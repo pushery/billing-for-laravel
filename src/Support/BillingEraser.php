@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\CustomerRegistry;
 use Pushery\Billing\Enums\AuditSource;
+use Pushery\Billing\Events\BillableAccountDeleting;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Models\CreditBalance;
 use Pushery\Billing\ValueObjects\ErasureReport;
@@ -44,6 +45,13 @@ final readonly class BillingEraser
 
     public function erase(Model $owner): ErasureReport
     {
+        // Stop live billing FIRST, before anything is erased: an owner whose data is gone but whose
+        // subscription keeps charging is a money leak AND a compliance breach (you cannot bill someone you
+        // erased). Dispatched — not called directly — so the same listener serves an app's own delete flow,
+        // and OUTSIDE the erase transaction below so the provider API call never runs inside the DB tx. The
+        // listener degrades on a transient provider failure (logs + continues), so the erase is never orphaned.
+        event(new BillableAccountDeleting($owner));
+
         $credit = $this->outstandingCredit($owner);
 
         $report = DB::transaction(function () use ($owner, $credit): ErasureReport {
