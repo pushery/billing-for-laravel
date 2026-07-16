@@ -91,8 +91,12 @@ abstract class AccountScreen extends Component
      * The canonical state of the owner's billing. With a subscription row it is presented from that; with
      * none, from the owner itself — so an owner on a generic trial (no subscription) resolves to
      * GenericTrial rather than being read as never-subscribed.
+     *
+     * $pendingActivation is the post-checkout signal: a customer just back from checkout whose subscription
+     * has not been recorded yet resolves to Activating (a transient state the screen polls out of), rather
+     * than the "never subscribed" it would otherwise read.
      */
-    protected function currentState(): SubscriptionState
+    protected function currentState(bool $pendingActivation = false): SubscriptionState
     {
         $subscription = $this->subscription();
 
@@ -100,7 +104,7 @@ abstract class AccountScreen extends Component
             ? $subscription->toSnapshot()
             : app(Trials::class)->ownerSnapshot($this->owner());
 
-        return app(SubscriptionPresenter::class)->present($snapshot);
+        return app(SubscriptionPresenter::class)->present($snapshot, $pendingActivation);
     }
 
     /**

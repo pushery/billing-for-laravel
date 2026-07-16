@@ -34,6 +34,11 @@ use RuntimeException;
  * @property ?int $subtotal_minor
  * @property ?int $tax_minor
  * @property bool $reverse_charge
+ * @property ?string $buyer_reference
+ * @property ?string $vat_note
+ * @property bool $oss
+ * @property ?string $destination_country
+ * @property ?string $oss_rate
  * @property ?array<int,array<string,mixed>> $lines
  */
 final class InvoiceRecord extends Model
@@ -44,7 +49,8 @@ final class InvoiceRecord extends Model
     protected $fillable = [
         'owner_type', 'owner_id', 'provider', 'provider_id', 'number', 'total_minor', 'currency',
         'status', 'issued_at', 'credited_invoice_id', 'credited_invoice_number', 'buyer', 'subtotal_minor',
-        'tax_minor', 'reverse_charge', 'lines',
+        'tax_minor', 'reverse_charge', 'buyer_reference', 'vat_note', 'oss', 'destination_country', 'oss_rate',
+        'lines',
     ];
 
     /** @var array<string,string> */
@@ -53,6 +59,10 @@ final class InvoiceRecord extends Model
         'subtotal_minor' => 'integer',
         'tax_minor' => 'integer',
         'reverse_charge' => 'boolean',
+        'oss' => 'boolean',
+        // decimal:2 keeps the applied VAT rate exact (a string, e.g. "19.00") — a float cast would let
+        // 19.00 drift, and the rate on a frozen tax document must round-trip byte-for-byte.
+        'oss_rate' => 'decimal:2',
         'status' => InvoiceStatus::class,
         // NOT the plain 'datetime' cast: this package targets a non-UTC (German) app, and the framework
         // default re-reads a stored instant in the APP timezone, shifting an invoice's frozen issue instant
@@ -74,8 +84,13 @@ final class InvoiceRecord extends Model
     protected static function booted(): void
     {
         self::updating(static function (self $invoice): void {
-            // Scalar frozen fields: isDirty is a reliable, engine-neutral comparison.
-            foreach (['number', 'total_minor', 'subtotal_minor', 'tax_minor', 'currency', 'reverse_charge', 'issued_at'] as $field) {
+            // Scalar frozen fields: isDirty is a reliable, engine-neutral comparison. The tax treatment of an
+            // issued document is frozen just like its amounts — reverse-charge, the OSS scheme/destination/rate
+            // and the routing reference all determine what an already-emitted e-invoice claims, so none may change.
+            foreach ([
+                'number', 'total_minor', 'subtotal_minor', 'tax_minor', 'currency', 'reverse_charge',
+                'buyer_reference', 'vat_note', 'oss', 'destination_country', 'oss_rate', 'issued_at',
+            ] as $field) {
                 if ($invoice->isDirty($field)) {
                     throw new RuntimeException("An issued invoice is immutable; '{$field}' cannot change after it is recorded.");
                 }

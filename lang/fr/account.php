@@ -5,6 +5,8 @@ declare(strict_types=1);
 return [
 
     'title' => 'Facturation',
+    'skip_to_content' => 'Aller au contenu',
+    'logout' => 'Se déconnecter',
 
     'overview' => [
         'heading' => 'Aperçu de la facturation',
@@ -28,6 +30,9 @@ return [
     'manage' => [
         'heading' => 'Changer de forfait',
         'current' => 'Forfait actuel : :plan.',
+        'card_on_file' => 'Carte enregistrée : :brand se terminant par :last4.',
+        'addons_heading' => 'Options',
+        'addon_buy' => 'Acheter',
         'swap_to' => 'Changer',
         'subscribe' => 'S’abonner',
         'trial_days' => 'Inclut un essai gratuit de :days jours.',
@@ -35,6 +40,10 @@ return [
         'preview_due' => 'À payer aujourd’hui avec prorata : :amount.',
         'preview_unavailable' => 'Aucune estimation disponible pour ce changement.',
         'no_options' => 'Aucun autre forfait n’est disponible.',
+        'link_out' => [
+            'body' => 'La facturation de ce compte est gérée sur le site de notre partenaire de facturation.',
+            'action' => 'Gérer la facturation',
+        ],
     ],
 
     'coupon' => [
@@ -67,6 +76,8 @@ return [
         'heading' => 'Abonnement',
         'status' => 'Statut',
         'next_invoice' => 'Prochaine facture : :amount le :date.',
+        'access_ends' => 'Ton accès se termine le :date.',
+        'access_ended' => 'Ton accès s’est terminé le :date.',
         'cancel' => 'Résilier l’abonnement',
         'resume' => 'Reprendre l’abonnement',
         'portal' => 'Ouvrir le portail de facturation',
@@ -80,6 +91,7 @@ return [
         'amount' => 'Montant',
         'status' => 'Statut',
         'download' => 'Télécharger',
+        'load_older' => 'Charger les plus anciennes',
     ],
 
     'invoice_status' => [
@@ -112,6 +124,8 @@ return [
         'warning' => 'Tu approches de ta limite.',
         'over' => 'Tu as dépassé ta limite.',
         'over_soft' => 'Tu as dépassé ton quota inclus ; la consommation au-delà est facturée.',
+        'cta_upgrade' => 'Passe à un forfait supérieur pour augmenter cette limite',
+        'cta_topup' => 'Recharge ce quota',
     ],
 
     'usage_history' => [
@@ -120,6 +134,7 @@ return [
         'empty' => 'Aucune consommation enregistrée pour l’instant.',
         'periods_heading' => 'Périodes précédentes',
         'used' => ':used utilisés',
+        'not_metered' => 'Non mesuré',
         'prepaid_used' => ':units prépayés',
         'topups_heading' => 'Recharges',
         'reversed' => 'annulé',
@@ -181,6 +196,12 @@ return [
         'usage_history' => 'Historique',
         'recovery' => 'Récupération',
         'danger' => 'Zone sensible',
+        'group' => [
+            'subscription' => 'Abonnement',
+            'billing' => 'Facturation',
+            'usage' => 'Utilisation',
+            'account' => 'Compte',
+        ],
     ],
 
 ];

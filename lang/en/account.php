@@ -5,6 +5,8 @@ declare(strict_types=1);
 return [
 
     'title' => 'Billing',
+    'skip_to_content' => 'Skip to content',
+    'logout' => 'Log out',
 
     'overview' => [
         'heading' => 'Billing overview',
@@ -28,6 +30,9 @@ return [
     'manage' => [
         'heading' => 'Change plan',
         'current' => 'Current plan: :plan.',
+        'card_on_file' => 'Card on file: :brand ending :last4.',
+        'addons_heading' => 'Add-ons',
+        'addon_buy' => 'Buy',
         'swap_to' => 'Switch',
         'subscribe' => 'Subscribe',
         'trial_days' => 'Includes a :days-day free trial.',
@@ -35,6 +40,10 @@ return [
         'preview_due' => 'Due today with proration: :amount.',
         'preview_unavailable' => 'No estimate available for this change.',
         'no_options' => 'No other plans are available.',
+        'link_out' => [
+            'body' => 'Billing for this account is managed on our billing partner’s site.',
+            'action' => 'Manage billing',
+        ],
     ],
 
     'coupon' => [
@@ -67,6 +76,8 @@ return [
         'heading' => 'Subscription',
         'status' => 'Status',
         'next_invoice' => 'Next invoice: :amount on :date.',
+        'access_ends' => 'Your access ends on :date.',
+        'access_ended' => 'Your access ended on :date.',
         'cancel' => 'Cancel subscription',
         'resume' => 'Resume subscription',
         'portal' => 'Open the billing portal',
@@ -80,6 +91,7 @@ return [
         'amount' => 'Amount',
         'status' => 'Status',
         'download' => 'Download',
+        'load_older' => 'Load older',
     ],
 
     'invoice_status' => [
@@ -112,6 +124,8 @@ return [
         'warning' => 'You are approaching your limit.',
         'over' => 'You have exceeded your limit.',
         'over_soft' => 'You are over your included allowance; usage beyond it is billed.',
+        'cta_upgrade' => 'Upgrade to raise this limit',
+        'cta_topup' => 'Top up this allowance',
     ],
 
     'usage_history' => [
@@ -120,6 +134,7 @@ return [
         'empty' => 'No usage recorded yet.',
         'periods_heading' => 'Past periods',
         'used' => ':used used',
+        'not_metered' => 'Not metered',
         'prepaid_used' => ':units prepaid',
         'topups_heading' => 'Top-ups',
         'reversed' => 'reversed',
@@ -181,6 +196,12 @@ return [
         'usage_history' => 'History',
         'recovery' => 'Recovery',
         'danger' => 'Danger zone',
+        'group' => [
+            'subscription' => 'Subscription',
+            'billing' => 'Billing',
+            'usage' => 'Usage',
+            'account' => 'Account',
+        ],
     ],
 
 ];

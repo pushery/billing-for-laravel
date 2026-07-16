@@ -4,6 +4,123 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-07-16
+
+### Fixed
+
+- **The EU reverse charge no longer zero-rates a domestic sale.** A validated business in the seller's OWN
+  country was granted the intra-EU reverse-charge zero-rate, silently under-charging VAT on every domestic
+  B2B supply. The reverse charge is now applied only when the buyer's country differs from the seller's
+  (`billing.company.country`) — a same-country supply is charged the normal domestic VAT, and when the seller
+  country is unknown nothing is zero-rated (never under-charge).
+- **A reverse-charge invoice no longer leaks VAT into its totals.** When a reverse-charge line carried a
+  notional non-zero rate, both the XRechnung (UBL) and ZUGFeRD (CII) writers emitted the full VAT in the
+  document total while the AE band showed zero — an EN 16931 violation (BR-CO-14 / BR-AE) that a validator
+  rejects and that overstated the payable. The seller's tax and every AE band are now forced to zero.
+- **The EU-OSS VAT table is matched case-insensitively.** A lower- or mixed-case country code (`de`) missed
+  the upper-case rate table and silently charged 0% VAT; the code is now normalized before lookup.
+- **A VIES member-state outage is no longer read as an invalid VAT id.** VIES answers HTTP 200 with a
+  `userError` for a transient outage; that is now treated as unavailable (conservative), not invalid, so an
+  outage neither rejects a real business nor lets the caller grant an unearned zero-rate.
+- **The EU reverse charge now requires a validated VAT id.** The reverse-charge zero-rate was applied to any
+  business that merely supplied a VAT id, even an unverified one — a VAT under-charge risk. An id must now be
+  proven valid before a supply is zero-rated: a new `VatIdValidator` seam (VIES-backed `ViesVatIdValidator`,
+  with a `NullVatIdValidator` default that proves nothing) validates it, and a VIES outage is treated
+  conservatively (unavailable, never assumed valid), so a temporary outage can never grant an unearned zero-rate.
+- **The hub navigation no longer breaks on an unregistered route.** A navigation entry whose route is not
+  registered is now silently dropped instead of throwing, so the hub can host a consumer's own screen —
+  registered in `billing.navigation` — that appears only once that route exists.
+- **Disabled billing is a clean no-op façade.** With `billing.enabled=false`, the subscription, upcoming-invoice
+  and invoice contracts now bind to no-op implementations — reads answer empty / null, mutations do nothing — so
+  a clone without billing boots and reads without any provider keys, instead of resolving to the driver's
+  implementations that would reach for them.
+- **An untouchable (comped / manually-granted) tier is no longer offered as a swap target.** The plan catalog
+  listed every other tier as a purchasable option, including tiers flagged `untouchable` — the comped or
+  lifetime grants the provider webhook is forbidden to overwrite. They are now excluded from the swap options,
+  so a customer can never self-serve their way onto a manually-granted plan.
+
+### Security
+
+- **Billing link-outs are validated before redirect.** Every redirect to a provider-hosted page — the hosted
+  checkout, the hosted card page, the billing portal — now passes through a guard that accepts only an absolute
+  http(s) URL with a host. A `javascript:` / `data:` scheme, a scheme-relative `//host`, or a bare path from a
+  tampered or misconfigured driver payload is refused (the screen does not navigate; the portal route 404s), so
+  a billing link can never become an XSS or an open redirect.
+
+### Added
+
+- **Account-hub app shell.** The account screens now render inside a publishable, framework-agnostic layout:
+  a grouped sidebar navigation (driven by `Account\Navigation`, marking the active item for assistive tech),
+  a skip link to the main content, a typed active document title, and a POST-logout form (never a GET link)
+  shown only when the app registers a `logout` route. It needs no UI-kit dependency; publish `billing-views`
+  to replace it wholesale with your own design system's shell.
+- **External-billing link-out mode (No-/external-Merchant-of-Record).** When an external merchant of record
+  owns billing, set `billing.link_out` (env `BILLING_LINK_OUT`) to its portal URL: the plan-change screen then
+  links OUT to it and suppresses the entire in-app checkout surface (plans, swap/subscribe, coupon), because
+  the app is not the merchant of record for those charges. The URL passes through the scheme guard, so a
+  tampered or misconfigured value keeps link-out off rather than becoming an open redirect.
+- **Grouped, runtime-aware account-hub navigation.** A new `Account\Navigation` renders the config-driven
+  hub navigation as ordered, non-empty groups (each item may declare a `group` and `web_only` flag), and
+  supplies a typed, localized active document title. An item whose route is not registered is hidden rather
+  than throwing, and a `web_only` item is hidden on a native runtime (`billing.runtime`) — for flows an app
+  store forbids in-app. Group labels come from `billing::account.nav.group.*`. The new `BILLING_RUNTIME`
+  env var selects `web` (default) or `native`.
+- **Coupon redemption with enforced limits.** A new `CouponRedeemer` atomically redeems a package-owned
+  coupon, enforcing that it is active, not expired, under its global `max_redemptions` cap, and not already
+  redeemed by the owner. The cap check and the count increment run inside one transaction under a row lock,
+  so two accounts racing for the last redemption cannot both win; the per-owner unique index makes a
+  double-apply impossible even under a race. A blocked redemption raises a `CouponUnavailable` with the
+  reason (inactive / expired / limit reached / already redeemed) instead of silently over-granting.
+- **ZUGFeRD / Factur-X CII e-invoice output.** A new `ZugferdCiiInvoice` renders a stored invoice as
+  EN 16931 in UN/CEFACT CII syntax — the XML that ZUGFeRD and Factur-X embed in a hybrid PDF/A-3 — as the
+  twin of the existing XRechnung UBL writer. Both syntaxes now build from one shared, normalized invoice
+  model (seller, buyer, lines, per-rate tax bands), so a standard-rated sale, an intra-EU reverse charge
+  (category AE with the exemption reason, never zero-rated Z), a credit note (type 381), and multi-rate
+  bands can never drift between the two outputs of the same invoice.
+- **Live screens refresh themselves without broadcasting.** When realtime is off, the subscription and
+  payment-recovery screens fall back to a short, self-limiting poll: they refresh every 5s while a transition
+  resolves (the post-checkout "activating" wait, a past-due recovery), stop after ~30s so a stuck state never
+  polls forever, never poll a settled state, and never poll at all when realtime broadcasting is on.
+- **A headless realtime bridge relays broadcast toasts.** The `AccountRealtime` component listens on the
+  owner's private channel and re-dispatches each broadcast toast as a `wirekit-toast` browser event for the
+  shell's toast region — clamping an untrusted payload (a non-empty message, a known level) before it reaches
+  the client.
+- **Opt-in realtime for the account hub.** Two broadcast events — `AccountBillingUpdated` (a live-refresh
+  trigger on the owner's private channel) and `AccountToastNotified` (a `{message, level}` toast) — let the hub
+  screens update without a reload. Off by default (`billing.realtime.enabled` / `BILLING_REALTIME`): a plain
+  install broadcasts nothing and falls back to a bounded poll. The channel follows the resolved billing owner
+  (user or team), so one owner never receives another's stream.
+- **A package-owned coupon model.** Coupons are no longer a provider-only concept: the package now has its own
+  `billing_coupons` table (percent or fixed value, duration, expiry, redemption limits, optional Stripe-coupon
+  mapping) and a `billing_coupon_redemptions` ledger with a per-owner unique index — so the local engine can
+  apply a coupon and a double redemption by the same owner is impossible at the database level.
+- **The subscription screen shows when access ends.** A canceled subscription still in its grace period now
+  shows the date access ends, and an ended one shows the date it ended — read from the local subscription row,
+  never a provider call.
+- **Buy one-time add-ons (top-ups) from the plan screen.** The subscription-management screen now has an
+  add-ons section listing the configured one-time purchases and their price, each with a Buy button that sends
+  the owner to the provider's hosted one-time checkout. The client submits only the add-on key — the price is
+  resolved server-side, so it cannot be injected — an unknown key is refused, and the checkout URL is
+  scheme-validated before the redirect. It is the section the usage screen's top-up call-to-action links to.
+- **The plan screen shows the card on file.** The subscription-management screen now displays the brand and
+  last four digits of the stored payment method — mirrored from local columns, never a provider call — so the
+  owner sees which card a swap or new subscription will charge.
+- **Invoice downloads are a bookmarkable route, and the list loads older invoices on demand.** Each invoice
+  row now links to a dedicated `…/invoices/{id}/download` route — a plain href that works without JavaScript and
+  owner-checks the id before streaming — instead of a Livewire action, and a "Load older" control widens the
+  page up to the provider's cap when more invoices exist than the first page shows.
+- **Usage history can flag an unmetered dimension.** A history provider that surfaces a dimension which was on
+  an unmetered / BYOK tier in a past period can mark its `PeriodUsage` as not metered, and the screen shows
+  "not metered" rather than a used count that would mean nothing there.
+- **The usage screen points you at the right remedy when a meter runs low.** A metered dimension that is
+  warning or over now shows a policy-driven call-to-action: a hard-capped meter offers an upgrade (the only way
+  to raise a hard ceiling), while a soft or degrading one offers a top-up of more units. A dimension
+  comfortably inside its allowance shows none.
+- **Tax and e-invoicing fields on the stored invoice.** The invoice record now carries the buyer routing
+  reference (Leitweg-ID, EN 16931 BT-10), a VAT exemption / reverse-charge note, and EU One-Stop-Shop markers
+  (scheme flag, destination country, and the applied rate as an exact decimal) — all optional, all frozen once
+  the invoice is issued, so a XRechnung / ZUGFeRD or OSS export reads them straight from the immutable document.
+
 ## [0.1.1] - 2026-07-16
 
 ### Fixed

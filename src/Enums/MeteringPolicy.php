@@ -38,4 +38,15 @@ enum MeteringPolicy: string
             self::FairUse => 'neutral',
         };
     }
+
+    /**
+     * The remedy the usage screen offers a dimension that is running out. A blocking policy (hard stop /
+     * refuse) refuses further use at the ceiling, so the only relief is a plan with a higher ceiling — an
+     * `upgrade`. A degrading or fair-use policy keeps running, so the fix is buying more of the same unit
+     * without changing plan — a `topup`. Drives which call-to-action renders beside the meter.
+     */
+    public function overRemedy(): string
+    {
+        return $this->isBlocking() ? 'upgrade' : 'topup';
+    }
 }

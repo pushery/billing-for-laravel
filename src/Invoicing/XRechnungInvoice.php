@@ -9,6 +9,7 @@ use DOMElement;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\EInvoice;
+use Pushery\Billing\Invoicing\Concerns\NormalizesInvoiceModel;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -22,6 +23,8 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final readonly class XRechnungInvoice implements EInvoice
 {
+    use NormalizesInvoiceModel;
+
     private const string UBL = 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2';
 
     private const string CAC = 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2';
@@ -68,19 +71,22 @@ final readonly class XRechnungInvoice implements EInvoice
         $root->appendChild($this->party($doc, 'cac:AccountingSupplierParty', $this->seller()));
         $root->appendChild($this->party($doc, 'cac:AccountingCustomerParty', $this->buyer($invoice)));
 
-        $lines = $this->lines($invoice);
-        $bands = $this->taxBands($lines);
-
         // An intra-EU B2B reverse charge: the buyer accounts for the VAT, so every band and line is VAT
         // category AE at 0%, with an exemption reason on the document band — not the zero-rated Z a 0% rate
         // would otherwise get (a conformant EN 16931 validator rejects Z here).
         $reverseCharge = (bool) $invoice->reverse_charge;
 
+        $lines = $this->lines($invoice);
+        $bands = $this->taxBandsFor($lines, $reverseCharge);
+
         // Derive the document net + tax from the lines so BT-110 equals the sum of the per-band tax
         // (BR-CO-14) and the totals stay internally consistent (BR-CO-13/15). A lineless invoice
         // cannot carry a breakdown, so it falls back to the stored figures.
         $net = $lines === [] ? ($invoice->subtotal_minor ?? $invoice->total_minor) : $this->sum($lines, fn (Line $line): int => $line->netMinor);
-        $tax = $lines === [] ? ($invoice->tax_minor ?? 0) : $this->sum($bands, fn (array $band): int => $band['tax']);
+        // A reverse charge shifts the VAT to the buyer: the seller charges zero. The document tax and every
+        // AE band's tax must be zero (BR-AE-*), or the AE category would carry VAT and the payable would
+        // overstate the net — so force zero here rather than trust a line's notional rate.
+        $tax = $reverseCharge ? 0 : ($lines === [] ? ($invoice->tax_minor ?? 0) : $this->sum($bands, fn (array $band): int => $band['tax']));
 
         $root->appendChild($this->taxTotal($doc, $bands, $tax, $currency, $reverseCharge));
         $root->appendChild($this->monetaryTotal($doc, $net, $tax, $currency));
@@ -164,7 +170,8 @@ final readonly class XRechnungInvoice implements EInvoice
         foreach ($bands as $band) {
             $subtotal = $doc->createElement('cac:TaxSubtotal');
             $this->money($doc, $subtotal, 'cbc:TaxableAmount', $band['taxable'], $currency);
-            $this->money($doc, $subtotal, 'cbc:TaxAmount', $band['tax'], $currency);
+            // A reverse-charge (AE) band carries zero tax — the buyer accounts for it (BR-AE-*).
+            $this->money($doc, $subtotal, 'cbc:TaxAmount', $reverseCharge ? 0 : $band['tax'], $currency);
             // The document-level band carries the exemption reason (BT-120/121) for a reverse charge.
             $subtotal->appendChild($this->taxCategory($doc, 'cac:TaxCategory', $band['rate'], $reverseCharge, withReason: true));
 
@@ -240,101 +247,8 @@ final readonly class XRechnungInvoice implements EInvoice
         $element->setAttribute('currencyID', $currency);
     }
 
-    /**
-     * Sum an integer projection over a list.
-     *
-     * @template T
-     *
-     * @param  list<T>  $items
-     * @param  callable(T): int  $value
-     */
-    private function sum(array $items, callable $value): int
+    private function config(): Repository
     {
-        $total = 0;
-
-        foreach ($items as $item) {
-            $total += $value($item);
-        }
-
-        return $total;
-    }
-
-    /** The buyer's BT-10 reference (Leitweg-ID) from the stored buyer snapshot, or null. */
-    private function buyerReference(InvoiceRecord $invoice): ?string
-    {
-        $buyer = $invoice->getAttribute('buyer');
-        $reference = is_array($buyer) ? ($buyer['reference'] ?? null) : null;
-
-        return is_string($reference) && $reference !== '' ? $reference : null;
-    }
-
-    /**
-     * Group line net by tax rate and compute the tax per band.
-     *
-     * @param  list<Line>  $lines
-     * @return list<array{rate: float, taxable: int, tax: int}>
-     */
-    private function taxBands(array $lines): array
-    {
-        $taxable = [];
-        $rates = [];
-
-        foreach ($lines as $line) {
-            $key = $this->rate($line->taxRate);
-            $taxable[$key] = ($taxable[$key] ?? 0) + $line->netMinor;
-            $rates[$key] = $line->taxRate;
-        }
-
-        $bands = [];
-
-        foreach ($taxable as $key => $sum) {
-            $rate = $rates[$key];
-            $bands[] = ['rate' => $rate, 'taxable' => $sum, 'tax' => (int) round($sum * $rate / 100)];
-        }
-
-        return $bands;
-    }
-
-    /** A tax rate as a plain percentage string, e.g. 19.0 → "19", 25.5 → "25.5". */
-    private function rate(float $rate): string
-    {
-        return rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.');
-    }
-
-    private function seller(): Party
-    {
-        return Party::fromArray($this->companyArray('billing.company'));
-    }
-
-    private function buyer(InvoiceRecord $invoice): Party
-    {
-        $buyer = $invoice->getAttribute('buyer');
-
-        return Party::fromArray(is_array($buyer) ? $buyer : []);
-    }
-
-    /** @return array<array-key, mixed> */
-    private function companyArray(string $key): array
-    {
-        $value = $this->config->get($key);
-
-        return is_array($value) ? $value : [];
-    }
-
-    /**
-     * @return list<Line>
-     */
-    private function lines(InvoiceRecord $invoice): array
-    {
-        $lines = $invoice->getAttribute('lines');
-        $out = [];
-
-        foreach (is_array($lines) ? $lines : [] as $line) {
-            if (is_array($line)) {
-                $out[] = Line::fromArray($line);
-            }
-        }
-
-        return $out;
+        return $this->config;
     }
 }

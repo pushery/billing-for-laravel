@@ -6,12 +6,16 @@ namespace Pushery\Billing\Livewire;
 
 use Illuminate\Contracts\View\View;
 use Livewire\Attributes\Locked;
+use Pushery\Billing\Catalogs\ConfigAddonCatalog;
 use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\DiscountResolver;
+use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\TierCatalog;
+use Pushery\Billing\Support\LinkOut;
+use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\Support\TrialCallouts;
 use Pushery\Billing\Trials\TrialPolicy;
 use Pushery\Billing\ValueObjects\Money;
@@ -63,6 +67,9 @@ final class ManageSubscription extends AccountScreen
 
         return $this->view('billing::livewire.manage-subscription', [
             'currentLabel' => $tiers->label($key),
+            // When an external merchant of record owns billing (config billing.link_out), the hub links OUT to
+            // its portal instead of offering the in-app checkout below — the app is not the merchant of record.
+            'linkOut' => app(LinkOut::class)->url(),
             'canSwap' => $this->hasLiveSubscription(),
             // The "includes an X-day free trial" hint is about the SUBSCRIPTION trial the owner gets on
             // subscribing, so it follows subscriptionTrialEnabled — a generic (pre-subscription) trial does
@@ -72,6 +79,10 @@ final class ManageSubscription extends AccountScreen
             'trial' => app(TrialCallouts::class)->for($this->owner(), $this->currentState(), $this->subscription()?->trial_ends_at),
             // Whether the typed coupon code is recognized, so the visitor sees it applied before checkout.
             'couponStatus' => $this->couponStatus(),
+            // The card a swap or subscription will charge, mirrored from local columns — never a provider call.
+            'cardOnFile' => $this->cardOnFile(),
+            // The purchasable one-time add-ons (top-ups), rendered in the #addons section the usage screen links to.
+            'addons' => $this->addonOptions(),
             'options' => array_map(static fn (Plan $plan): array => [
                 'key' => $plan->key,
                 'label' => $tiers->label($plan->key),
@@ -82,6 +93,48 @@ final class ManageSubscription extends AccountScreen
     }
 
     /**
+     * The card on file, mirrored from the local `pm_type` / `pm_last_four` columns (never a provider call), so
+     * the owner sees which card a swap or subscription will charge. Null when no card is stored.
+     *
+     * @return array{brand: string, last4: string}|null
+     */
+    private function cardOnFile(): ?array
+    {
+        $owner = $this->owner();
+        $brand = $owner->getAttribute('pm_type');
+        $last4 = $owner->getAttribute('pm_last_four');
+
+        if (! is_string($brand) || $brand === '' || ! is_string($last4) || $last4 === '') {
+            return null;
+        }
+
+        return ['brand' => $brand, 'last4' => $last4];
+    }
+
+    /**
+     * The purchasable one-time add-ons (top-ups) — key, label, and formatted price from the catalog. The
+     * client only ever submits a KEY; the price is resolved server-side, mirroring the tier allowlist so a
+     * client can never inject a price. Only add-ons with a configured display price are offered.
+     *
+     * @return list<array{key: string, label: string, price: string}>
+     */
+    private function addonOptions(): array
+    {
+        $catalog = app(ConfigAddonCatalog::class);
+        $out = [];
+
+        foreach ($catalog->all() as $key) {
+            $price = $catalog->priceFor($key);
+
+            if ($price instanceof Money) {
+                $out[] = ['key' => $key, 'label' => $catalog->label($key), 'price' => $price->format()];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * The one entrance action. An owner who already has a live subscription SWAPS to the tier in-app; an
      * owner who does not is taken to the hosted checkout to become a subscriber. The mirror guard is the
      * point: without the hasLiveSubscription() branch, an owner with a subscription could open a SECOND
@@ -89,6 +142,7 @@ final class ManageSubscription extends AccountScreen
      */
     public function subscribe(string $tierKey): void
     {
+        $this->denyInAppCheckout();
         $this->ensureEligible();
 
         if ($this->hasLiveSubscription()) {
@@ -101,14 +155,38 @@ final class ManageSubscription extends AccountScreen
         $coupon = $coupon !== '' ? $coupon : null;
 
         $intent = app(Checkout::class)->subscribe($this->owner(), $tierKey, $coupon);
-        $url = $intent->payload['checkout_url'] ?? null;
+        $url = SafeExternalUrl::orNull($intent->payload['checkout_url'] ?? null);
 
-        if (is_string($url) && $url !== '') {
+        if ($url !== null) {
             // The subscription itself is not real yet — it becomes real on the checkout return, where the
             // plan-sync effect records plan.granted. This only marks that the customer started checkout.
             $this->audit('checkout.started', ['tier' => $tierKey, 'coupon' => $coupon]);
 
-            // A full-page redirect to the provider's hosted checkout. redirect() returns void in Livewire.
+            // A full-page redirect to the provider's hosted checkout — validated to be an absolute http(s)
+            // URL first, so a tampered payload can never bounce the customer to a script/open-redirect target.
+            $this->redirect($url);
+        }
+    }
+
+    /**
+     * Buy a one-time add-on (a top-up) via the provider's hosted mode:payment checkout. Like subscribe(), the
+     * client submits only the add-on KEY — the catalog resolves the price server-side (anti-price-injection) —
+     * and an unknown key is refused before any charge. The hosted URL is scheme-validated before the redirect;
+     * a driver with no checkout URL yields nothing (no redirect).
+     */
+    public function purchaseAddon(string $addonKey): void
+    {
+        $this->denyInAppCheckout();
+        $this->ensureEligible();
+
+        abort_unless(app(ConfigAddonCatalog::class)->exists($addonKey), 404);
+
+        $intent = app(OneTimeCharge::class)->purchase($this->owner(), $addonKey);
+        $url = SafeExternalUrl::orNull($intent->payload['checkout_url'] ?? null);
+
+        if ($url !== null) {
+            $this->audit('addon.checkout.started', ['addon' => $addonKey]);
+
             $this->redirect($url);
         }
     }
@@ -149,6 +227,7 @@ final class ManageSubscription extends AccountScreen
 
     public function swap(string $tierKey): void
     {
+        $this->denyInAppCheckout();
         $this->ensureEligible();
 
         app(SubscriptionActions::class)->swap($this->owner(), $tierKey);
@@ -157,5 +236,16 @@ final class ManageSubscription extends AccountScreen
 
         $this->previewTierKey = null;
         $this->previewAmount = null;
+    }
+
+    /**
+     * Guard every in-app money-moving action at the SERVER, not just the view. In external-MoR link-out mode
+     * the app is not the merchant of record, so no in-app checkout may run: the Blade view hides the controls,
+     * and this refuses a crafted request (`$wire.subscribe(...)`) that would otherwise reach a public Livewire
+     * method regardless of whether its button was rendered.
+     */
+    private function denyInAppCheckout(): void
+    {
+        abort_if(app(LinkOut::class)->active(), 403);
     }
 }

@@ -68,6 +68,12 @@ final readonly class ConfigPlanCatalog implements PlanCatalog
                 continue;
             }
 
+            // An untouchable tier is a manually-granted plan (comp / lifetime) the provider webhook must not
+            // overwrite — it is not self-service purchasable, so it must never be offered as a swap target.
+            if ($this->tiers->isUntouchable($key)) {
+                continue;
+            }
+
             $plan = $this->planFor($key);
 
             if ($plan instanceof Plan) {

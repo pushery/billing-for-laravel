@@ -1,5 +1,7 @@
 @php($intent = $state->badgeIntent())
-<div class="space-y-6">
+{{-- While the subscription is still "activating" after checkout, poll (bounded) until it settles — unless
+     realtime broadcasting is on, in which case the .billing.updated event refreshes instead. --}}
+<div class="space-y-6" @if ($poll) wire:poll.{{ $poll }}="activationTick" @endif>
     <header>
         <h1 class="text-2xl font-semibold">{{ __('billing::account.subscription.heading') }}</h1>
     </header>
@@ -25,6 +27,17 @@
                 {{ __('billing::account.state.'.$state->value) }}
             </span>
         </div>
+
+        {{-- When access ends (grace) or has ended, show the date — read from the local column, never a call. --}}
+        @if ($endsAt !== null && $state->value === 'grace')
+            <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                {{ __('billing::account.subscription.access_ends', ['date' => $endsAt->format('d.m.Y')]) }}
+            </p>
+        @elseif ($endsAt !== null && $state->value === 'ended')
+            <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                {{ __('billing::account.subscription.access_ended', ['date' => $endsAt->format('d.m.Y')]) }}
+            </p>
+        @endif
 
         @if ($preview)
             <p class="mt-4 text-sm text-gray-600 dark:text-gray-300">
@@ -75,7 +88,7 @@
                 </a>
             @endif
 
-            @if (\Illuminate\Support\Facades\Route::has('billing.account.portal'))
+            @if ($supportsHostedPortal && \Illuminate\Support\Facades\Route::has('billing.account.portal'))
                 <a href="{{ route('billing.account.portal') }}"
                     class="text-sm font-medium text-gray-600 underline hover:text-gray-900 dark:text-gray-300 dark:hover:text-white">
                     {{ __('billing::account.subscription.portal') }}

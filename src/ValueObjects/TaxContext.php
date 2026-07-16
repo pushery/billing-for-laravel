@@ -14,11 +14,18 @@ final readonly class TaxContext
         public string $countryCode,
         public ?string $vatId = null,
         public bool $business = false,
+        public bool $vatIdValid = false,
     ) {}
 
-    /** Whether this looks like a validated intra-EU business (has a VAT id and is flagged business). */
+    /**
+     * Whether this is a VALIDATED intra-EU business: flagged business, carrying a VAT id, AND that id proven
+     * valid (via VIES). The reverse charge zero-rates the supply, so it must never rest on an id that was
+     * merely present — a fake, or one that VIES could not confirm, would under-charge VAT.
+     */
     public function isReverseChargeCandidate(): bool
     {
-        return $this->business && $this->vatId !== null && trim($this->vatId) !== '';
+        return $this->business
+            && $this->vatId !== null && trim($this->vatId) !== ''
+            && $this->vatIdValid;
     }
 }

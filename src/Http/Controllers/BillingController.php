@@ -9,7 +9,10 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\HostedPortal;
+use Pushery\Billing\Contracts\Invoices;
+use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\Support\SubscriptionReconciler;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 /**
@@ -27,7 +30,9 @@ final class BillingController
         abort_unless($actor instanceof Model, 403);
 
         $owner = app(BillingEntityResolver::class)->ownerFor($actor);
-        $url = app(HostedPortal::class)->url($owner);
+        // The portal URL comes from the driver; validate it is an absolute http(s) URL before sending the
+        // owner away, so a bad payload can never turn the portal link into a script or open-redirect target.
+        $url = SafeExternalUrl::orNull(app(HostedPortal::class)->url($owner));
 
         abort_if($url === null, 404);
 
@@ -54,6 +59,34 @@ final class BillingController
             report($e);
         }
 
-        return redirect()->route('billing.account.subscription');
+        // Flag the subscription screen as "activating": if the webhook has not landed yet the reconcile above
+        // may not have recorded the subscription, so the screen shows a pending state and polls until it does.
+        return redirect()->route('billing.account.subscription', ['activating' => 1]);
+    }
+
+    /**
+     * Stream an owner's invoice document from a dedicated, bookmarkable route (rather than a Livewire action),
+     * so a row's download link is a plain href that works without JavaScript. The driver owner-checks the id
+     * and returns null for anything not the signed-in owner's — a 404 here, so one owner can never pull
+     * another's document by guessing an id.
+     */
+    public function downloadInvoice(string $invoiceId): StreamedResponse
+    {
+        $actor = Auth::user();
+
+        abort_unless($actor instanceof Model, 403);
+
+        $owner = app(BillingEntityResolver::class)->ownerFor($actor);
+        $document = app(Invoices::class)->download($owner, $invoiceId);
+
+        abort_if($document === null, 404);
+
+        return response()->streamDownload(
+            function () use ($document): void {
+                echo $document->contents;
+            },
+            $document->filename,
+            ['Content-Type' => $document->mimeType],
+        );
     }
 }

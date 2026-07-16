@@ -36,6 +36,10 @@ final class OwnerScopedTables
         // (retained) add-on purchase and its invoice. Once the person is gone there is nobody left to spend
         // them, so the balance goes with them.
         'billing_prepaid_units',
+        // A coupon redemption records WHO used a coupon — personal data, not a financial record (any money it
+        // discounted lives on the retained invoice). It goes with the person; the coupon definition itself is
+        // owner-less and stays.
+        'billing_coupon_redemptions',
     ];
 
     /** Kept, but unlinked from the owner: the law requires them for years. */
