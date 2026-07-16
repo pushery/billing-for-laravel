@@ -1,0 +1,109 @@
+{
+    "name": "pushery/billing-for-laravel",
+    "description": "Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Stripe-first; Mollie and Adyen planned on the same neutral contracts.",
+    "keywords": [
+        "laravel",
+        "billing",
+        "subscriptions",
+        "payments",
+        "stripe",
+        "cashier",
+        "invoices",
+        "e-invoicing",
+        "xrechnung",
+        "datev",
+        "dunning",
+        "usage-based-billing",
+        "metered-billing",
+        "saas"
+    ],
+    "license": "MIT",
+    "type": "library",
+    "homepage": "https://github.com/pushery/billing-for-laravel",
+    "authors": [
+        {
+            "name": "Pushery",
+            "homepage": "https://www.pushery.com"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/pushery/billing-for-laravel/issues",
+        "source": "https://github.com/pushery/billing-for-laravel"
+    },
+    "require": {
+        "php": "^8.4",
+        "ext-json": "*",
+        "illuminate/contracts": "^13.0",
+        "illuminate/database": "^13.0",
+        "illuminate/http": "^13.0",
+        "illuminate/notifications": "^13.0",
+        "illuminate/routing": "^13.0",
+        "illuminate/support": "^13.0",
+        "laravel/cashier": "^16.0",
+        "stripe/stripe-php": "^17.3"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.0",
+        "laravel/pint": "^1.0",
+        "livewire/livewire": "^4.3",
+        "orchestra/testbench": "^11.0",
+        "pestphp/pest": "^4.0",
+        "pestphp/pest-plugin-browser": "^4.3",
+        "pestphp/pest-plugin-laravel": "^4.0",
+        "pestphp/pest-plugin-type-coverage": "^4.0",
+        "rector/rector": "^2.0",
+        "spaze/phpstan-disallowed-calls": "^4.12"
+    },
+    "suggest": {
+        "livewire/livewire": "Required only for the optional account-hub UI — the nine Livewire screens. The billing core (models, webhooks, invoicing, tax, contracts) needs none of it."
+    },
+    "autoload": {
+        "psr-4": {
+            "Pushery\\Billing\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Pushery\\Billing\\Tests\\": "tests/",
+            "Workbench\\App\\": "workbench/app/",
+            "Workbench\\Database\\Factories\\": "workbench/database/factories/",
+            "Workbench\\Database\\Seeders\\": "workbench/database/seeders/"
+        }
+    },
+    "scripts": {
+        "test": "pest",
+        "test:coverage": "pest --coverage --min=100",
+        "test:type-coverage": "pest --type-coverage --min=100",
+        "test:browser": "pest tests/Browser",
+        "test:stripe-live": "pest tests/LiveStripe",
+        "test:database": "pest --testsuite=Postgres,MySql",
+        "analyse": "phpstan analyse --memory-limit=1G",
+        "format": "pint",
+        "format:test": "pint --test",
+        "rector": "rector process",
+        "rector:test": "rector process --dry-run",
+        "mutate": "pest --mutate --everything --covered-only --parallel --processes=4 --min=85 --testsuite=Unit,Feature,Stripe",
+        "qa": [
+            "@format:test",
+            "@rector:test",
+            "@analyse",
+            "@test:type-coverage",
+            "@test:coverage"
+        ]
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Pushery\\Billing\\BillingServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
