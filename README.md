@@ -375,6 +375,21 @@ delete (`User::query()->where(...)->delete()`) fires no model events at all — 
 under-erase and never know. Call `billing:erase` (or the `BillingEraser`) from wherever you handle the
 request.
 
+**Deleting an account stops live billing first.** A deleted owner whose subscription keeps charging is a
+money leak (and billing someone you erased is a compliance breach). `billing:erase` / `BillingEraser` fire a
+`BillableAccountDeleting` event before they erase, and the package cancels the owner's subscription
+immediately (not into a grace period) in response — tolerant of a provider blip, which is logged and lets the
+delete continue rather than leaving a user who asked to leave undeletable. If your app has its **own** delete
+UI that does not go through `BillingEraser`, dispatch the event yourself, right after re-confirming identity
+([`ConfirmsIdentity`](#the-account-hub)) and before `$user->delete()`:
+
+```php
+use Pushery\Billing\Events\BillableAccountDeleting;
+
+event(new BillableAccountDeleting($user));   // cancels billing now
+$user->delete();
+```
+
 `billing:prune` also ages out the stored webhook payloads on its own clock
 (`billing.retention.webhook_payload_days`, default 90). They exist for exactly one reason — so a failed effect
 can be re-driven from what the provider already sent — and the provider itself stops redelivering after about

@@ -71,12 +71,14 @@ use Pushery\Billing\Dunning\LocalDunningGuard;
 use Pushery\Billing\Dunning\NullLateFees;
 use Pushery\Billing\Eligibility\AlwaysEligible;
 use Pushery\Billing\Entitlements\ConfigLicense;
+use Pushery\Billing\Events\BillableAccountDeleting;
 use Pushery\Billing\Http\Controllers\BillingController;
 use Pushery\Billing\Http\Middleware\AccountContentSecurityPolicy;
 use Pushery\Billing\Http\Middleware\EnforceDunning;
 use Pushery\Billing\Http\Middleware\EnforceQuota;
 use Pushery\Billing\Http\Middleware\EnforceSuspension;
 use Pushery\Billing\Invoicing\XRechnungInvoice;
+use Pushery\Billing\Listeners\StopBillingForDeletedAccount;
 use Pushery\Billing\Listeners\SyncSeatsOnMembershipChange;
 use Pushery\Billing\Livewire\AccountOverview;
 use Pushery\Billing\Livewire\DangerZone;
@@ -298,6 +300,11 @@ final class BillingServiceProvider extends ServiceProvider
             // Re-sync a team's billed seats whenever its membership changes. The consumer names its own
             // join/leave events; each one drives the queued seat-sync listener.
             $this->registerSeatSyncListeners();
+
+            // Stop live billing the instant an account is being deleted — a deleted owner must never linger
+            // as an active, still-charging subscription at the provider. An app dispatches
+            // BillableAccountDeleting from its own delete flow; the package's BillingEraser dispatches it too.
+            $this->app->make(Dispatcher::class)->listen(BillableAccountDeleting::class, StopBillingForDeletedAccount::class);
         }
 
         if ($this->app->runningInConsole()) {

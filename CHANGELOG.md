@@ -4,6 +4,16 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-07-16
+
+### Fixed
+
+- **A deleted account could keep billing.** `BillingEraser` / `billing:erase` erased an owner's data but did
+  not cancel their subscription, so a deleted owner stayed active and charging at the provider. Erasing now
+  fires a `BillableAccountDeleting` event that cancels the subscription immediately, before the erase —
+  tolerant of a provider blip (logged, deletion continues, never orphaned). Apps with their own delete UI can
+  dispatch the event directly, right after re-confirming identity and before deleting the user.
+
 ## [0.1.0] - 2026-07-16
 
 ### Added
