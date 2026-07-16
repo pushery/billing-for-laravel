@@ -1,0 +1,186 @@
+<?php
+
+declare(strict_types=1);
+
+return [
+
+    'title' => 'Abrechnung',
+
+    'overview' => [
+        'heading' => 'Abrechnungsübersicht',
+        'current_plan' => 'Aktueller Tarif: :plan.',
+    ],
+
+    'banner' => [
+        'past_due' => 'Deine letzte Zahlung ist fehlgeschlagen. Aktualisiere deine Zahlungsmethode, damit dein Abo aktiv bleibt.',
+        'incomplete' => 'Deine Zahlung muss noch bestätigt werden, bevor dein Abo startet.',
+        'grace' => 'Dein Abo ist gekündigt und endet bald. Setze es fort, um deinen Zugang zu behalten.',
+        'paused' => 'Deine Abrechnung ist pausiert, deine bezahlten Funktionen ruhen so lange. Du kannst jederzeit fortsetzen.',
+        'trial_ending' => 'Deine Testphase endet bald. Wähle einen Tarif, um deinen Zugang zu behalten.',
+        'cta' => [
+            'recover' => 'Zahlung beheben',
+            'confirm' => 'Zahlung bestätigen',
+            'resume' => 'Fortsetzen',
+            'upgrade' => 'Tarif wählen',
+        ],
+    ],
+
+    'manage' => [
+        'heading' => 'Tarif ändern',
+        'current' => 'Aktueller Tarif: :plan.',
+        'swap_to' => 'Wechseln',
+        'subscribe' => 'Abonnieren',
+        'trial_days' => 'Inklusive :days Tage kostenlos testen.',
+        'preview' => 'Kosten vorschauen',
+        'preview_due' => 'Heute fällig mit Anrechnung: :amount.',
+        'preview_unavailable' => 'Für diese Änderung ist keine Schätzung verfügbar.',
+        'no_options' => 'Keine weiteren Tarife verfügbar.',
+    ],
+
+    'coupon' => [
+        'label' => 'Gutscheincode',
+        'placeholder' => 'Code eingeben',
+        'applied' => 'Gutschein angewendet.',
+        'invalid' => 'Dieser Code ist ungültig.',
+    ],
+
+    'trial' => [
+        'generic' => 'Deine kostenlose Testphase endet in :days Tag — wähle einen Tarif, um deinen Zugang zu behalten.|Deine kostenlose Testphase endet in :days Tagen — wähle einen Tarif, um deinen Zugang zu behalten.',
+        'add_pm' => 'Deine Testphase endet in :days Tag — füge eine Zahlungsmethode hinzu, damit dein Tarif weiterläuft.|Deine Testphase endet in :days Tagen — füge eine Zahlungsmethode hinzu, damit dein Tarif weiterläuft.',
+        'upgrade' => 'Deine Testphase endet in :days Tag — du kannst deinen Tarif jederzeit anpassen.|Deine Testphase endet in :days Tagen — du kannst deinen Tarif jederzeit anpassen.',
+        'usage' => 'Du hast noch :days Tag in deiner Testphase; die Nutzung unten entspricht deinem Test-Tarif.|Du hast noch :days Tage in deiner Testphase; die Nutzung unten entspricht deinem Test-Tarif.',
+        'cta' => [
+            'subscribe' => 'Jetzt abonnieren',
+            'add_payment_method' => 'Zahlungsmethode hinzufügen',
+            'upgrade' => 'Tarife ansehen',
+        ],
+    ],
+
+    'interval' => [
+        'day' => 'Tag',
+        'week' => 'Woche',
+        'month' => 'Monat',
+        'year' => 'Jahr',
+    ],
+
+    'subscription' => [
+        'heading' => 'Abo',
+        'status' => 'Status',
+        'next_invoice' => 'Nächste Rechnung: :amount am :date.',
+        'cancel' => 'Abo kündigen',
+        'resume' => 'Abo fortsetzen',
+        'portal' => 'Zahlungsportal öffnen',
+    ],
+
+    'invoices' => [
+        'heading' => 'Rechnungen',
+        'empty' => 'Noch keine Rechnungen.',
+        'date' => 'Datum',
+        'number' => 'Nummer',
+        'amount' => 'Betrag',
+        'status' => 'Status',
+        'download' => 'Herunterladen',
+    ],
+
+    'invoice_status' => [
+        'draft' => 'Entwurf',
+        'open' => 'Offen',
+        'paid' => 'Bezahlt',
+        'uncollectible' => 'Uneinbringlich',
+        'void' => 'Storniert',
+        'refunded' => 'Erstattet',
+    ],
+
+    'payment_methods' => [
+        'heading' => 'Zahlungsmethoden',
+        'add' => 'Zahlungsmethode hinzufügen',
+        'default' => 'Standard',
+        'make_default' => 'Als Standard',
+        'remove' => 'Entfernen',
+        'empty' => 'Keine Zahlungsmethoden hinterlegt.',
+        'expired' => 'Abgelaufen :date',
+        'expiring' => 'Läuft ab :date',
+    ],
+
+    'degraded' => 'Ein Teil dieser Seite konnte nicht geladen werden. Bitte versuche es gleich noch einmal.',
+
+    'usage' => [
+        'unavailable' => 'Die Nutzungsübersicht ist gerade nicht verfügbar. Bitte versuche es in einem Moment noch einmal.',
+        'heading' => 'Nutzung',
+        'prepaid' => 'Vorausbezahltes Guthaben: :units :unit',
+        'unmetered' => 'Dein Tarif hat keine gemessenen Limits.',
+        'warning' => 'Du näherst dich deinem Limit.',
+        'over' => 'Du hast dein Limit überschritten.',
+        'over_soft' => 'Du bist über deinem inklusiven Kontingent; darüber hinausgehende Nutzung wird berechnet.',
+    ],
+
+    'usage_history' => [
+        'heading' => 'Nutzungsverlauf',
+        'unavailable' => 'Der Nutzungsverlauf ist gerade nicht verfügbar. Bitte versuche es in einem Moment noch einmal.',
+        'empty' => 'Noch keine Nutzung erfasst.',
+        'periods_heading' => 'Vergangene Perioden',
+        'used' => ':used genutzt',
+        'prepaid_used' => ':units vorausbezahlt',
+        'topups_heading' => 'Aufladungen',
+        'reversed' => 'storniert',
+    ],
+
+    'recovery' => [
+        'heading' => 'Zahlungswiederherstellung',
+        'failed' => 'Deine letzte Zahlung ist fehlgeschlagen.',
+        'current_method' => 'Hinterlegte Zahlungsmethode: :method.',
+        'no_method' => 'Du hast keine Zahlungsmethode hinterlegt.',
+        'update' => 'Zahlungsmethode aktualisieren',
+        'all_good' => 'Nichts wiederherzustellen – deine Zahlungen sind aktuell.',
+        'incomplete' => 'Deine Zahlung muss bestätigt werden, bevor dein Abo startet.',
+        'incomplete_hint' => 'Deine Bank hat dich um Bestätigung dieser Zahlung gebeten. Bestätige sie, um dein Abo zu aktivieren.',
+        'confirm' => 'Zahlung bestätigen',
+    ],
+
+    'reconfirm' => [
+        'prompt' => 'Bestätige dein Passwort, um fortzufahren.',
+        'wrong' => 'Das hat nicht gepasst. Bitte versuche es erneut.',
+        'throttled' => 'Zu viele Versuche. Versuche es in :seconds Sekunden erneut.',
+    ],
+
+    'danger' => [
+        'heading' => 'Gefahrenzone',
+        'explanation' => 'Wenn du jetzt kündigst, endet die Abrechnung sofort – ohne Übergangsfrist.',
+        'cancel_now' => 'Abrechnung sofort beenden',
+        'confirm_question' => 'Das lässt sich nicht rückgängig machen. Abrechnung sofort beenden?',
+        'confirm_yes' => 'Ja, sofort beenden',
+        'confirm_no' => 'Abo behalten',
+    ],
+
+    'credit' => [
+        'balance' => 'Du hast :amount Guthaben auf deinem Konto.',
+        'explanation' => 'Es wird automatisch mit deiner nächsten Rechnung verrechnet.',
+    ],
+
+    'state' => [
+        'none' => 'Kein Abo',
+        'churned' => 'Nicht abonniert',
+        'activating' => 'Wird aktiviert',
+        'generic_trial' => 'Testphase',
+        'trialing' => 'In der Testphase',
+        'active' => 'Aktiv',
+        'past_due' => 'Zahlung fehlgeschlagen',
+        'incomplete' => 'Zahlung unvollständig',
+        'incomplete_expired' => 'Zahlung abgelaufen',
+        'grace' => 'Endet zum Periodenende',
+        'paused' => 'Pausiert',
+        'ended' => 'Beendet',
+    ],
+
+    'nav' => [
+        'subscription' => 'Abo',
+        'plan' => 'Tarif',
+        'payment_methods' => 'Zahlungsmethoden',
+        'invoices' => 'Rechnungen',
+        'usage' => 'Nutzung',
+        'usage_history' => 'Verlauf',
+        'recovery' => 'Wiederherstellung',
+        'danger' => 'Gefahrenzone',
+    ],
+
+];
