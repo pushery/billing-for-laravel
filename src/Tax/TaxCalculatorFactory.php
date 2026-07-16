@@ -19,9 +19,17 @@ final readonly class TaxCalculatorFactory
     public function make(): TaxCalculator
     {
         return match ($this->config->get('billing.tax', 'none')) {
-            'eu_oss' => new EuOssTaxCalculator,
+            // The seller's own country drives the domestic-vs-cross-border reverse-charge decision.
+            'eu_oss' => new EuOssTaxCalculator($this->sellerCountry()),
             'provider', 'stripe' => new StripeTaxCalculator,
             default => new NoTaxCalculator,
         };
+    }
+
+    private function sellerCountry(): ?string
+    {
+        $country = $this->config->get('billing.company.country');
+
+        return is_string($country) && $country !== '' ? $country : null;
     }
 }

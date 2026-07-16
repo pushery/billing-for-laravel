@@ -15,8 +15,26 @@
                 {{ trans_choice($trial->messageKey, $trial->daysLeft, ['days' => $trial->daysLeft]) }}
             </p>
         @endif
+
+        {{-- The card a swap/subscription will charge, mirrored from local columns — never a provider call. --}}
+        @if ($cardOnFile !== null)
+            <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                {{ __('billing::account.manage.card_on_file', ['brand' => ucfirst($cardOnFile['brand']), 'last4' => $cardOnFile['last4']]) }}
+            </p>
+        @endif
     </header>
 
+    @if ($linkOut !== null)
+        {{-- External merchant of record: billing is managed off-site, so the hub links out instead of
+             offering in-app checkout it is not the merchant of record for. --}}
+        <div class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+            <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('billing::account.manage.link_out.body') }}</p>
+            <a href="{{ $linkOut }}" target="_blank" rel="noopener noreferrer"
+                class="mt-4 inline-flex rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 dark:bg-white dark:text-gray-900">
+                {{ __('billing::account.manage.link_out.action') }}
+            </a>
+        </div>
+    @else
     {{-- Coupon entry: only for a visitor about to subscribe (a coupon applies at checkout, not to a swap).
          The code is validated live so the visitor sees it take before the hosted checkout. --}}
     @unless ($canSwap)
@@ -82,4 +100,25 @@
             <p class="p-6 text-sm text-gray-500 dark:text-gray-400">{{ __('billing::account.manage.no_options') }}</p>
         @endforelse
     </section>
+
+    {{-- One-time add-ons (top-ups). The #addons anchor is where the usage screen's top-up CTA lands. --}}
+    @if ($addons !== [])
+        <section id="addons" class="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
+            <h2 class="p-4 text-lg font-medium">{{ __('billing::account.manage.addons_heading') }}</h2>
+
+            @foreach ($addons as $addon)
+                <div wire:key="addon-{{ $addon['key'] }}" class="flex items-center justify-between p-4">
+                    <div>
+                        <p class="font-medium">{{ $addon['label'] }}</p>
+                        <p class="text-sm text-gray-500 dark:text-gray-400">{{ $addon['price'] }}</p>
+                    </div>
+                    <button type="button" wire:click="purchaseAddon('{{ $addon['key'] }}')"
+                        class="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500">
+                        {{ __('billing::account.manage.addon_buy') }}
+                    </button>
+                </div>
+            @endforeach
+        </section>
+    @endif
+    @endif
 </div>

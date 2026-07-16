@@ -41,6 +41,7 @@ use Pushery\Billing\Contracts\DiscountResolver;
 use Pushery\Billing\Contracts\DunningGuard;
 use Pushery\Billing\Contracts\DunningNotifier;
 use Pushery\Billing\Contracts\EInvoice;
+use Pushery\Billing\Contracts\Invoices;
 use Pushery\Billing\Contracts\LateFees;
 use Pushery\Billing\Contracts\License;
 use Pushery\Billing\Contracts\MandateNotifier;
@@ -49,6 +50,7 @@ use Pushery\Billing\Contracts\PaymentActionNotifier;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\SeatBilling;
+use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\SubscriptionNotifier;
 use Pushery\Billing\Contracts\SuspensionLadder;
 use Pushery\Billing\Contracts\SuspensionNotifier;
@@ -56,15 +58,20 @@ use Pushery\Billing\Contracts\TaxCalculator;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Contracts\TierResolver;
 use Pushery\Billing\Contracts\TrialNotifier;
+use Pushery\Billing\Contracts\UpcomingInvoice;
 use Pushery\Billing\Contracts\UsageHistoryProvider;
 use Pushery\Billing\Contracts\UsageNotifier;
 use Pushery\Billing\Contracts\UsageProvider;
 use Pushery\Billing\Contracts\UsageReporter;
+use Pushery\Billing\Contracts\VatIdValidator;
 use Pushery\Billing\Discounts\ConfigDiscountResolver;
 use Pushery\Billing\Drivers\NullCreditSync;
 use Pushery\Billing\Drivers\NullCustomerRegistry;
+use Pushery\Billing\Drivers\NullInvoices;
 use Pushery\Billing\Drivers\NullMeterInspector;
 use Pushery\Billing\Drivers\NullSeatBilling;
+use Pushery\Billing\Drivers\NullSubscriptionActions;
+use Pushery\Billing\Drivers\NullUpcomingInvoice;
 use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
 use Pushery\Billing\Dunning\LadderSuspension;
 use Pushery\Billing\Dunning\LocalDunningGuard;
@@ -81,6 +88,7 @@ use Pushery\Billing\Invoicing\XRechnungInvoice;
 use Pushery\Billing\Listeners\StopBillingForDeletedAccount;
 use Pushery\Billing\Listeners\SyncSeatsOnMembershipChange;
 use Pushery\Billing\Livewire\AccountOverview;
+use Pushery\Billing\Livewire\AccountRealtime;
 use Pushery\Billing\Livewire\DangerZone;
 use Pushery\Billing\Livewire\InvoiceHistory;
 use Pushery\Billing\Livewire\ManageSubscription;
@@ -97,6 +105,7 @@ use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\MeteringSupportGuard;
 use Pushery\Billing\Support\RetentionFloorGuard;
 use Pushery\Billing\Support\TaxSupportGuard;
+use Pushery\Billing\Tax\NullVatIdValidator;
 use Pushery\Billing\Tax\TaxCalculatorFactory;
 use Pushery\Billing\Usage\CounterUsageProvider;
 use Pushery\Billing\Usage\DatabaseUsageHistory;
@@ -145,6 +154,10 @@ final class BillingServiceProvider extends ServiceProvider
         $this->app->singleton(WebhookEffectRegistry::class);
 
         $this->app->bind(DiscountResolver::class, ConfigDiscountResolver::class);
+
+        // VAT-id validation is a seam: the default proves nothing (so the package runs offline and never grants
+        // a reverse charge on an unvalidated id), an app that needs real EU B2B zero-rating binds ViesVatIdValidator.
+        $this->app->bind(VatIdValidator::class, NullVatIdValidator::class);
 
         $this->app->bind(
             DunningNotifier::class,
@@ -246,6 +259,16 @@ final class BillingServiceProvider extends ServiceProvider
         // client, the driver factory, and the account-hub/webhook contracts). The
         // future Mollie/Adyen drivers ship their own providers alongside it.
         $this->app->register(StripeServiceProvider::class);
+
+        // No-op façade for a billing-disabled clone. The driver above binds the invoice / subscription
+        // contracts to its Stripe impls unconditionally, so with the master switch off we rebind them to safe
+        // no-ops: reads answer empty/null, mutations do nothing, and nothing reaches for Stripe keys the clone
+        // does not have. (UsageProvider and TierResolver are already provider-free, so they need no rebind.)
+        if (! (bool) $this->app->make(Repository::class)->get('billing.enabled', true)) {
+            $this->app->bind(SubscriptionActions::class, NullSubscriptionActions::class);
+            $this->app->bind(UpcomingInvoice::class, NullUpcomingInvoice::class);
+            $this->app->bind(Invoices::class, NullInvoices::class);
+        }
     }
 
     public function boot(): void
@@ -357,6 +380,7 @@ final class BillingServiceProvider extends ServiceProvider
     private function registerAccountHub(): void
     {
         Livewire::component('billing.account-overview', AccountOverview::class);
+        Livewire::component('billing.account-realtime', AccountRealtime::class);
         Livewire::component('billing.subscription-overview', SubscriptionOverview::class);
         Livewire::component('billing.manage-subscription', ManageSubscription::class);
         Livewire::component('billing.invoice-history', InvoiceHistory::class);
@@ -385,6 +409,7 @@ final class BillingServiceProvider extends ServiceProvider
                 Route::get('/subscription', SubscriptionOverview::class)->name('billing.account.subscription');
                 Route::get('/plan', ManageSubscription::class)->name('billing.account.plan');
                 Route::get('/invoices', InvoiceHistory::class)->name('billing.account.invoices');
+                Route::get('/invoices/{invoiceId}/download', [BillingController::class, 'downloadInvoice'])->name('billing.account.invoice-download');
                 Route::get('/payment-methods', PaymentMethodManager::class)->name('billing.account.payment-methods');
                 Route::get('/usage', UsageOverview::class)->name('billing.account.usage');
                 Route::get('/usage/history', UsageHistory::class)->name('billing.account.usage-history');

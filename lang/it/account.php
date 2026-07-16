@@ -5,6 +5,8 @@ declare(strict_types=1);
 return [
 
     'title' => 'Fatturazione',
+    'skip_to_content' => 'Vai al contenuto',
+    'logout' => 'Esci',
 
     'overview' => [
         'heading' => 'Panoramica della fatturazione',
@@ -28,6 +30,9 @@ return [
     'manage' => [
         'heading' => 'Cambia piano',
         'current' => 'Piano attuale: :plan.',
+        'card_on_file' => 'Carta salvata: :brand con finale :last4.',
+        'addons_heading' => 'Componenti aggiuntivi',
+        'addon_buy' => 'Acquista',
         'swap_to' => 'Cambia',
         'subscribe' => 'Abbonati',
         'trial_days' => 'Include una prova gratuita di :days giorni.',
@@ -35,6 +40,10 @@ return [
         'preview_due' => 'Da pagare oggi con conguaglio: :amount.',
         'preview_unavailable' => 'Nessuna stima disponibile per questa modifica.',
         'no_options' => 'Nessun altro piano disponibile.',
+        'link_out' => [
+            'body' => 'La fatturazione di questo account è gestita sul sito del nostro partner di fatturazione.',
+            'action' => 'Gestisci la fatturazione',
+        ],
     ],
 
     'coupon' => [
@@ -67,6 +76,8 @@ return [
         'heading' => 'Abbonamento',
         'status' => 'Stato',
         'next_invoice' => 'Prossima fattura: :amount il :date.',
+        'access_ends' => 'Il tuo accesso termina il :date.',
+        'access_ended' => 'Il tuo accesso è terminato il :date.',
         'cancel' => 'Annulla abbonamento',
         'resume' => 'Riprendi abbonamento',
         'portal' => 'Apri il portale di fatturazione',
@@ -80,6 +91,7 @@ return [
         'amount' => 'Importo',
         'status' => 'Stato',
         'download' => 'Scarica',
+        'load_older' => 'Carica meno recenti',
     ],
 
     'invoice_status' => [
@@ -112,6 +124,8 @@ return [
         'warning' => 'Ti stai avvicinando al tuo limite.',
         'over' => 'Hai superato il tuo limite.',
         'over_soft' => 'Hai superato la quota inclusa; l’utilizzo eccedente viene fatturato.',
+        'cta_upgrade' => 'Fai l’upgrade per aumentare questo limite',
+        'cta_topup' => 'Ricarica questa quota',
     ],
 
     'usage_history' => [
@@ -120,6 +134,7 @@ return [
         'empty' => 'Nessun utilizzo registrato finora.',
         'periods_heading' => 'Periodi precedenti',
         'used' => ':used utilizzati',
+        'not_metered' => 'Non misurato',
         'prepaid_used' => ':units prepagati',
         'topups_heading' => 'Ricariche',
         'reversed' => 'annullato',
@@ -181,6 +196,12 @@ return [
         'usage_history' => 'Cronologia',
         'recovery' => 'Recupero',
         'danger' => 'Zona pericolosa',
+        'group' => [
+            'subscription' => 'Abbonamento',
+            'billing' => 'Fatturazione',
+            'usage' => 'Utilizzo',
+            'account' => 'Account',
+        ],
     ],
 
 ];

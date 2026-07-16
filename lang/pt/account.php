@@ -5,6 +5,8 @@ declare(strict_types=1);
 return [
 
     'title' => 'Faturação',
+    'skip_to_content' => 'Ir para o conteúdo',
+    'logout' => 'Terminar sessão',
 
     'overview' => [
         'heading' => 'Resumo da faturação',
@@ -28,6 +30,9 @@ return [
     'manage' => [
         'heading' => 'Mudar de plano',
         'current' => 'Plano atual: :plan.',
+        'card_on_file' => 'Cartão guardado: :brand terminado em :last4.',
+        'addons_heading' => 'Complementos',
+        'addon_buy' => 'Comprar',
         'swap_to' => 'Mudar',
         'subscribe' => 'Subscrever',
         'trial_days' => 'Inclui um período de teste gratuito de :days dias.',
@@ -35,6 +40,10 @@ return [
         'preview_due' => 'A pagar hoje, com valor proporcional: :amount.',
         'preview_unavailable' => 'Não há estimativa disponível para esta alteração.',
         'no_options' => 'Não há outros planos disponíveis.',
+        'link_out' => [
+            'body' => 'A faturação desta conta é gerida no site do nosso parceiro de faturação.',
+            'action' => 'Gerir faturação',
+        ],
     ],
 
     'coupon' => [
@@ -67,6 +76,8 @@ return [
         'heading' => 'Subscrição',
         'status' => 'Estado',
         'next_invoice' => 'Próxima fatura: :amount a :date.',
+        'access_ends' => 'O teu acesso termina a :date.',
+        'access_ended' => 'O teu acesso terminou a :date.',
         'cancel' => 'Cancelar subscrição',
         'resume' => 'Retomar subscrição',
         'portal' => 'Abrir o portal de faturação',
@@ -80,6 +91,7 @@ return [
         'amount' => 'Valor',
         'status' => 'Estado',
         'download' => 'Transferir',
+        'load_older' => 'Carregar mais antigas',
     ],
 
     'invoice_status' => [
@@ -112,6 +124,8 @@ return [
         'warning' => 'Estás a aproximar-te do teu limite.',
         'over' => 'Excedeste o teu limite.',
         'over_soft' => 'Excedeste a tua quota incluída; a utilização acima é faturada.',
+        'cta_upgrade' => 'Faz upgrade para aumentar este limite',
+        'cta_topup' => 'Recarrega esta quota',
     ],
 
     'usage_history' => [
@@ -120,6 +134,7 @@ return [
         'empty' => 'Ainda não há utilização registada.',
         'periods_heading' => 'Períodos anteriores',
         'used' => ':used usados',
+        'not_metered' => 'Não medido',
         'prepaid_used' => ':units pré-pagos',
         'topups_heading' => 'Recargas',
         'reversed' => 'anulado',
@@ -181,6 +196,12 @@ return [
         'usage_history' => 'Histórico',
         'recovery' => 'Recuperação',
         'danger' => 'Zona de perigo',
+        'group' => [
+            'subscription' => 'Assinatura',
+            'billing' => 'Faturação',
+            'usage' => 'Utilização',
+            'account' => 'Conta',
+        ],
     ],
 
 ];

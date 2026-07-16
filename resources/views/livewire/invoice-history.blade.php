@@ -45,16 +45,28 @@
                             </td>
                             <td class="px-4 py-3 text-right">
                                 @if ($invoice->isDownloadable())
-                                    <button type="button" wire:click="download('{{ $invoice->id }}')"
+                                    {{-- A plain href to a dedicated, bookmarkable route — works without JS,
+                                         and the route owner-checks the id before streaming anything. --}}
+                                    <a href="{{ route('billing.account.invoice-download', $invoice->id) }}"
                                         class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
                                         {{ __('billing::account.invoices.download') }}
-                                    </button>
+                                    </a>
                                 @endif
                             </td>
                         </tr>
                     @endforeach
                 </tbody>
             </table>
+
+            @if ($page->hasMore)
+                {{-- Widen the read to pull older invoices, up to the provider's cap. --}}
+                <div class="border-t border-gray-200 p-4 text-center dark:border-gray-800">
+                    <button type="button" wire:click="loadOlder"
+                        class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
+                        {{ __('billing::account.invoices.load_older') }}
+                    </button>
+                </div>
+            @endif
         @endif
     </section>
 </div>

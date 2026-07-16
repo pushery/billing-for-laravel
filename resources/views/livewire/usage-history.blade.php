@@ -24,9 +24,14 @@
                                 <div wire:key="period-{{ $period }}-{{ $row->meterKey }}" class="flex items-center justify-between text-sm">
                                     <dt class="text-gray-600 dark:text-gray-300">{{ $row->meterKey }}</dt>
                                     <dd class="text-gray-500 dark:text-gray-400">
-                                        {{ __('billing::account.usage_history.used', ['used' => $row->used]) }}
-                                        @if ($row->prepaidUsed > 0)
-                                            <span class="text-xs">({{ __('billing::account.usage_history.prepaid_used', ['units' => $row->prepaidUsed]) }})</span>
+                                        @if ($row->metered)
+                                            {{ __('billing::account.usage_history.used', ['used' => $row->used]) }}
+                                            @if ($row->prepaidUsed > 0)
+                                                <span class="text-xs">({{ __('billing::account.usage_history.prepaid_used', ['units' => $row->prepaidUsed]) }})</span>
+                                            @endif
+                                        @else
+                                            {{-- An unmetered / BYOK dimension: the count is not a meaningful allowance figure, so say so. --}}
+                                            <span class="italic">{{ __('billing::account.usage_history.not_metered') }}</span>
                                         @endif
                                     </dd>
                                 </div>

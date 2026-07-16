@@ -7,6 +7,7 @@ namespace Pushery\Billing\Livewire;
 use Illuminate\Contracts\View\View;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Livewire\Concerns\DegradesGracefully;
+use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\PaymentMethod;
 
 /**
@@ -38,9 +39,9 @@ final class PaymentMethodManager extends AccountScreen
         // A full-page redirect to the provider's hosted card page — no card data touches this app, and no
         // front-end element is shipped. The card is captured on the provider's side and attached to the
         // customer; the customer returns here. A driver with no hosted page yields null and nothing happens.
-        $url = app(PaymentMethods::class)->addMethodUrl($this->owner());
+        $url = SafeExternalUrl::orNull(app(PaymentMethods::class)->addMethodUrl($this->owner()));
 
-        if (is_string($url) && $url !== '') {
+        if ($url !== null) {
             $this->redirect($url);
         }
     }

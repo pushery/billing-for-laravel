@@ -5,6 +5,8 @@ declare(strict_types=1);
 return [
 
     'title' => 'Facturering',
+    'skip_to_content' => 'Naar de inhoud',
+    'logout' => 'Uitloggen',
 
     'overview' => [
         'heading' => 'Factureringsoverzicht',
@@ -28,6 +30,9 @@ return [
     'manage' => [
         'heading' => 'Plan wijzigen',
         'current' => 'Huidig plan: :plan.',
+        'card_on_file' => 'Opgeslagen kaart: :brand eindigend op :last4.',
+        'addons_heading' => 'Add-ons',
+        'addon_buy' => 'Kopen',
         'swap_to' => 'Wisselen',
         'subscribe' => 'Abonneren',
         'trial_days' => 'Inclusief een gratis proefperiode van :days dagen.',
@@ -35,6 +40,10 @@ return [
         'preview_due' => 'Vandaag te betalen met verrekening: :amount.',
         'preview_unavailable' => 'Geen schatting beschikbaar voor deze wijziging.',
         'no_options' => 'Er zijn geen andere plannen beschikbaar.',
+        'link_out' => [
+            'body' => 'De facturering van dit account wordt beheerd op de site van onze factureringspartner.',
+            'action' => 'Facturering beheren',
+        ],
     ],
 
     'coupon' => [
@@ -67,6 +76,8 @@ return [
         'heading' => 'Abonnement',
         'status' => 'Status',
         'next_invoice' => 'Volgende factuur: :amount op :date.',
+        'access_ends' => 'Je toegang eindigt op :date.',
+        'access_ended' => 'Je toegang is geëindigd op :date.',
         'cancel' => 'Abonnement opzeggen',
         'resume' => 'Abonnement hervatten',
         'portal' => 'Factureringsportaal openen',
@@ -80,6 +91,7 @@ return [
         'amount' => 'Bedrag',
         'status' => 'Status',
         'download' => 'Downloaden',
+        'load_older' => 'Oudere laden',
     ],
 
     'invoice_status' => [
@@ -112,6 +124,8 @@ return [
         'warning' => 'Je nadert je limiet.',
         'over' => 'Je hebt je limiet overschreden.',
         'over_soft' => 'Je zit boven je inbegrepen tegoed; verbruik daarboven wordt in rekening gebracht.',
+        'cta_upgrade' => 'Upgrade om deze limiet te verhogen',
+        'cta_topup' => 'Vul dit tegoed aan',
     ],
 
     'usage_history' => [
@@ -120,6 +134,7 @@ return [
         'empty' => 'Nog geen verbruik geregistreerd.',
         'periods_heading' => 'Voorgaande periodes',
         'used' => ':used gebruikt',
+        'not_metered' => 'Niet gemeten',
         'prepaid_used' => ':units vooruitbetaald',
         'topups_heading' => 'Aankopen',
         'reversed' => 'teruggedraaid',
@@ -181,6 +196,12 @@ return [
         'usage_history' => 'Geschiedenis',
         'recovery' => 'Herstel',
         'danger' => 'Gevarenzone',
+        'group' => [
+            'subscription' => 'Abonnement',
+            'billing' => 'Facturering',
+            'usage' => 'Gebruik',
+            'account' => 'Account',
+        ],
     ],
 
 ];

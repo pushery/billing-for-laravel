@@ -76,6 +76,12 @@ It writes three files, each documented inline:
 - **`config/account.php`** — the account-hub route prefix, middleware, view set, and scoped CSP.
 - **`config/license.php`** — what each tier _unlocks_ (boolean feature grants + numeric limits), kept separate from pricing.
 
+> **Billing and licensing are two orthogonal domains.** `billing.php` is what your customers **pay**;
+> `license.php` is what a tier **unlocks**. They are deliberately separate, and **neither ever blocks a
+> public or marketing surface** — both fail open. Billing code never reads `license.*` config; the single
+> bridge is the `License` contract, so a tier's entitlements can be license-backed without coupling pricing
+> to licensing. An arch guard (`LicenseBillingSeparationTest`) pins the boundary so it cannot regress.
+
 Point the package at your billable model and define your tiers:
 
 ```php
@@ -92,6 +98,8 @@ Point the package at your billable model and define your tiers:
     ],
 ],
 ```
+
+A tier may carry `'byok' => true` — a "bring your own keys" tier, where the customer runs on their own provider credentials rather than being metered and billed the usual way. The package exposes it through `Entitlements::isByok()` / `TierCatalog::isByok($key)`; your app reads that flag to route a BYOK owner around its own metering/server-key path. The package itself holds no server-side execution key, so it never puts a BYOK owner on a metered server path — that boundary lives in your app, and `isByok()` is the seam it reads. BYOK is orthogonal to payment method: a BYOK tier can still be a paid subscription.
 
 Each paid tier's `provider_price` is a **Stripe price id**. Create the product and its recurring price in the Stripe dashboard (or via the API), then put the id in `.env` — a tier whose `provider_price` is empty cannot be checked out:
 
@@ -145,6 +153,29 @@ Add the shell banner to your layout — it renders nothing for a healthy account
 ```blade
 <x-billing::banner />
 ```
+
+Every screen renders inside a **publishable app shell** (`layouts/account.blade.php`): a grouped sidebar
+navigation with the active item marked, a skip link to the main content, a typed document title, and a
+POST-logout form shown only when your app registers a `logout` route. It needs no UI-kit dependency; publish
+`billing-views` to replace it with your own design system's shell.
+
+If an **external merchant of record** owns billing (an app-store subscription, an external portal), set
+`billing.link_out` (env `BILLING_LINK_OUT`) to that portal's URL: the plan screen then links out to it and
+suppresses the in-app checkout it is not the merchant of record for. On a native runtime, set
+`billing.runtime=native` (env `BILLING_RUNTIME`) to hide flows an app store forbids in-app.
+
+### Hosting your own screens in the hub
+
+The hub navigation is config-driven, and the hub _hosts_ screens it does not own. To slot one of your own app or auth screens — sessions, connections, set-password, an onboarding step — into the hub, register its route in `billing.navigation` (an optional `group` places it in a labeled section, `billing::account.nav.group.<group>`):
+
+```php
+// config/billing.php
+'navigation' => [
+    'sessions' => ['label' => 'account.sessions', 'route' => 'app.sessions', 'group' => 'account', 'order' => 60],
+],
+```
+
+The entry appears in the navigation **only once that route actually exists**, so the same config can name a section your app builds later — an unregistered route (or one that needs parameters the hub cannot supply) is silently dropped, never rendered as a broken link. The package ships no ancillary-screen classes of its own; it only slots your route into the shell.
 
 ### Subscribing
 
@@ -301,6 +332,16 @@ Already have a hand-rolled billing namespace — your own subscription model, we
 
 Each step is independently shippable, and the package runs beside your code until you retire the last of it.
 
+**How your columns map.** The package's tables use **provider-neutral** names, so one schema serves Stripe today and Mollie/Adyen later. The renames to expect when you backfill data (step 6) all follow one rule — *no provider or app assumption in a column name*:
+
+| A hand-rolled table often called… | …becomes | Key column change |
+|---|---|---|
+| `stripe_events` / a webhook log | `billing_webhook_events` | a single `stripe_event_id` splits into `provider` + `event_id` (an id is only unique *within* a provider) |
+| `addon_purchases` / top-ups | `billing_addon_purchases` | the checkout/session id becomes a neutral `reference`; the buyer is a polymorphic `owner_type` / `owner_id`, not a hardcoded `user_id` |
+| `subscriptions` | `billing_subscriptions` | `provider` + `provider_id` instead of `stripe_id`; the plan is a neutral `tier_key`; grace/ended dates are local `ends_at` columns, never a provider call |
+
+Map your old rows onto these columns before you delete the old namespace — the data then lives entirely in the package tables.
+
 ## Audit trail
 
 Every money movement and entitlement change is recorded on an append-only audit ledger with WHO did it —
@@ -406,16 +447,29 @@ to the invoice it credits. DATEV books it as a Haben (credit), and XRechnung ren
 note (type code 381) referencing the original invoice — amounts stay positive, the document type carries the
 credit meaning.
 
-Render a stored invoice as an EN 16931 / XRechnung document, or export a batch to DATEV:
+Render a stored invoice as an EN 16931 document, or export a batch to DATEV:
 
 ```php
-$xml = app(Pushery\Billing\Contracts\EInvoice::class)->render($invoice);
+// XRechnung — the standalone UBL syntax (the EInvoice default), for B2G / Leitweg-ID:
+$ubl = app(Pushery\Billing\Contracts\EInvoice::class)->render($invoice);
+
+// ZUGFeRD / Factur-X — the UN/CEFACT CII syntax a hybrid PDF/A-3 embeds:
+$cii = app(Pushery\Billing\Invoicing\ZugferdCiiInvoice::class)->render($invoice);
 
 $csv = app(Pushery\Billing\Invoicing\DatevExport::class)
     ->export($invoices, $from, $to);
 ```
 
-Set your company details under `config('billing.company')` and your DATEV account numbers under `config('billing.datev')`. ZUGFeRD (this XML embedded in a PDF/A-3) plugs into the same `EInvoice` contract.
+Both syntaxes are built from one normalized invoice model, so a standard sale, an intra-EU reverse charge, a
+credit note (type 381) or a multi-rate split can never drift between them. The reverse-charge zero rate is
+applied only when the buyer's VAT id is **validated** (a `VatIdValidator` seam — a VIES-backed implementation
+ships, with a null default that proves nothing offline) **and** the supply is cross-border (the buyer's
+country differs from `billing.company.country`), so a fake id, a VIES outage, or a domestic sale is never
+wrongly zero-rated.
+
+Set your company details under `config('billing.company')` and your DATEV account numbers under
+`config('billing.datev')`. Embedding the CII XML in a conformant PDF/A-3 is a consumer-side step (any PDF/A-3
+toolchain works) — the package produces the XML both channels need.
 
 ## Feature reference
 

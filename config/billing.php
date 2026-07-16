@@ -2,6 +2,12 @@
 
 declare(strict_types=1);
 
+// Billing ≠ licensing. This file is BILLING — your end customers' subscriptions, invoices and payments.
+// The separate config/license.php is LICENSING — the tiers/entitlements that govern what an owner may DO in
+// the app. They are orthogonal on purpose: neither ever blocks a public/marketing surface, and billing code
+// never reads config('license.*') (an arch guard enforces that) — the single sanctioned bridge is the
+// License contract's ConfigLicense binding. Keep pricing here; keep entitlements in license.php.
+
 return [
 
     /*
@@ -554,6 +560,22 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Realtime
+    |--------------------------------------------------------------------------
+    |
+    | Opt-in live refresh for the account-hub screens. OFF by default: the billing
+    | events only broadcast when this is on AND a broadcaster (e.g. Reverb) is
+    | configured, so a plain install (or a native app) has nothing on the wire and
+    | falls back to a bounded poll. Switch it on once your Echo/Reverb is wired.
+    |
+    */
+
+    'realtime' => [
+        'enabled' => env('BILLING_REALTIME', false),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Coupons
     |--------------------------------------------------------------------------
     |
@@ -582,6 +604,36 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Runtime
+    |--------------------------------------------------------------------------
+    |
+    | Where the account hub renders: "web" (a browser) or "native" (a mobile app
+    | webview). Navigation items flagged web_only are hidden on a native runtime —
+    | for flows an app store forbids from being completed in-app (e.g. account
+    | deletion or a link out to an external billing portal).
+    |
+    */
+
+    'runtime' => env('BILLING_RUNTIME', 'web'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | External billing link-out (No-/external-Merchant-of-Record)
+    |--------------------------------------------------------------------------
+    |
+    | For a mode where an EXTERNAL merchant of record owns billing (an app store's
+    | subscription management, an external Lane/Fuel portal), set this to that
+    | portal's URL. The account hub then links OUT to it for billing management
+    | instead of offering in-app checkout it is not the merchant of record for.
+    | The value is scheme-restricted (only absolute http/https with a host passes,
+    | via SafeExternalUrl); anything else is ignored and link-out stays off.
+    |
+    */
+
+    'link_out' => env('BILLING_LINK_OUT'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Account-hub navigation
     |--------------------------------------------------------------------------
     |
@@ -598,14 +650,14 @@ return [
     */
 
     'navigation' => [
-        'subscription' => ['label' => 'billing::account.nav.subscription', 'route' => 'billing.account.subscription', 'order' => 10],
-        'plan' => ['label' => 'billing::account.nav.plan', 'route' => 'billing.account.plan', 'order' => 20],
-        'payment-methods' => ['label' => 'billing::account.nav.payment_methods', 'route' => 'billing.account.payment-methods', 'order' => 30],
-        'invoices' => ['label' => 'billing::account.nav.invoices', 'route' => 'billing.account.invoices', 'order' => 40],
-        'usage' => ['label' => 'billing::account.nav.usage', 'route' => 'billing.account.usage', 'order' => 50],
-        'usage-history' => ['label' => 'billing::account.nav.usage_history', 'route' => 'billing.account.usage-history', 'order' => 55],
-        'recovery' => ['label' => 'billing::account.nav.recovery', 'route' => 'billing.account.recovery', 'order' => 60],
-        'danger' => ['label' => 'billing::account.nav.danger', 'route' => 'billing.account.danger', 'order' => 70],
+        'subscription' => ['label' => 'billing::account.nav.subscription', 'route' => 'billing.account.subscription', 'group' => 'subscription', 'order' => 10],
+        'plan' => ['label' => 'billing::account.nav.plan', 'route' => 'billing.account.plan', 'group' => 'subscription', 'order' => 20],
+        'payment-methods' => ['label' => 'billing::account.nav.payment_methods', 'route' => 'billing.account.payment-methods', 'group' => 'billing', 'order' => 30],
+        'invoices' => ['label' => 'billing::account.nav.invoices', 'route' => 'billing.account.invoices', 'group' => 'billing', 'order' => 40],
+        'usage' => ['label' => 'billing::account.nav.usage', 'route' => 'billing.account.usage', 'group' => 'usage', 'order' => 50],
+        'usage-history' => ['label' => 'billing::account.nav.usage_history', 'route' => 'billing.account.usage-history', 'group' => 'usage', 'order' => 55],
+        'recovery' => ['label' => 'billing::account.nav.recovery', 'route' => 'billing.account.recovery', 'group' => 'billing', 'order' => 60],
+        'danger' => ['label' => 'billing::account.nav.danger', 'route' => 'billing.account.danger', 'group' => 'account', 'web_only' => true, 'order' => 70],
     ],
 
     /*

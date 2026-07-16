@@ -5,6 +5,8 @@ declare(strict_types=1);
 return [
 
     'title' => 'Abrechnung',
+    'skip_to_content' => 'Zum Inhalt springen',
+    'logout' => 'Abmelden',
 
     'overview' => [
         'heading' => 'Abrechnungsübersicht',
@@ -28,6 +30,9 @@ return [
     'manage' => [
         'heading' => 'Tarif ändern',
         'current' => 'Aktueller Tarif: :plan.',
+        'card_on_file' => 'Hinterlegte Karte: :brand endend auf :last4.',
+        'addons_heading' => 'Add-ons',
+        'addon_buy' => 'Kaufen',
         'swap_to' => 'Wechseln',
         'subscribe' => 'Abonnieren',
         'trial_days' => 'Inklusive :days Tage kostenlos testen.',
@@ -35,6 +40,10 @@ return [
         'preview_due' => 'Heute fällig mit Anrechnung: :amount.',
         'preview_unavailable' => 'Für diese Änderung ist keine Schätzung verfügbar.',
         'no_options' => 'Keine weiteren Tarife verfügbar.',
+        'link_out' => [
+            'body' => 'Die Abrechnung für dieses Konto wird auf der Seite unseres Abrechnungspartners verwaltet.',
+            'action' => 'Abrechnung verwalten',
+        ],
     ],
 
     'coupon' => [
@@ -67,6 +76,8 @@ return [
         'heading' => 'Abo',
         'status' => 'Status',
         'next_invoice' => 'Nächste Rechnung: :amount am :date.',
+        'access_ends' => 'Dein Zugang endet am :date.',
+        'access_ended' => 'Dein Zugang endete am :date.',
         'cancel' => 'Abo kündigen',
         'resume' => 'Abo fortsetzen',
         'portal' => 'Zahlungsportal öffnen',
@@ -80,6 +91,7 @@ return [
         'amount' => 'Betrag',
         'status' => 'Status',
         'download' => 'Herunterladen',
+        'load_older' => 'Ältere laden',
     ],
 
     'invoice_status' => [
@@ -112,6 +124,8 @@ return [
         'warning' => 'Du näherst dich deinem Limit.',
         'over' => 'Du hast dein Limit überschritten.',
         'over_soft' => 'Du bist über deinem inklusiven Kontingent; darüber hinausgehende Nutzung wird berechnet.',
+        'cta_upgrade' => 'Upgrade, um dieses Limit anzuheben',
+        'cta_topup' => 'Guthaben aufladen',
     ],
 
     'usage_history' => [
@@ -120,6 +134,7 @@ return [
         'empty' => 'Noch keine Nutzung erfasst.',
         'periods_heading' => 'Vergangene Perioden',
         'used' => ':used genutzt',
+        'not_metered' => 'Nicht gemessen',
         'prepaid_used' => ':units vorausbezahlt',
         'topups_heading' => 'Aufladungen',
         'reversed' => 'storniert',
@@ -181,6 +196,12 @@ return [
         'usage_history' => 'Verlauf',
         'recovery' => 'Wiederherstellung',
         'danger' => 'Gefahrenzone',
+        'group' => [
+            'subscription' => 'Abonnement',
+            'billing' => 'Abrechnung',
+            'usage' => 'Nutzung',
+            'account' => 'Konto',
+        ],
     ],
 
 ];

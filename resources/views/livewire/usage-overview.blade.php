@@ -62,6 +62,17 @@
                     @elseif ($dimension->isWarning())
                         <p class="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">{{ __('billing::account.usage.warning') }}</p>
                     @endif
+
+                    {{-- Policy-driven remedy: a blocking dimension can only be relieved by upgrading to a higher
+                         ceiling; a degrading/soft one is topped up with more units. The CTA appears once the
+                         dimension is warning or over, and never for a comfortable one. --}}
+                    @if ($dimension->isOver() || $dimension->isWarning())
+                        @php($remedy = $dimension->policy->overRemedy())
+                        <a href="{{ $remedy === 'upgrade' ? route('billing.account.plan') : route('billing.account.plan').'#addons' }}"
+                            class="mt-2 inline-flex text-xs font-medium text-blue-600 hover:underline dark:text-blue-400">
+                            {{ $remedy === 'upgrade' ? __('billing::account.usage.cta_upgrade') : __('billing::account.usage.cta_topup') }}
+                        </a>
+                    @endif
                 </div>
             @endforeach
         </section>

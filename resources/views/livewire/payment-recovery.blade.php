@@ -1,4 +1,4 @@
-<div class="space-y-6">
+<div class="space-y-6" @if ($poll) wire:poll.{{ $poll }}="activationTick" @endif>
     <header>
         <h1 class="text-2xl font-semibold">{{ __('billing::account.recovery.heading') }}</h1>
     </header>

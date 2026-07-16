@@ -67,6 +67,17 @@ enum SubscriptionState: string
     }
 
     /**
+     * Whether this state has a next invoice worth previewing — only a live, subscription-backed paying or
+     * trialing subscription does. A generic trial has no subscription at the provider yet, and grace/ended/
+     * paused/past-due have no NEXT invoice coming, so asking the provider for one is a wasted call that can
+     * only answer null. Gates the one live upcoming-invoice read on the subscription screen.
+     */
+    public function hasUpcomingInvoice(): bool
+    {
+        return $this === self::Active || $this === self::Trialing;
+    }
+
+    /**
      * Whether this state currently grants entitlement access (paying, on grace, or trialing in good
      * standing). Callers still combine this with the resolved tier — a state never implies a tier.
      *
