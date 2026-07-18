@@ -89,6 +89,7 @@ use Pushery\Billing\Listeners\StopBillingForDeletedAccount;
 use Pushery\Billing\Listeners\SyncSeatsOnMembershipChange;
 use Pushery\Billing\Livewire\AccountOverview;
 use Pushery\Billing\Livewire\AccountRealtime;
+use Pushery\Billing\Livewire\BillingAdminConsole;
 use Pushery\Billing\Livewire\DangerZone;
 use Pushery\Billing\Livewire\InvoiceHistory;
 use Pushery\Billing\Livewire\ManageSubscription;
@@ -306,6 +307,9 @@ final class BillingServiceProvider extends ServiceProvider
             // falls back to configured URLs when the hub's own routes are absent.
             if (class_exists(Livewire::class)) {
                 $this->registerAccountHub();
+                // The optional admin console — a separate, admin-gated route, NOT one of the account-hub
+                // screens. Same Livewire-only condition; the billing core never needs it.
+                $this->registerAdminConsole();
             }
 
             // The per-surface suspension lockout, applied by the host as
@@ -417,6 +421,28 @@ final class BillingServiceProvider extends ServiceProvider
                 Route::get('/danger', DangerZone::class)->name('billing.account.danger');
                 Route::get('/portal', [BillingController::class, 'portal'])->name('billing.account.portal');
                 Route::get('/checkout/return', [BillingController::class, 'checkoutReturn'])->name('billing.account.checkout-return');
+            });
+    }
+
+    /**
+     * Register the optional admin console: one Livewire component on its own admin-prefixed route. It is
+     * NOT an account-hub screen — it has a stricter gate (the console authorizes every request against the
+     * app-defined `billing.admin.ability`, fail-closed) and its own minimal shell, so it stays clear of the
+     * customer account screens and their security harness.
+     */
+    private function registerAdminConsole(): void
+    {
+        Livewire::component('billing.admin-console', BillingAdminConsole::class);
+
+        $config = $this->app->make(Repository::class);
+        $prefix = $config->get('billing.admin.prefix', 'admin/billing');
+        $middleware = $config->get('billing.admin.middleware', ['web', 'auth']);
+        $middleware = is_array($middleware) ? $middleware : ['web', 'auth'];
+
+        Route::middleware($middleware)
+            ->prefix(is_string($prefix) ? $prefix : 'admin/billing')
+            ->group(function (): void {
+                Route::get('/', BillingAdminConsole::class)->name('billing.admin.console');
             });
     }
 

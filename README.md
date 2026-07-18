@@ -25,7 +25,7 @@ Everything crosses a small set of contracts, so your app talks to _billing_ — 
 - **Usage-based billing** — charge a base fee _plus_ what a customer actually used ("19 € a month, plus 0.50 € per 1 000 emails, first 10 000 included"). Record usage with one call; the package counts it against the tier's included allowance, shows it on the usage screen, and reports it to the provider that bills it — with a retry that cannot double-bill and an outage that cannot silently lose revenue. A `billing.quota:<meter>` middleware (and a `UsageGate`) applies the meter's policy: a hard-stop / refuse meter is blocked past its allowance, a degrade meter still serves but is flagged, a fair-use meter never blocks. For a limit that must not be oversold, meter the work through `UsageRecorder::meter()` — it HOLDS the allowance under a row lock before the work runs, records only what the work actually consumed, and hands the rest back. The middleware is the cheap pre-check in front of it: on its own it is a point-in-time read, and two simultaneous requests can both pass a boundary check.
 - **Entitlements & seats** — a separate `License` gate for what a tier _unlocks_ (feature grants + numeric limits), independent of what it costs, plus team seats and a User-XOR-Team owner model.
 - **Dunning, suspension & tax** — a config-driven multi-level dunning ladder, a per-surface `423 Locked` suspension gate driven by a stored delinquency clock (outage-safe), and provider tax (Stripe Tax) on the invoice with a pluggable `TaxCalculator` seam for a local computation path.
-- **E-invoicing** — a dependency-free **EN 16931 / XRechnung** (UBL) writer and a **DATEV** (EXTF Buchungsstapel) export.
+- **E-invoicing** — dependency-free **EN 16931** writers in both syntaxes (**XRechnung** UBL and **ZUGFeRD / Factur-X** CII), an optional hybrid **PDF/A-3** embed, and a **DATEV** (EXTF Buchungsstapel) export.
 - **Security-first** — a `billing.enabled` master switch that makes the whole surface disappear, a scoped Content-Security-Policy for the hub, a fail-closed money-eligibility gate, and card capture that happens on the provider's own hosted page, so no card data ever touches your app (PCI SAQ-A).
 
 ## Requirements
@@ -385,6 +385,24 @@ your catalog says you charge, deliberately independent of a provider coupon or m
 a single billing currency; a free tier (no `price_display`) contributes nothing. Pass a window to `compute($days)`
 to measure churn over a different span.
 
+### Admin console (optional Livewire UI)
+
+Those metrics, the recent audit log and the comp-a-tier action are also surfaced as an **optional, publishable
+Livewire console** — the UI counterpart of `BillingMetricsReporter` and `BillingAdmin`, for when support wants a
+screen instead of the CLI. It mounts under `config('billing.admin.prefix')` (default `admin/billing`) behind
+`config('billing.admin.middleware')` (default `web` + `auth`), is plain framework-agnostic Blade (publish
+`billing-views` to reskin it), and — like the account hub — renders only when Livewire is installed, so the
+billing core stays UI-free.
+
+It is **admin-gated, fail-closed**: every request (mount, render *and* the comp action) is authorized against the
+`config('billing.admin.ability')` Gate (default `billing-admin`) — an ability **your app defines**. Until you
+define it the Gate denies everyone, so the console is never open by accident:
+
+```php
+// A support agent, not the account's own user. Define the ability your app already uses for staff.
+Gate::define('billing-admin', fn ($user) => $user->is_staff);
+```
+
 ## Personal data
 
 The package stores personal data on your behalf — the customer's name and address on an invoice, and the raw
@@ -468,8 +486,23 @@ country differs from `billing.company.country`), so a fake id, a VIES outage, or
 wrongly zero-rated.
 
 Set your company details under `config('billing.company')` and your DATEV account numbers under
-`config('billing.datev')`. Embedding the CII XML in a conformant PDF/A-3 is a consumer-side step (any PDF/A-3
-toolchain works) — the package produces the XML both channels need.
+`config('billing.datev')`.
+
+To ship the hybrid **ZUGFeRD / Factur-X** document — the CII XML embedded in a human-readable PDF/A-3 —
+`Invoicing\ZugferdPdfInvoice::embed()` merges the XML into your own rendered invoice PDF and returns the
+PDF/A-3 bytes:
+
+```php
+// $yourInvoicePdf is your app's own rendered invoice (binary content) — the human-readable page the
+// structured XML is embedded into. Pass your own document, never untrusted input.
+$pdf = app(Pushery\Billing\Invoicing\ZugferdPdfInvoice::class)
+    ->embed($invoice, $yourInvoicePdf);
+```
+
+A conformant PDF/A-3 needs a real PDF toolchain the lean core does not carry, so this one helper is **opt-in**:
+`composer require horstoeko/zugferd` (a `suggest` dependency). Without it `embed()` throws a clear
+`MissingPdfEmbedder` instead of fataling — and you can still ship the CII or XRechnung XML on its own, which
+needs no PDF library.
 
 ## Feature reference
 
@@ -523,7 +556,7 @@ The complete surface, by area. Everything below ships today on the Stripe driver
 - `billing.enabled` master switch (the whole surface disappears, incl. Cashier routes), scoped CSP, per-screen fail-closed auth, ownership checks on payment-method verbs.
 - **GDPR** — `billing:erase` / `billing:export` / `billing:prune`; erasure retains invoices (statutory), scrubs webhook-payload PII, banks owed credit to the audit log.
 - **Audit trail** — append-only ledger recording WHO (actor + source: customer/admin/webhook/system) did every money and entitlement change.
-- **Admin console** — `BillingAdmin` (comp / cancel / refund), UI- and auth-agnostic.
+- **Admin console** — `BillingAdmin` (comp / cancel / refund), UI- and auth-agnostic, plus an **optional publishable Livewire console** (metrics + audit log + comp-a-tier) behind an app-defined admin Gate.
 - The Stripe **API version is pinned by the package** (not inherited from the SDK); `billing:doctor` checks your endpoints match it.
 
 **Scheduled + on-demand commands** — see [Scheduled commands](#scheduled-commands) for all 15.

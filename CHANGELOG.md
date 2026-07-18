@@ -4,6 +4,28 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-18
+
+### Added
+
+- **Optional admin console.** A publishable Livewire admin console (`Livewire\BillingAdminConsole`) surfaces
+  the billing metrics, the recent audit log and a comp-a-tier action on one screen — the UI counterpart of
+  `BillingMetricsReporter` and `BillingAdmin`, for support agents who want a screen instead of the CLI. It
+  mounts under `config('billing.admin.prefix')` (default `admin/billing`) and — like the account hub — is
+  plain framework-agnostic Blade that renders only when Livewire is installed, so the billing core stays
+  UI-free. It is **admin-gated, fail-closed**: mount, render and the action each authorize against the
+  app-defined `config('billing.admin.ability')` Gate (default `billing-admin`), which denies everyone until
+  your app defines it. The comp action validates the submitted tier against `config('billing.tiers')` — an
+  unknown or empty key is refused, never written — so it cannot silently downgrade an owner, matching the
+  `billing:tier:grant` CLI. The console meets WCAG 2.1 AA. New `billing.admin` config block; new `admin`
+  translation namespace (seven locales).
+- **ZUGFeRD / Factur-X hybrid PDF/A-3.** A new `Invoicing\ZugferdPdfInvoice` embeds the EN 16931 CII XML into
+  a PDF/A-3 — the hybrid document that is both human-readable (the PDF) and machine-readable (the embedded
+  invoice). The XML comes from `ZugferdCiiInvoice`; the source PDF is your own rendered invoice. Because a
+  conformant PDF/A-3 needs a real PDF toolchain, this is an OPTIONAL capability: `composer require
+  horstoeko/zugferd` (a `suggest` dependency) to use it. Without it the method throws a clear
+  `MissingPdfEmbedder` — the lean core carries no PDF library, and the XML writers need none of it.
+
 ## [0.2.0] - 2026-07-16
 
 ### Fixed
