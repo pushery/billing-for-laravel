@@ -634,6 +634,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Admin console
+    |--------------------------------------------------------------------------
+    |
+    | The optional publishable admin console (billing metrics, the audit log, and a
+    | comp-a-tier action) mounts under `prefix` behind `middleware`, and every access
+    | is authorized against the `ability` Gate — which YOUR app defines. Until you
+    | define it, the Gate denies everyone (fail-closed), so the console is never open
+    | by accident. It renders only when Livewire is installed.
+    |
+    */
+
+    'admin' => [
+        'ability' => env('BILLING_ADMIN_ABILITY', 'billing-admin'),
+        'prefix' => env('BILLING_ADMIN_PREFIX', 'admin/billing'),
+        'middleware' => ['web', 'auth'],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Account-hub navigation
     |--------------------------------------------------------------------------
     |
