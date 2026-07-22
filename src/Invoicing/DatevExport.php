@@ -60,7 +60,11 @@ final readonly class DatevExport
             $from->format('Ymd'),
             $to->format('Ymd'),
             $this->quote('Billing'),
-            '', '1', '0', '0', $this->quote('EUR'),
+            // Fields 19–22: Buchungstyp (1 = Finanzbuchführung), Rechnungslegungszweck (0 = unabhängig),
+            // Festschreibekennzeichen, WKZ. Field 21 is written as "1" — festgeschrieben. A batch exported
+            // as "0" stays alterable after import, which is what GoBD does not permit; the flag is a
+            // property of the exported batch, not a preference, so it is not configurable.
+            '', '1', '0', '1', $this->quote('EUR'),
             '', '', '', '', '', '', '', '', '',
         ]);
     }

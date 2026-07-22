@@ -15,6 +15,15 @@ use Pushery\Billing\ValueObjects\TokenizedMethod;
  * implements. It moves money and stores mandates; it knows nothing about subscriptions, invoices or
  * proration — those live in the BillingEngine above it. Everything crosses the boundary as Money and
  * value objects, never a raw provider response.
+ *
+ * THIS LAYER IS DELIBERATELY NOT ELIGIBILITY-GATED, and it must stay that way. The eligibility gate
+ * (CanTransactMoney) belongs at the ENTRY seams — Checkout, OneTimeCharge, SubscriptionActions::swap —
+ * where a payment BEGINS, not on every charge. Wrapping this interface in a gate looks like the tidier,
+ * more central place for it and is the wrong answer twice over: it guards nothing today, and once dunning
+ * retries exist it would start REFUSING legitimate collections. offSessionCharge() is what a retry uses,
+ * and a subscriber who was eligible when they subscribed can later fail an age or KYC predicate — gating
+ * here would block collecting money they already owe. That an entry-seam gate cannot be forgotten is
+ * enforced structurally instead (tests/Unit/MoneyEntryGateTest.php).
  */
 interface PaymentRails
 {

@@ -4,6 +4,27 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-07-22
+
+### Fixed
+
+- **DATEV exports are now written as locked batches.** The EXTF header's field 21 (`Festschreibekennzeichen`) was emitted as `0`, which marks a booking batch as still alterable after import. It is now `1`. This changes the bytes of every generated export file: if you keep golden copies of exports, regenerate them. A test now pins the flag's position and value against the EXTF 700 field layout rather than against whatever the exporter happens to produce.
+- **An unrecognized country code no longer results in 0% VAT.** `EuOssTaxCalculator` treated any country it had no rate for as zero-rated, so a malformed or unassigned code (`"DEU"`, `"Germany"`, an empty string) was indistinguishable from a genuine supply outside the EU VAT area. A code that is not an assigned ISO 3166-1 alpha-2 country now raises `UnknownTaxCountry`; supplies to real countries outside the EU VAT area continue to be zero-rated as before.
+- **A tax mode that cannot be resolved is refused at boot.** `billing.tax` was ignored by the support guard whenever it was not a string — for example after adding a sub-key underneath it, which turns the value into an array — and a mistyped mode name passed the guard as well. Both then fell through to "no tax", so every invoice was issued with 0% VAT and nothing surfaced it. Any value outside the resolvable set now raises `TaxModeUnsupported` during boot.
+- **`billing.tax = 'stripe'` is recognized as provider tax by the boot guard.** The calculator resolves `'stripe'` as an alias of `'provider'`, but the guard classified it as a locally-computed mode. It therefore refused to boot on the very driver that mode requires, and accepted it on a driver that cannot apply it. Both sides now read the same classification.
+
+### Added
+
+- `TaxCalculatorFactory::MODES` and `TaxCalculatorFactory::PROVIDER_MODES` expose which values `billing.tax` accepts and which of them defer tax to the payment provider, so the boot guard and the calculator can no longer disagree about a mode.
+- The credit ledger's shape is now asserted rather than assumed: a containment test keeps it to a single-owner balance with no value-exit path, so adding a withdrawal or an owner-to-owner transfer fails a test instead of passing silently.
+- The eligibility gate is now held in place structurally. Any implementation of `Checkout`, `OneTimeCharge` or `SubscriptionActions` must consult `CanTransactMoney` before it does anything else, keyed on the contract and the dependency type rather than on a specific driver — so a new driver is covered the moment it appears, and a seam that omits the gate or runs it too late fails a test.
+
+### Changed
+
+- `PaymentRails` now documents why it is deliberately not eligibility-gated: the gate belongs at the entry seams where a payment begins, and gating the rails would refuse legitimate dunning retries for a subscriber who was eligible when they subscribed but no longer satisfies a consumer-supplied predicate.
+- `ext-mbstring` is now declared in `composer.json`. The package already used it, so this documents an existing requirement rather than adding one — every Laravel application already satisfies it through the framework.
+- The two tax failures quote the offending value back so an operator can see what was rejected, but the value is now stripped of control characters and bounded in length first. These messages are persisted into failure-reason columns and written to logs, where an unbounded value with an embedded newline can forge a log line.
+
 ## [0.4.1] - 2026-07-22
 
 ### Fixed

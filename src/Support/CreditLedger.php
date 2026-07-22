@@ -18,6 +18,19 @@ use Pushery\Billing\ValueObjects\Money;
  * The balance is deliberately allowed to go NEGATIVE — a customer who is refunded credit they already
  * spent owes it back, and clamping at zero would silently forgive that debt. Both directions are just a
  * signed integer under the same lock.
+ *
+ * DO NOT ADD A PAYOUT OR TRANSFER METHOD HERE. Two properties of this class are load-bearing and hold only
+ * because the corresponding code does not exist:
+ *
+ *  1. There is no path that pays a balance back OUT — credit is spent against what this package bills, and
+ *     nothing else. The balance is a claim on future invoices, not a store of withdrawable value.
+ *  2. Every method takes exactly ONE owner, so a balance cannot move between owners.
+ *
+ * Together those keep this a prepayment against the seller's own supplies. A withdraw()/payout() method, or
+ * a debit() wired to a "pay out my remaining balance" button, changes what the instrument IS — and it does
+ * so without breaking a single test, which is precisely why the properties are pinned by an explicit
+ * containment test (tests/Unit/CreditLedgerContainmentTest.php) instead of being left to this comment. If a
+ * feature seems to need one of these, it is a design decision to escalate, not a method to add.
  */
 final class CreditLedger
 {
