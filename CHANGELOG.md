@@ -4,12 +4,17 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-07-22
+
+### Fixed
+
+- Housekeeping to the published release notes; no functional or API change since 0.4.0.
+
 ## [0.4.0] - 2026-07-22
 
 ### Added
 
 - **Marketplace seller-of-record posture (opt-in).** A new `billing.marketplace` config block and a `SellerOfRecordResolver` contract name and enforce who the seller of record is to the buyer on a routed sale: the deemed-supplier presumption for electronically-supplied services (Art. 9a VAT-IR (EU) 282/2011, CJEU C-695/20) versus a merchant-as-seller or a disclosed-intermediary posture for physical goods. It is fail-closed (an un-whitelisted posture, or `seller_of_record` on an electronic supply without a genuine Art. 9a rebuttal, is refused) and sits behind a master switch that is **off by default**, so single-merchant behavior is unchanged.
-- **Wider and better-proven release guards.** The spelling guard now reads every text file the package ships — Markdown included, so the adoption skill and the documentation tree once it lands are checked like the rest — and its British-form list no longer loses the inflected forms or the verbs whose noun is spelled the same in both dialects. Five arms are new: internal issue ids and process vocabulary in any shipped prose, German outside the translation files, invalid UTF-8 in text that carries `§`, `€` and umlauts, marketing adjectives in the package's own product voice, and appended data in a shipped image. Every arm ships with a fixture it must reject and one it must accept, so an arm that has quietly stopped matching fails the build instead of reading as a pass.
 
 ### Changed
 
