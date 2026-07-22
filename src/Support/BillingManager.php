@@ -11,7 +11,7 @@ use Pushery\Billing\Exceptions\UnsupportedDriver;
 use Pushery\Billing\ValueObjects\DriverCapabilities;
 
 /**
- * Resolves the active payment driver by name and honours the master switch: when billing.enabled is
+ * Resolves the active payment driver by name and honors the master switch: when billing.enabled is
  * off it returns the NullDriver, so a clone without billing has a clean no-op facade. Drivers are
  * registered lazily via extend() (the Stripe/Mollie/Adyen service providers register their own).
  */

@@ -26,7 +26,7 @@ which runs, and each can be run on its own:
 |---|---|
 | `composer format:test` | Code style — Laravel Pint, zero diffs (`composer format` to fix). |
 | `composer rector:test` | Refactoring — Rector with the PHP rule set, dry-run clean (`composer rector` to apply). |
-| `composer analyse` | Static analysis — Larastan at `max` level, no errors. |
+| `composer analyze` | Static analysis — Larastan at `max` level, no errors. |
 | `composer test:type-coverage` | 100% type coverage of `src/`. |
 | `composer test:coverage` | 100% line coverage of `src/`. |
 

@@ -35,7 +35,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
 
     public function purchase(Model $billable, string $addonKey): ClientIntent
     {
-        // Defence in depth: refuse to open a paid checkout for an ineligible owner even if a caller
+        // Defense in depth: refuse to open a paid checkout for an ineligible owner even if a caller
         // bypassed the UI eligibility guard.
         if (! $this->eligibility->check($billable)) {
             throw EligibilityDenied::forMoneyMovement();

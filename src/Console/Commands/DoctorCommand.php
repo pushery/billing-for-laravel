@@ -92,7 +92,7 @@ final class DoctorCommand extends Command
         return self::SUCCESS;
     }
 
-    /** The version the package pins, honouring an app override, else the tested default. */
+    /** The version the package pins, honoring an app override, else the tested default. */
     private function pinnedVersion(Repository $config): string
     {
         $version = $config->get('billing.stripe.api_version');

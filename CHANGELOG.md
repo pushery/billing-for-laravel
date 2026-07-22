@@ -4,6 +4,19 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-22
+
+### Added
+
+- **Marketplace seller-of-record posture (opt-in).** A new `billing.marketplace` config block and a `SellerOfRecordResolver` contract name and enforce who the seller of record is to the buyer on a routed sale: the deemed-supplier presumption for electronically-supplied services (Art. 9a VAT-IR (EU) 282/2011, CJEU C-695/20) versus a merchant-as-seller or a disclosed-intermediary posture for physical goods. It is fail-closed (an un-whitelisted posture, or `seller_of_record` on an electronic supply without a genuine Art. 9a rebuttal, is refused) and sits behind a master switch that is **off by default**, so single-merchant behavior is unchanged.
+- **Wider and better-proven release guards.** The spelling guard now reads every text file the package ships — Markdown included, so the adoption skill and the documentation tree once it lands are checked like the rest — and its British-form list no longer loses the inflected forms or the verbs whose noun is spelled the same in both dialects. Five arms are new: internal issue ids and process vocabulary in any shipped prose, German outside the translation files, invalid UTF-8 in text that carries `§`, `€` and umlauts, marketing adjectives in the package's own product voice, and appended data in a shipped image. Every arm ships with a fixture it must reject and one it must accept, so an arm that has quietly stopped matching fails the build instead of reading as a pass.
+
+### Changed
+
+- Every publishable asset now also sits under a shared `billing` umbrella tag, so `php artisan vendor:publish --tag=billing` publishes the config, migrations, views and translations in one go; the specific tags (`billing-config`, `billing-views`, …) still publish a single group.
+- The README now carries a Laravel-versions badge next to the PHP-version badge, and `composer.json` declares its `$schema` so editors validate it — three of the standard package-skeleton conventions.
+- The static-analysis composer script is now named `analyze`, the US spelling the rest of the package uses and the one `CONTRIBUTING.md` already documented; the PHPStan subcommand it wraps keeps its own name.
+
 ## [0.3.0] - 2026-07-18
 
 ### Added
@@ -170,7 +183,7 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - **`PricingCatalog::cards()` — one config-authoritative source for the in-app upgrade grid and a public
   `/pricing` page.** Each tier's feature bullets live in config as an ordered list of translation keys (your
   app owns the strings, in every locale), resolved by `PricingCatalog::bulletsFor()`; an optional
-  `highlight`/`badge` per tier emphasises a card. Because both surfaces render from the same `PricingCard`
+  `highlight`/`badge` per tier emphasizes a card. Because both surfaces render from the same `PricingCard`
   read-model and the bullets come only from config, the grid and `/pricing` cannot drift into different
   promises. A malformed `features` entry yields no bullets rather than a raw key on the page.
 - **Customers are warned BEFORE a metered allowance runs out, instead of first learning about it by being
@@ -516,7 +529,7 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - The usage screen's over-limit callout now reflects the meter's policy: a hard limit reads as danger, a
   degrade as a warning, and a fair-use (soft) allowance as neutral information ("billed beyond it")
-  rather than an alarming red — the same allowance was previously coloured as an error for every policy.
+  rather than an alarming red — the same allowance was previously colored as an error for every policy.
 
 - **A refunded, disputed or admin-refunded add-on now claws back the credit it granted.** When a
   one-time add-on's charge is refunded (`charge.refunded`), a dispute over it is lost
@@ -636,7 +649,7 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - `billing:run` scheduler command that advances the active driver's recurring billing cycle
   (scheduled hourly). A no-op under Stripe, which drives its own cycle; the seam exists so a
-  local-engine driver advances every due subscription without a rewrite. Honours the master switch.
+  local-engine driver advances every due subscription without a rewrite. Honors the master switch.
 
 - Per-surface suspension lockout: a `billing.suspend:<surface>` middleware that returns HTTP 423
   (Locked) once a delinquent owner reaches the surface's configured dunning rung
@@ -714,7 +727,7 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 - Eligibility gate: money-initiating account-hub actions (add/change payment method,
   swap plan) and the add-on checkout run a `CanTransactMoney` check first — at the UI and,
-  as defence in depth, in the money-moving driver itself. The package allows everyone by
+  as defense in depth, in the money-moving driver itself. The package allows everyone by
   default; an app binds the fail-closed gate with its own age/KYC checks to deny until
   eligible.
 
@@ -782,7 +795,7 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   account ever got was anonymous. Both now go through the customer registry, which creates the customer
   with the owner's identity on it. This was live on the default configuration.
 
-- `billing.customer.column` is now honoured everywhere, not just in half the package. Invoice history, the
+- `billing.customer.column` is now honored everywhere, not just in half the package. Invoice history, the
   next-invoice preview, the plan-swap preview and the payment-method manager all read a hardcoded
   `stripe_id`, so on a renamed column they silently showed nothing — an empty invoice list, no cards, no
   preview, with no error to notice — and `billing:cards:warn` reported "Warned 0 owner(s)" and exited
@@ -869,7 +882,7 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - Completed the zero-decimal currency set (UGX, XPF, …) so those amounts are no longer
   off by 100×.
 
-- The webhook endpoint honours the billing master switch (404 when billing is disabled).
+- The webhook endpoint honors the billing master switch (404 when billing is disabled).
 
 - Payment-method listing requests the full page so the default card is never truncated
   away.

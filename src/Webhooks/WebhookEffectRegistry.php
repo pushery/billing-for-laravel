@@ -60,7 +60,7 @@ final class WebhookEffectRegistry
         }
 
         // Fire through the framework too, so a host app can listen or fake. Resolved here, not injected,
-        // so a test's Event::fake() (which rebinds the dispatcher after boot) is honoured.
+        // so a test's Event::fake() (which rebinds the dispatcher after boot) is honored.
         Event::dispatch($event);
     }
 }

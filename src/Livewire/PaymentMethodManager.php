@@ -18,7 +18,7 @@ use Pushery\Billing\ValueObjects\PaymentMethod;
  *
  * The method id is a client-supplied action argument (`wire:click="remove('pm_x')"`), so both mutating
  * verbs check it against the owner's OWN methods before acting — an id for another account resolves to a
- * 404 here, and the driver re-checks it against the Stripe customer as defence in depth.
+ * 404 here, and the driver re-checks it against the Stripe customer as defense in depth.
  */
 final class PaymentMethodManager extends AccountScreen
 {
