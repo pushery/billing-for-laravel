@@ -42,7 +42,7 @@ final readonly class PaymentMethod
     public function expiresAt(): ?Carbon
     {
         // Out-of-range month is corrupt provider data — treat it as "no expiry" rather than overflowing
-        // into a neighbouring year (Carbon::create is lenient and would).
+        // into a neighboring year (Carbon::create is lenient and would).
         if ($this->expMonth === null || $this->expYear === null || $this->expMonth < 1 || $this->expMonth > 12) {
             return null;
         }

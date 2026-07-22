@@ -65,7 +65,7 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
 
     public function swap(Model $billable, string $tierKey, bool $prorate = true): void
     {
-        // Defence in depth: a swap reprices the subscription and books a proration — a money movement — so
+        // Defense in depth: a swap reprices the subscription and books a proration — a money movement — so
         // refuse it for an ineligible owner even if a caller bypassed the UI eligibility guard (mirrors
         // StripeCheckout / StripeOneTimeCharge). cancel/resume/cancelNow move no money and stay ungated so
         // account deletion can always cancel.

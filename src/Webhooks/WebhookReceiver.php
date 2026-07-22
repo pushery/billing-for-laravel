@@ -20,7 +20,7 @@ use Pushery\Billing\Support\WebhookEventLedger;
  * The HTTP entry point of the webhook spine: verify the signature, RECORD the delivery, map the payload
  * to neutral domain events, queue each to the registered effects. Verification happens BEFORE anything
  * else is trusted, so a forged payload never reaches an effect or the ledger; a rejected request answers
- * 400. The master switch is honoured first: when billing is disabled the endpoint answers 404, so a
+ * 400. The master switch is honored first: when billing is disabled the endpoint answers 404, so a
  * paused clone mutates no state and sends no dunning even if a secret is still configured.
  *
  * The delivery is recorded WITH its raw payload before any effect runs. That record is what makes the

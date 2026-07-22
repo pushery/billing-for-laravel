@@ -11,7 +11,7 @@ use InvalidArgumentException;
 
 /**
  * One rung of the multi-level dunning ladder: how many days after the delinquency clock started
- * this level fires, plus the fee it applies. Modelled as a value object rather than an enum because
+ * this level fires, plus the fee it applies. Modeled as a value object rather than an enum because
  * the ladder is config-driven — a project defines as many rungs as it needs (config `billing.dunning`).
  * The delinquency clock is a timestamp, never a gateway status, so the ladder is outage-safe.
  */

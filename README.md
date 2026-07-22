@@ -8,6 +8,7 @@
 
 [![Latest Version](https://img.shields.io/packagist/v/pushery/billing-for-laravel.svg)](https://packagist.org/packages/pushery/billing-for-laravel)
 [![PHP Version](https://img.shields.io/packagist/dependency-v/pushery/billing-for-laravel/php.svg)](https://packagist.org/packages/pushery/billing-for-laravel)
+[![Laravel Versions](https://badge.laravel.cloud/badge/pushery/billing-for-laravel?style=flat)](https://packagist.org/packages/pushery/billing-for-laravel)
 [![PHPStan](https://img.shields.io/badge/PHPStan-max-blue.svg)](https://phpstan.org)
 [![Code Style](https://img.shields.io/badge/code%20style-pint-orange.svg)](https://laravel.com/docs/pint)
 [![License](https://img.shields.io/packagist/l/pushery/billing-for-laravel.svg)](LICENSE)
@@ -107,7 +108,7 @@ Each paid tier's `provider_price` is a **Stripe price id**. Create the product a
 BILLING_PRICE_PRO=price_...
 ```
 
-For a **pricing surface** — the in-app upgrade grid and a public `/pricing` page — both render from one config-authoritative source, `PricingCatalog::cards()`, so they can never promise different things. A tier's feature bullets live in config as an ordered list of **translation keys** (your app owns the strings, in every locale); an optional `highlight`/`badge` emphasises a card:
+For a **pricing surface** — the in-app upgrade grid and a public `/pricing` page — both render from one config-authoritative source, `PricingCatalog::cards()`, so they can never promise different things. A tier's feature bullets live in config as an ordered list of **translation keys** (your app owns the strings, in every locale); an optional `highlight`/`badge` emphasizes a card:
 
 ```php
 'pro' => [
@@ -189,6 +190,8 @@ The hub and its emails ship translated in English, German, Spanish, French, Ital
 php artisan vendor:publish --tag=billing-views
 php artisan vendor:publish --tag=billing-lang
 ```
+
+Every publishable asset also sits under a shared `billing` umbrella tag, so `php artisan vendor:publish --tag=billing` publishes the config, migrations, views and translations in one go.
 
 ## Webhooks
 
@@ -644,7 +647,7 @@ Please review the [security policy](SECURITY.md) and report vulnerabilities priv
 
 This package is built and maintained by [Pushery](https://www.pushery.com) — a Berlin-based studio building Laravel applications, SaaS products, and open-source tools.
 
-Building a Laravel UI? [WireKit](https://wirekit.app), Pushery's open-source Livewire component kit, gives you a polished component library out of the box. Browse the rest of our work at [pushery.com](https://www.pushery.com).
+Building a Laravel UI? [WireKit](https://wirekit.app), Pushery's open-source Livewire component kit, gives you a themeable component library out of the box. Browse the rest of our work at [pushery.com](https://www.pushery.com).
 
 ## License
 

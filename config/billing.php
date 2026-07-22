@@ -299,7 +299,7 @@ return [
     |     'label' => 'Pro',
     |     // ... price as above ...
     |     'features'  => ['pricing.pro.projects', 'pricing.pro.priority_support'], // ordered i18n KEYS, never raw text
-    |     'highlight' => true,                    // render this card emphasised
+    |     'highlight' => true,                    // render this card emphasized
     |     'badge'     => 'pricing.badge.popular', // an optional ribbon (also an i18n key)
     | ],
     |
@@ -795,6 +795,50 @@ return [
         'account_length' => (int) env('BILLING_DATEV_ACCOUNT_LENGTH', 4),
         'revenue_account' => env('BILLING_DATEV_REVENUE_ACCOUNT'),
         'customer_account' => env('BILLING_DATEV_CUSTOMER_ACCOUNT'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Marketplace (multi-merchant)
+    |--------------------------------------------------------------------------
+    |
+    | The optional multi-merchant marketplace surface (Stripe Connect). OFF by
+    | default: with `enabled` false the whole marketplace path is unreachable and
+    | the single-merchant behavior is byte-identical.
+    |
+    | `seller_of_record` names WHO the seller is to the buyer, per sale — a
+    | liability/VAT decision the package never makes for you, only enforces. It
+    | turns on what is sold: an electronically-supplied service falls under the
+    | Art. 9a deemed-supplier presumption (the platform is the seller by law;
+    | Art. 9a VAT-IR (EU) 282/2011, CJEU C-695/20), physical goods do not. Pick a
+    | default, whitelist the postures you have opted into, and — only for a genuine
+    | non-electronic / hands-off case — assert the Art. 9a rebuttal to unlock the
+    | `seller_of_record` posture. See the posture guide before changing these.
+    |
+    */
+
+    'marketplace' => [
+        'enabled' => (bool) env('BILLING_MARKETPLACE_ENABLED', false),
+
+        'seller_of_record' => [
+            // platform_deemed_supplier | seller_of_record | platform_intermediary
+            'default_posture' => env('BILLING_MARKETPLACE_POSTURE', 'platform_deemed_supplier'),
+
+            // The postures you have deliberately opted into. Resolving one outside this list is refused.
+            'allowed_postures' => ['platform_deemed_supplier'],
+
+            // Default classification of what is sold. true = electronically-supplied service (Art. 9a
+            // applies); false = physical goods. Override per product class through the resolver.
+            'supplies_are_electronic' => (bool) env('BILLING_MARKETPLACE_SUPPLIES_ELECTRONIC', true),
+
+            // The Art. 9a rebuttal: `seller_of_record` for an electronic supply is refused unless ALL four are
+            // true. A platform that sets its own terms, authorizes billing or approves the supply cannot
+            // truthfully assert these — leave them false and stay the deemed supplier.
+            'art9a_rebuttal_asserted' => (bool) env('BILLING_MARKETPLACE_ART9A_REBUTTAL', false),
+            'no_agb_control' => false,
+            'no_billing_authorization' => false,
+            'no_supply_authorization' => false,
+        ],
     ],
 
 ];

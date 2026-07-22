@@ -50,6 +50,7 @@ use Pushery\Billing\Contracts\PaymentActionNotifier;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\SeatBilling;
+use Pushery\Billing\Contracts\SellerOfRecordResolver;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\SubscriptionNotifier;
 use Pushery\Billing\Contracts\SuspensionLadder;
@@ -98,6 +99,7 @@ use Pushery\Billing\Livewire\PaymentRecovery;
 use Pushery\Billing\Livewire\SubscriptionOverview;
 use Pushery\Billing\Livewire\UsageHistory;
 use Pushery\Billing\Livewire\UsageOverview;
+use Pushery\Billing\Marketplace\ConfigSellerOfRecordResolver;
 use Pushery\Billing\Notifiers\LaravelDunningNotifier;
 use Pushery\Billing\Resolvers\ColumnTierResolver;
 use Pushery\Billing\Resolvers\ConfigBillingEntityResolver;
@@ -155,6 +157,11 @@ final class BillingServiceProvider extends ServiceProvider
         $this->app->singleton(WebhookEffectRegistry::class);
 
         $this->app->bind(DiscountResolver::class, ConfigDiscountResolver::class);
+
+        // Marketplace: the seller-of-record posture resolver. Bound always (cheap); only the marketplace
+        // paths consult it, and the master switch keeps them unreachable when billing.marketplace.enabled is
+        // false, so the single-merchant behavior is unchanged.
+        $this->app->bind(SellerOfRecordResolver::class, ConfigSellerOfRecordResolver::class);
 
         // VAT-id validation is a seam: the default proves nothing (so the package runs offline and never grants
         // a reverse charge on an unvalidated id), an app that needs real EU B2B zero-rating binds ViesVatIdValidator.
@@ -465,11 +472,13 @@ final class BillingServiceProvider extends ServiceProvider
 
     private function registerPublishing(): void
     {
+        // Each group carries its own specific tag AND the shared `billing` umbrella tag, so a consumer can
+        // publish one asset kind (`--tag=billing-config`) or everything at once (`--tag=billing`).
         $this->publishes([
             __DIR__.'/../config/billing.php' => config_path('billing.php'),
             __DIR__.'/../config/account.php' => config_path('account.php'),
             __DIR__.'/../config/license.php' => config_path('license.php'),
-        ], 'billing-config');
+        ], ['billing', 'billing-config']);
 
         // publishesMigrations (not publishes) rewrites each file with a fresh, monotonically increasing
         // timestamp at publish time, so a consumer who publishes them never gets a dev-era prefix that could
@@ -478,14 +487,14 @@ final class BillingServiceProvider extends ServiceProvider
         // BillingServiceProvider::ignoreMigrations() to avoid running both copies.
         $this->publishesMigrations([
             __DIR__.'/../database/migrations/server' => database_path('migrations'),
-        ], 'billing-migrations');
+        ], ['billing', 'billing-migrations']);
 
         $this->publishes([
             __DIR__.'/../resources/views' => resource_path('views/vendor/billing'),
-        ], 'billing-views');
+        ], ['billing', 'billing-views']);
 
         $this->publishes([
             __DIR__.'/../lang' => lang_path('vendor/billing'),
-        ], 'billing-lang');
+        ], ['billing', 'billing-lang']);
     }
 }

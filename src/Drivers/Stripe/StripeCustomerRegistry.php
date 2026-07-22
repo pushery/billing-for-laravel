@@ -16,7 +16,7 @@ use Stripe\StripeClient;
  * copy of "read stripe_id, else create([])"; a create with no email or name gives Stripe nothing to put
  * on the invoice or the receipt, and a hardcoded column ignores a consumer that renamed it.
  *
- * The reference column is config('billing.customer.column') (Cashier's `stripe_id` by default), honoured
+ * The reference column is config('billing.customer.column') (Cashier's `stripe_id` by default), honored
  * on both the read and the write.
  */
 final readonly class StripeCustomerRegistry implements CustomerRegistry
