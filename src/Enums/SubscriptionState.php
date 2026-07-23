@@ -90,4 +90,21 @@ enum SubscriptionState: string
             default => false,
         };
     }
+
+    /**
+     * Whether a stored payment method is still needed for a pending or future charge in this state — a live
+     * subscription that will be billed (or is being retried). Removing the owner's default or only card in
+     * one of these states sends the next charge into involuntary dunning, so it is the state the
+     * default-card guard keys on.
+     *
+     * Grace (canceled, paid through the period end) and the terminal/paused states have no charge coming, so
+     * removing a card there is harmless. A generic trial has no subscription at the provider yet.
+     */
+    public function requiresPaymentMethod(): bool
+    {
+        return match ($this) {
+            self::Active, self::Trialing, self::PastDue, self::Incomplete => true,
+            default => false,
+        };
+    }
 }

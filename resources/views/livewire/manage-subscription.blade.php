@@ -5,6 +5,20 @@
             {{ __('billing::account.manage.current', ['plan' => $currentLabel]) }}
         </p>
 
+        {{-- A scheduled downgrade the customer has not seen take effect yet: shown with its date and a
+             cancel action, so a pending change is never a surprise on the next invoice. --}}
+        @if ($scheduledSwap !== null)
+            <div role="status" class="mt-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm dark:border-amber-900 dark:bg-amber-950">
+                <span class="text-amber-800 dark:text-amber-200">
+                    {{ __('billing::account.manage.scheduled_swap', ['plan' => $scheduledSwap['tierLabel'], 'date' => $scheduledSwap['date']]) }}
+                </span>
+                <button type="button" wire:click="cancelScheduledSwap" wire:loading.attr="disabled"
+                    class="shrink-0 rounded-md border border-amber-300 px-3 py-1 font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-900">
+                    {{ __('billing::account.manage.scheduled_swap_cancel') }}
+                </button>
+            </div>
+        @endif
+
         {{-- Trial-status note: how long is left, and (for a card-free trial) the hint to add one. --}}
         @if ($trial !== null)
             <p role="status" @class([

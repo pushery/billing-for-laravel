@@ -37,6 +37,8 @@ use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\CreditSync;
 use Pushery\Billing\Contracts\CustomerRegistry;
+use Pushery\Billing\Contracts\CycleAmountResolver;
+use Pushery\Billing\Contracts\DatevAccountResolver;
 use Pushery\Billing\Contracts\DiscountResolver;
 use Pushery\Billing\Contracts\DunningGuard;
 use Pushery\Billing\Contracts\DunningNotifier;
@@ -47,6 +49,7 @@ use Pushery\Billing\Contracts\License;
 use Pushery\Billing\Contracts\MandateNotifier;
 use Pushery\Billing\Contracts\MeterInspector;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
+use Pushery\Billing\Contracts\PdfRenderer;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\SeatBilling;
@@ -85,6 +88,8 @@ use Pushery\Billing\Http\Middleware\AccountContentSecurityPolicy;
 use Pushery\Billing\Http\Middleware\EnforceDunning;
 use Pushery\Billing\Http\Middleware\EnforceQuota;
 use Pushery\Billing\Http\Middleware\EnforceSuspension;
+use Pushery\Billing\Invoicing\ConfigDatevAccountResolver;
+use Pushery\Billing\Invoicing\UnavailablePdfRenderer;
 use Pushery\Billing\Invoicing\XRechnungInvoice;
 use Pushery\Billing\Listeners\StopBillingForDeletedAccount;
 use Pushery\Billing\Listeners\SyncSeatsOnMembershipChange;
@@ -103,8 +108,10 @@ use Pushery\Billing\Marketplace\ConfigSellerOfRecordResolver;
 use Pushery\Billing\Notifiers\LaravelDunningNotifier;
 use Pushery\Billing\Resolvers\ColumnTierResolver;
 use Pushery\Billing\Resolvers\ConfigBillingEntityResolver;
+use Pushery\Billing\Resolvers\PlanCycleAmountResolver;
 use Pushery\Billing\Support\BillingConfigValidator;
 use Pushery\Billing\Support\BillingManager;
+use Pushery\Billing\Support\CustodyGuard;
 use Pushery\Billing\Support\MeteringSupportGuard;
 use Pushery\Billing\Support\RetentionFloorGuard;
 use Pushery\Billing\Support\TaxSupportGuard;
@@ -157,6 +164,20 @@ final class BillingServiceProvider extends ServiceProvider
         $this->app->singleton(WebhookEffectRegistry::class);
 
         $this->app->bind(DiscountResolver::class, ConfigDiscountResolver::class);
+
+        // Resolves a DATEV business transaction to its account from the configured chart. The default reads
+        // the single-seller revenue account, so the export is byte-identical until a chart is selected.
+        $this->app->bind(DatevAccountResolver::class, ConfigDatevAccountResolver::class);
+
+        // The PDF step of the local invoice renderer is a seam: the package produces the invoice HTML but
+        // ships no PDF toolchain. The default refuses loudly (bind dompdf/Snappy to enable PDF downloads).
+        $this->app->bind(PdfRenderer::class, UnavailablePdfRenderer::class);
+
+        // What a subscription line costs for a cycle. The default reads a fixed line's stored amount and
+        // hands a metered one to the resolver named on the line, so nothing rates usage unless something was
+        // asked to — a driver that rates remotely keeps doing so, and a local engine binds or names a
+        // resolver that rates from the package's own counters.
+        $this->app->bind(CycleAmountResolver::class, PlanCycleAmountResolver::class);
 
         // Marketplace: the seller-of-record posture resolver. Bound always (cheap); only the marketplace
         // paths consult it, and the master switch keeps them unreachable when billing.marketplace.enabled is
@@ -308,6 +329,11 @@ final class BillingServiceProvider extends ServiceProvider
             // too short would prune tax records too early. EU law leads; keeping data longer is always fine.
             $this->app->make(RetentionFloorGuard::class)->verify();
 
+            // Refuse to boot the platform-held custody mode without a license attestation: holding other
+            // people's funds on the platform's own account is a regulated activity, and a config flag alone
+            // must never be enough to enable it. A no-op unless the marketplace is on.
+            $this->app->make(CustodyGuard::class)->verify();
+
             // The account hub is an OPTIONAL Livewire/WireKit UI: livewire is a suggest + require-dev, not a
             // hard dependency. Register the nine screens and their routes only when Livewire is installed —
             // the billing core (models, webhooks, invoicing, tax, contracts) never needs it, and CheckoutUrls
@@ -420,7 +446,11 @@ final class BillingServiceProvider extends ServiceProvider
                 Route::get('/subscription', SubscriptionOverview::class)->name('billing.account.subscription');
                 Route::get('/plan', ManageSubscription::class)->name('billing.account.plan');
                 Route::get('/invoices', InvoiceHistory::class)->name('billing.account.invoices');
-                Route::get('/invoices/{invoiceId}/download', [BillingController::class, 'downloadInvoice'])->name('billing.account.invoice-download');
+                // A document download is heavier than a screen render and worth rate-limiting; throttle it
+                // per the framework's limiter (60/min). The controller marks the response noindex.
+                Route::get('/invoices/{invoiceId}/download', [BillingController::class, 'downloadInvoice'])
+                    ->middleware('throttle:60,1')
+                    ->name('billing.account.invoice-download');
                 Route::get('/payment-methods', PaymentMethodManager::class)->name('billing.account.payment-methods');
                 Route::get('/usage', UsageOverview::class)->name('billing.account.usage');
                 Route::get('/usage/history', UsageHistory::class)->name('billing.account.usage-history');

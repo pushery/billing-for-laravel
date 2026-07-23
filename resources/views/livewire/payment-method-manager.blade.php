@@ -14,6 +14,13 @@
         </p>
     @endif
 
+    @error('remove')
+        {{-- The default-card guard refused a removal (removing the card a live subscription is billed to). --}}
+        <p role="alert" class="rounded-lg bg-red-50 p-3 text-sm font-medium text-red-900 dark:bg-red-950/40 dark:text-red-100">
+            {{ $message }}
+        </p>
+    @enderror
+
     <section class="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
         @forelse ($methods as $method)
             <div wire:key="pm-{{ $method->id }}" class="flex items-center justify-between p-4">

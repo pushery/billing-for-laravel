@@ -34,6 +34,8 @@ return [
         'addons_heading' => 'Add-ons',
         'addon_buy' => 'Kopen',
         'swap_to' => 'Wisselen',
+        'scheduled_swap' => 'Wijzigt op :date naar :plan.',
+        'scheduled_swap_cancel' => 'Geplande wijziging annuleren',
         'subscribe' => 'Abonneren',
         'trial_days' => 'Inclusief een gratis proefperiode van :days dagen.',
         'preview' => 'Kosten bekijken',
@@ -112,6 +114,7 @@ return [
         'empty' => 'Geen betaalmethoden opgeslagen.',
         'expired' => 'Verlopen :date',
         'expiring' => 'Verloopt :date',
+        'cannot_remove_last_default' => 'Je kunt de kaart waarop je actieve abonnement wordt afgeschreven niet verwijderen. Voeg eerst een andere betaalmethode toe en stel die in als standaard.',
     ],
 
     'degraded' => 'Een deel van deze pagina kon niet worden geladen. Probeer het zo opnieuw.',

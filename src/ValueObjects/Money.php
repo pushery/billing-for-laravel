@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\ValueObjects;
 
 use InvalidArgumentException;
+use Pushery\Billing\Enums\RoundingResidual;
 use Pushery\Billing\Exceptions\CurrencyMismatch;
 
 /**
@@ -168,6 +169,96 @@ final readonly class Money
         return array_map(fn (int $s): self => new self($s, $this->currency), array_values($shares));
     }
 
+    /**
+     * Split into a bps portion and the remainder, summing EXACTLY to the original.
+     *
+     * A percentage of an integer amount rarely divides evenly, and the rule that keeps a cent from
+     * appearing or vanishing is that one side is computed and the OTHER is the difference — never both
+     * independently. That is exactly what allocate() does; this is the bps-shaped face of it. The odd minor
+     * unit of an uneven split goes to the side named by $residual, which at volume is real money and so is
+     * an explicit choice rather than a consequence of argument order.
+     *
+     * A fee of 2.5% is 250 bps. `splitByBps(250, RoundingResidual::ToPortion)` returns `[fee, net]` with the
+     * leftover unit on the fee; `ToRemainder` puts it on the net. Both are integer math end to end — no float
+     * is ever constructed.
+     *
+     * @return array{self, self} [portion, remainder]
+     */
+    public function splitByBps(int $bps, RoundingResidual $residual): array
+    {
+        if ($bps < 0 || $bps > 10_000) {
+            throw new InvalidArgumentException("A bps split must be between 0 and 10000; got {$bps}.");
+        }
+
+        // allocate() puts the residual on the FIRST ratio. To land it on the portion, the portion's ratio
+        // goes first; to land it on the remainder, the remainder's does — then the pair is returned in the
+        // fixed [portion, remainder] order regardless, so a caller never has to track which way it ran.
+        if ($residual === RoundingResidual::ToPortion) {
+            [$portion, $remainder] = $this->allocate($bps, 10_000 - $bps);
+        } else {
+            [$remainder, $portion] = $this->allocate(10_000 - $bps, $bps);
+        }
+
+        return [$portion, $remainder];
+    }
+
+    /**
+     * Read an amount that INCLUDES a bps markup as the base it was added to and the markup itself.
+     *
+     * Gross to net: a 119.00 amount that carries 19% (1900 bps) is a 100.00 base plus 19.00. The base is
+     * `round(amount / (1 + bps))` as integer minor-unit math, and the markup is the DIFFERENCE — so the two
+     * always sum back to the original and a cent is never conjured. At 7% on 119.00 that is 111.21 base and
+     * 7.79 markup as the difference, where an independent `base × rate` would have lost a cent.
+     *
+     * @return array{self, self} [base, markup]
+     */
+    public function baseFromMarkup(int $bps): array
+    {
+        if ($bps < 0) {
+            throw new InvalidArgumentException("A bps markup cannot be negative; got {$bps}.");
+        }
+
+        $base = new self($this->halfUpDiv($this->minorUnits * 10_000, 10_000 + $bps), $this->currency);
+
+        return [$base, $this->minus($base)];
+    }
+
+    /**
+     * Read an amount that REMAINS after a bps rate was deducted as the base it came from and the deduction.
+     *
+     * Target payout to net: a 90.00 payout after a 10% (1000 bps) fee reconstructs a 100.00 base, and the
+     * deduction is the base minus the amount (10.00). The base is `round(amount / (1 − bps))` in integer
+     * minor units; the deduction is the DIFFERENCE, so the base less the deduction is the amount exactly.
+     *
+     * @return array{self, self} [base, deduction]
+     */
+    public function baseFromRate(int $bps): array
+    {
+        if ($bps < 0 || $bps >= 10_000) {
+            throw new InvalidArgumentException("A bps rate to reverse must be between 0 and 9999; got {$bps}.");
+        }
+
+        $base = new self($this->halfUpDiv($this->minorUnits * 10_000, 10_000 - $bps), $this->currency);
+
+        return [$base, $base->minus($this)];
+    }
+
+    /**
+     * Integer division rounded half-up by magnitude, no float involved.
+     *
+     * The magnitude is rounded and the sign reapplied, so a refund (a negative amount) rounds the same
+     * distance from zero as the charge it reverses — the alternative (rounding toward negative infinity)
+     * would make a reversal off by a cent from the thing it undoes. The divisor is always positive here
+     * (10000 ± a bounded bps), so only the dividend carries the sign.
+     */
+    private function halfUpDiv(int $dividend, int $divisor): int
+    {
+        $sign = $dividend < 0 ? -1 : 1;
+        $magnitude = intdiv(abs($dividend) * 2 + $divisor, $divisor * 2);
+
+        return $sign * $magnitude;
+    }
+
     public function isZero(): bool
     {
         return $this->minorUnits === 0;
@@ -221,6 +312,46 @@ final readonly class Money
     public function format(): string
     {
         return $this->toDecimal().' '.$this->currency;
+    }
+
+    /**
+     * The Mollie amount shape: a decimal-string value plus its currency, e.g. `['value' => '10.00',
+     * 'currency' => 'EUR']`.
+     *
+     * Mollie is the one provider that speaks decimal strings rather than integer minor units, and its
+     * value must carry exactly the currency's number of decimal places — "10" or "10.000" for a EUR amount
+     * is rejected by the API. That formatting is already toDecimal()'s job (a zero-decimal currency like JPY
+     * renders with no point at all), so this is a thin shape around it, not a second implementation.
+     *
+     * @return array{value: string, currency: string}
+     */
+    public function toMollie(): array
+    {
+        return ['value' => $this->toDecimal(), 'currency' => $this->currency];
+    }
+
+    /**
+     * Read a Mollie amount back into Money, with no float anywhere on the path.
+     *
+     * The value is parsed through fromDecimal(), which is integer/string based and rejects more precision
+     * than the currency allows — so a malformed amount is refused here rather than silently truncated. The
+     * currency must be a present string; a missing or non-string field is a malformed payload, not a value
+     * to coerce.
+     *
+     * @param  array{value?: mixed, currency?: mixed}  $amount
+     */
+    public static function fromMollie(array $amount): self
+    {
+        $value = $amount['value'] ?? null;
+        $currency = $amount['currency'] ?? null;
+
+        if (! is_string($value) || ! is_string($currency)) {
+            throw new InvalidArgumentException(
+                'A Mollie amount must carry a string value and a string currency.'
+            );
+        }
+
+        return self::fromDecimal($value, $currency);
     }
 
     private function assertSameCurrency(self $other): void

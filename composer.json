@@ -59,7 +59,7 @@
         "spaze/phpstan-disallowed-calls": "^4.12"
     },
     "suggest": {
-        "livewire/livewire": "Required only for the optional account-hub UI — the nine Livewire screens. The billing core (models, webhooks, invoicing, tax, contracts) needs none of it.",
+        "livewire/livewire": "Required only for the optional account-hub UI \u2014 the nine Livewire screens. The billing core (models, webhooks, invoicing, tax, contracts) needs none of it.",
         "horstoeko/zugferd": "Required only to embed the EN 16931 CII XML into a ZUGFeRD/Factur-X hybrid PDF/A-3 via Invoicing\\ZugferdPdfInvoice. The CII and XRechnung XML writers need none of it."
     },
     "autoload": {

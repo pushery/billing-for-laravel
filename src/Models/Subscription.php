@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
@@ -21,6 +23,8 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * @property ?string $provider_id
  * @property string $status
  * @property ?string $tier_key
+ * @property ?string $scheduled_tier_key
+ * @property ?Carbon $scheduled_swap_at
  * @property ?Carbon $trial_ends_at
  * @property ?Carbon $ends_at
  * @property ?Carbon $delinquent_since
@@ -36,6 +40,7 @@ final class Subscription extends Model
     /** @var list<string> */
     protected $fillable = [
         'owner_type', 'owner_id', 'type', 'provider', 'provider_id', 'status', 'tier_key',
+        'scheduled_tier_key', 'scheduled_swap_at',
         'trial_ends_at', 'ends_at', 'delinquent_since', 'dunning_level', 'synced_event_at',
         'current_period_start', 'current_period_end',
     ];
@@ -52,6 +57,7 @@ final class Subscription extends Model
         'synced_event_at' => 'integer',
         'current_period_start' => UtcDateTime::class,
         'current_period_end' => UtcDateTime::class,
+        'scheduled_swap_at' => UtcDateTime::class,
     ];
 
     public function onTrial(): bool
@@ -94,6 +100,50 @@ final class Subscription extends Model
     public function paused(): bool
     {
         return $this->status === 'paused';
+    }
+
+    /** Whether a plan change is scheduled but not yet in effect (a downgrade waiting for the period end). */
+    public function hasScheduledSwap(): bool
+    {
+        return $this->scheduled_tier_key !== null;
+    }
+
+    /**
+     * Record a plan change to take effect later, replacing any earlier pending one.
+     *
+     * Overwriting rather than stacking is deliberate: two pending downgrades make no sense — the customer's
+     * latest choice is the one that should land — and keeping only the newest means the effective date is
+     * always the one the customer last saw on the screen.
+     */
+    public function scheduleSwap(string $tierKey, CarbonInterface $at): void
+    {
+        $this->update(['scheduled_tier_key' => $tierKey, 'scheduled_swap_at' => $at]);
+    }
+
+    /** Drop a pending plan change — the customer canceled it, or a new upgrade took effect immediately. */
+    public function cancelScheduledSwap(): void
+    {
+        // Cleared when EITHER column is set, not only when the tier is: a malformed row (a date with no
+        // tier) must also be clearable, or the runner would re-select it by date on every pass and never
+        // shake it loose. A row with both already null needs no write.
+        if ($this->scheduled_tier_key === null && $this->scheduled_swap_at === null) {
+            return;
+        }
+
+        $this->update(['scheduled_tier_key' => null, 'scheduled_swap_at' => null]);
+    }
+
+    /**
+     * The provider-neutral lines this subscription bills each cycle.
+     *
+     * Empty for a Stripe subscription, whose lines live in Cashier's own `subscription_items` — this
+     * relation is what the local engine (Mollie, Adyen) uses in place of a provider-side line model.
+     *
+     * @return HasMany<SubscriptionItem, $this>
+     */
+    public function items(): HasMany
+    {
+        return $this->hasMany(SubscriptionItem::class, 'billing_subscription_id');
     }
 
     /** Build the driver-neutral snapshot the SubscriptionPresenter collapses into one state. */

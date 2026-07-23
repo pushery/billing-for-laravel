@@ -40,6 +40,21 @@ final class BillingDataExport
             $export[$table] = array_values($rows);
         }
 
+        // Child tables key on their parent row, not on the owner, so the filter above cannot see them —
+        // they are reached by joining through the parent. They are still this person's data (what they
+        // subscribe to and are billed for each cycle), and the eraser reads the same map, so a child table
+        // cannot end up covered by one side and forgotten by the other.
+        foreach (OwnerScopedTables::CASCADED as $table => $link) {
+            $export[$table] = array_values(DB::table($table)
+                ->whereIn($link['foreign_key'], DB::table($link['parent'])
+                    ->where('owner_type', $owner->getMorphClass())
+                    ->where('owner_id', $owner->getKey())
+                    ->select('id'))
+                ->get()
+                ->map(fn (object $row): array => (array) $row)
+                ->all());
+        }
+
         // The audit ledger keys on subject/actor, not owner — but a subject-access request covers the
         // owner's billing history all the same, so include the rows where they are the subject OR the actor.
         $export['billing_events'] = array_values(DB::table('billing_events')

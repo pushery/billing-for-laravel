@@ -22,6 +22,13 @@ namespace Pushery\Billing\Support;
  * SCRUBBED — the stored webhook deliveries. The delivery record is what makes a failed effect replayable
  * and is the package's own account of what the provider sent, so the row stays; the raw payload inside it
  * carries the customer's email, name, billing address and card last four, so that goes.
+ *
+ * CASCADED — a table keyed to a PARENT row rather than to the owner. It cannot go in the lists above,
+ * because the eraser and exporter filter on `owner_type`/`owner_id` and those columns do not exist on it;
+ * it is reached by joining through its parent instead. Both sides read this map for the same reason they
+ * read the lists above: a child table covered by one and forgotten by the other is exactly the drift this
+ * class exists to prevent — an export alone leaves the data behind, a delete alone denies a person their
+ * copy of it.
  */
 final class OwnerScopedTables
 {
@@ -40,6 +47,10 @@ final class OwnerScopedTables
         // discounted lives on the retained invoice). It goes with the person; the coupon definition itself is
         // owner-less and stays.
         'billing_coupon_redemptions',
+        // A local order is the operational billing unit a due cycle is assembled into; the RETAINED financial
+        // record is the invoice produced from it, not the order itself. So an order is purged with the owner,
+        // the same way the subscription it billed is.
+        'billing_orders',
     ];
 
     /** Kept, but unlinked from the owner: the law requires them for years. */
@@ -50,6 +61,21 @@ final class OwnerScopedTables
 
     /** The row survives; the personal data inside it does not. */
     public const string SCRUBBED = 'billing_webhook_events';
+
+    /**
+     * Child tables, reached through their parent: table => [parent table, referencing column].
+     *
+     * The foreign key would cascade these away on its own, and that is deliberately NOT what the eraser
+     * relies on: SQLite enforces foreign keys only when `PRAGMA foreign_keys` is on, and it is off by
+     * default — an erasure obligation resting on a setting the CONSUMING application controls, failing
+     * silently on the one engine where nothing would look wrong. The cascade stays as defense in depth.
+     *
+     * @var array<string, array{parent: string, foreign_key: string}>
+     */
+    public const array CASCADED = [
+        'billing_subscription_items' => ['parent' => 'billing_subscriptions', 'foreign_key' => 'billing_subscription_id'],
+        'billing_order_items' => ['parent' => 'billing_orders', 'foreign_key' => 'order_id'],
+    ];
 
     /**
      * Every table an owner's data lives in — what an export has to cover to be a complete answer.

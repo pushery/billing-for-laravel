@@ -34,6 +34,8 @@ return [
         'addons_heading' => 'Add-ons',
         'addon_buy' => 'Buy',
         'swap_to' => 'Switch',
+        'scheduled_swap' => 'Changes to :plan on :date.',
+        'scheduled_swap_cancel' => 'Cancel scheduled change',
         'subscribe' => 'Subscribe',
         'trial_days' => 'Includes a :days-day free trial.',
         'preview' => 'Preview cost',
@@ -112,6 +114,7 @@ return [
         'empty' => 'No payment methods on file.',
         'expired' => 'Expired :date',
         'expiring' => 'Expires :date',
+        'cannot_remove_last_default' => 'You cannot remove the card your active subscription is billed to. Add another payment method and make it the default first.',
     ],
 
     'degraded' => 'Part of this page could not be loaded. Please try again in a moment.',

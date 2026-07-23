@@ -57,7 +57,41 @@ final class PaymentMethodManager extends AccountScreen
     {
         $this->authorizeMethod($methodId);
 
+        // Self-harm guard: removing the default (or only) card while a live subscription will still be
+        // charged strands the next charge and sends the owner into involuntary dunning. Refuse with a clear
+        // message — set another card as default first — rather than a 500 or a silent lapse. This is a
+        // correctness guard, not a security one: ownership is already enforced by authorizeMethod().
+        if ($this->wouldStrandBilling($methodId)) {
+            $this->addError('remove', __('billing::account.payment_methods.cannot_remove_last_default'));
+
+            return;
+        }
+
         app(PaymentMethods::class)->remove($this->owner(), $methodId);
+    }
+
+    /**
+     * Whether removing this method would leave a live subscription with no card to bill: the method is the
+     * default or the owner's only one, AND the subscription is in a state that still needs a payment method
+     * (a charge is coming or is being retried). Grace and the terminal states have no charge coming, so
+     * removing a card there is harmless.
+     */
+    private function wouldStrandBilling(string $methodId): bool
+    {
+        if (! $this->currentState()->requiresPaymentMethod()) {
+            return false;
+        }
+
+        $methods = app(PaymentMethods::class)->all($this->owner());
+
+        if (count($methods) === 1) {
+            return true;
+        }
+
+        return array_any(
+            $methods,
+            static fn (PaymentMethod $method): bool => $method->id === $methodId && $method->isDefault,
+        );
     }
 
     /**

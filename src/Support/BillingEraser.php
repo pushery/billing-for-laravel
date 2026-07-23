@@ -57,6 +57,15 @@ final readonly class BillingEraser
         $report = DB::transaction(function () use ($owner, $credit): ErasureReport {
             $purged = [];
 
+            // Child tables key on their parent row, not on the owner, so the loop below cannot see them —
+            // and they must go FIRST, while the parent rows still exist to join through. Why this is not
+            // left to the foreign key is recorded on the map itself (OwnerScopedTables::CASCADED).
+            foreach (OwnerScopedTables::CASCADED as $table => $link) {
+                $purged[$table] = DB::table($table)
+                    ->whereIn($link['foreign_key'], $this->owned($link['parent'], $owner)->select('id'))
+                    ->delete();
+            }
+
             foreach (OwnerScopedTables::PURGED as $table) {
                 $purged[$table] = $this->owned($table, $owner)->delete();
             }

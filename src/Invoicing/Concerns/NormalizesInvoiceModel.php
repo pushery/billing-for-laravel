@@ -42,13 +42,42 @@ trait NormalizesInvoiceModel
         return is_array($value) ? $value : [];
     }
 
-    /** The buyer's BT-10 reference (Leitweg-ID) from the stored buyer snapshot, or null. */
+    /**
+     * The buyer's BT-10 reference (the Leitweg-ID for a German B2G supply), from the invoice's own
+     * `buyer_reference` column. The column is authoritative — it is the frozen value the invoice was issued
+     * with — and the buyer snapshot's `reference` is only a fallback for a row written before the column
+     * existed. Null when neither carries one.
+     */
     private function buyerReference(InvoiceRecord $invoice): ?string
     {
+        $column = $invoice->buyer_reference;
+
+        if (is_string($column) && $column !== '') {
+            return $column;
+        }
+
         $buyer = $invoice->getAttribute('buyer');
         $reference = is_array($buyer) ? ($buyer['reference'] ?? null) : null;
 
         return is_string($reference) && $reference !== '' ? $reference : null;
+    }
+
+    /**
+     * The BT-120 tax exemption / reverse-charge reason text, from the invoice's `vat_note` column.
+     *
+     * It is DERIVED, not a literal: a reverse charge without an explicit note falls back to the standard
+     * "Reverse charge" wording, but a stored note (an OSS reference, a specific exemption clause) is used as
+     * written. Null when the supply carries no exemption reason at all.
+     */
+    private function vatNote(InvoiceRecord $invoice, bool $reverseCharge): ?string
+    {
+        $note = $invoice->vat_note;
+
+        if (is_string($note) && $note !== '') {
+            return $note;
+        }
+
+        return $reverseCharge ? 'Reverse charge' : null;
     }
 
     /**

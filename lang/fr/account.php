@@ -34,6 +34,8 @@ return [
         'addons_heading' => 'Options',
         'addon_buy' => 'Acheter',
         'swap_to' => 'Changer',
+        'scheduled_swap' => 'Passe à :plan le :date.',
+        'scheduled_swap_cancel' => 'Annuler le changement programmé',
         'subscribe' => 'S’abonner',
         'trial_days' => 'Inclut un essai gratuit de :days jours.',
         'preview' => 'Estimer le coût',
@@ -112,6 +114,7 @@ return [
         'empty' => 'Aucun moyen de paiement enregistré.',
         'expired' => 'Expirée :date',
         'expiring' => 'Expire :date',
+        'cannot_remove_last_default' => 'Tu ne peux pas supprimer la carte sur laquelle ton abonnement actif est prélevé. Ajoute d’abord un autre moyen de paiement et définis-le par défaut.',
     ],
 
     'degraded' => 'Une partie de cette page n’a pas pu se charger. Réessaie dans un instant.',

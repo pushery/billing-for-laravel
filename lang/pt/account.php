@@ -34,6 +34,8 @@ return [
         'addons_heading' => 'Complementos',
         'addon_buy' => 'Comprar',
         'swap_to' => 'Mudar',
+        'scheduled_swap' => 'Muda para :plan em :date.',
+        'scheduled_swap_cancel' => 'Cancelar a mudança agendada',
         'subscribe' => 'Subscrever',
         'trial_days' => 'Inclui um período de teste gratuito de :days dias.',
         'preview' => 'Ver custo',
@@ -112,6 +114,7 @@ return [
         'empty' => 'Não há métodos de pagamento guardados.',
         'expired' => 'Expirou :date',
         'expiring' => 'Expira :date',
+        'cannot_remove_last_default' => 'Não podes remover o cartão no qual a tua subscrição ativa é cobrada. Adiciona primeiro outro método de pagamento e define-o como predefinido.',
     ],
 
     'degraded' => 'Parte desta página não pôde ser carregada. Tenta novamente daqui a pouco.',

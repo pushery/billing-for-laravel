@@ -34,6 +34,8 @@ return [
         'addons_heading' => 'Componenti aggiuntivi',
         'addon_buy' => 'Acquista',
         'swap_to' => 'Cambia',
+        'scheduled_swap' => 'Passa a :plan il :date.',
+        'scheduled_swap_cancel' => 'Annulla la modifica programmata',
         'subscribe' => 'Abbonati',
         'trial_days' => 'Include una prova gratuita di :days giorni.',
         'preview' => 'Anteprima costo',
@@ -112,6 +114,7 @@ return [
         'empty' => 'Nessun metodo di pagamento salvato.',
         'expired' => 'Scaduta :date',
         'expiring' => 'Scade :date',
+        'cannot_remove_last_default' => 'Non puoi rimuovere la carta su cui viene addebitato il tuo abbonamento attivo. Aggiungi prima un altro metodo di pagamento e impostalo come predefinito.',
     ],
 
     'degraded' => 'Non è stato possibile caricare una parte di questa pagina. Riprova tra un momento.',

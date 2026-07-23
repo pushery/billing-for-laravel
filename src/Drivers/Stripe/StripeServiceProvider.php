@@ -30,7 +30,7 @@ use Pushery\Billing\Contracts\WebhookVerifier;
 use Pushery\Billing\Drivers\NullCustomerRegistry;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
-use Pushery\Billing\Events\InvoiceCredited;
+use Pushery\Billing\Events\InvoiceCorrected;
 use Pushery\Billing\Events\InvoiceFinalized;
 use Pushery\Billing\Events\InvoiceUpcoming;
 use Pushery\Billing\Events\MandateRevoked;
@@ -43,8 +43,8 @@ use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\WebhookSecretGuard;
 use Pushery\Billing\Webhooks\Effects\CreditAddonPurchase;
 use Pushery\Billing\Webhooks\Effects\FlushUpcomingUsage;
-use Pushery\Billing\Webhooks\Effects\PersistCreditNote;
 use Pushery\Billing\Webhooks\Effects\PersistInvoice;
+use Pushery\Billing\Webhooks\Effects\PersistInvoiceCorrection;
 use Pushery\Billing\Webhooks\Effects\ReverseAddonPurchase;
 use Pushery\Billing\Webhooks\Effects\RevokeMandate;
 use Pushery\Billing\Webhooks\Effects\SendDunningNotice;
@@ -154,7 +154,7 @@ final class StripeServiceProvider extends ServiceProvider
         // move; this tells them when it did.
         $registry->on(PaymentSucceeded::class, SendPaymentReceipt::class);
         $registry->on(InvoiceFinalized::class, PersistInvoice::class);
-        $registry->on(InvoiceCredited::class, PersistCreditNote::class);
+        $registry->on(InvoiceCorrected::class, PersistInvoiceCorrection::class);
         $registry->on(MandateRevoked::class, RevokeMandate::class);
         $registry->on(InvoiceUpcoming::class, FlushUpcomingUsage::class);
         $registry->on(TrialEnding::class, SendTrialEndingNotice::class);

@@ -49,22 +49,23 @@ final readonly class XRechnungInvoice implements EInvoice
 
         $reference = $invoice->number ?? (string) $invoice->id;
 
-        $creditNote = $invoice->isCreditNote();
+        $correction = $invoice->isCorrection();
 
         $this->el($doc, $root, 'cbc:CustomizationID', self::CUSTOMIZATION);
         $this->el($doc, $root, 'cbc:ID', $reference);
         $this->el($doc, $root, 'cbc:IssueDate', ($invoice->issued_at ?? Carbon::now())->format('Y-m-d'));
-        // BT-3 Type code: 380 for an invoice, 381 for a credit note. Expressing a credit note in Invoice
-        // syntax with type 381 is a valid EN 16931 credit note — the code, not a negative amount, carries
-        // the credit meaning, so the amounts below stay positive.
-        $this->el($doc, $root, 'cbc:InvoiceTypeCode', $creditNote ? '381' : '380');
+        // BT-3 Type code: 380 for an invoice, 381 for a correction (EN 16931 names 381 "Credit note").
+        // Expressing a correction in Invoice syntax with type 381 is valid — the code, not a negative
+        // amount, carries the correcting meaning, so the amounts below stay positive. (The 384 amendment
+        // branch is added with the correction roles' XML serialization; today only 381 is produced.)
+        $this->el($doc, $root, 'cbc:InvoiceTypeCode', $correction ? '381' : '380');
         $this->el($doc, $root, 'cbc:DocumentCurrencyCode', $currency);
         // BT-10 Buyer reference (the Leitweg-ID for B2G); defaults to the invoice reference for B2B.
         $this->el($doc, $root, 'cbc:BuyerReference', $this->buyerReference($invoice) ?? $reference);
 
-        // BG-3 Preceding invoice reference: a credit note must name the invoice it credits (BR-55). UBL
+        // BG-3 Preceding invoice reference: a correction must name the invoice it corrects (BR-55). UBL
         // orders cac:BillingReference after cbc:BuyerReference and before the parties.
-        if ($creditNote && $invoice->credited_invoice_number !== null) {
+        if ($correction && $invoice->credited_invoice_number !== null) {
             $root->appendChild($this->billingReference($doc, $invoice->credited_invoice_number));
         }
 
@@ -88,7 +89,11 @@ final readonly class XRechnungInvoice implements EInvoice
         // overstate the net — so force zero here rather than trust a line's notional rate.
         $tax = $reverseCharge ? 0 : ($lines === [] ? ($invoice->tax_minor ?? 0) : $this->sum($bands, fn (array $band): int => $band['tax']));
 
-        $root->appendChild($this->taxTotal($doc, $bands, $tax, $currency, $reverseCharge));
+        // BT-120: the exemption reason text, DERIVED from the invoice's vat_note column (a reverse charge
+        // with no stored note falls back to the standard wording), never a hardcoded literal.
+        $exemptionReason = $this->vatNote($invoice, $reverseCharge);
+
+        $root->appendChild($this->taxTotal($doc, $bands, $tax, $currency, $reverseCharge, $exemptionReason));
         $root->appendChild($this->monetaryTotal($doc, $net, $tax, $currency));
 
         foreach ($lines as $index => $line) {
@@ -162,7 +167,7 @@ final readonly class XRechnungInvoice implements EInvoice
      *
      * @param  list<array{rate: float, taxable: int, tax: int}>  $bands
      */
-    private function taxTotal(DOMDocument $doc, array $bands, int $tax, string $currency, bool $reverseCharge): DOMElement
+    private function taxTotal(DOMDocument $doc, array $bands, int $tax, string $currency, bool $reverseCharge, ?string $exemptionReason): DOMElement
     {
         $node = $doc->createElement('cac:TaxTotal');
         $this->money($doc, $node, 'cbc:TaxAmount', $tax, $currency);
@@ -173,7 +178,7 @@ final readonly class XRechnungInvoice implements EInvoice
             // A reverse-charge (AE) band carries zero tax — the buyer accounts for it (BR-AE-*).
             $this->money($doc, $subtotal, 'cbc:TaxAmount', $reverseCharge ? 0 : $band['tax'], $currency);
             // The document-level band carries the exemption reason (BT-120/121) for a reverse charge.
-            $subtotal->appendChild($this->taxCategory($doc, 'cac:TaxCategory', $band['rate'], $reverseCharge, withReason: true));
+            $subtotal->appendChild($this->taxCategory($doc, 'cac:TaxCategory', $band['rate'], $reverseCharge, withReason: true, exemptionReason: $exemptionReason));
 
             $node->appendChild($subtotal);
         }
@@ -200,7 +205,7 @@ final readonly class XRechnungInvoice implements EInvoice
      * require. The line-level ClassifiedTaxCategory carries the code + rate only; the reason lives once, on
      * the band. UBL order inside cac:TaxCategory: ID, Percent, TaxExemptionReasonCode/Reason, TaxScheme.
      */
-    private function taxCategory(DOMDocument $doc, string $name, float $rate, bool $reverseCharge, bool $withReason = false): DOMElement
+    private function taxCategory(DOMDocument $doc, string $name, float $rate, bool $reverseCharge, bool $withReason = false, ?string $exemptionReason = null): DOMElement
     {
         $category = $doc->createElement($name);
         $this->el($doc, $category, 'cbc:ID', $reverseCharge ? 'AE' : ($rate > 0 ? 'S' : 'Z'));
@@ -208,7 +213,9 @@ final readonly class XRechnungInvoice implements EInvoice
 
         if ($reverseCharge && $withReason) {
             $this->el($doc, $category, 'cbc:TaxExemptionReasonCode', 'VATEX-EU-AE');
-            $this->el($doc, $category, 'cbc:TaxExemptionReason', 'Reverse charge');
+            // BT-120: the derived reason text (from vat_note), falling back to the standard wording only when
+            // the column carries none — never hardcoded.
+            $this->el($doc, $category, 'cbc:TaxExemptionReason', $exemptionReason ?? 'Reverse charge');
         }
 
         $scheme = $doc->createElement('cac:TaxScheme');
