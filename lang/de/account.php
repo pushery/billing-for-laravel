@@ -34,6 +34,8 @@ return [
         'addons_heading' => 'Add-ons',
         'addon_buy' => 'Kaufen',
         'swap_to' => 'Wechseln',
+        'scheduled_swap' => 'Wechselt am :date zu :plan.',
+        'scheduled_swap_cancel' => 'Geplanten Wechsel abbrechen',
         'subscribe' => 'Abonnieren',
         'trial_days' => 'Inklusive :days Tage kostenlos testen.',
         'preview' => 'Kosten vorschauen',
@@ -112,6 +114,7 @@ return [
         'empty' => 'Keine Zahlungsmethoden hinterlegt.',
         'expired' => 'Abgelaufen :date',
         'expiring' => 'Läuft ab :date',
+        'cannot_remove_last_default' => 'Du kannst die Karte, über die dein aktives Abo abgerechnet wird, nicht entfernen. Füge zuerst eine andere Zahlungsmethode hinzu und lege sie als Standard fest.',
     ],
 
     'degraded' => 'Ein Teil dieser Seite konnte nicht geladen werden. Bitte versuche es gleich noch einmal.',

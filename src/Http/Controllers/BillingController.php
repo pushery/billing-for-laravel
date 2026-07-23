@@ -10,8 +10,11 @@ use Illuminate\Support\Facades\Auth;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\HostedPortal;
 use Pushery\Billing\Contracts\Invoices;
+use Pushery\Billing\Invoicing\InvoiceDocumentRenderer;
+use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\Support\SubscriptionReconciler;
+use Pushery\Billing\ValueObjects\InvoiceDownload;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -79,6 +82,13 @@ final class BillingController
         $owner = app(BillingEntityResolver::class)->ownerFor($actor);
         $document = app(Invoices::class)->download($owner, $invoiceId);
 
+        // A provider that hosts its own PDFs (Stripe) answers here. A local-engine driver (Mollie) has none,
+        // so the package renders the stored invoice itself — a foreign invoice is refused (403), an absent one
+        // is a 404, so one owner can never pull another's document by guessing an id.
+        if ($document === null) {
+            $document = $this->renderLocalInvoice($owner, $invoiceId);
+        }
+
         abort_if($document === null, 404);
 
         return response()->streamDownload(
@@ -86,7 +96,34 @@ final class BillingController
                 echo $document->contents;
             },
             $document->filename,
-            ['Content-Type' => $document->mimeType],
+            // noindex: a private financial document must never be indexed if the URL leaks into a crawler.
+            ['Content-Type' => $document->mimeType, 'X-Robots-Tag' => 'noindex, nofollow'],
         );
+    }
+
+    /**
+     * Render one of the package's OWN stored invoices as a document — the local path for a driver without
+     * hosted PDFs. The invoice is looked up by id and ownership-checked here: a row belonging to another
+     * owner is refused (403), so a shared id space cannot leak one owner's document to another.
+     */
+    private function renderLocalInvoice(Model $owner, string $invoiceId): ?InvoiceDownload
+    {
+        $invoice = InvoiceRecord::query()->find($invoiceId);
+
+        if ($invoice === null) {
+            return null; // absent → 404
+        }
+
+        $ownerKey = $owner->getKey();
+        $sameOwner = $invoice->owner_type === $owner->getMorphClass()
+            && is_scalar($ownerKey)
+            && (string) $invoice->owner_id === (string) $ownerKey;
+
+        abort_unless($sameOwner, 403);
+
+        $pdf = app(InvoiceDocumentRenderer::class)->pdf($invoice);
+        $number = $invoice->number ?? (string) $invoice->id;
+
+        return new InvoiceDownload("invoice-{$number}.pdf", $pdf);
     }
 }

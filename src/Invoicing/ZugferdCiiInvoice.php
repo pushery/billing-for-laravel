@@ -51,11 +51,11 @@ final readonly class ZugferdCiiInvoice implements EInvoice
 
         $currency = $invoice->currency;
         $reference = $invoice->number ?? (string) $invoice->id;
-        $creditNote = $invoice->isCreditNote();
+        $correction = $invoice->isCorrection();
         $reverseCharge = (bool) $invoice->reverse_charge;
 
         $root->appendChild($this->documentContext($doc));
-        $root->appendChild($this->document($doc, $reference, $creditNote, $invoice->issued_at ?? Carbon::now()));
+        $root->appendChild($this->document($doc, $reference, $correction, $invoice->issued_at ?? Carbon::now()));
 
         $lines = $this->lines($invoice);
         $bands = $this->taxBandsFor($lines, $reverseCharge);
@@ -93,13 +93,14 @@ final readonly class ZugferdCiiInvoice implements EInvoice
         return $context;
     }
 
-    private function document(DOMDocument $doc, string $reference, bool $creditNote, Carbon $issuedAt): DOMElement
+    private function document(DOMDocument $doc, string $reference, bool $correction, Carbon $issuedAt): DOMElement
     {
         $document = $doc->createElement('rsm:ExchangedDocument');
         $this->el($doc, $document, 'ram:ID', $reference);
-        // BT-3 type code: 380 invoice, 381 credit note. The code carries the credit meaning, so amounts
-        // stay positive — a negative total would be a non-conformant credit note.
-        $this->el($doc, $document, 'ram:TypeCode', $creditNote ? '381' : '380');
+        // BT-3 type code: 380 invoice, 381 correction (EN 16931 names 381 "Credit note"). The code carries
+        // the correcting meaning, so amounts stay positive — a negative total would be non-conformant. (The
+        // 384 amendment branch arrives with the correction roles' XML serialization; today only 381.)
+        $this->el($doc, $document, 'ram:TypeCode', $correction ? '381' : '380');
 
         $issue = $doc->createElement('ram:IssueDateTime');
         // Qualifier 102 = CCYYMMDD, the only date format EN 16931 allows for the issue date (BT-2).
@@ -207,13 +208,17 @@ final readonly class ZugferdCiiInvoice implements EInvoice
         $settlement = $doc->createElement('ram:ApplicableHeaderTradeSettlement');
         $this->el($doc, $settlement, 'ram:InvoiceCurrencyCode', $currency);
 
+        // BT-120: the exemption reason text, derived from the invoice's vat_note column — the SAME derivation
+        // XRechnung uses, so the two syntaxes of one invoice never carry different reason text.
+        $exemptionReason = $this->vatNote($invoice, $reverseCharge);
+
         foreach ($bands as $band) {
-            $settlement->appendChild($this->headerTax($doc, $band, $currency, $reverseCharge));
+            $settlement->appendChild($this->headerTax($doc, $band, $currency, $reverseCharge, $exemptionReason));
         }
 
         $settlement->appendChild($this->monetarySummation($doc, $net, $tax, $currency));
 
-        if ($invoice->isCreditNote() && $invoice->credited_invoice_number !== null) {
+        if ($invoice->isCorrection() && $invoice->credited_invoice_number !== null) {
             $referenced = $doc->createElement('ram:InvoiceReferencedDocument');
             $this->el($doc, $referenced, 'ram:IssuerAssignedID', $invoice->credited_invoice_number);
             $settlement->appendChild($referenced);
@@ -230,14 +235,15 @@ final readonly class ZugferdCiiInvoice implements EInvoice
      *
      * @param  array{rate: float, taxable: int, tax: int}  $band
      */
-    private function headerTax(DOMDocument $doc, array $band, string $currency, bool $reverseCharge): DOMElement
+    private function headerTax(DOMDocument $doc, array $band, string $currency, bool $reverseCharge, ?string $exemptionReason = null): DOMElement
     {
         $tax = $doc->createElement('ram:ApplicableTradeTax');
         $this->amount($doc, $tax, 'ram:CalculatedAmount', $reverseCharge ? 0 : $band['tax'], $currency);
         $this->el($doc, $tax, 'ram:TypeCode', 'VAT');
 
         if ($reverseCharge) {
-            $this->el($doc, $tax, 'ram:ExemptionReason', 'Reverse charge');
+            // Derived from vat_note (falls back to the standard wording), never a hardcoded literal.
+            $this->el($doc, $tax, 'ram:ExemptionReason', $exemptionReason ?? 'Reverse charge');
         }
 
         $this->amount($doc, $tax, 'ram:BasisAmount', $band['taxable'], $currency);

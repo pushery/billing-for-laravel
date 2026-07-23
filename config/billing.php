@@ -208,6 +208,24 @@ return [
     'tier_column' => 'plan',
 
     /*
+    |--------------------------------------------------------------------------
+    | Subscription swap timing
+    |--------------------------------------------------------------------------
+    |
+    | When a downgrade takes effect. An upgrade is always immediate (the customer
+    | asked for more and pays the prorated difference). A downgrade defaults to
+    | 'period_end' — the current cycle is already paid at the higher tier, so
+    | moving down mid-cycle would owe a refund or take away paid-for access.
+    | Set to 'immediate' to downgrade at once instead. Both the screen and the
+    | swap read this one value, so they cannot disagree about when a change lands.
+    |
+    */
+
+    'subscriptions' => [
+        'downgrade_timing' => env('BILLING_DOWNGRADE_TIMING', 'period_end'),
+    ],
+
+    /*
     | Tiers the webhook never flips (admin-comped, e.g. an unlimited grant). The
     | plan-sync effect skips these in both directions.
     */
@@ -430,11 +448,17 @@ return [
         // only reason the payload is kept at all.
         'webhook_payload_days' => (int) env('BILLING_RETENTION_WEBHOOK_PAYLOAD_DAYS', 90),
 
-        // The financial records of erased owners: ~10 years (§147 AO / §14b UStG).
-        'erased_financial_days' => (int) env('BILLING_RETENTION_ERASED_FINANCIAL_DAYS', 3650),
+        // The INVOICE window: an erased owner's retained invoices are kept eight years (2920 days) — §14b
+        // Abs. 1 UStG n. F. The clock is counted from the END of the year the invoice was issued (§147 Abs. 4
+        // AO), which billing:prune anchors to; a shorter window refuses to boot. This is a FLOOR and a
+        // default: set your own for another jurisdiction. Deliberately NOT the same as audit_days below —
+        // over-retaining an invoice to the ten-year book window keeps personal data two years past its
+        // obligation, in breach of storage limitation (Art. 5(1)(e)).
+        'erased_financial_days' => (int) env('BILLING_RETENTION_ERASED_FINANCIAL_DAYS', 2920),
 
-        // The audit ledger. GDPR storage limitation vs. bookkeeping retention (§257 HGB / §147 AO): the
-        // default is the longer, book-keeping window. Check it against your own obligations.
+        // The BOOK/BATCH window for the audit ledger: ten years (§257 HGB / §147 AO) — longer than the
+        // invoice window above ON PURPOSE. The two numbers (3650 vs 2920) are different windows for different
+        // record classes, not a value that got out of sync; do not "unify" them.
         'audit_days' => (int) env('BILLING_RETENTION_AUDIT_DAYS', 3650),
     ],
 
@@ -793,8 +817,68 @@ return [
         'consultant' => env('BILLING_DATEV_CONSULTANT'),
         'client' => env('BILLING_DATEV_CLIENT'),
         'account_length' => (int) env('BILLING_DATEV_ACCOUNT_LENGTH', 4),
+
+        // Single-seller accounts: the revenue account (Gegenkonto) and the customer/receivables account
+        // (Konto) every invoice books to when no chart of accounts is selected below. This is the shipped
+        // default and its output is byte-for-byte unchanged.
         'revenue_account' => env('BILLING_DATEV_REVENUE_ACCOUNT'),
         'customer_account' => env('BILLING_DATEV_CUSTOMER_ACCOUNT'),
+
+        // The chart of accounts whose per-transaction map below is active: 'skr03', 'skr04', or null. Null
+        // (the default) uses the single-seller accounts above — the export is byte-identical. Selecting a
+        // chart only changes the VALUES resolved per transaction, never the export's structure or field order.
+        // The account NUMBERS are German-accountant defaults (SKR03/SKR04) confirmed with the tax advisor,
+        // not values the package invents; a consumer with a different frame overrides them here — no code
+        // change. These are read only behind the German jurisdiction profile (billing.tax_profile = 'de');
+        // a consumer elsewhere runs an empty set and the DATEV export is simply not used.
+        //
+        // Each account is [account, automatic]. An "automatic" account (Automatikkonto) derives its VAT from
+        // the posting itself, so a BU-Schlüssel is NEVER set alongside it — doing so cancels the automatic
+        // derivation and is the classic import error.
+        'chart' => env('BILLING_DATEV_CHART'),
+
+        'accounts' => [
+            'skr03' => [
+                'fan_revenue_standard' => ['account' => '8400', 'automatic' => true],
+                'fan_revenue_reduced' => ['account' => '8300', 'automatic' => true],
+                'commission_revenue' => ['account' => '8510', 'automatic' => true],
+                'creator_input_de_standard' => ['account' => '3106', 'automatic' => true],
+                'creator_input_exempt' => ['account' => '3109', 'automatic' => false],
+                'creator_input_eu_reverse_charge' => ['account' => '3123', 'automatic' => true],
+                'creator_input_third_country_reverse_charge' => ['account' => '3125', 'automatic' => true],
+                'creator_input_eu_reverse_charge_reduced' => ['account' => '3113', 'automatic' => true],
+                'creator_input_third_country_reverse_charge_reduced' => ['account' => '3115', 'automatic' => true],
+                // The PSP fee is a §13b input (an Irish supplier's service), booked like an EU input — NOT a
+                // money-transfer/bank-charge account. Getting this wrong is the classic audit finding.
+                'psp_fee' => ['account' => '3123', 'automatic' => true],
+                'money_transit' => ['account' => '1360', 'automatic' => false],
+                'creator_liabilities' => ['account' => '1705', 'automatic' => false],
+                'voucher_liabilities' => ['account' => '1706', 'automatic' => false],
+                'transit_items' => ['account' => '1590', 'automatic' => false],
+                'other_income' => ['account' => '2709', 'automatic' => false],
+                // OSS revenue is a block resolved per destination country — no default, since each consumer's
+                // OSS registration differs. Configure one account per activated country here.
+                'oss_revenue' => [],
+            ],
+            'skr04' => [
+                'fan_revenue_standard' => ['account' => '4400', 'automatic' => true],
+                'fan_revenue_reduced' => ['account' => '4300', 'automatic' => true],
+                'commission_revenue' => ['account' => '4510', 'automatic' => true],
+                'creator_input_de_standard' => ['account' => '5906', 'automatic' => true],
+                'creator_input_exempt' => ['account' => '5909', 'automatic' => false],
+                'creator_input_eu_reverse_charge' => ['account' => '5923', 'automatic' => true],
+                'creator_input_third_country_reverse_charge' => ['account' => '5925', 'automatic' => true],
+                'creator_input_eu_reverse_charge_reduced' => ['account' => '5913', 'automatic' => true],
+                'creator_input_third_country_reverse_charge_reduced' => ['account' => '5915', 'automatic' => true],
+                'psp_fee' => ['account' => '5923', 'automatic' => true],
+                'money_transit' => ['account' => '1460', 'automatic' => false],
+                'creator_liabilities' => ['account' => '3505', 'automatic' => false],
+                'voucher_liabilities' => ['account' => '3506', 'automatic' => false],
+                'transit_items' => ['account' => '1370', 'automatic' => false],
+                'other_income' => ['account' => '4830', 'automatic' => false],
+                'oss_revenue' => [],
+            ],
+        ],
     ],
 
     /*
@@ -838,6 +922,31 @@ return [
             'no_agb_control' => false,
             'no_billing_authorization' => false,
             'no_supply_authorization' => false,
+        ],
+
+        'fee' => [
+            // Which side of an uneven percentage split keeps the leftover minor unit. A commercial
+            // per-transaction rounding leaves one cent to assign, and at volume that assignment is real
+            // money, so it is a documented contract choice, not an accident of code:
+            //
+            //   platform_first — the residual cent goes to the fee (the platform). This is the default,
+            //                    matching the per-transaction commercial rounding decided for the ledger.
+            //   creator_first  — the residual cent goes to the net (the creator). This is the only order
+            //                    that hits an exact target payout, at the cost of the platform's cent; a
+            //                    consumer using it must show the RESULTING payout, never treat the input as
+            //                    a promise.
+            'rounding' => env('BILLING_MARKETPLACE_FEE_ROUNDING', 'platform_first'),
+        ],
+
+        // Who holds the money on a routed sale. The safe default is that the payment provider holds it end
+        // to end (the platform never has other people's funds on its own account); the package ships only
+        // this path. Holding funds on a platform-owned account is a regulated activity in most
+        // jurisdictions, so `platform_held` is refused at boot unless the host binds a
+        // PaymentServiceLicenseAttestation — the package will not let an unaware consumer become an
+        // unlicensed money holder by flipping a flag. There is deliberately no yield/interest option: paying
+        // interest on held funds is a further regulated activity the package does not offer.
+        'custody' => [
+            'platform_held' => (bool) env('BILLING_MARKETPLACE_PLATFORM_HELD', false),
         ],
     ],
 

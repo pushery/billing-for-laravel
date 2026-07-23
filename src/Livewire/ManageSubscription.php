@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Livewire;
 
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Carbon;
 use Livewire\Attributes\Locked;
 use Pushery\Billing\Catalogs\ConfigAddonCatalog;
 use Pushery\Billing\Contracts\Checkout;
@@ -14,7 +15,10 @@ use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\TierCatalog;
+use Pushery\Billing\Enums\SwapTiming;
+use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\LinkOut;
+use Pushery\Billing\Support\PlanSwapPlanner;
 use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\Support\TrialCallouts;
 use Pushery\Billing\Trials\TrialPolicy;
@@ -71,6 +75,9 @@ final class ManageSubscription extends AccountScreen
             // its portal instead of offering the in-app checkout below — the app is not the merchant of record.
             'linkOut' => app(LinkOut::class)->url(),
             'canSwap' => $this->hasLiveSubscription(),
+            // A downgrade the customer scheduled but that has not taken effect yet: shown as "changes on
+            // {date}" with a cancel action, so a pending change is never a surprise on the next invoice.
+            'scheduledSwap' => $this->scheduledSwap(),
             // The "includes an X-day free trial" hint is about the SUBSCRIPTION trial the owner gets on
             // subscribing, so it follows subscriptionTrialEnabled — a generic (pre-subscription) trial does
             // not belong on a plan row.
@@ -230,12 +237,71 @@ final class ManageSubscription extends AccountScreen
         $this->denyInAppCheckout();
         $this->ensureEligible();
 
-        app(SubscriptionActions::class)->swap($this->owner(), $tierKey);
+        $subscription = $this->subscription();
+        $timing = $subscription instanceof Subscription
+            ? app(PlanSwapPlanner::class)->timingFor($this->currentTierKey(), $tierKey)
+            : SwapTiming::Immediate;
 
-        $this->audit('subscription.swapped', ['tier' => $tierKey]);
+        // A move to the same tier is a no-op the planner reports as null — don't call the provider or
+        // schedule an empty change.
+        if ($timing === null) {
+            $this->previewTierKey = null;
+            $this->previewAmount = null;
+
+            return;
+        }
+
+        // A downgrade waits for the period end (the current cycle is already paid at the higher tier). It is
+        // recorded, shown, and cancellable until then — the provider is not touched now; ScheduledSwapRunner
+        // performs the swap when the date arrives. An upgrade takes effect immediately.
+        if ($timing === SwapTiming::PeriodEnd && $subscription instanceof Subscription) {
+            $subscription->scheduleSwap($tierKey, $subscription->current_period_end ?? Carbon::now()->utc());
+            $this->audit('subscription.swap_scheduled', ['tier' => $tierKey]);
+        } else {
+            app(SubscriptionActions::class)->swap($this->owner(), $tierKey);
+
+            // An immediate upgrade supersedes any pending downgrade — the customer just chose to move up now.
+            $subscription?->cancelScheduledSwap();
+            $this->audit('subscription.swapped', ['tier' => $tierKey]);
+        }
 
         $this->previewTierKey = null;
         $this->previewAmount = null;
+    }
+
+    /**
+     * The pending scheduled swap for the view: the target tier's label and the date it takes effect, or
+     * null when nothing is scheduled.
+     *
+     * @return array{tierLabel: string, date: string}|null
+     */
+    private function scheduledSwap(): ?array
+    {
+        $subscription = $this->subscription();
+
+        if (! $subscription instanceof Subscription || ! $subscription->hasScheduledSwap()) {
+            return null;
+        }
+
+        $tierKey = $subscription->scheduled_tier_key ?? '';
+
+        return [
+            'tierLabel' => app(TierCatalog::class)->label($tierKey),
+            'date' => ($subscription->scheduled_swap_at ?? Carbon::now())->toFormattedDateString(),
+        ];
+    }
+
+    /** Drop a downgrade the customer scheduled but changed their mind about, before it takes effect. */
+    public function cancelScheduledSwap(): void
+    {
+        $this->denyInAppCheckout();
+
+        $subscription = $this->subscription();
+
+        if ($subscription instanceof Subscription && $subscription->hasScheduledSwap()) {
+            $subscription->cancelScheduledSwap();
+            $this->audit('subscription.swap_schedule_canceled', []);
+        }
     }
 
     /**

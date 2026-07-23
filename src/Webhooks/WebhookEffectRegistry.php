@@ -6,6 +6,7 @@ namespace Pushery\Billing\Webhooks;
 
 use Illuminate\Support\Facades\Event;
 use Pushery\Billing\Events\BillingDomainEvent;
+use Pushery\Billing\Events\HasDeprecatedAlias;
 use Pushery\Billing\Models\BillingWebhookEvent;
 
 /**
@@ -62,5 +63,12 @@ final class WebhookEffectRegistry
         // Fire through the framework too, so a host app can listen or fake. Resolved here, not injected,
         // so a test's Event::fake() (which rebinds the dispatcher after boot) is honored.
         Event::dispatch($event);
+
+        // A renamed event fires under its former name too, for one deprecation window, so a host that still
+        // listens for the old class is not silently dropped. The alias reaches framework listeners only — it
+        // is NOT run through the registered effects above, so the package never persists the same event twice.
+        if ($event instanceof HasDeprecatedAlias) {
+            Event::dispatch($event->deprecatedAlias());
+        }
     }
 }

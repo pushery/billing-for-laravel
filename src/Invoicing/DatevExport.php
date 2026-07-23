@@ -7,6 +7,8 @@ namespace Pushery\Billing\Invoicing;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Contracts\DatevAccountResolver;
+use Pushery\Billing\Enums\DatevTransaction;
 use Pushery\Billing\Models\InvoiceRecord;
 
 /**
@@ -28,7 +30,10 @@ final readonly class DatevExport
         'Belegfeld 1', 'Belegfeld 2', 'Skonto', 'Buchungstext',
     ];
 
-    public function __construct(private Repository $config) {}
+    public function __construct(
+        private Repository $config,
+        private DatevAccountResolver $accounts,
+    ) {}
 
     /**
      * @param  iterable<InvoiceRecord>  $invoices
@@ -81,8 +86,18 @@ final readonly class DatevExport
         // which is economically a revenue reduction and must book "H" too, or turnover is overstated. The
         // two ways of being a credit XOR: a negative credit note is a debit again.
         // XOR via !== (the `xor` keyword binds looser than `=` — a classic precedence trap).
-        $isCredit = $invoice->isCreditNote() !== ($invoice->total_minor < 0);
+        $isCredit = $invoice->isCorrection() !== ($invoice->total_minor < 0);
         $marker = $isCredit ? 'H' : 'S';
+
+        // The revenue account (Gegenkonto) comes from the account resolver — the export names the business
+        // transaction (fan revenue) and gets an account back, rather than reading a config field itself. With
+        // no chart of accounts selected this resolves to the single-seller revenue_account, so the output is
+        // byte-for-byte unchanged. The Konto (customer/receivables) stays the configured customer account
+        // (the person-account model is a separate concern).
+        //
+        // The BU-Schlüssel (field 9) stays empty: the revenue account is an Automatikkonto, which derives its
+        // VAT from the posting, and setting a BU-Schlüssel would cancel that — the classic import error.
+        $revenue = $this->accounts->resolve(DatevTransaction::FanRevenueStandard);
 
         return implode(';', [
             $this->amount($invoice),
@@ -90,7 +105,7 @@ final readonly class DatevExport
             $this->quote($invoice->currency),
             '', '', '',
             $this->number('customer_account'),
-            $this->number('revenue_account'),
+            $revenue->number,
             '',
             $date->format('dm'),
             $this->quote($reference),

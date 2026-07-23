@@ -115,13 +115,13 @@ final class InvoiceRecord extends Model
     }
 
     /**
-     * Whether this row is a credit note — a document that credits another invoice, rather than a charge.
-     * It is identified by a reference to what it credits (the local row or the provider's own number), which
-     * drives the accounting direction (DATEV books it "H", not "S") and the e-invoice type code (381, not
-     * 380). A credit note carries POSITIVE amounts; the credit-note nature — not a sign — is what inverts
-     * the meaning, exactly as EN 16931 and a DATEV Haben booking require.
+     * Whether this row is an invoice correction — a document that corrects another invoice, rather than a
+     * charge. It is identified by a reference to what it corrects (the local row or the provider's own
+     * number), which drives the accounting direction (DATEV books it "H", not "S") and the e-invoice type
+     * code (381/384, not 380). A correction carries POSITIVE amounts; the correction's nature — not a sign —
+     * is what inverts the meaning, exactly as EN 16931 and a DATEV Haben booking require.
      */
-    public function isCreditNote(): bool
+    public function isCorrection(): bool
     {
         return $this->credited_invoice_id !== null || $this->credited_invoice_number !== null;
     }

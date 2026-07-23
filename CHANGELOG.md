@@ -4,6 +4,91 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-07-23
+
+### Added
+
+- **A self-harm guard on payment-method removal.** The account-hub payment-method screen now refuses to
+  remove the card a live subscription is billed to — the default card, or the owner's only card — while a
+  charge is still coming or being retried (`Active`, `Trialing`, `PastDue`, `Incomplete`). It answers with a
+  clear, localized message ("add another card and make it the default first") instead of a 500 or a silent
+  lapse into involuntary dunning; removing a spare card, or any card once the subscription is in grace or
+  ended, stays allowed. Backed by a new `SubscriptionState::requiresPaymentMethod()` predicate.
+- **A catalog and i18n adoption guide.** The tiers-and-pricing docs now describe the config-authoritative
+  catalog services (`PricingCatalog`, `TierCatalog`, `AddonCatalog`) and how to extend them by rebinding, and
+  a new i18n page covers publishing and overriding the translation namespace, adding or removing a locale, the
+  informal register the strings keep, and the parity/informality/key-existence gate. The `provider_price`
+  documentation is corrected: it is the active provider's price reference — a scalar or a per-provider map,
+  resolved by `ProviderPriceResolver` as the anti-price-injection allowlist — not a Stripe-specific id.
+- **A `docs/` tree, and the README is now a showcase.** The documentation is reorganized into a
+  mode-structured `docs/` tree — single-seller (Mode S, the 90% path, written in full), plus scaffolds for the
+  marketplace (K), intermediary (V) and other-jurisdiction (X) modes, and cross-cutting reference, guides and
+  compliance sections. The single-seller content moved out of the README (it is not duplicated), leaving the
+  README as a showcase: header, highlights, requirements, a short installation, a pointer into `docs/`,
+  security and license. Two guards keep the structure honest: a Mode-S page may not use marketplace
+  vocabulary, and every relative link in `docs/` must resolve with no page orphaned from the index — both with
+  red-proofs. Docs prose is English, US spelling. `docs/` now ships as Markdown to the public repository —
+  readable and linkable there — and is `export-ignore`d, so the package you install stays byte-for-byte as
+  lean as before.
+
+### Changed (breaking — pre-1.0)
+
+- **Terminology: the cancellation "credit note" is now an "invoice correction".** The word *credit note*
+  (Gutschrift) is reserved for the self-billing document (§ 14 Abs. 2 S. 5 UStG, EN 16931 type code 389);
+  the document that cancels or amends an existing invoice is a **correction**. This renames part of the
+  published API, so it lands in a pre-1.0 minor with this note rather than silently. Migration:
+
+  | Old (removed) | New |
+  |---|---|
+  | `Pushery\Billing\ValueObjects\CreditNoteSnapshot` | `Pushery\Billing\ValueObjects\InvoiceCorrectionSnapshot` |
+  | `Pushery\Billing\Events\InvoiceCredited` | `Pushery\Billing\Events\InvoiceCorrected` (read `$event->correction`, was `$event->creditNote`) |
+  | `Pushery\Billing\Webhooks\Effects\PersistCreditNote` | `Pushery\Billing\Webhooks\Effects\PersistInvoiceCorrection` |
+  | `InvoiceRecord::isCreditNote()` | `InvoiceRecord::isCorrection()` |
+  | translation key `billing::invoice.credit_note` | `billing::invoice.correction` |
+
+  For one deprecation window, `InvoiceCorrected` **also fires the old `InvoiceCredited` event** through the
+  framework dispatcher, so an existing `Event::listen(InvoiceCredited::class)` keeps being called instead of
+  going silently quiet (the package's own effects listen on `InvoiceCorrected` only, so nothing is persisted
+  twice). `InvoiceCredited` is now `@deprecated` and will be removed in a later release. The renamed value
+  object, effect and model method are a hard rename with no runtime alias — a reference to an old name is a
+  loud "class not found", not a silent no-op.
+- **A correction now carries a role, and it is validated.** `InvoiceCorrectionSnapshot` takes an
+  `InvoiceCorrectionKind` — `Cancellation` (Storno, type code 381) or `Amendment` (Rechnungsberichtigung,
+  384) — defaulting to `Cancellation` (the only role produced today; the 384 XML branch and its persisted
+  role land with the correction-writer work). The snapshot refuses a **negative amount** at construction (a
+  correction carries positive magnitudes; its nature, not a sign, inverts the meaning) and refuses an
+  **amendment with no origin reference** (BG-3 is mandatory for a 384). The `credited_invoice_*` columns are
+  left as-is (internal schema, not part of the renamed public surface) — a deliberate, documented choice to
+  avoid a schema migration where none is yet needed. The rendered 381 document is byte-for-byte unchanged.
+
+### Added
+
+
+### Changed
+
+- **The e-invoice writers read the landed EN 16931 columns.** `XRechnungInvoice` (and the ZUGFeRD CII writer, in parity) now take the Leitweg-ID (BT-10) from the invoice's `buyer_reference` column rather than the buyer JSON snapshot, and derive the reverse-charge / exemption reason (BT-120) from the `vat_note` column instead of a hardcoded "Reverse charge" literal — falling back to the standard wording only when no note is stored. The single-merchant rendered output is pinned by a golden fixture so a later change is a visible drift to review. Both syntaxes derive these through the shared normalizer, so one invoice never renders a different reason text in UBL than in CII.
+- **The invoice retention floor is now eight years, down from ten**, and the clock is anchored to the end of the issue year. An erased owner's retained invoices are kept `billing.retention.erased_financial_days` (default `2920`, was `3650`) counted from the end of the year each was issued (§147 Abs. 4 AO), not from the raw issue instant — so `billing:prune` no longer deletes a March invoice nine months before a December one from the same year. This is a visible behavior change: retained invoices become prunable up to two years earlier than before, which is the point (keeping them the full ten years over-retains an erased owner's personal data past its statutory obligation, in breach of storage limitation). The separate audit/book window (`audit_days`) stays ten years — a different record class under a different statute, deliberately not unified. A floor below eight years still refuses to boot unless you opt in for a jurisdiction whose minimum is genuinely shorter.
+
+### Added
+
+- **Local invoice renderer.** `InvoiceDocumentRenderer` renders one of the package's own invoices to a complete, deterministic HTML document from the stored row and a publishable Blade template (`billing::invoice`), with translations in all seven locales — the local counterpart to a provider's hosted invoice PDF, for a driver (Mollie) that supplies none. The PDF step is a seam (`PdfRenderer`): the package ships no PDF toolchain, so the default refuses loudly with instructions to bind one (dompdf, Snappy, …), keeping the package lean while the HTML stage stays browser-free and snapshot-testable. The invoice download route serves the locally-rendered document when the provider has no hosted PDF, ownership-checked (403 for another owner's invoice, 404 for an absent one), rate-limited (`throttle:60,1`) and marked `noindex`.
+- **DATEV account resolution per business transaction.** The `datev` config block now carries a per-transaction account map with confirmed SKR03 and SKR04 default sets (`billing.datev.chart`), so each booking can land on the account that carries its own tax logic — a fan-revenue rate, an OSS country, a §13b input — instead of one revenue account for everything. A `DatevAccountResolver` sits in front of the export, which names a business transaction and gets an account back rather than reading a config field itself. With no chart selected the export is byte-for-byte unchanged (the single-seller revenue account). A transaction with no configured account aborts the export rather than booking to a default, the PSP fee resolves to the §13b input account rather than a bank-charge account, and an Automatikkonto never carries a BU-Schlüssel — each pinned by a test. The account numbers live only in config (behind the German jurisdiction profile); no core path contains an account number or the word "SKR".
+- **Local order model.** `billing_orders` / `billing_order_items` and their `Order` / `OrderItem` models are the package's own billing unit for a driver without a provider-side order model (Mollie, Adyen): a due cycle is assembled as an order, processed, and an invoice produced from it. The columns are provider-neutral, the status is a typed `OrderStatus` enum, and exactly one order exists per subscription cycle (a unique on `[subscription_id, period_start]`) so a re-assembled cycle cannot bill twice. Line items carry a typed `OrderItemType` and their own currency, so a line's `Money` never depends on the parent being loaded, and a line's tax rate is stored in basis points rather than a percentage float, consistent with the rest of the money layer. Orders are purged with the owner (the retained financial record is the invoice), and their items are reached through the order for both erasure and export.
+- **Custody guard: the platform-held funds mode is opt-in and gated.** `billing.marketplace.custody.platform_held` (default `false`) selects who holds money on a routed sale. Setting it `true` refuses to boot unless the host binds a `PaymentServiceLicenseAttestation` — holding other people's funds on a platform-owned account is a regulated activity, and a config flag alone must never enable it. The guard is jurisdiction-neutral (it checks a technical property, not a country's statute), a no-op unless the marketplace is enabled, and there is deliberately no yield/interest option. A README section explains when a payment-services or e-money license is needed, without claiming to be legal advice.
+- **`Money::toMollie()` / `Money::fromMollie()`** map between the value object and Mollie's decimal-string amount shape (`['value' => '10.00', 'currency' => 'EUR']`), the one provider representation that is not integer minor units. The value carries exactly the currency's precision — no point at all for a zero-decimal currency — and the read path parses through the existing integer/string decimal parser, so no float is ever constructed and a value with more precision than the currency allows is refused rather than truncated. A malformed payload (a missing or non-string field) is refused, not coerced.
+- **Percentage and division primitives on `Money`.** `splitByBps()` splits an amount into a basis-points portion and the remainder that sum back exactly, with the leftover minor unit of an uneven split assigned explicitly (a `RoundingResidual`) rather than by argument order — because at volume that cent is real money. `baseFromMarkup()` reads an amount that includes a markup as its base and the markup; `baseFromRate()` reconstructs the base an amount remained from after a rate was deducted. In all three, one side is computed and the other is the difference, so no cent is ever conjured or lost, and everything is integer minor-unit math with no float. A new `billing.marketplace.fee.rounding` key (default `platform_first`) documents which side keeps the residual cent; the primitive itself is neutral money arithmetic and carries no tax or marketplace meaning.
+
+- **Provider-neutral subscription lines.** A new `billing_subscription_items` table and `SubscriptionItem` model carry what a subscription bills each cycle — catalog key, optional provider price reference, quantity, whether the line is metered, and the amount once known. Stripe prices usage remotely and keeps using Cashier's own items; this is what the local engine uses in place of a provider-side line model. A `preprocessor` column names the application-side resolver that prices a metered line when its cycle closes.
+- `Subscription::items()` exposes the lines, and `SubscriptionItem::amount()` returns the line's `Money` — or `null` while a metered line is unpriced, which is a distinct state from an amount of zero.
+- **A `CycleAmountResolver` contract for what a subscription line costs per cycle**, so invoicing and cycle runs stay driver-neutral whether the provider rates usage or the application does. The default reads a fixed line's stored amount and hands a metered line to the resolver named in its `preprocessor` column, so nothing rates usage unless something was asked to. A line that cannot be priced raises `CycleAmountUnresolvable` rather than returning zero, which would turn an unpriced cycle into a settled one that bills nothing.
+- `MeteredCycleAmountResolver` rates a metered line from the package's own usage counters for drivers that have no provider-side rating — netting both the tier's included allowance and any prepaid units before pricing whole packages. It must not be used on a driver that rates remotely: the allowance would be netted twice and the customer would get the free units they already have.
+- **Upgrade/downgrade timing.** A swap's direction is read from the tier ranking (the configured order, not price), and its timing follows: an upgrade takes effect immediately, a downgrade is scheduled to the current period end so the customer is never charged twice or refunded for time they already paid. The default is `config('billing.subscriptions.downgrade_timing')` (`period_end`, overridable to `immediate`), which both the screen and the swap read, so they cannot disagree. A scheduled downgrade is shown on the account screen as "changes on {date}" with a cancel control, an immediate upgrade supersedes any pending downgrade, and `billing:run` applies a downgrade once its date arrives — driver-neutral, since a swap due now is simply the normal swap performed then.
+- **`CreditBalanceProrationStrategy` — mid-cycle proration for a provider that has none** (Mollie, Adyen). It computes the unused remainder of the current plan and credits it to the customer's balance, leaving the next order to raise the new charge, so a swap never bills the same days twice. `previewSwap` returns the net owed now (positive for an upgrade, negative for a downgrade, `null` when the current plan cannot be priced); `applySwap` books only the unused credit and records why on the audit ledger. A swap that leaves nothing unused writes no movement, and a downgrade whose credit exceeds the new plan leaves the surplus standing rather than producing a negative order. It is a sibling of the delegated strategy that a local-engine driver binds; the shipped Stripe behavior is unchanged.
+
+### Changed
+
+- Subscription lines are included in an owner's data export and removed by an erasure. They key on their subscription rather than on the owner, so both paths reach them by joining through it; the classification map that the eraser and exporter both read now carries this shape explicitly, so a future child table cannot be covered by one and missed by the other. The erasure does not rely on the foreign key cascading, because SQLite enforces foreign keys only when `PRAGMA foreign_keys` is enabled and that is the consuming application's setting, not the package's.
+
 ## [0.5.0] - 2026-07-22
 
 ### Fixed

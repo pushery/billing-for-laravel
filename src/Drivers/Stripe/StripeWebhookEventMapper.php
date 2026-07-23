@@ -11,7 +11,7 @@ use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\BillingDomainEvent;
-use Pushery\Billing\Events\InvoiceCredited;
+use Pushery\Billing\Events\InvoiceCorrected;
 use Pushery\Billing\Events\InvoiceFinalized;
 use Pushery\Billing\Events\InvoiceUpcoming;
 use Pushery\Billing\Events\MandateRevoked;
@@ -20,7 +20,7 @@ use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\Events\TrialEnding;
-use Pushery\Billing\ValueObjects\CreditNoteSnapshot;
+use Pushery\Billing\ValueObjects\InvoiceCorrectionSnapshot;
 use Pushery\Billing\ValueObjects\InvoiceSnapshot;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -33,7 +33,7 @@ use Pushery\Billing\ValueObjects\Money;
  * yields nothing.
  *
  * `charge.refunded` maps to AddonRefunded so a refunded one-time add-on's credit is automatically
- * clawed back — the MONEY side. `credit_note.created` maps to InvoiceCredited — the ACCOUNTING side:
+ * clawed back — the MONEY side. `credit_note.created` maps to InvoiceCorrected — the ACCOUNTING side:
  * the document that credits a finalized invoice, with the lines and tax a raw refund event does not
  * carry. The two are deliberately separate concerns, not a duplicate mapping of the same money.
  *
@@ -91,7 +91,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             'checkout.session.async_payment_succeeded' => $this->checkoutEvents($object),
             'charge.refunded' => $this->refundEvents($object),
             'charge.dispute.closed' => $this->disputeClosedEvents($object),
-            'credit_note.created' => $this->creditNoteEvents($object),
+            'credit_note.created' => $this->correctionEvents($object),
             'payment_method.detached' => $this->paymentMethodDetachedEvents($object, $data),
             default => [],
         };
@@ -409,7 +409,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
      * @param  array<array-key, mixed>  $object
      * @return list<BillingDomainEvent>
      */
-    private function creditNoteEvents(array $object): array
+    private function correctionEvents(array $object): array
     {
         $customer = $this->string($object, 'customer');
         $id = $this->string($object, 'id');
@@ -423,7 +423,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         $total = $this->int($object, 'total') ?? 0;
         [$net, $tax] = $this->netAndTax($object, $total);
 
-        return [new InvoiceCredited(new CreditNoteSnapshot(
+        return [new InvoiceCorrected(new InvoiceCorrectionSnapshot(
             provider: 'stripe',
             providerId: $id,
             customerReference: $customer,

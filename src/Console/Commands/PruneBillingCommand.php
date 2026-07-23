@@ -30,6 +30,16 @@ use Pushery\Billing\Support\OwnerScopedTables;
  */
 final class PruneBillingCommand extends Command
 {
+    /**
+     * The column that carries a retained record's ISSUE date per table — the date the §147(4) retention
+     * clock counts from. A table not listed falls back to created_at.
+     *
+     * @var array<string,string>
+     */
+    private const array RETENTION_ISSUE_COLUMN = [
+        'billing_invoices' => 'issued_at',
+    ];
+
     protected $signature = 'billing:prune {--dry-run : Report what would be pruned, delete nothing}';
 
     protected $description = 'Age out stored webhook payloads and financial records past their retention';
@@ -39,7 +49,6 @@ final class PruneBillingCommand extends Command
         $dryRun = $this->option('dry-run') === true;
 
         $payloadCutoff = Carbon::now()->subDays($this->days($config, 'webhook_payload_days', 90));
-        $financialCutoff = Carbon::now()->subDays($this->days($config, 'erased_financial_days', 3650));
 
         $payloads = DB::table(OwnerScopedTables::SCRUBBED)
             ->whereNotNull('payload')
@@ -50,12 +59,27 @@ final class PruneBillingCommand extends Command
         // throw away the only copy of work the package knows it has not finished.
         $payloadCount = $dryRun ? $payloads->count() : $payloads->update(['payload' => null]);
 
+        // §147 Abs. 4 AO: the retention clock starts at the END of the year the document was issued, so a
+        // record is kept for the floor counted from that year end — NOT from the raw issue instant. Anchoring
+        // to the year start of (now − floor) is what implements it: an invoice issued in March of a year and
+        // one issued that December are kept the same length (to the following year boundary), instead of the
+        // March one being deleted nine months too early. A record is pruned only once BOTH hold: its owner was
+        // erased, and the statutory window from its issue year has passed.
+        $financialFloor = $this->days($config, 'erased_financial_days', 2920);
+        $financialCutoff = Carbon::now()->subDays($financialFloor)->startOfYear();
+
         $financialCount = 0;
 
         foreach (OwnerScopedTables::RETAINED as $table) {
+            $issueColumn = self::RETENTION_ISSUE_COLUMN[$table] ?? 'created_at';
+
             $rows = DB::table($table)
                 ->whereNotNull('owner_erased_at')
-                ->where('owner_erased_at', '<=', $financialCutoff);
+                // COALESCE so a record with no explicit issue date falls back to when it was created — a
+                // null issue date must never read as "infinitely old" and prune early. The cutoff is bound as
+                // a datetime STRING: a raw binding does not go through the datetime caster, so a Carbon here
+                // would compare as an unusable value and quietly match nothing.
+                ->whereRaw("COALESCE({$issueColumn}, created_at) < ?", [$financialCutoff->toDateTimeString()]);
 
             $financialCount += $dryRun ? $rows->count() : $rows->delete();
         }
@@ -64,6 +88,8 @@ final class PruneBillingCommand extends Command
         // than needed; bookkeeping law (§257 HGB, §147 AO) says booking records ARE kept for years. The
         // default window is the longer, book-keeping one — check it against your obligations. Deleted through
         // the append-only guard's purge, the only sanctioned way an audit row leaves.
+        // The audit/book window keeps its ten-year default and its raw age cutoff — a different record class
+        // (book-keeping, not invoices) with a different statute (§257 HGB / §147 AO).
         $auditCutoff = Carbon::now()->subDays($this->days($config, 'audit_days', 3650));
         $expiredAudit = BillingEvent::query()->where('created_at', '<=', $auditCutoff);
 
