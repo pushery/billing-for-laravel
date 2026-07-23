@@ -6,15 +6,20 @@ namespace Pushery\Billing\Livewire;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\View\View;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Url;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\UpcomingInvoice;
+use Pushery\Billing\Enums\CancellationReason;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Livewire\Concerns\DegradesGracefully;
 use Pushery\Billing\Livewire\Concerns\PollsWhileActivating;
+use Pushery\Billing\Models\CancellationSurveyRecord;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\CreditLedger;
 use Pushery\Billing\Support\TrialCallouts;
+use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -32,6 +37,13 @@ final class SubscriptionOverview extends AccountScreen
      * screen shows "activating" and polls until the webhook lands. Reset once the state is no longer pending. */
     #[Url]
     public bool $activating = false;
+
+    /** The optional churn-survey reason the owner picks when canceling (a CancellationReason value, or null
+     * for "prefer not to say"). Bound from the cancel form; never required. */
+    public ?string $cancelReason = null;
+
+    /** The optional free-text detail, used only when the reason is "other". */
+    public ?string $cancelDetail = null;
 
     public function render(): View
     {
@@ -87,9 +99,53 @@ final class SubscriptionOverview extends AccountScreen
 
     public function cancel(): void
     {
-        app(SubscriptionActions::class)->cancel($this->owner());
+        $survey = $this->cancellationSurvey();
 
-        $this->audit('subscription.canceled');
+        // Record the churn reason locally only when one was actually given, then cancel. The survey is also
+        // handed to the driver, where a provider with a native cancellation-feedback field receives it.
+        if ($survey instanceof CancellationSurvey) {
+            CancellationSurveyRecord::record($this->owner(), $survey);
+        }
+
+        app(SubscriptionActions::class)->cancel($this->owner(), $survey);
+
+        // Deliberately NO identity re-confirm here: canceling is reversible (resume() exists), so it is
+        // covered by auth + owner-scoping — a re-confirm is reserved for the irreversible (account deletion,
+        // DangerZone). That boundary is a settled design decision, not an oversight. The survey likewise
+        // never gates the cancellation: leaving must stay one action.
+        $this->audit('subscription.canceled', $survey instanceof CancellationSurvey ? ['reason' => $survey->reason->value] : []);
+
+        $this->reset('cancelReason', 'cancelDetail');
+    }
+
+    /**
+     * Build the optional cancellation survey from the form input. No reason chosen → null, and the
+     * cancellation proceeds regardless: a survey that could stop someone leaving is a dark pattern. A chosen
+     * reason is validated for SHAPE only (a known enum value), so a tampered value is a 422, not a stored
+     * junk row; "other" additionally requires a detail, surfaced as a 422 rather than the DTO's 500.
+     */
+    private function cancellationSurvey(): ?CancellationSurvey
+    {
+        if ($this->cancelReason === null || $this->cancelReason === '') {
+            return null;
+        }
+
+        $this->validate([
+            'cancelReason' => [Rule::enum(CancellationReason::class)],
+            'cancelDetail' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $reason = CancellationReason::from($this->cancelReason);
+
+        $detail = $this->cancelDetail !== null && trim($this->cancelDetail) !== '' ? $this->cancelDetail : null;
+
+        if ($reason->detailRequired() && $detail === null) {
+            throw ValidationException::withMessages([
+                'cancelDetail' => __('billing::account.cancel_survey.detail_required'),
+            ]);
+        }
+
+        return new CancellationSurvey($reason, $detail);
     }
 
     public function resume(): void

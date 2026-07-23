@@ -4,6 +4,25 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-07-23
+
+### Added
+
+- **An optional cancellation reason on the subscription screen.** When an owner cancels, they can pick a
+  reason (and add a free-text detail for "Other") from a short, localized list. It is recorded for churn
+  analytics and passed to the provider, where a driver with a native cancellation-feedback field receives it
+  (Stripe maps it onto `cancellation_details`). It is **never required and never blocks the cancellation** —
+  no reason means a one-click cancel; a survey that could stop someone leaving would be a dark pattern. The
+  reason is shape-validated (a tampered value is rejected, not stored), and it is purged with the owner like
+  any other operational data — churn feedback carries no retention obligation.
+
+### Changed (breaking — pre-1.0)
+
+- **`SubscriptionActions::cancel()` takes an optional survey.** The signature is now
+  `cancel(Model $billable, ?CancellationSurvey $survey = null)`. Callers are unaffected (the argument
+  defaults to null); a **custom driver** that implements `SubscriptionActions` must add the parameter to its
+  `cancel()` method. The built-in Stripe and null drivers already do.
+
 ## [0.6.0] - 2026-07-23
 
 ### Added

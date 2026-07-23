@@ -10,6 +10,7 @@ use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Facades\Billing;
+use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\ClientIntent;
 
 /**
@@ -29,7 +30,7 @@ final class BillingFake implements Checkout, OneTimeCharge, SubscriptionActions
     /** @var list<array{owner: Model, tier: string, prorate: bool}> */
     private array $swaps = [];
 
-    /** @var list<array{owner: Model, action: string}> */
+    /** @var list<array{owner: Model, action: string, survey?: ?CancellationSurvey}> */
     private array $lifecycle = [];
 
     /** @var list<array{owner: Model, addon: string}> */
@@ -49,9 +50,9 @@ final class BillingFake implements Checkout, OneTimeCharge, SubscriptionActions
         return $this->intent();
     }
 
-    public function cancel(Model $billable): void
+    public function cancel(Model $billable, ?CancellationSurvey $survey = null): void
     {
-        $this->lifecycle[] = ['owner' => $billable, 'action' => 'cancel'];
+        $this->lifecycle[] = ['owner' => $billable, 'action' => 'cancel', 'survey' => $survey];
     }
 
     public function resume(Model $billable): void

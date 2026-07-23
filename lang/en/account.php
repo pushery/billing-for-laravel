@@ -74,6 +74,22 @@ return [
         'year' => 'year',
     ],
 
+    'cancel_survey' => [
+        'prompt' => 'Reason for leaving (optional)',
+        'no_reason' => 'Prefer not to say',
+        'detail_label' => 'Tell us more',
+        'detail_placeholder' => 'What made you cancel?',
+        'detail_required' => 'Please add a detail for \'Other\'.',
+        'reason' => [
+            'too_expensive' => 'It is too expensive',
+            'missing_features' => 'Missing features I need',
+            'not_using_enough' => 'I am not using it enough',
+            'switched_provider' => 'I switched to another provider',
+            'technical_issues' => 'Technical issues',
+            'no_longer_needed' => 'I no longer need it',
+            'other' => 'Other',
+        ],
+    ],
     'subscription' => [
         'heading' => 'Subscription',
         'status' => 'Status',

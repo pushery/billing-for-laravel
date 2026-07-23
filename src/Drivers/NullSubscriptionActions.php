@@ -6,6 +6,7 @@ namespace Pushery\Billing\Drivers;
 
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\SubscriptionActions;
+use Pushery\Billing\ValueObjects\CancellationSurvey;
 
 /**
  * The no-op SubscriptionActions bound when billing is disabled (`billing.enabled=false`). A clone without
@@ -15,7 +16,7 @@ use Pushery\Billing\Contracts\SubscriptionActions;
  */
 final class NullSubscriptionActions implements SubscriptionActions
 {
-    public function cancel(Model $billable): void {}
+    public function cancel(Model $billable, ?CancellationSurvey $survey = null): void {}
 
     public function resume(Model $billable): void {}
 

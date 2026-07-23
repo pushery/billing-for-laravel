@@ -74,6 +74,22 @@ return [
         'year' => 'an',
     ],
 
+    'cancel_survey' => [
+        'prompt' => 'Motif de résiliation (facultatif)',
+        'no_reason' => 'Je préfère ne pas le dire',
+        'detail_label' => 'Dis-nous en plus',
+        'detail_placeholder' => 'Qu’est-ce qui t’a poussé à résilier ?',
+        'detail_required' => 'Ajoute un détail pour « Autre ».',
+        'reason' => [
+            'too_expensive' => 'Trop cher',
+            'missing_features' => 'Des fonctionnalités me manquent',
+            'not_using_enough' => 'Je ne l’utilise pas assez',
+            'switched_provider' => 'Je suis passé à un autre fournisseur',
+            'technical_issues' => 'Problèmes techniques',
+            'no_longer_needed' => 'Je n’en ai plus besoin',
+            'other' => 'Autre',
+        ],
+    ],
     'subscription' => [
         'heading' => 'Abonnement',
         'status' => 'Statut',
