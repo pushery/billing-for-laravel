@@ -7,7 +7,7 @@ namespace Pushery\Billing\Proration;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
- * The pure time-proration math the credit-balance drivers (Mollie/Adyen) use to compute a mid-cycle
+ * The pure time-proration math the credit-balance drivers use to compute a mid-cycle
  * swap themselves, because those providers have no provider-side proration. It knows nothing about
  * subscriptions or the database: given an amount and where the clock sits in the period, it returns
  * the prorated portion; given two plan prices, it returns the net due now (charge positive, credit

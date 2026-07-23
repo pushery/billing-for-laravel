@@ -8,7 +8,7 @@ use RuntimeException;
 
 /**
  * Thrown at boot when a driver's webhook signature verification is not configured in production —
- * an empty Stripe signing secret, a missing Adyen HMAC key, etc. Failing loud prevents silently
+ * an empty Stripe signing secret, a missing HMAC key, etc. Failing loud prevents silently
  * accepting unverified webhooks.
  */
 final class WebhookSigningNotConfigured extends RuntimeException

@@ -12,7 +12,7 @@ use Illuminate\Contracts\Config\Repository;
  *
  * A `provider_price` may be declared two ways:
  *   - a scalar string — one price for whichever driver is active (the single-provider common case);
- *   - a per-provider map — `['stripe' => 'price_...', 'mollie' => 'ord_...']`, so one tier config carries
+ *   - a per-provider map — `['stripe' => 'price_...']`, so one tier config carries
  *     the right id for each driver. The active driver is `billing.default` unless a provider is named.
  *
  * Anything else (missing, empty, a map with no entry for the provider) resolves to null — the caller then

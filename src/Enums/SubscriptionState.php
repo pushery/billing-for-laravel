@@ -11,7 +11,7 @@ namespace Pushery\Billing\Enums;
  * subscription-state model (no provider API call); provider-specific statuses are mapped onto
  * these by each driver.
  *
- * Provider-neutral by design: it does not know Stripe, Mollie or Adyen — each driver maps its own
+ * Provider-neutral by design: it does not know any specific provider — each driver maps its own
  * status vocabulary onto these cases.
  */
 enum SubscriptionState: string

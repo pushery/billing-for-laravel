@@ -7,7 +7,7 @@ namespace Pushery\Billing\ValueObjects;
 /**
  * A driver-neutral snapshot of a billable's subscription predicates at one instant, from which the
  * SubscriptionPresenter collapses a single canonical SubscriptionState. Each driver builds this from
- * its own subscription model (the Stripe driver from a Cashier subscription, the Mollie/Adyen local
+ * its own subscription model (the Stripe driver from a Cashier subscription, the local
  * engine from the local subscription row) — so the presenter stays pure and provider-agnostic.
  *
  * When {@see $hasSubscription} is true the status predicates below it (incomplete, pastDue, …) are the

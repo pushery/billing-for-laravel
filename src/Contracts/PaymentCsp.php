@@ -8,7 +8,7 @@ namespace Pushery\Billing\Contracts;
  * The extra Content-Security-Policy sources a driver's client-side payment element needs. The account
  * hub scopes these to its own route group only — so the payment provider's scripts and frames load on
  * the billing screens and NOWHERE else in the host app. Each driver declares its own origins (Stripe
- * loads js.stripe.com; Mollie/Adyen declare theirs), keeping the CSP per-driver.
+ * loads js.stripe.com; another driver declares theirs), keeping the CSP per-driver.
  */
 interface PaymentCsp
 {

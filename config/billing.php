@@ -30,8 +30,8 @@ return [
     |--------------------------------------------------------------------------
     |
     | The payment driver used when none is named. Drivers register themselves
-    | with the BillingManager (the Stripe driver ships today; Mollie and Adyen
-    | are planned on the same contracts).
+    | with the BillingManager (the Stripe driver ships today; other drivers
+    | register on the same contracts).
     |
     */
 
@@ -257,7 +257,7 @@ return [
     |
     | provider_price may be a single id (one provider) OR a per-provider map, so
     | one tier config carries the right id per driver:
-    |     'provider_price' => ['stripe' => 'price_...', 'mollie' => 'ord_...'],
+    |     'provider_price' => ['stripe' => 'price_...'],
     |
     | Example:
     | 'pro' => [

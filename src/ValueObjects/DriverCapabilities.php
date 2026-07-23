@@ -6,7 +6,7 @@ namespace Pushery\Billing\ValueObjects;
 
 /**
  * What a payment driver can do natively, so the package/UI can query capabilities and fill the gaps
- * with its own local engine. This is how Mollie/Adyen slot in without reducing Stripe: Stripe
+ * with its own local engine. This is how a local-engine driver slots in without reducing Stripe: Stripe
  * reports rich native capabilities; the others report fewer, and the package supplies the rest.
  */
 final readonly class DriverCapabilities

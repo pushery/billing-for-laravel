@@ -28,7 +28,7 @@ hardcoded to one provider. It may be declared two ways:
 - a **scalar string** — one price for whichever driver is active (the single-provider common case). On Stripe
   that string is a Stripe price id (`price_...`); create the product and its recurring price in the Stripe
   dashboard or via the API, then put the id in `.env`.
-- a **per-provider map** — `['stripe' => 'price_...', 'mollie' => 'ord_...']`, so one tier config carries the
+- a **per-provider map** — `['stripe' => 'price_...']`, so one tier config carries the
   right id for each driver; the active driver is `billing.default` unless a provider is named.
 
 ```dotenv

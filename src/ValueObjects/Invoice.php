@@ -9,7 +9,7 @@ use Pushery\Billing\Enums\InvoiceStatus;
 
 /**
  * A package-owned invoice DTO returned across the Invoices contract. The Stripe driver hydrates it
- * from a Stripe invoice; the Mollie/Adyen local engine builds it directly. Views render this shape,
+ * from a Stripe invoice; the local engine builds it directly. Views render this shape,
  * never a provider object — so a gap-free, immutable local number can sit alongside a Stripe id.
  */
 final readonly class Invoice

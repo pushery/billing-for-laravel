@@ -6,7 +6,7 @@ namespace Pushery\Billing\Enums;
 
 /**
  * A provider-neutral invoice status. Each driver maps its own status vocabulary onto these (Stripe
- * draft/open/paid/uncollectible/void; a locally-generated Mollie/Adyen invoice sets them directly),
+ * draft/open/paid/uncollectible/void; a locally-generated invoice sets them directly),
  * so views never branch on provider strings.
  */
 enum InvoiceStatus: string

@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * The customer credit-balance ledger, one balance per owner per currency. Credit-balance proration
- * (Mollie/Adyen, which have no provider-side balance) writes unused time here and offsets the next
+ * (a local-engine driver, which has no provider-side balance) writes unused time here and offsets the next
  * order against it. Server-only.
  */
 return new class extends Migration

@@ -1,6 +1,6 @@
 {{--
     The package's own invoice document — the local counterpart to a provider's hosted invoice PDF, for a
-    driver that supplies none (Mollie). Publish it (`php artisan vendor:publish --tag=billing-views`) to
+    driver that supplies none. Publish it (`php artisan vendor:publish --tag=billing-views`) to
     override the layout. All amounts are pre-formatted by the renderer; this template is presentation only.
 --}}
 <!DOCTYPE html>

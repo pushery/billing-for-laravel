@@ -10,7 +10,7 @@ use Pushery\Billing\ValueObjects\PaymentMethod;
 
 /**
  * In-app payment-method management. setupIntent returns a driver-shaped client payload the matching
- * front-end adapter consumes (a Stripe client secret, a Mollie token, an Adyen session). The
+ * front-end adapter consumes (a Stripe client secret, or another provider's token or session). The
  * list/remove/set-default trio is the superset closure over apps that could only add a single card.
  *
  * The method id in the two mutating verbs is client-supplied, so an implementation MUST verify the
@@ -30,7 +30,7 @@ interface PaymentMethods
     /**
      * A driver-shaped client payload for capturing a method with the provider's OWN front-end element —
      * the DIY seam for an app that wants inline capture. The package ships no element for it; mount your
-     * own from this payload (a Stripe client secret, a Mollie token, an Adyen session). Most apps want
+     * own from this payload (a Stripe client secret, or another provider's token or session). Most apps want
      * {@see addMethodUrl()} instead.
      */
     public function setupIntent(Model $billable): ClientIntent;

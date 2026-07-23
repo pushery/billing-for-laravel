@@ -26,7 +26,7 @@ Each step is independently shippable, and the package runs beside your code unti
 
 ## How your columns map
 
-The package's tables use **provider-neutral** names, so one schema serves Stripe today and Mollie/Adyen
+The package's tables use **provider-neutral** names, so one schema serves Stripe today and a local-engine driver
 later. The renames to expect when you backfill data (step 6) all follow one rule — *no provider or app
 assumption in a column name*:
 

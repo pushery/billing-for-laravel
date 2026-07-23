@@ -7,11 +7,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * The package's own order: the local billing unit a driver without a provider-side order model (Mollie,
- * Adyen) assembles for a due cycle, processes, and produces an invoice from. Stripe drives its own cycle and
+ * The package's own order: the local billing unit a driver without a provider-side order model
+ * assembles for a due cycle, processes, and produces an invoice from. Stripe drives its own cycle and
  * does not use these tables.
  *
- * The column names are provider-neutral — Adyen uses the same tables. Server-only, reversible.
+ * The column names are provider-neutral — any driver uses the same tables. Server-only, reversible.
  */
 return new class extends Migration
 {

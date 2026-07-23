@@ -10,9 +10,9 @@ use Pushery\Billing\Exceptions\CurrencyMismatch;
 
 /**
  * A monetary amount as integer minor units plus an ISO-4217 currency, normalized across every
- * payment driver. Stripe and Adyen speak integer minor units; Mollie speaks a decimal-string
- * amount + currency — Money is the single representation that crosses the contract boundary, so a
- * raw int or string never does. All arithmetic is integer/string based; floats are never used.
+ * payment driver. Some providers speak integer minor units, others a decimal-string amount plus
+ * currency — Money is the single representation that crosses the contract boundary, so a raw int or
+ * string never does. All arithmetic is integer/string based; floats are never used.
  */
 final readonly class Money
 {
@@ -51,7 +51,7 @@ final readonly class Money
     }
 
     /**
-     * Build from a decimal-string amount (the Mollie representation), e.g. "10.00" EUR → 1000
+     * Build from a decimal-string amount (the shape some providers use), e.g. "10.00" EUR → 1000
      * minor. The fractional precision must not exceed the currency's minor-unit exponent.
      */
     public static function fromDecimal(string $amount, string $currency): self
@@ -312,46 +312,6 @@ final readonly class Money
     public function format(): string
     {
         return $this->toDecimal().' '.$this->currency;
-    }
-
-    /**
-     * The Mollie amount shape: a decimal-string value plus its currency, e.g. `['value' => '10.00',
-     * 'currency' => 'EUR']`.
-     *
-     * Mollie is the one provider that speaks decimal strings rather than integer minor units, and its
-     * value must carry exactly the currency's number of decimal places — "10" or "10.000" for a EUR amount
-     * is rejected by the API. That formatting is already toDecimal()'s job (a zero-decimal currency like JPY
-     * renders with no point at all), so this is a thin shape around it, not a second implementation.
-     *
-     * @return array{value: string, currency: string}
-     */
-    public function toMollie(): array
-    {
-        return ['value' => $this->toDecimal(), 'currency' => $this->currency];
-    }
-
-    /**
-     * Read a Mollie amount back into Money, with no float anywhere on the path.
-     *
-     * The value is parsed through fromDecimal(), which is integer/string based and rejects more precision
-     * than the currency allows — so a malformed amount is refused here rather than silently truncated. The
-     * currency must be a present string; a missing or non-string field is a malformed payload, not a value
-     * to coerce.
-     *
-     * @param  array{value?: mixed, currency?: mixed}  $amount
-     */
-    public static function fromMollie(array $amount): self
-    {
-        $value = $amount['value'] ?? null;
-        $currency = $amount['currency'] ?? null;
-
-        if (! is_string($value) || ! is_string($currency)) {
-            throw new InvalidArgumentException(
-                'A Mollie amount must carry a string value and a string currency.'
-            );
-        }
-
-        return self::fromDecimal($value, $currency);
     }
 
     private function assertSameCurrency(self $other): void

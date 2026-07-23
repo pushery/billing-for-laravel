@@ -13,9 +13,9 @@
 [![Code Style](https://img.shields.io/badge/code%20style-pint-orange.svg)](https://laravel.com/docs/pint)
 [![License](https://img.shields.io/packagist/l/pushery/billing-for-laravel.svg)](LICENSE)
 
-Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Stripe-first, with Mollie and Adyen planned on the same neutral contracts.
+Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Stripe-first, on provider-neutral contracts.
 
-Everything crosses a small set of contracts, so your app talks to _billing_ — not to Stripe. The Stripe driver ships today. The contracts are the seam a second provider slots into — the Mollie and Adyen drivers are not built yet.
+Everything crosses a small set of contracts, so your app talks to _billing_ — not to Stripe. The Stripe driver ships today. The contracts are the seam a second provider slots into.
 
 ## Highlights
 

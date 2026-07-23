@@ -12,7 +12,7 @@ use Pushery\Billing\ValueObjects\DriverCapabilities;
 /**
  * The default driver: Stripe Billing via Cashier. It reports rich native capabilities (hosted portal,
  * provider tax, native metering, provider proration), so the package delegates to Stripe rather than
- * filling those gaps with its own engine — the opposite of the Mollie/Adyen drivers.
+ * filling those gaps with its own engine — the opposite of a local-engine driver.
  *
  * A capability is a promise the PACKAGE keeps, not a description of what the provider could do. Metered
  * usage counts as native here because the package actually reports it to Stripe's meters

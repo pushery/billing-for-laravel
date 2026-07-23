@@ -20,7 +20,7 @@ use Pushery\Billing\ValueObjects\InvoiceCorrectionSnapshot;
  * refund event does not carry.
  *
  * Neutral by design: the Stripe mapper builds the snapshot from a Stripe credit note, and a future
- * Mollie/Adyen local engine builds it from its own. The effect that persists it never sees a provider
+ * the local engine builds it from its own. The effect that persists it never sees a provider
  * object.
  *
  * Renamed from `InvoiceCredited` (the old name conflated this correcting document with a self-billing

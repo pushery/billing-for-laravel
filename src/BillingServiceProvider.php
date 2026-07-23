@@ -286,7 +286,7 @@ final class BillingServiceProvider extends ServiceProvider
 
         // The shipped default driver registers its own bindings (the Stripe SDK
         // client, the driver factory, and the account-hub/webhook contracts). The
-        // future Mollie/Adyen drivers ship their own providers alongside it.
+        // future local-engine drivers ship their own providers alongside it.
         $this->app->register(StripeServiceProvider::class);
 
         // No-op façade for a billing-disabled clone. The driver above binds the invoice / subscription
@@ -388,7 +388,7 @@ final class BillingServiceProvider extends ServiceProvider
             ]);
         }
 
-        // The local-engine cycle advance. A no-op under Stripe; the Mollie/Adyen engine advances due
+        // The local-engine cycle advance. A no-op under Stripe; the local engine advances due
         // subscriptions here. Deferred until the scheduler resolves so it costs nothing otherwise.
         //
         // The usage flush runs on its own, far tighter cadence: it hands recorded usage to the provider,

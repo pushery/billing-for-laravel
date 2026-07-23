@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * The package's OWN coupon/discount model — a coupon is not a provider-only concept (cashier-mollie defines
+ * The package's OWN coupon/discount model — a coupon is not a provider-only concept (other billing packages define
  * them locally too). The local engine applies these directly; the Stripe driver optionally maps a coupon to a
  * Stripe coupon via `provider_coupon_id`. `value` holds a percentage (for a percent coupon) or an amount in
  * minor units (for a fixed coupon), and `currency` scopes a fixed amount. `redeemed_count` is denormalized for

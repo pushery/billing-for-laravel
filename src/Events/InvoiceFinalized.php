@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\InvoiceSnapshot;
  * had no data source.
  *
  * Neutral by design: the Stripe mapper builds the snapshot from a Stripe invoice, and a future
- * Mollie/Adyen local engine builds it from its own. The effect that persists it never sees a provider
+ * the local engine builds it from its own. The effect that persists it never sees a provider
  * object.
  */
 final readonly class InvoiceFinalized implements BillingDomainEvent, IdentifiesCustomer

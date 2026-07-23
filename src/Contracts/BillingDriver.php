@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\DriverCapabilities;
  */
 interface BillingDriver
 {
-    /** The driver's stable key, e.g. "stripe", "mollie", "adyen". */
+    /** The driver's stable key, e.g. "stripe". */
     public function name(): string;
 
     public function rails(): PaymentRails;

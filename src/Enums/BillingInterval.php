@@ -6,7 +6,7 @@ namespace Pushery\Billing\Enums;
 
 /**
  * The recurrence interval of a plan. Provider-neutral: each driver maps it onto its own interval
- * vocabulary (Stripe day/week/month/year, a local Mollie/Adyen engine cycle).
+ * vocabulary (Stripe day/week/month/year, a local engine cycle).
  */
 enum BillingInterval: string
 {
