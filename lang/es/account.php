@@ -74,6 +74,22 @@ return [
         'year' => 'año',
     ],
 
+    'cancel_survey' => [
+        'prompt' => 'Motivo de la cancelación (opcional)',
+        'no_reason' => 'Prefiero no decirlo',
+        'detail_label' => 'Cuéntanos más',
+        'detail_placeholder' => '¿Qué te hizo cancelar?',
+        'detail_required' => 'Añade un detalle para «Otro».',
+        'reason' => [
+            'too_expensive' => 'Es demasiado caro',
+            'missing_features' => 'Faltan funciones que necesito',
+            'not_using_enough' => 'No lo uso lo suficiente',
+            'switched_provider' => 'Me cambié a otro proveedor',
+            'technical_issues' => 'Problemas técnicos',
+            'no_longer_needed' => 'Ya no lo necesito',
+            'other' => 'Otro',
+        ],
+    ],
     'subscription' => [
         'heading' => 'Suscripción',
         'status' => 'Estado',

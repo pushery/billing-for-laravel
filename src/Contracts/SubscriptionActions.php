@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Contracts;
 
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\ValueObjects\CancellationSurvey;
 
 /**
  * The only provider-mutating subscription seam. Cancel moves to a grace period; resume is grace-only;
@@ -13,8 +14,12 @@ use Illuminate\Database\Eloquent\Model;
  */
 interface SubscriptionActions
 {
-    /** Cancel at period end (enters the grace period). */
-    public function cancel(Model $billable): void;
+    /**
+     * Cancel at period end (enters the grace period). The optional survey carries the owner's reason for
+     * leaving; a driver passes it to the provider's native cancellation-feedback field where one exists. It
+     * is purely informational — a cancellation NEVER depends on it, and a null survey is the normal case.
+     */
+    public function cancel(Model $billable, ?CancellationSurvey $survey = null): void;
 
     /** Resume a subscription that is still within its grace period. */
     public function resume(Model $billable): void;

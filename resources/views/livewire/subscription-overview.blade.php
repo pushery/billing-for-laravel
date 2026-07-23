@@ -68,10 +68,41 @@
 
         <div class="mt-6 flex flex-wrap items-center gap-3">
             @if ($state === \Pushery\Billing\Enums\SubscriptionState::Active)
-                <button type="button" wire:click="cancel" wire:loading.attr="disabled"
-                    class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900">
-                    {{ __('billing::account.subscription.cancel') }}
-                </button>
+                {{-- The optional churn survey. It NEVER blocks the cancellation — "prefer not to say" leaves
+                     the reason empty and the button still cancels in one click. --}}
+                <div class="flex w-full flex-col gap-3">
+                    <label class="flex max-w-xs flex-col gap-1 text-sm text-gray-600 dark:text-gray-300">
+                        <span>{{ __('billing::account.cancel_survey.prompt') }}</span>
+                        <select id="cancel-reason" wire:model.live="cancelReason"
+                            class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900">
+                            <option value="">{{ __('billing::account.cancel_survey.no_reason') }}</option>
+                            @foreach (\Pushery\Billing\Enums\CancellationReason::cases() as $reason)
+                                <option value="{{ $reason->value }}">{{ __('billing::account.cancel_survey.reason.'.$reason->value) }}</option>
+                            @endforeach
+                        </select>
+                    </label>
+
+                    @if ($cancelReason === \Pushery\Billing\Enums\CancellationReason::Other->value)
+                        <label class="flex max-w-xs flex-col gap-1 text-sm text-gray-600 dark:text-gray-300">
+                            <span class="sr-only">{{ __('billing::account.cancel_survey.detail_label') }}</span>
+                            <textarea wire:model="cancelDetail" rows="2" maxlength="1000"
+                                placeholder="{{ __('billing::account.cancel_survey.detail_placeholder') }}"
+                                class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"></textarea>
+                        </label>
+                    @endif
+
+                    @error('cancelReason')
+                        <p role="alert" class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                    @error('cancelDetail')
+                        <p role="alert" class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+
+                    <button type="button" wire:click="cancel" wire:loading.attr="disabled"
+                        class="self-start rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                        {{ __('billing::account.subscription.cancel') }}
+                    </button>
+                </div>
             @elseif ($state === \Pushery\Billing\Enums\SubscriptionState::Grace)
                 <button type="button" wire:click="resume" wire:loading.attr="disabled"
                     class="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50">

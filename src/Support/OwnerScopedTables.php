@@ -51,6 +51,10 @@ final class OwnerScopedTables
         // record is the invoice produced from it, not the order itself. So an order is purged with the owner,
         // the same way the subscription it billed is.
         'billing_orders',
+        // A cancellation survey is churn feedback — operational analytics, never a financial record and under
+        // no retention obligation. It goes with the person: nobody is entitled to keep why someone left once
+        // they are gone.
+        'billing_cancellation_surveys',
     ];
 
     /** Kept, but unlinked from the owner: the law requires them for years. */

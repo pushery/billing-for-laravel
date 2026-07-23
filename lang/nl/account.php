@@ -74,6 +74,22 @@ return [
         'year' => 'jaar',
     ],
 
+    'cancel_survey' => [
+        'prompt' => 'Reden voor opzeggen (optioneel)',
+        'no_reason' => 'Zeg ik liever niet',
+        'detail_label' => 'Vertel ons meer',
+        'detail_placeholder' => 'Waarom zeg je op?',
+        'detail_required' => 'Voeg een toelichting toe bij „Anders“.',
+        'reason' => [
+            'too_expensive' => 'Te duur',
+            'missing_features' => 'Ik mis functies',
+            'not_using_enough' => 'Ik gebruik het te weinig',
+            'switched_provider' => 'Ik ben overgestapt naar een andere aanbieder',
+            'technical_issues' => 'Technische problemen',
+            'no_longer_needed' => 'Ik heb het niet meer nodig',
+            'other' => 'Anders',
+        ],
+    ],
     'subscription' => [
         'heading' => 'Abonnement',
         'status' => 'Status',

@@ -74,6 +74,22 @@ return [
         'year' => 'Jahr',
     ],
 
+    'cancel_survey' => [
+        'prompt' => 'Grund fürs Kündigen (optional)',
+        'no_reason' => 'Keine Angabe',
+        'detail_label' => 'Erzähl uns mehr',
+        'detail_placeholder' => 'Was hat dich zum Kündigen bewogen?',
+        'detail_required' => 'Bitte gib bei „Sonstiges“ ein Detail an.',
+        'reason' => [
+            'too_expensive' => 'Zu teuer',
+            'missing_features' => 'Mir fehlen Funktionen',
+            'not_using_enough' => 'Ich nutze es zu wenig',
+            'switched_provider' => 'Ich bin zu einem anderen Anbieter gewechselt',
+            'technical_issues' => 'Technische Probleme',
+            'no_longer_needed' => 'Ich brauche es nicht mehr',
+            'other' => 'Sonstiges',
+        ],
+    ],
     'subscription' => [
         'heading' => 'Abo',
         'status' => 'Status',
