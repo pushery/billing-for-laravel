@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
  * The provider-neutral lines of a local subscription: what is billed each cycle, and for how much.
  *
  * Only Stripe prices usage remotely, so for that driver Cashier's own `subscription_items` stays
- * authoritative and this table simply mirrors nothing. The local engine (Mollie, Adyen) has no
+ * authoritative and this table simply mirrors nothing. The local engine has no
  * provider-side line model at all — it has to know the cycle's composition itself, which is what these
  * rows carry: the catalog key, an optional provider price reference, a quantity, whether the line is
  * metered, and the amount once it is known.

@@ -12,7 +12,7 @@ use Pushery\Billing\ValueObjects\Money;
 
 /**
  * Renders one of the package's own invoices to a human-readable document — the local counterpart to a
- * provider's hosted invoice PDF, for a driver (Mollie) that supplies none.
+ * provider's hosted invoice PDF, for a driver that supplies none.
  *
  * It has two stages, and the split is the point: html() produces a complete, deterministic HTML document
  * from the invoice row and a publishable Blade template, with no browser and no PDF toolchain involved — so

@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * The package's own local subscription-state model. It always exists: the Stripe driver mirrors the
- * Stripe subscription into it; the Mollie/Adyen local engine treats it as the source of truth. The
+ * Stripe subscription into it; the local engine treats it as the source of truth. The
  * SubscriptionPresenter reads a snapshot built from this row — no provider call on the hot path.
  * Server-only.
  */

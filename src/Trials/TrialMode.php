@@ -11,7 +11,7 @@ namespace Pushery\Billing\Trials;
  *
  * - None: no trial is offered.
  * - Subscription: a trial that is part of the subscription — collected at checkout via Stripe's
- *   `trial_period_days` (the mirror), or held on the local subscription row for Mollie/Adyen.
+ *   `trial_period_days` (the mirror), or held on the local subscription row for a local-engine driver.
  * - Generic: a trial with NO subscription — granted by {@see Trials::grant()} onto the owner's own
  *   `trial_ends_at` and unlocking the configured `generic_tier` while it runs.
  */

@@ -137,7 +137,7 @@ final class Subscription extends Model
      * The provider-neutral lines this subscription bills each cycle.
      *
      * Empty for a Stripe subscription, whose lines live in Cashier's own `subscription_items` — this
-     * relation is what the local engine (Mollie, Adyen) uses in place of a provider-side line model.
+     * relation is what the local engine uses in place of a provider-side line model.
      *
      * @return HasMany<SubscriptionItem, $this>
      */

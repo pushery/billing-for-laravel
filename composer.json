@@ -1,7 +1,7 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
     "name": "pushery/billing-for-laravel",
-    "description": "Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Stripe-first; Mollie and Adyen planned on the same neutral contracts.",
+    "description": "Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Stripe-first, on provider-neutral contracts.",
     "keywords": [
         "laravel",
         "billing",

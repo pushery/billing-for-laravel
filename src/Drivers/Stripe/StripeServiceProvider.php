@@ -61,7 +61,7 @@ use Stripe\StripeClient;
  * Wires the Stripe driver into the container: a configured Stripe SDK client, the driver factory the
  * BillingManager resolves for the "stripe" name, and the concrete implementations of the neutral
  * account-hub and webhook contracts. Registered by the package's service provider; the future
- * Mollie/Adyen drivers ship their own providers that rebind these when they are the active driver.
+ * Local-engine drivers ship their own providers that rebind these when they are the active driver.
  */
 final class StripeServiceProvider extends ServiceProvider
 {

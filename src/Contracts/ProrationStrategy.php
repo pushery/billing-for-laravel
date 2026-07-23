@@ -12,7 +12,7 @@ use Pushery\Billing\ValueObjects\Plan;
  * How unused time is credited when a plan is swapped mid-cycle. Two implementations:
  *
  *  - DELEGATE (Stripe): defer to the provider's own proration.
- *  - CREDIT-BALANCE (Mollie/Adyen): the package computes the unused portion into a customer credit
+ *  - CREDIT-BALANCE (a local-engine driver): the package computes the unused portion into a customer credit
  *    balance and offsets the next order — because those providers have no provider-side proration.
  */
 interface ProrationStrategy

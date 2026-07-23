@@ -11,7 +11,7 @@ use Pushery\Billing\ValueObjects\ClientIntent;
  * Open a checkout that turns a visitor into a subscriber. The caller submits a tier KEY, never a price
  * (anti-price-injection, exactly like OneTimeCharge); the driver resolves the price from the plan
  * catalog, opens a hosted checkout in subscription mode, and returns the driver-shaped payload the
- * front-end redirects to (a Stripe Checkout URL, later a Mollie/Adyen equivalent). This is the one seam
+ * front-end redirects to (a Stripe Checkout URL, later another driver's equivalent). This is the one seam
  * SubscriptionActions never had — it can cancel/resume/swap an existing subscription, not create one.
  */
 interface Checkout

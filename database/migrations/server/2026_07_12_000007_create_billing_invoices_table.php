@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * The package's own invoice model. The Stripe driver hydrates DTOs from Stripe invoices; the
- * Mollie/Adyen local engine persists them here (with a gap-free immutable number, and credit-note
+ * the local engine persists them here (with a gap-free immutable number, and credit-note
  * rows linked back to the invoice they credit). Server-only.
  */
 return new class extends Migration

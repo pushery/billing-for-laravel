@@ -7,8 +7,7 @@ namespace Pushery\Billing\Enums;
 /**
  * Where a local order sits in its lifecycle.
  *
- * An order is the package's own billing unit for a driver that has no provider-side order model (Mollie,
- * Adyen): a due cycle is assembled as an order, processed (its items summed, a charge attempted), and an
+ * An order is the package's own billing unit for a driver that has no provider-side order model: a due cycle is assembled as an order, processed (its items summed, a charge attempted), and an
  * invoice is produced from the result. The status is the record of how far that got.
  */
 enum OrderStatus: string

@@ -6,7 +6,7 @@ namespace Pushery\Billing\ValueObjects;
 
 /**
  * The outcome of a PaymentRails charge (on- or off-session). Provider-neutral: every driver returns
- * this shape so the engine above never inspects a Stripe/Mollie/Adyen response object.
+ * this shape so the engine above never inspects a provider response object.
  *
  * A charge has more than two outcomes. Besides succeeded and declined, a European card payment can
  * come back needing the cardholder to authenticate (3-D Secure — `requiresAction`, with the

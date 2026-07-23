@@ -1,7 +1,7 @@
 # Billing for Laravel — documentation
 
 Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and
-e-invoicing. Stripe-first, with Mollie and Adyen planned on the same neutral contracts.
+e-invoicing. Stripe-first, on provider-neutral contracts.
 
 This tree is the package's full documentation. The [README](../README.md) is the showcase; everything
 below is the detail it used to carry.

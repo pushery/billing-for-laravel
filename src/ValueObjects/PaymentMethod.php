@@ -9,8 +9,7 @@ use Illuminate\Support\Carbon;
 
 /**
  * A stored payment method as the account hub renders it — a provider-neutral mirror of the card /
- * mandate on file. Drivers hydrate this from their own objects (a Stripe payment method, a Mollie
- * mandate) so the UI never branches on a provider shape.
+ * mandate on file. Drivers hydrate this from their own objects (a Stripe payment method or another provider's object) so the UI never branches on a provider shape.
  */
 final readonly class PaymentMethod
 {

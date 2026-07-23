@@ -20,9 +20,9 @@ use Pushery\Billing\ValueObjects\Plan;
  * Proration for a provider that has none: the unused remainder of the current plan becomes customer
  * credit, and the next order is offset against it.
  *
- * Stripe prorates on its own side, which is what DelegatedProrationStrategy defers to. Mollie and Adyen
- * have no such thing — a swap there is simply a new order at the new price, and without this the customer
- * pays twice for the same days. Bind this in place of the delegated strategy on those drivers.
+ * Stripe prorates on its own side, which is what DelegatedProrationStrategy defers to. A local-engine driver
+ * has no such thing — a swap there is simply a new order at the new price, and without this the customer
+ * pays twice for the same days. Bind this in place of the delegated strategy on such a driver.
  *
  * WHY THE CREDIT IS BOOKED AND THE CHARGE IS NOT. A swap has two halves: the unused old time (a credit,
  * which is money the customer is owed and which nothing else in the system will remember) and the new

@@ -21,15 +21,15 @@ owner, a calculator never invents a rate it cannot justify, and a money-moving s
 
 ## Drivers
 
-| Capability | Stripe (shipping) | Mollie / Adyen (planned) |
+| Capability | Stripe (shipping) | Local-engine driver |
 | --- | --- | --- |
 | Subscriptions, proration, trials | native | package-local engine |
 | Invoices / PDF | native | generated locally |
 | Hosted portal | native | not available |
 | Webhooks | signed | bare-id / HMAC |
 
-The neutral contracts and the `BillingEngine::tick()` seam ship today; the Mollie and Adyen drivers themselves
-are not built. Under Stripe, `tick()` is a deliberate no-op — Stripe drives its own recurring cycle.
+The neutral contracts and the `BillingEngine::tick()` seam ship today; a local-engine driver itself
+is not built yet. Under Stripe, `tick()` is a deliberate no-op — Stripe drives its own recurring cycle.
 
 ## The Cashier coupling, and where it stops
 
