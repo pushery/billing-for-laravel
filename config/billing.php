@@ -460,6 +460,12 @@ return [
         // invoice window above ON PURPOSE. The two numbers (3650 vs 2920) are different windows for different
         // record classes, not a value that got out of sync; do not "unify" them.
         'audit_days' => (int) env('BILLING_RETENTION_AUDIT_DAYS', 3650),
+
+        // The escape hatch for a jurisdiction whose invoice minimum genuinely is SHORTER than the German
+        // floor above. Left false, a shorter erased_financial_days refuses to boot rather than prune tax
+        // records early. It is declared here rather than left as an undocumented read, because a fail-closed
+        // guard whose opt-out appears in no published file is one a consumer can only discover by hitting it.
+        'allow_below_statutory_minimum' => (bool) env('BILLING_RETENTION_ALLOW_BELOW_STATUTORY_MINIMUM', false),
     ],
 
     /*

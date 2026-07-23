@@ -89,9 +89,10 @@ drifts.
   Because both surfaces read the one source, they can never promise different things.
 - **`TierCatalog`** (contract; `ConfigTierCatalog` by default) — `all()`, `find($key)`, `label($key)`,
   `priceDisplay($key)`, and the flags `isByok($key)` / `isUntouchable($key)`.
-- **`AddonCatalog`** (`ConfigAddonCatalog`) — `all()`, `exists($key)`, `label($key)`, `priceFor($key)`,
+- **`ConfigAddonCatalog`** — `all()`, `exists($key)`, `label($key)`, `priceFor($key)`,
   `providerPriceFor($key)`, and `grantsFor($key)` for a prepaid-unit add-on (see
-  [Usage-based billing](usage-based-billing.md)).
+  [Usage-based billing](usage-based-billing.md)). Unlike the tier and plan catalogs it is a concrete class,
+  not a contract, so extend it by binding your own subclass rather than rebinding an interface.
 
 Use them as-is for the common case; **extend by rebinding the contract** when you need catalog data from
 somewhere other than config (a database of tiers, say). Rebind `TierCatalog` (or `PlanCatalog`) to your own

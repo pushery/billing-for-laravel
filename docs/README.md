@@ -8,10 +8,10 @@ below is the detail it used to carry.
 
 ## Start here
 
-- **[Choosing your mode](choosing-your-mode.md)** — a three-question path into exactly one of the four
-  operating modes. Most apps are **Mode S (single seller)** and can go straight to the single-seller guide.
+- **[Choosing your setup](choosing-your-setup.md)** — the six decisions to make before `billing:install`,
+  each with its config key and its default.
 
-## Mode S — single seller (the default, the 90% case)
+## The guide
 
 The whole surface for an app that sells its own product. Start at installation and read in order, or jump to
 what you need.
@@ -31,26 +31,17 @@ what you need.
 - [Admin and support](single-seller/admin-and-support.md) — `BillingAdmin`, the optional Livewire console, the app-defined admin gate, the audit trail, metrics
 - [Data protection](single-seller/data-protection.md) — `billing:export`, `billing:erase`, `billing:prune`, why invoices stay, the retention windows
 
-## Marketplace and other jurisdictions
-
-- **Mode K (commission marketplace)** — [overview](marketplace/overview.md) · [commission model](marketplace/commission-model.md) · [self-billing](marketplace/self-billing.md) · [seller status](marketplace/seller-status.md) · [payouts and clawbacks](marketplace/payouts-and-clawbacks.md) · [reporting](marketplace/reporting.md)
-- **Mode V (intermediary marketplace)** — [overview](marketplace-intermediary/overview.md) · [commission invoice](marketplace-intermediary/commission-invoice.md) · [consumer-to-consumer](marketplace-intermediary/consumer-to-consumer.md) · [buyer fee](marketplace-intermediary/buyer-fee.md)
-- **Mode X (another jurisdiction)** — [profiles](jurisdictions/profiles.md) · [the German profile](jurisdictions/profile-de.md) · [writing a profile](jurisdictions/writing-a-profile.md)
-
-The marketplace and jurisdiction pages are scaffolds today: their goal and outline are set, and the feature
-work that owns each fills it in. Mode S stays byte-identical whether or not the marketplace is enabled.
-
 ## Reference
 
-- [Configuration reference](reference/configuration.md) — the complete key reference (generated)
+- [Configuration reference](reference/configuration.md) — every key in the three config files, its env variable and its default
 - [Command reference](reference/commands.md) — every Artisan command, its cadence and exit behavior
 - [Event reference](reference/events.md) — the provider-neutral domain events and their payloads
 - [Contract reference](reference/contracts.md) — the extension seams and their guarantees
-- [Database reference](reference/database.md) — the package tables and provider-neutral column naming
+- [Database reference](reference/database.md) — the package tables, their columns and what erasure does to each
 
 ## Guides
 
-- [Upgrading](guides/upgrading.md) — upgrade paths per version
+- [Upgrading](guides/upgrading.md) — what each released version needs from you
 - [Migrating from your own billing code](guides/migrating-from-custom-billing.md) — adopt the package in place, one seam at a time
 - [Migrating from Cashier](guides/migrating-from-cashier.md) — adopt existing Cashier subscriptions with `billing:sync`
 - [Testing](guides/testing.md) — `Billing::fake()`, asserting on domain events, cross-engine testing
