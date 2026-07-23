@@ -4,6 +4,34 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-07-23
+
+### Added
+
+- **The documentation now describes only what ships, and the reference pages are held to the code.** The
+  configuration, database, event and troubleshooting pages are written from `config/`, the migrations,
+  `src/Events` and `src/Exceptions` — and each is locked to its source by a guard, so a key, table, event or
+  exception added to the package and not to its page fails a test instead of leaving the page quietly
+  incomplete. The database reference states what an erasure request does to every table, and that answer is
+  compared against the same list the eraser and the exporter read. `docs/guides/upgrading.md` now carries the
+  per-version upgrade path, including what a consumer shipping its own driver has to change.
+- `billing.retention.allow_below_statutory_minimum` (default `false`) is declared in the published config.
+  The retention guard already read it; a fail-closed guard whose opt-out appears in no published file is one
+  a consumer can only discover by hitting it. Behavior is unchanged.
+
+### Removed
+
+- **The documentation pages for features that do not ship.** Thirteen pages whose whole content was a
+  placeholder banner and an outline are gone, and the entry page is rewritten as the six setup decisions a
+  reader actually has to make, each with its config key and default. A page that announces itself as empty is
+  worse than no page: it costs a reader the click and tells them a feature exists.
+
+### Fixed
+
+- The docs link guard split a link on `#` with `strtok`, which skips leading delimiters — so a same-page
+  anchor came back as a filename and read as a broken link. Anchor links on a long reference page are now
+  recognized, with a red-proof.
+
 ## [0.8.0] - 2026-07-23
 
 ### Changed (breaking — pre-1.0)
