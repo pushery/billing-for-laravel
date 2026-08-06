@@ -4,15 +4,20 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\View as ViewFacade;
+use Illuminate\View\View as ConcreteView;
 use Livewire\Component;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Reporting\BillingMetricsReporter;
 use Pushery\Billing\Support\BillingAdmin;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * The optional, publishable admin console: billing metrics, the recent audit log, and a comp-a-tier action.
@@ -45,13 +50,17 @@ final class BillingAdminConsole extends Component
         // visitor whose admin grant was revoked between requests.
         $this->authorizeAdmin();
 
-        // ->layout() is Livewire's full-page wrapper (typed as mixed on the View contract); the same @var
-        // re-assert AccountScreen::view() uses. Without a layout a routed Livewire view has no page shell.
-        /** @var View $view */
-        $view = view('billing::livewire.billing-admin-console', [
-            'metrics' => app(BillingMetricsReporter::class)->compute(),
+        // ->layout() is Livewire's full-page wrapper, registered as a macro on the CONCRETE view class --
+        // the contract the factory is documented against does not carry it. Same naming as
+        // AccountScreen::view(). Without a layout a routed Livewire view has no page shell.
+        /** @var ConcreteView $rendered */
+        $rendered = ViewFacade::make('billing::livewire.billing-admin-console', [
+            'metrics' => Container::getInstance()->make(BillingMetricsReporter::class)->compute(),
             'events' => BillingEvent::query()->latest('id')->limit(50)->get(),
-        ])->layout('billing::layouts.admin');
+        ]);
+
+        /** @var View $view */
+        $view = $rendered->layout('billing::layouts.admin');
 
         return $view;
     }
@@ -81,7 +90,7 @@ final class BillingAdminConsole extends Component
             return;
         }
 
-        app(BillingAdmin::class)->comp($owner, $tier, 'admin console', Auth::user());
+        Container::getInstance()->make(BillingAdmin::class)->comp($owner, $tier, 'admin console', Auth::user());
 
         $this->compResult = 'granted';
         $this->reset('compOwnerId', 'compTier');
@@ -90,14 +99,14 @@ final class BillingAdminConsole extends Component
     /** Whether the app declares this tier in billing.tiers — existence, not resolvability (mirrors GrantTierCommand). */
     private function tierExists(string $tier): bool
     {
-        $tiers = config('billing.tiers');
+        $tiers = Config::get('billing.tiers');
 
         return is_array($tiers) && array_key_exists($tier, $tiers);
     }
 
     private function resolveOwner(): ?Model
     {
-        $model = config('billing.customer.model');
+        $model = Config::get('billing.customer.model');
         $id = trim($this->compOwnerId);
 
         if (! is_string($model) || ! is_a($model, Model::class, true) || $id === '') {
@@ -116,8 +125,10 @@ final class BillingAdminConsole extends Component
 
     private function authorizeAdmin(): void
     {
-        $ability = config('billing.admin.ability', 'billing-admin');
+        $ability = Config::get('billing.admin.ability', 'billing-admin');
 
-        abort_unless(Gate::allows(is_string($ability) ? $ability : 'billing-admin'), 403);
+        if (! (Gate::allows(is_string($ability) ? $ability : 'billing-admin'))) {
+            throw new HttpException(403);
+        }
     }
 }

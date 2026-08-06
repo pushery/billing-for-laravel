@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Pushery\Billing\Contracts\UsageHistoryProvider;
 use Pushery\Billing\Livewire\Concerns\DegradesGracefully;
@@ -22,7 +23,7 @@ final class UsageHistory extends AccountScreen
     public function render(): View
     {
         $owner = $this->owner();
-        $history = app(UsageHistoryProvider::class);
+        $history = Container::getInstance()->make(UsageHistoryProvider::class);
 
         $periods = $this->orDegrade(fn () => $history->periods($owner), []);
         $topups = $this->orDegrade(fn () => $history->topups($owner), []);

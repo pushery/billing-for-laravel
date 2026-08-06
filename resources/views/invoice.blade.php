@@ -46,6 +46,7 @@
                 @endif
             </td>
             <td>
+                @if ($itemisesTax)
                 <strong>{{ __('billing::invoice.to') }}</strong><br>
                 {{ $buyer['name'] ?? '' }}<br>
                 {{ $buyer['address'] ?? '' }}<br>
@@ -53,6 +54,7 @@
                 {{ $buyer['country'] ?? '' }}
                 @if (! empty($buyer['vat_id']))
                     <br>{{ __('billing::invoice.vat_id', ['id' => $buyer['vat_id']]) }}
+                @endif
                 @endif
             </td>
         </tr>
@@ -84,6 +86,7 @@
     @endif
 
     <table class="totals">
+        @if ($itemisesTax)
         <tr>
             <td>{{ __('billing::invoice.subtotal') }}</td>
             <td class="num">{{ $subtotal }}</td>
@@ -92,11 +95,16 @@
             <td>{{ $reverseCharge ? __('billing::invoice.vat_reverse_charge') : __('billing::invoice.vat') }}</td>
             <td class="num">{{ $tax }}</td>
         </tr>
+        @endif
         <tr class="total">
-            <td>{{ __('billing::invoice.total') }}</td>
+            <td>{{ $itemisesTax ? __('billing::invoice.total') : __('billing::invoice.total_including_vat', ['rate' => $taxRate]) }}</td>
             <td class="num">{{ $total }}</td>
         </tr>
     </table>
+
+    @if ($marginScheme && $marginNote)
+        <p class="note">{{ $marginNote }}</p>
+    @endif
 
     @if ($reverseCharge || $vatNote)
         <p class="note muted">{{ $vatNote ?? __('billing::invoice.reverse_charge_note') }}</p>

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Support\Facades\Lang;
 
 /**
  * Sent when a payment method that could be charged off-session was removed — a detached card, a revoked
@@ -17,9 +18,9 @@ final class PaymentMethodRemovedNotification extends BillingNotification
     public function toMail(object $notifiable): MailMessage
     {
         return new MailMessage()
-            ->subject(__('billing::notifications.payment_method_removed.subject'))
-            ->line(__('billing::notifications.payment_method_removed.intro'))
-            ->line(__('billing::notifications.payment_method_removed.outro'));
+            ->subject(Lang::get('billing::notifications.payment_method_removed.subject'))
+            ->line(Lang::get('billing::notifications.payment_method_removed.intro'))
+            ->line(Lang::get('billing::notifications.payment_method_removed.outro'));
     }
 
     /** @return array<string, mixed> */

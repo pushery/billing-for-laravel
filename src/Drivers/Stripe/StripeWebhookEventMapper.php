@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Events\AddonPurchased;
@@ -18,10 +20,13 @@ use Pushery\Billing\Events\MandateRevoked;
 use Pushery\Billing\Events\PaymentActionRequired;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
+use Pushery\Billing\Events\RoutedChargeAbandoned;
+use Pushery\Billing\Events\RoutedChargeConfirmed;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\Events\TrialEnding;
 use Pushery\Billing\ValueObjects\InvoiceCorrectionSnapshot;
 use Pushery\Billing\ValueObjects\InvoiceSnapshot;
+use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -37,6 +42,10 @@ use Pushery\Billing\ValueObjects\Money;
  * the document that credits a finalized invoice, with the lines and tax a raw refund event does not
  * carry. The two are deliberately separate concerns, not a duplicate mapping of the same money.
  *
+ * `@partially-mapped:` `charge.dispute.closed` IS answered, and books the dispute — what it does not do is
+ * resolve an OWNER from it. The qualifier below carries the whole difference, so it is stated here where a
+ * reader looking for the exclusion will find it.
+ *
  * Scope notes. A voided credit note (credit_note.voided) is not mapped: reversing an already-booked
  * credit is a distinct accounting action whose direction needs its own decision, and emitting the wrong
  * booking is worse than leaving a rare correction to be made by hand. Dispute and mandate-revocation
@@ -45,19 +54,30 @@ use Pushery\Billing\ValueObjects\Money;
  * neutral ChargebackReceived / MandateRevoked events exist for the driver and consumers that will produce
  * them.
  *
- * `payment_intent.*` is deliberately NOT mapped. Every payment the package cares about is already covered
- * without it: a subscription charge fires `invoice.payment_*` (which carries the invoice reference the
+ * `@partially-mapped:` `payment_intent.succeeded`, `payment_intent.payment_failed` and
+ * `payment_intent.canceled` ARE answered — but only for a ROUTED marketplace charge, and every one of them
+ * returns nothing for a payment that carries an invoice. The sentence below used to say the family was not
+ * mapped at all, which stopped being true when the routed lane landed.
+ *
+ * `payment_intent.*` is mapped for NOTHING INVOICE-DRIVEN, which is every customer-facing payment. Those are
+ * already covered: a subscription charge fires `invoice.payment_*` (which carries the invoice reference the
  * dunning notice dedups on), an add-on fires `checkout.session.*`, and an off-session recovery charge
  * returns its ChargeResult to the caller synchronously. A `payment_intent.payment_failed` fires in PARALLEL
  * with `invoice.payment_failed` for the SAME failure but carries the payment-intent id, not the invoice —
- * so mapping it to PaymentFailed would bypass the dunning dedup and mail the customer a second "payment
- * failed", while covering no failure the invoice event does not already cover. It stays unmapped until a
- * flow appears that genuinely needs it, and PaymentIntentMappingTest pins that so it is a decision, not an
- * oversight.
+ * so mapping THAT to PaymentFailed would bypass the dunning dedup and mail the customer a second "payment
+ * failed", while covering no failure the invoice event does not already cover. `PaymentIntentMappingTest`
+ * pins the exclusion so it stays a decision rather than an oversight.
+ *
+ * What the routed arms map instead is a payment with NO invoice at all — the discriminator is taken from the
+ * payload rather than from a lookup, and the effect behind it no-ops on a reference this package never wrote
+ * as a routed charge. So an ordinary invoice-less checkout emits an event that finds nothing.
  */
 final readonly class StripeWebhookEventMapper implements WebhookEventMapper
 {
-    public function __construct(private StripeSubscriptionMapper $subscriptions) {}
+    public function __construct(
+        private StripeSubscriptionMapper $subscriptions,
+        private MerchantAccountDirectory $accounts,
+    ) {}
 
     public function map(Request $request): iterable
     {
@@ -89,6 +109,28 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             'invoice.payment_succeeded' => [...$this->invoiceEvents($object, failed: false), ...$this->invoiceSnapshotEvents($object)],
             'checkout.session.completed',
             'checkout.session.async_payment_succeeded' => $this->checkoutEvents($object),
+            // `@partially-mapped:` payment_intent.succeeded, payment_intent.payment_failed and
+            // payment_intent.canceled ARE answered, for routed marketplace charges only. What stays out is
+            // every INVOICE-DRIVEN payment, which is the whole customer-facing surface — and that qualifier
+            // is the claim, not a softening of it.
+            //
+            // `payment_intent.*` stays unmapped for anything invoice-driven, which is every customer-facing
+            // payment. That pin is not being loosened: it exists because `payment_intent.payment_failed`
+            // fires in parallel with `invoice.payment_failed` for the same failure while carrying the
+            // payment-intent id rather than the invoice, so mapping it would bypass a dunning dedup keyed on
+            // the invoice and mail the customer a second failure notice.
+            //
+            // A ROUTED marketplace charge is not that. It is not invoiced through the provider at all, so
+            // the payload carries no `invoice` — and that absence is the discriminator, taken from the
+            // payload itself rather than from a database lookup a mapper has no business doing. Every case
+            // the pin covers carries an invoice and still maps to nothing.
+            //
+            // The rest of the narrowing happens downstream: the effect only acts on a reference matching a
+            // routed charge this package wrote as pending, and no-ops otherwise. So an ordinary one-time
+            // checkout, which also has no invoice, emits an event that finds nothing and changes nothing.
+            'payment_intent.succeeded' => $this->routedChargeEvents($object, confirmed: true),
+            'payment_intent.payment_failed',
+            'payment_intent.canceled' => $this->routedChargeEvents($object, confirmed: false),
             'charge.refunded' => $this->refundEvents($object),
             'charge.dispute.closed' => $this->disputeClosedEvents($object),
             'credit_note.created' => $this->correctionEvents($object),
@@ -194,9 +236,40 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
      */
     private function subscriptionEvents(array $object, ?int $occurredAt): array
     {
-        $event = $this->subscriptions->toEvent($object, $occurredAt);
+        // A routed subscription rides a destination charge: it lives on the PLATFORM account (so its event
+        // arrives here, not on the merchant endpoint) but carries transfer_data.destination naming the
+        // connected account its money is owed to. That destination resolves to the local merchant, which
+        // keys the fan's per-creator row — while the customer stays a platform customer, so the owner is
+        // still resolved globally (no account reference rides along). A subscription with no transfer_data is
+        // a plain platform sale and maps exactly as before.
+        $event = $this->subscriptions->toEvent($object, $occurredAt, $this->routedMerchant($object));
 
         return $event instanceof SubscriptionStateChanged ? [$event] : [];
+    }
+
+    /**
+     * The merchant a subscription's destination charge routes to, from transfer_data.destination, or null for
+     * an unrouted platform subscription. The destination is the connected account id (a string, or an
+     * expanded account object); an account with no local merchant on file resolves to null rather than a
+     * guess.
+     *
+     * @param  array<array-key, mixed>  $object
+     */
+    private function routedMerchant(array $object): ?MerchantScope
+    {
+        $transfer = $object['transfer_data'] ?? null;
+        $destination = is_array($transfer) ? ($transfer['destination'] ?? null) : null;
+
+        // Expanded, the destination is an account object; unexpanded (the webhook default) it is the id.
+        $accountId = is_array($destination) ? $this->string($destination, 'id') : (is_string($destination) ? $destination : null);
+
+        if ($accountId === null || $accountId === '') {
+            return null;
+        }
+
+        $merchant = $this->accounts->merchantForReference($accountId);
+
+        return $merchant instanceof Model ? MerchantScope::forMerchant($merchant) : null;
     }
 
     /**
@@ -578,5 +651,43 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         $value = $data[$key] ?? null;
 
         return is_int($value) ? $value : null;
+    }
+
+    /**
+     * A routed marketplace charge clearing, or not, after the fact.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function routedChargeEvents(array $object, bool $confirmed): array
+    {
+        // Invoice-driven means customer-facing, and customer-facing is what the pin protects. Checked for
+        // PRESENCE rather than truthiness: the provider sends `invoice: null` on a payment that has none,
+        // and a null-check that treated that as "has an invoice" would map nothing, forever, silently.
+        if (($object['invoice'] ?? null) !== null) {
+            return [];
+        }
+
+        $reference = $object['id'] ?? null;
+
+        if (! is_string($reference) || $reference === '') {
+            return [];
+        }
+
+        // THE TRANSFER THE PROVIDER ALREADY MADE, carried through instead of dropped.
+        //
+        // On a destination charge the transfer is created as the payment settles, and the payload names it.
+        // The synchronous path has always passed that reference on; this one settled the charge WITHOUT it,
+        // so a hosted checkout produced a settled row whose link to the provider's transfer never existed —
+        // and that link is the key any reconciliation against the provider has to join on.
+        //
+        // Read as a string only. Stripe expands this field to an object when asked to, and an expanded
+        // transfer is not an id: storing `Array` or a nested payload here would be worse than the null it
+        // replaced, because null at least says nothing.
+        $transfer = $object['transfer'] ?? null;
+
+        return [$confirmed
+            ? new RoutedChargeConfirmed('stripe', $reference, is_string($transfer) && $transfer !== '' ? $transfer : null)
+            : new RoutedChargeAbandoned('stripe', $reference)];
     }
 }

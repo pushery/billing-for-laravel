@@ -223,4 +223,10 @@ return [
         ],
     ],
 
+    // Toasts transmitidos. Uma linha cada: um toast lê-se de passagem, ao lado do e-mail que o explica.
+    'toast' => [
+        'payment_failed' => 'O teu pagamento não pôde ser processado. Atualiza os teus dados de pagamento.',
+        'subscription_activated' => 'A tua subscrição está ativa — tudo o que inclui está disponível.',
+    ],
+
 ];

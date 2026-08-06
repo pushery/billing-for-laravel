@@ -26,6 +26,21 @@ final class UsageCounter extends Model
     /** @var list<string> */
     protected $fillable = ['owner_type', 'owner_id', 'meter_key', 'period', 'used', 'reserved', 'prepaid_used', 'warned_at'];
 
+    /**
+     * The same defaults the schema carries, so a row that was just created reads like one that was read back.
+     *
+     * Without them a model created without these columns holds null for each, while the row the database
+     * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
+     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     *
+     * @var array<string, int>
+     */
+    protected $attributes = [
+        'used' => 0,
+        'reserved' => 0,
+        'prepaid_used' => 0,
+    ];
+
     /** @var array<string,string> */
     protected $casts = ['used' => 'integer', 'reserved' => 'integer', 'prepaid_used' => 'integer', 'warned_at' => 'datetime'];
 }

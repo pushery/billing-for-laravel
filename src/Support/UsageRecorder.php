@@ -52,7 +52,6 @@ final readonly class UsageRecorder
         private TierResolver $tiers,
         private PeriodResolver $periods,
         private UsageMeter $counters,
-        private PrepaidLedger $prepaid,
         private Repository $config,
         private UsageNotifier $notifier,
     ) {}
@@ -173,8 +172,8 @@ final readonly class UsageRecorder
                 'source_key' => $sourceKey,
                 'state' => ($reportable ? UsageEventState::Pending : UsageEventState::Local)->value,
                 'attempts' => 0,
-                'created_at' => now(),
-                'updated_at' => now(),
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
             ]);
 
             // The unique source key lost the race (or lost it earlier): this usage is already on the
@@ -200,7 +199,7 @@ final readonly class UsageRecorder
             if ($drawn > 0) {
                 UsageEvent::query()
                     ->where('identifier', $identifier)
-                    ->update(['prepaid_units' => $drawn, 'updated_at' => now()]);
+                    ->update(['prepaid_units' => $drawn, 'updated_at' => Carbon::now()]);
             }
 
             return true;
@@ -260,11 +259,11 @@ final readonly class UsageRecorder
         );
 
         if (! $hold instanceof UsageHold) {
-            // What is left is the free allowance the cycle has not spent PLUS the units the owner bought —
-            // the same sum the reservation just refused, so the error reports the number it was measured on.
-            $included = $component instanceof MeteredComponent ? ($component->included ?? 0) : 0;
-            $remaining = max(0, $included - $this->counters->consumed($owner, $meterKey, $period->key))
-                + $this->prepaid->balance($owner, $meterKey);
+            // The same sum the reservation just refused — the same method, so the message cannot quote a
+            // remainder measured differently from the refusal it explains. It used to compute its own, and
+            // once the free allowance was gone it told the customer they had units that were already held.
+            $included = $component instanceof MeteredComponent ? $component->included : null;
+            $remaining = $this->counters->remaining($owner, $meterKey, $period->key, $included);
 
             throw QuotaExceeded::onMeter(
                 $meterKey,

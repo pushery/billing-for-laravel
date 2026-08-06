@@ -28,7 +28,25 @@ final readonly class ChargeResult
         public bool $pending = false,
         /** The provider secret the front end confirms an action against (a Stripe PaymentIntent client secret). */
         public ?string $clientSecret = null,
+        /**
+         * The provider's reference for the movement that carried the merchant's share, once one exists.
+         *
+         * Null carries two different meanings and the difference matters: on an unrouted payment there was
+         * never a transfer, while on a routed one the provider has not named it yet. Neither is an error,
+         * and a caller that needs to tell them apart reads the stored charge rather than guessing here.
+         */
+        public ?string $transferReference = null,
+        /** What the platform kept, on a routed payment. Null when nothing was routed. */
+        public ?Money $applicationFee = null,
+        /** The account the merchant's share was owed to, on a routed payment. */
+        public ?string $destination = null,
     ) {}
+
+    /** Whether this payment carried a merchant's share at all. */
+    public function isRouted(): bool
+    {
+        return $this->destination !== null;
+    }
 
     /** A genuine failure — a decline. An unsettled charge that still might succeed (action/pending) is NOT failed. */
     public function failed(): bool

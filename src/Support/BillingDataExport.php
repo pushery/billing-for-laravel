@@ -20,40 +20,25 @@ use Illuminate\Support\Facades\DB;
  * uncomfortable: they are the person's data, they are what the package actually stores, and an export that
  * quietly leaves out the biggest file is not an honest one.
  */
-final class BillingDataExport
+final readonly class BillingDataExport
 {
+    /**
+     * The shared table machinery is DEFAULTED rather than required: this class is public surface a consumer
+     * may legitimately construct with `new`, and it is stateless, so demanding the dependency would break
+     * that for no benefit. The container still injects its own instance.
+     */
+    public function __construct(private SubjectScopedRecords $records = new SubjectScopedRecords) {}
+
     /**
      * @return array<string, list<array<array-key, mixed>>>
      */
     public function for(Model $owner): array
     {
-        $export = [];
-
-        foreach (OwnerScopedTables::all() as $table) {
-            $rows = DB::table($table)
-                ->where('owner_type', $owner->getMorphClass())
-                ->where('owner_id', $owner->getKey())
-                ->get()
-                ->map(fn (object $row): array => (array) $row)
-                ->all();
-
-            $export[$table] = array_values($rows);
-        }
-
-        // Child tables key on their parent row, not on the owner, so the filter above cannot see them —
-        // they are reached by joining through the parent. They are still this person's data (what they
-        // subscribe to and are billed for each cycle), and the eraser reads the same map, so a child table
-        // cannot end up covered by one side and forgotten by the other.
-        foreach (OwnerScopedTables::CASCADED as $table => $link) {
-            $export[$table] = array_values(DB::table($table)
-                ->whereIn($link['foreign_key'], DB::table($link['parent'])
-                    ->where('owner_type', $owner->getMorphClass())
-                    ->where('owner_id', $owner->getKey())
-                    ->select('id'))
-                ->get()
-                ->map(fn (object $row): array => (array) $row)
-                ->all());
-        }
+        // The same axis, the same table work the eraser does — read out instead of deleted. Child tables
+        // included: they key on their parent row rather than on the person, so they are reached by joining
+        // through the parent, and covering them here but not there (or the reverse) is exactly the drift
+        // one shared implementation makes impossible.
+        $export = $this->records->export(OwnerScopedTables::ownerAxis(), $owner);
 
         // The audit ledger keys on subject/actor, not owner — but a subject-access request covers the
         // owner's billing history all the same, so include the rows where they are the subject OR the actor.

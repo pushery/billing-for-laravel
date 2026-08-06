@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\View as ViewFacade;
+use Illuminate\View\View as ConcreteView;
 use Livewire\Component;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\CanTransactMoney;
@@ -17,6 +20,7 @@ use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\SubscriptionPresenter;
 use Pushery\Billing\Trials\Trials;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * The base for every account-hub screen. It resolves the billing owner for the signed-in actor once —
@@ -31,9 +35,11 @@ abstract class AccountScreen extends Component
     {
         $actor = Auth::user();
 
-        abort_unless($actor instanceof Model, 403);
+        if (! ($actor instanceof Model)) {
+            throw new HttpException(403);
+        }
 
-        return app(BillingEntityResolver::class)->ownerFor($actor);
+        return Container::getInstance()->make(BillingEntityResolver::class)->ownerFor($actor);
     }
 
     /**
@@ -43,9 +49,16 @@ abstract class AccountScreen extends Component
      */
     protected function actor(): Model
     {
+        // The same fail-closed check owner() makes, and it is NOT redundant with it. audit() resolves
+        // owner() first in one argument list, so on that path this branch is indeed already refused —
+        // but ConfirmsIdentity::confirmIdentity() calls actor() on its own, at the START of the
+        // irreversible actions, before any owner() lookup. A Livewire action is its own request, so a
+        // session that ends between the mount and the click arrives exactly there.
         $actor = Auth::user();
 
-        abort_unless($actor instanceof Model, 403);
+        if (! ($actor instanceof Model)) {
+            throw new HttpException(403);
+        }
 
         return $actor;
     }
@@ -57,13 +70,13 @@ abstract class AccountScreen extends Component
      */
     protected function audit(string $type, array $payload = []): void
     {
-        app(BillingEventLog::class)->record($type, $this->owner(), $payload, AuditSource::Customer, $this->actor());
+        Container::getInstance()->make(BillingEventLog::class)->record($type, $this->owner(), $payload, AuditSource::Customer, $this->actor());
     }
 
     /** The owner's current tier key from its denormalized tier column (fail-safe to the zero tier). */
     protected function currentTierKey(): string
     {
-        $config = app(Repository::class);
+        $config = Container::getInstance()->make(Repository::class);
 
         $column = $config->get('billing.tier_column', 'plan');
         $zero = $config->get('billing.zero_tier', 'free');
@@ -82,6 +95,7 @@ abstract class AccountScreen extends Component
         return Subscription::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
+            ->forMerchant(null)
             ->where('type', 'default')
             ->latest('id')
             ->first();
@@ -102,9 +116,9 @@ abstract class AccountScreen extends Component
 
         $snapshot = $subscription instanceof Subscription
             ? $subscription->toSnapshot()
-            : app(Trials::class)->ownerSnapshot($this->owner());
+            : Container::getInstance()->make(Trials::class)->ownerSnapshot($this->owner());
 
-        return app(SubscriptionPresenter::class)->present($snapshot, $pendingActivation);
+        return Container::getInstance()->make(SubscriptionPresenter::class)->present($snapshot, $pendingActivation);
     }
 
     /**
@@ -124,7 +138,9 @@ abstract class AccountScreen extends Component
      */
     protected function ensureEligible(): void
     {
-        abort_unless(app(CanTransactMoney::class)->check($this->owner()), 403);
+        if (! (Container::getInstance()->make(CanTransactMoney::class)->check($this->owner()))) {
+            throw new HttpException(403);
+        }
     }
 
     /**
@@ -141,12 +157,21 @@ abstract class AccountScreen extends Component
         // unauthenticated visitor, even one (like DangerZone) whose render does not otherwise resolve the
         // owner, and even if a route were ever mounted without the auth middleware. owner()/actor() enforce
         // the same on data access; centralizing it here means a new screen inherits the guard automatically.
-        abort_unless(Auth::user() instanceof Model, 403);
+        if (! (Auth::user() instanceof Model)) {
+            throw new HttpException(403);
+        }
 
-        $layout = app(Repository::class)->get('account.layout', 'billing::layouts.account');
+        $layout = Container::getInstance()->make(Repository::class)->get('account.layout', 'billing::layouts.account');
+
+        // The factory is DOCUMENTED as returning the View CONTRACT, but the object it really hands back is
+        // the concrete Illuminate\View\View -- and that concrete class is where Livewire registers
+        // ->layout() as a macro (SupportPageComponents). So the concrete type is named here: the contract
+        // genuinely does not carry the method, and nothing else in the chain reveals which class does.
+        /** @var ConcreteView $rendered */
+        $rendered = ViewFacade::make($name, $data);
 
         /** @var View $view */
-        $view = view($name, $data)->layout(is_string($layout) ? $layout : 'billing::layouts.account');
+        $view = $rendered->layout(is_string($layout) ? $layout : 'billing::layouts.account');
 
         return $view;
     }

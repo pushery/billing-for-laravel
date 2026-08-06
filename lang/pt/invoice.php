@@ -21,5 +21,8 @@ return [
     'vat' => 'IVA',
     'vat_reverse_charge' => 'IVA (autoliquidação)',
     'total' => 'Total',
+    'total_including_vat' => 'Total com IVA de :rate incluído',
     'reverse_charge_note' => 'Autoliquidação: o adquirente é responsável pelo IVA.',
+    'margin_scheme_note' => 'Regime da margem de lucro — bens em segunda mão',
+    'self_billed_note' => 'Autofaturação: emitida pelo destinatário em nome do fornecedor, mediante acordo prévio.',
 ];

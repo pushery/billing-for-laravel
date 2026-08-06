@@ -15,6 +15,51 @@ use RuntimeException;
  */
 final class InvalidBillingConfig extends RuntimeException
 {
+    /**
+     * A configured value that cannot be read as what it must be.
+     *
+     * Refused rather than coerced, because the coerced form of a broken money setting is almost always a
+     * plausible one — a rate that arrived as a string becomes zero, and a zero commission is
+     * indistinguishable from a platform that deliberately takes nothing.
+     */
+    public static function forKey(string $key, string $requirement): self
+    {
+        return new self("Configuration key [{$key}] {$requirement}.");
+    }
+
+    /** @param  list<string>  $supported */
+    public static function unsupportedMerchantAccountType(string $type, array $supported): self
+    {
+        return new self(
+            "billing.marketplace.onboarding.account_type is '{$type}', which this driver does not support ".
+            '(supported: '.implode(', ', $supported).'). The account type decides who carries the identity '.
+            'checks and who absorbs a loss, and it cannot be changed once a merchant has onboarded — so it '.
+            'is refused at boot rather than defaulted silently.'
+        );
+    }
+
+    public static function implausibleFoundingYear(int $year, int $earliest, int $latest): self
+    {
+        return new self(
+            "The declared business founding year {$year} is outside the plausible range {$earliest}–{$latest}. "
+            .'This is refused rather than rounded because a threshold reads it: an early founding year and a '
+            .'late one put a business under different rules, so a wrong year changes the answer instead of '
+            .'blurring it. It is also never derived from when the merchant signed up here — those are '
+            .'different facts, and they differ routinely.'
+        );
+    }
+
+    public static function unreadableHoldEnforcementDate(string $configured): self
+    {
+        return new self(
+            "billing.marketplace.tax_status_hold.enforce_from is set to \"{$configured}\", which is not a "
+            .'date. It is refused rather than interpreted, because both ways of guessing are worse than '
+            .'stopping: reading it as "now" would refuse every routed sale on a typo, and reading it as '
+            .'"unset" would switch a tax control off without saying so. Set a date the hold should begin on, '
+            .'or leave the key empty to say it has not begun.'
+        );
+    }
+
     public static function ownerMode(string $owner): self
     {
         return new self("billing.owner must be 'user' or 'team', got '{$owner}'.");

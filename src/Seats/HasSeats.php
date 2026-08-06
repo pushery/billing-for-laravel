@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Seats;
 
 use Illuminate\Contracts\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Config;
 use Pushery\Billing\Contracts\ProvidesSeats;
 
 /**
@@ -41,13 +42,13 @@ trait HasSeats
      */
     protected function activeSeatMembers(): Builder
     {
-        $relation = config('billing.seats.membership_relation', 'members');
+        $relation = Config::get('billing.seats.membership_relation', 'members');
         $query = $this->{is_string($relation) ? $relation : 'members'}();
 
-        $column = config('billing.seats.active_status_column');
+        $column = Config::get('billing.seats.active_status_column');
 
         if (is_string($column) && $column !== '') {
-            $query->where($column, config('billing.seats.active_status_value', 'active'));
+            $query->where($column, Config::get('billing.seats.active_status_value', 'active'));
         }
 
         return $query;

@@ -6,6 +6,7 @@ namespace Pushery\Billing\Notifications;
 
 use DateTimeInterface;
 use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Support\Facades\Lang;
 
 /**
  * The reminder sent as a free trial nears its end. Localized via the publishable
@@ -22,10 +23,10 @@ final class TrialEndingNotification extends BillingNotification
     public function toMail(object $notifiable): MailMessage
     {
         return new MailMessage()
-            ->subject(__('billing::notifications.trial_ending.subject'))
-            ->line(__('billing::notifications.trial_ending.intro'))
+            ->subject(Lang::get('billing::notifications.trial_ending.subject'))
+            ->line(Lang::get('billing::notifications.trial_ending.intro'))
             ->line($this->trialEndsAt->format('Y-m-d'))
-            ->line(__('billing::notifications.trial_ending.outro'));
+            ->line(Lang::get('billing::notifications.trial_ending.outro'));
     }
 
     /** @return array<string, string> */

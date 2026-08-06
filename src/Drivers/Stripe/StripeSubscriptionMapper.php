@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Pushery\Billing\Drivers\Stripe;
 
 use Pushery\Billing\Catalogs\TierPriceIndex;
+use Pushery\Billing\Catalogs\TierPriceIndexFactory;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Events\SubscriptionStateChanged;
+use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
  * Turns one raw Stripe subscription object into the neutral SubscriptionStateChanged event the plan-sync
@@ -20,12 +22,16 @@ use Pushery\Billing\Events\SubscriptionStateChanged;
  */
 final readonly class StripeSubscriptionMapper
 {
-    public function __construct(private TierPriceIndex $tiers) {}
+    public function __construct(private TierPriceIndexFactory $indexes) {}
 
     /**
      * @param  array<array-key, mixed>  $subscription
+     *
+     * `$merchantAccount` is the provider account the event fired on — passed straight onto the event so the
+     * plan-sync effect can resolve the owner account-scoped. It is a second identity from `$merchant`: the
+     * scope keys the local row, the account reference scopes the customer lookup. Null for a platform event.
      */
-    public function toEvent(array $subscription, ?int $occurredAt): ?SubscriptionStateChanged
+    public function toEvent(array $subscription, ?int $occurredAt, ?MerchantScope $merchant = null, ?string $merchantAccount = null): ?SubscriptionStateChanged
     {
         $customer = $this->string($subscription, 'customer');
         $id = $this->string($subscription, 'id');
@@ -34,17 +40,23 @@ final readonly class StripeSubscriptionMapper
             return null;
         }
 
-        $tierItem = $this->tierItem($subscription);
+        // The tier is resolved against the FIRING merchant's catalog, so a connected-account webhook reads
+        // the creator's tiers and never the platform's. A null merchant reads the platform catalog, byte-for-
+        // byte the single-seller behavior.
+        $index = $this->indexes->for($merchant);
+        $tierItem = $this->tierItem($subscription, $index);
 
         return new SubscriptionStateChanged(
             customerReference: $customer,
             state: $this->mapState($subscription),
             subscriptionReference: $id,
-            tierKey: $this->tierKey($subscription),
+            tierKey: $this->tierKey($subscription, $index),
             occurredAt: $occurredAt,
             periodStart: $this->period($subscription, $tierItem, 'current_period_start'),
             periodEnd: $this->period($subscription, $tierItem, 'current_period_end'),
             trialEnd: $this->int($subscription, 'trial_end'),
+            merchant: $merchant,
+            merchantAccountReference: $merchantAccount,
         );
     }
 
@@ -73,14 +85,14 @@ final readonly class StripeSubscriptionMapper
      * @param  array<array-key, mixed>  $subscription
      * @return ?array<array-key, mixed>
      */
-    private function tierItem(array $subscription): ?array
+    private function tierItem(array $subscription, TierPriceIndex $index): ?array
     {
         $fallback = null;
 
         foreach ($this->items($subscription) as $item) {
             $price = $item['price'] ?? null;
 
-            if (is_array($price) && $this->tiers->isTierPrice($this->string($price, 'id'))) {
+            if (is_array($price) && $index->isTierPrice($this->string($price, 'id'))) {
                 return $item;
             }
 
@@ -147,11 +159,11 @@ final readonly class StripeSubscriptionMapper
      *
      * @param  array<array-key, mixed>  $subscription
      */
-    private function tierKey(array $subscription): ?string
+    private function tierKey(array $subscription, TierPriceIndex $index): ?string
     {
         foreach ($this->items($subscription) as $item) {
             $price = $item['price'] ?? null;
-            $tier = is_array($price) ? $this->tiers->tierForPrice($this->string($price, 'id')) : null;
+            $tier = is_array($price) ? $index->tierForPrice($this->string($price, 'id')) : null;
 
             if ($tier !== null) {
                 return $tier;

@@ -19,11 +19,20 @@ use Stripe\Webhook;
  */
 final readonly class StripeWebhookVerifier implements WebhookVerifier
 {
-    public function __construct(private Repository $config) {}
+    /**
+     * @param  string  $secretConfigKey  which signing secret to check against. The platform's own is the
+     *                                   default; the marketplace endpoint passes its own key, because a
+     *                                   verifier that accepted either would let the weaker one authenticate
+     *                                   traffic that moves the platform's money.
+     */
+    public function __construct(
+        private Repository $config,
+        private string $secretConfigKey = 'cashier.webhook.secret',
+    ) {}
 
     public function verify(Request $request): bool
     {
-        $secret = $this->config->get('cashier.webhook.secret');
+        $secret = $this->config->get($this->secretConfigKey);
 
         if (! is_string($secret) || $secret === '') {
             return false;

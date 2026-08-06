@@ -58,6 +58,16 @@ final readonly class StripeSubscriptionSync implements SubscriptionSync
 
         foreach ($subscriptions->data as $candidate) {
             $array = $candidate->toArray();
+
+            // A routed subscription (a destination charge) carries transfer_data: it belongs to a merchant,
+            // not the platform plan this reconcile writes, and its OWN webhook syncs it to the merchant's row
+            // by that same transfer_data. Reconciling it here would stamp a creator's tier onto the platform
+            // plan — and picking a "liveliest" across a fan's platform sub and several creator subs is
+            // meaningless anyway. The merchant-scoped return reconcile is a separate path; here we skip it.
+            if (isset($array['transfer_data'])) {
+                continue;
+            }
+
             $created = is_int($array['created'] ?? null) ? $array['created'] : 0;
             $event = $this->mapper->toEvent($array, $created);
 

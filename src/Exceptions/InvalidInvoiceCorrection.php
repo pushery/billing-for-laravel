@@ -22,6 +22,24 @@ final class InvalidInvoiceCorrection extends InvalidArgumentException
         );
     }
 
+    /**
+     * The original's party could not be resolved, so the standing behind the restated tax cannot be checked.
+     *
+     * Fail-closed rather than best-effort: a correcting document that states tax names somebody who then
+     * carries what it says. An unprovable permission is not a permission, and the alternative would be to
+     * state tax on behalf of a party nobody can name.
+     */
+    public static function partyUnresolvable(string $original): self
+    {
+        return new self(sprintf(
+            'The document being corrected [%s] has no resolvable owner, so the standing that must permit the '
+            .'tax it restates cannot be read. A correcting document that states tax passes the same '
+            .'disclosure whitelist the original passed, at the original\'s own moment -- and a party that '
+            .'cannot be identified cannot be shown to have permitted it.',
+            $original,
+        ));
+    }
+
     public static function negativeAmount(string $field, int $value): self
     {
         return new self(

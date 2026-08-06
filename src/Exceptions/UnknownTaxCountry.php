@@ -21,6 +21,28 @@ use RuntimeException;
  */
 final class UnknownTaxCountry extends RuntimeException
 {
+    /**
+     * A country nobody has classified — neither covered nor deliberately outside the tax area.
+     *
+     * Separate from `code()` because the two are different problems with different fixes. `code()` is a
+     * malformed or unassigned country code: a typo. This one is a perfectly real country that this
+     * installation has simply never answered for, and the fix is a decision rather than a correction.
+     *
+     * It refuses instead of pricing at zero, and that is the whole reason it exists. A zero for an
+     * unclassified country is indistinguishable from a relief — the invoice says zero, the return says zero,
+     * and nothing records that the zero was a gap rather than a rule. The only way to notice would be an
+     * audit asking why.
+     */
+    public static function unclassified(string $country): self
+    {
+        return new self(
+            "No tax treatment is recorded for '{$country}'. It is neither covered by a known rate nor "
+            .'classified as outside the tax area, so pricing stops here rather than charging zero — a zero '
+            .'for an unclassified country reads as a relief on every document that carries it. Classify it '
+            .'in the jurisdiction profile: either give it a rate, or record that it is deliberately untaxed.'
+        );
+    }
+
     public static function code(string $country): self
     {
         return new self(

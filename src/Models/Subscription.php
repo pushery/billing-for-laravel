@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Pushery\Billing\Models;
 
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
+use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
 
 /**
@@ -29,9 +32,14 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * @property ?Carbon $ends_at
  * @property ?Carbon $delinquent_since
  * @property int $dunning_level
+ * @property ?Carbon $payment_reminded_on
+ * @property ?Carbon $terminated_at
  * @property ?int $synced_event_at
  * @property ?Carbon $current_period_start
  * @property ?Carbon $current_period_end
+ * @property string $merchant_uid
+ * @property ?string $merchant_type
+ * @property int|string|null $merchant_id
  */
 final class Subscription extends Model
 {
@@ -41,8 +49,27 @@ final class Subscription extends Model
     protected $fillable = [
         'owner_type', 'owner_id', 'type', 'provider', 'provider_id', 'status', 'tier_key',
         'scheduled_tier_key', 'scheduled_swap_at',
-        'trial_ends_at', 'ends_at', 'delinquent_since', 'dunning_level', 'synced_event_at',
+        'trial_ends_at', 'ends_at', 'delinquent_since', 'dunning_level', 'payment_reminded_on', 'synced_event_at',
         'current_period_start', 'current_period_end',
+        'merchant_uid', 'merchant_type', 'merchant_id',
+    ];
+
+    /**
+     * The same defaults the schema carries, so a row that was just created reads like one that was read back.
+     *
+     * Without them a model created without these columns holds null for each, while the row the database
+     * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
+     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     *
+     * @var array<string, int|string>
+     */
+    protected $attributes = [
+        'type' => 'default',
+        'dunning_level' => 0,
+        // The single-seller sentinel. A subscription created without a merchant reads as the platform's
+        // own, exactly as the schema default records it — so the row and the freshly-built instance agree
+        // before anyone re-reads. Held against the migration by ModelSchemaDefaultsTest.
+        'merchant_uid' => 'platform',
     ];
 
     /** @var array<string,string> */
@@ -54,6 +81,10 @@ final class Subscription extends Model
         'ends_at' => UtcDateTime::class,
         'delinquent_since' => UtcDateTime::class,
         'dunning_level' => 'integer',
+        // A DATE, not a datetime: the marker answers "was a reminder sent today", and a time of day would
+        // make that comparison depend on when the sweep happens to run.
+        'payment_reminded_on' => 'date',
+        'terminated_at' => UtcDateTime::class,
         'synced_event_at' => 'integer',
         'current_period_start' => UtcDateTime::class,
         'current_period_end' => UtcDateTime::class,
@@ -94,6 +125,18 @@ final class Subscription extends Model
     public function active(): bool
     {
         return $this->status === 'active';
+    }
+
+    /**
+     * Whether this subscription expired for good and cannot be revived.
+     *
+     * Distinct from `onGracePeriod()` and from a status of `ended`: those describe where the row stands
+     * today, this records that a decision was taken. A payment arriving after it is a NEW subscription, not
+     * a resumption of this one — so the marker has to survive every status a provider may report afterwards.
+     */
+    public function terminated(): bool
+    {
+        return $this->terminated_at !== null;
     }
 
     /** Billing is paused: no invoice is being raised, so no paid tier is being paid for. */
@@ -144,6 +187,48 @@ final class Subscription extends Model
     public function items(): HasMany
     {
         return $this->hasMany(SubscriptionItem::class, 'billing_subscription_id');
+    }
+
+    /**
+     * The creator this subscription is to, or null on a single-seller (platform) row.
+     *
+     * @return MorphTo<Model, $this>
+     */
+    public function merchant(): MorphTo
+    {
+        return $this->morphTo();
+    }
+
+    /**
+     * Narrow a query to one merchant's rows — the platform's own when no merchant is given.
+     *
+     * The scope keys on the sentinel string, never on the nullable morph, so a null scope selects exactly
+     * the single-seller rows (`merchant_uid = 'platform'`) and can never pick up a merchant-scoped row. It
+     * is the one place the (billable, merchant) selection is spelled, so every caller — resolver, actions,
+     * state reader — narrows the same way.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeForMerchant(Builder $query, ?MerchantScope $merchant): void
+    {
+        $query->where('merchant_uid', ($merchant ?? MerchantScope::platform())->uid());
+    }
+
+    /**
+     * Narrow a query to rows that belong to a MERCHANT rather than to the platform itself.
+     *
+     * The inverse of the sentinel, and it exists so that a marketplace-only mechanism can say so in one
+     * clause instead of reading the marketplace flag. The two are not the same test: the flag says whether
+     * the surface is switched on, this says whether THIS ROW came through it. A single-seller install has no
+     * non-platform row at all, so a sweep narrowed this way is byte-identical there whatever the flag does —
+     * and an install that later switches the flag on does not retroactively pull its own platform
+     * subscriptions into a marketplace rule.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeMerchantScoped(Builder $query): void
+    {
+        $query->where('merchant_uid', '!=', MerchantScope::platform()->uid());
     }
 
     /** Build the driver-neutral snapshot the SubscriptionPresenter collapses into one state. */

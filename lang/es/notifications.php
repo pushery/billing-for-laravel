@@ -28,6 +28,14 @@ return [
         'outro' => 'Conservas el acceso hasta el final del periodo pagado, que se indica abajo.',
     ],
 
+    'tax_status_changed' => [
+        'subject' => 'Tu situación fiscal ha cambiado',
+        'intro' => 'Tu situación fiscal ha pasado de :from a :to. Lo determinamos a partir de nuestros propios registros: no lo pediste.',
+        'effective' => 'Se aplica desde el :date.',
+        'consequence' => 'Desde esa fecha el importe que te llega es mayor, porque el impuesto viaja con él. Lo que te queda no cambia.',
+        'outro' => 'Si esto no coincide con tu situación, avísanos: podemos corregirlo.',
+    ],
+
     'suspension_warning' => [
         'subject' => 'Acción necesaria: tu acceso se suspenderá',
         'intro' => 'Tu cuenta tiene un saldo vencido y tu acceso se suspenderá pronto.',

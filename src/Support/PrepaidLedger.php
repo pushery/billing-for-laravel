@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Support;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Models\PrepaidUnits;
 
@@ -94,8 +95,8 @@ final readonly class PrepaidLedger
             'meter_key' => $meterKey,
             'balance' => 0,
             'granted_total' => 0,
-            'created_at' => now(),
-            'updated_at' => now(),
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
         ]);
 
         return PrepaidUnits::query()

@@ -7,9 +7,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Gap-free sequential number sources (per scope, e.g. per year) for legally-immutable invoice
- * numbers. Each scope holds the next value; it is handed out under a row lock so numbering has no
- * gaps and no duplicates even under concurrency. Server-only.
+ * Unique, monotonic number sources (per scope, e.g. per series and year) for legally-immutable
+ * document numbers. Each scope holds the next value; it is handed out under a row lock so two
+ * concurrent callers never receive the same number and the counter only advances. The guarantee is
+ * uniqueness, not gap-freedom — a caller's surrounding transaction may roll back after a number was
+ * drawn, and that gap is harmless; a duplicate is what cannot happen. Server-only.
  */
 return new class extends Migration
 {

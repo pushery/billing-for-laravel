@@ -21,5 +21,8 @@ return [
     'vat' => 'Btw',
     'vat_reverse_charge' => 'Btw (verlegd)',
     'total' => 'Totaal',
+    'total_including_vat' => 'Totaal inclusief :rate btw',
     'reverse_charge_note' => 'Btw verlegd: de afnemer is de btw verschuldigd.',
+    'margin_scheme_note' => 'Margeregeling — gebruikte goederen',
+    'self_billed_note' => 'Self-billing: opgesteld door de afnemer namens de leverancier, op grond van een voorafgaande afspraak.',
 ];

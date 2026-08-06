@@ -25,7 +25,8 @@ namespace Pushery\Billing\Enums;
  *  - `PlatformIntermediary` — the platform is a disclosed intermediary in someone else's name (physical
  *    goods, e.g. a used-goods C2C marketplace, where Art. 9a does not apply). Only the platform's own
  *    commission is its taxable turnover; a non-business seller triggers no VAT receipt for the goods at all.
- *    This is the posture that pairs with escrow.
+ *    It is the posture a deferred-payout rail is built on — the money stays with the payment provider
+ *    throughout, and the platform never holds it.
  */
 enum SellerOfRecordPosture: string
 {

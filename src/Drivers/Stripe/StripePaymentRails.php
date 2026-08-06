@@ -4,15 +4,25 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
+use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\PaymentRails;
+use Pushery\Billing\Contracts\SupplyRegimeResolver;
+use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\FeeRefundPolicy;
+use Pushery\Billing\Exceptions\FeeRefundPolicyNotPermitted;
+use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\ValueObjects\ChargeResult;
+use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\MandateReference;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\RefundResult;
 use Pushery\Billing\ValueObjects\TokenizedMethod;
+use Stripe\Charge;
 use Stripe\Exception\CardException;
 use Stripe\PaymentIntent;
+use Stripe\Refund;
 use Stripe\StripeClient;
+use Stripe\TransferReversal;
 
 /**
  * The Stripe implementation of the lower billing layer — it moves money and stores mandates through
@@ -29,17 +39,32 @@ use Stripe\StripeClient;
  */
 final readonly class StripePaymentRails implements PaymentRails
 {
-    public function __construct(private StripeClient $stripe) {}
+    public function __construct(
+        private StripeClient $stripe,
+        private Repository $config,
+        private SupplyRegimeResolver $regimes,
+    ) {}
 
-    public function charge(Money $amount, string $token, ?string $idempotencyKey = null): ChargeResult
+    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): ChargeResult
     {
-        return $this->settle(fn (): PaymentIntent => $this->stripe->paymentIntents->create([
+        $params = $this->routed([
             'amount' => $amount->minorUnits,
             'currency' => strtolower($amount->currency),
             'payment_method' => $token,
             'confirm' => true,
             'off_session' => false,
-        ], $this->options($idempotencyKey)), $amount);
+        ], $amount, $routing);
+
+        return $this->settle(
+            // The SDK's generated param shape cannot express a payload assembled at runtime: the routing keys
+            // are present or absent depending on the charge type, and an unrouted payment must carry neither.
+            // The payload IS a valid PaymentIntent request; its exact fields are asserted one by one in
+            // StripeMarketplaceRoutingTest, including the assertion that an unrouted charge emits none of them.
+            // @phpstan-ignore argument.type
+            fn (): PaymentIntent => $this->stripe->paymentIntents->create($params, $this->options($idempotencyKey)),
+            $amount,
+            $routing,
+        );
     }
 
     public function createMandate(string $customerReference, string $token): MandateReference
@@ -77,14 +102,14 @@ final readonly class StripePaymentRails implements PaymentRails
      * customer from the attached method, and `off_session: true` flags the absent-cardholder intent so
      * the correct SCA exemption is requested.
      */
-    public function offSessionCharge(Money $amount, MandateReference $mandate, ?string $idempotencyKey = null): ChargeResult
+    public function offSessionCharge(Money $amount, MandateReference $mandate, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): ChargeResult
     {
         $customer = $mandate->customerReference;
         $options = $this->options($idempotencyKey);
 
         // Stripe needs the customer to charge a stored payment method off-session; a mandate created
         // by createMandate() carries it. Without it, fall back to a payment-method-only intent.
-        return $this->settle(fn (): PaymentIntent => $this->stripe->paymentIntents->create(
+        $params = $this->routed(
             $customer !== null
                 ? [
                     'amount' => $amount->minorUnits,
@@ -101,22 +126,203 @@ final readonly class StripePaymentRails implements PaymentRails
                     'confirm' => true,
                     'off_session' => true,
                 ],
-            $options,
-        ), $amount);
+            $amount,
+            $routing,
+        );
+
+        return $this->settle(
+            // The SDK's generated param shape cannot express a payload assembled at runtime: the routing keys
+            // are present or absent depending on the charge type, and an unrouted payment must carry neither.
+            // The payload IS a valid PaymentIntent request; its exact fields are asserted one by one in
+            // StripeMarketplaceRoutingTest, including the assertion that an unrouted charge emits none of them.
+            // @phpstan-ignore argument.type
+            fn (): PaymentIntent => $this->stripe->paymentIntents->create($params, $options),
+            $amount,
+            $routing,
+        );
     }
 
-    public function refund(string $chargeReference, Money $amount, ?string $idempotencyKey = null): RefundResult
+    public function refund(string $chargeReference, Money $amount, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): RefundResult
     {
-        $refund = $this->stripe->refunds->create([
-            'payment_intent' => $chargeReference,
-            'amount' => $amount->minorUnits,
-        ], $this->options($idempotencyKey));
+        $params = ['payment_intent' => $chargeReference, 'amount' => $amount->minorUnits];
+
+        // The flag only means something on a DESTINATION charge, where the transfer is part of the payment
+        // and the provider can unwind both together. On a separate transfer the money moved in its own call,
+        // and refunding the payment does not touch it — the flag is accepted and does nothing.
+        //
+        // Setting it anyway would be worse than omitting it. A no-op flag reads as "the reversal is handled"
+        // to everyone who looks, while the merchant keeps their share and the platform refunds the buyer out
+        // of its own money. The gap has to be VISIBLE, so the lane that cannot reverse here says nothing
+        // rather than something untrue — and `reversedTransferReference` comes back null, which is the
+        // honest answer a caller can act on.
+        //
+        // Note also what the flag does when it DOES apply: it reverses proportionally. That is the number
+        // ClawbackCalculator exists to disprove — with any fixed fee component, a partial refund owes more
+        // than the proportional share, forever, and both figures look reasonable. Reversing explicitly with
+        // the calculated amount is the separate-transfer lane's job.
+        if ($routing instanceof ChargeRouting && $routing->type === ChargeType::Destination) {
+            $params['reverse_transfer'] = true;
+
+            // The VALUE here follows the configured policy, and it did not use to. It was the constant
+            // `false` — meaning "the platform keeps its fee" — while the shipped default of
+            // `billing.marketplace.fee.refund_policy` says `refund`, and a go-live checkpoint reads that key
+            // and REFUSES `retain` under a commission chain. So the package validated a setting nothing
+            // obeyed, and then did the opposite of it on every refund.
+            //
+            // The reason the checkpoint refuses is the reason this has to follow it: keeping a fee
+            // presupposes a document the platform issued the merchant for a service. A commission chain has
+            // none — the platform buys and resells, and unwinding the sale unwinds both supplies. Money kept
+            // afterwards sits on no supply at all, which is turnover on a tax return with nothing behind it.
+            $params['refund_application_fee'] = $this->feeRefundPolicy()->refundsPlatformFee();
+
+            // Without this the provider answers with the reversal's ID and nothing else, so the AMOUNT that
+            // came back is unknowable from the response — and a caller that needs it would have to either
+            // make a second call or infer it from the refund total. The inference is the trap: it is right
+            // only while the fee is a pure percentage, and silently short on any fee with a fixed part.
+            //
+            // Expanding costs no extra round trip, and it is asked for only on the lane that can actually
+            // reverse. An unrouted refund's payload stays byte-for-byte what it has always been.
+            $params['expand'] = ['transfer_reversal'];
+        }
+
+        $refund = $this->stripe->refunds->create($params, $this->options($idempotencyKey));
 
         return new RefundResult(
             successful: $refund->status === 'succeeded' || $refund->status === 'pending',
             reference: $refund->id,
             amount: $amount,
+            // The provider's own reference for the reversal, never a flag set from our intent — a refund
+            // reporting a reversal that did not happen is the failure this whole path exists to prevent.
+            reversedTransferReference: $this->transferReversalOf($refund),
+            // Read off the reversal the provider MADE, not off the refund we asked for. The two differ on
+            // every partial reversal, and the difference is money owed in one direction or the other.
+            transferReversed: $this->transferReversedIn($refund),
+            // Deliberately absent here: see the field's own documentation. This lane can only learn the fee
+            // refund as a cumulative total on the ApplicationFee, which is not this refund's figure once a
+            // second partial refund exists — and a number that is right until it quietly is not is worse
+            // than none at all.
         );
+    }
+
+    /**
+     * Add the routing fields to a PaymentIntent, or return it untouched.
+     *
+     * Untouched is load-bearing. An unrouted payment must reach the provider with exactly the fields it
+     * has always reached it with — not the same fields plus nulls, which would still be a change in what
+     * the provider is told and could still move behavior under a single seller who asked for nothing.
+     *
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     */
+    private function routed(array $params, Money $amount, ?ChargeRouting $routing): array
+    {
+        if (! $routing instanceof ChargeRouting) {
+            return $params;
+        }
+
+        $routing->assertFitsWithin($amount);
+
+        if ($routing->type === ChargeType::Destination) {
+            $params['transfer_data'] = ['destination' => $routing->destination->accountId];
+            $params['application_fee_amount'] = $routing->applicationFee->minorUnits;
+        }
+
+        // A separate transfer moves the merchant's share after the payment settles, so the intent itself
+        // correctly carries no destination — the platform is the merchant of record and takes the whole
+        // amount. That much is right. What these rails cannot do is the SECOND half: the later call that
+        // actually moves the share.
+        //
+        // That call now EXISTS — `MovesMerchantShare`, implemented by `StripeMerchantTransfers`, which binds
+        // the transfer to the funding charge via `source_transaction`. This comment used to say it did not,
+        // which stopped being true the day it was built and would have sent the next reader to build it a
+        // second time. What has not changed is WHERE it can be made: only after the payment has actually
+        // succeeded, which is after this method has returned. So the rails still refuse — not because the
+        // capability is missing, but because it is not theirs to reach.
+        //
+        // So the routing is REFUSED rather than half-served. Accepting it would settle the entire payment
+        // on the platform account and never pay the merchant, and every signal would look healthy — a
+        // successful ChargeResult, no exception, and a null transfer reference indistinguishable from one
+        // that is still settling. This package tells driver authors exactly what to do here ("a driver
+        // that cannot serve a routing must THROW, never no-op"), and the shipped driver has to hold to it
+        // first. It is also the DEFAULT charge type, so silence would be the ordinary case, not the edge.
+        if ($routing->type === ChargeType::SeparateTransfer) {
+            throw MarketplaceUnsupported::separateTransferNeedsRoutedPayment();
+        }
+
+        if ($routing->onBehalfOf) {
+            $params['on_behalf_of'] = $routing->destination->accountId;
+        }
+
+        return $params;
+    }
+
+    /**
+     * The provider's reference for the transfer that carried the merchant's share, when it exists yet.
+     *
+     * On a destination charge the transfer is created when the payment settles, so an intent that still
+     * needs authentication has none. Absent is therefore a stage rather than a fault, and reporting it as
+     * an empty string would make a caller believe a transfer happened and was simply unnamed.
+     *
+     * That reading holds ONLY for a destination charge. On a separate transfer the provider creates nothing
+     * on its own — the platform takes the whole payment and the merchant's share is moved by a later call,
+     * which THESE RAILS do not make. `RoutedPayment` does, through `MovesMerchantShare`, once the payment
+     * has actually succeeded; that is why this lane refuses the routing rather than returning a null a
+     * caller would read as "settling". Null there is permanent, not pending.
+     */
+    private function transferOf(PaymentIntent $intent): ?string
+    {
+        $charge = $intent->latest_charge ?? null;
+
+        if (! $charge instanceof Charge) {
+            return null;
+        }
+
+        $transfer = $charge->transfer ?? null;
+
+        return is_string($transfer) && $transfer !== '' ? $transfer : null;
+    }
+
+    /**
+     * The provider's reference for a reversal on a refund, when it made one.
+     *
+     * BOTH shapes have to be read, and that is not defensive coding. The field is an id until something asks
+     * for it expanded, and the refund path now does exactly that on the lane that can reverse — so reading
+     * only the string would return null on the one lane where a reversal actually happens, while the
+     * unexpanded lanes kept working and every test built on a stubbed id stayed green.
+     */
+    private function transferReversalOf(Refund $refund): ?string
+    {
+        $reversal = $refund->transfer_reversal ?? null;
+
+        if ($reversal instanceof TransferReversal) {
+            return $reversal->id === '' ? null : $reversal->id;
+        }
+
+        return is_string($reversal) && $reversal !== '' ? $reversal : null;
+    }
+
+    /**
+     * The amount the provider actually reversed, when it says so.
+     *
+     * Only an EXPANDED reversal carries the figure. A bare id means the amount was not reported, which is
+     * null rather than a number derived from the refund — see {@see RefundResult::$transferReversed}.
+     */
+    private function transferReversedIn(Refund $refund): ?Money
+    {
+        $reversal = $refund->transfer_reversal ?? null;
+
+        if (! $reversal instanceof TransferReversal) {
+            return null;
+        }
+
+        $currency = $reversal->currency ?? null;
+
+        if (! is_string($currency) || $currency === '') {
+            return null;
+        }
+
+        // The provider speaks lowercase currency codes; Money holds ISO-4217, which is upper case.
+        return new Money($reversal->amount, strtoupper($currency));
     }
 
     /**
@@ -126,7 +332,7 @@ final readonly class StripePaymentRails implements PaymentRails
      *
      * @param  callable(): PaymentIntent  $create
      */
-    private function settle(callable $create, Money $amount): ChargeResult
+    private function settle(callable $create, Money $amount, ?ChargeRouting $routing = null): ChargeResult
     {
         try {
             $intent = $create();
@@ -139,7 +345,7 @@ final readonly class StripePaymentRails implements PaymentRails
             );
         }
 
-        return $this->outcomeFor($intent, $amount);
+        return $this->outcomeFor($intent, $amount, $routing);
     }
 
     /**
@@ -150,10 +356,25 @@ final readonly class StripePaymentRails implements PaymentRails
      * genuine failure. Reporting an authentication or a pending debit as a decline is how a good European
      * payment gets counted as a loss.
      */
-    private function outcomeFor(PaymentIntent $intent, Money $amount): ChargeResult
+    private function outcomeFor(PaymentIntent $intent, Money $amount, ?ChargeRouting $routing = null): ChargeResult
     {
+        $split = $routing instanceof ChargeRouting
+            ? [
+                'transferReference' => $this->transferOf($intent),
+                'applicationFee' => $routing->applicationFee,
+                'destination' => $routing->destination->accountId,
+            ]
+            : ['transferReference' => null, 'applicationFee' => null, 'destination' => null];
+
         return match ($intent->status) {
-            'succeeded' => new ChargeResult(successful: true, reference: $intent->id, amount: $amount),
+            'succeeded' => new ChargeResult(
+                successful: true,
+                reference: $intent->id,
+                amount: $amount,
+                transferReference: $split['transferReference'],
+                applicationFee: $split['applicationFee'],
+                destination: $split['destination'],
+            ),
             'requires_action', 'requires_confirmation' => new ChargeResult(
                 successful: false,
                 reference: $intent->id,
@@ -197,5 +418,34 @@ final readonly class StripePaymentRails implements PaymentRails
     private function isReusable(string $type): bool
     {
         return ! in_array($type, ['ideal', 'bancontact', 'sofort', 'p24', 'giropay', 'eps'], true);
+    }
+
+    /**
+     * The fee refund policy in force, refusing one the regime does not permit.
+     *
+     * The preflight checkpoint asks the same question, and that is not a duplicate check. Preflight is a
+     * GATE: it answers once, on the day somebody runs it. The regime and the policy are both configuration
+     * and both movable afterwards, so a platform that switches to a commission chain a month later passes no
+     * gate at all — it just starts retaining fees that sit on no supply. A refund is where the money moves,
+     * so a refund is where the question has to be answered again.
+     *
+     * It throws rather than falling back. Defaulting here would answer a question about somebody else's
+     * money with whatever the package happens to prefer, on every refund, for as long as the misconfiguration
+     * survives — and a refund that completed is not one anybody goes back to check.
+     */
+    private function feeRefundPolicy(): FeeRefundPolicy
+    {
+        $configured = $this->config->get('billing.marketplace.fee.refund_policy', 'refund');
+        $policy = is_string($configured) ? FeeRefundPolicy::tryFrom($configured) : null;
+
+        if (! $policy instanceof FeeRefundPolicy) {
+            throw FeeRefundPolicyNotPermitted::unknown(is_string($configured) ? $configured : gettype($configured));
+        }
+
+        if (! $policy->permittedIn($this->regimes->resolveFor())) {
+            throw FeeRefundPolicyNotPermitted::retainInCommissionChain();
+        }
+
+        return $policy;
     }
 }

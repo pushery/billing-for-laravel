@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Pushery\Billing\Support;
 
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Support\Carbon;
 use Pushery\Billing\Exceptions\InvalidBillingConfig;
+use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
 
 /**
  * Fail-loud validation of the billing configuration — a small, directly-testable unit (not buried in the
@@ -18,7 +20,10 @@ use Pushery\Billing\Exceptions\InvalidBillingConfig;
  */
 final readonly class BillingConfigValidator
 {
-    public function __construct(private Repository $config) {}
+    public function __construct(
+        private Repository $config,
+        private DistanceSaleThresholdMonitor $thresholds,
+    ) {}
 
     public function validate(): void
     {
@@ -26,6 +31,26 @@ final readonly class BillingConfigValidator
         $this->validateTiers();
         $this->validateDimensionWarnThresholds();
         $this->validateDunningAscending();
+        $this->validateThresholdBinding();
+    }
+
+    /**
+     * A declaration that gave up the threshold binds for a number of years, and withdrawing it early is a
+     * configuration change nobody would otherwise notice.
+     *
+     * It has to fail at boot rather than at the next sale. Discovered at the sale, the fallback is a quiet
+     * one — the seller's own rate on a supply that owes the destination's — and every document issued in
+     * between is wrong in a way that reads as normal. The binding length itself comes from the operator,
+     * because it is their tax authority's term, not the package's.
+     */
+    private function validateThresholdBinding(): void
+    {
+        $years = $this->config->get('billing.tax_oss.binding_years');
+
+        $this->thresholds->assertBindingHonored(
+            (int) Carbon::now()->year,
+            is_int($years) && $years > 0 ? $years : 2,
+        );
     }
 
     private function validateOwner(): void

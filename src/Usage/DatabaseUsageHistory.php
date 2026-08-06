@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Usage;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\UsageHistoryProvider;
 use Pushery\Billing\Models\AddonPurchase;
 use Pushery\Billing\Models\UsageCounter;
@@ -56,7 +57,7 @@ final class DatabaseUsageHistory implements UsageHistoryProvider
                 addonKey: $row->addon_key,
                 amount: Money::of($row->amount_minor, $row->currency),
                 // created_at is set on insert; fall back to now only for the degenerate untimestamped row.
-                purchasedAt: $row->created_at ?? now(),
+                purchasedAt: $row->created_at ?? Carbon::now(),
                 // Fully clawed back: explicitly revoked, or the reversed amount reached the purchase.
                 reversed: $row->revoked_at !== null || $row->reversed_minor >= $row->amount_minor,
             ))

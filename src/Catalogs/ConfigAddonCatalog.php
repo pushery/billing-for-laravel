@@ -6,6 +6,9 @@ namespace Pushery\Billing\Catalogs;
 
 use Illuminate\Contracts\Config\Repository;
 use InvalidArgumentException;
+use Pushery\Billing\Contracts\AddonCatalog;
+use Pushery\Billing\Contracts\SuppliesProductArchetypes;
+use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\UnitGrant;
 
@@ -13,7 +16,7 @@ use Pushery\Billing\ValueObjects\UnitGrant;
  * The config-driven add-on catalog (config('billing.addons')). One-time purchases resolve their
  * price here from the add-on KEY — the client never submits a price, mirroring the tier allowlist.
  */
-final readonly class ConfigAddonCatalog
+final readonly class ConfigAddonCatalog implements AddonCatalog, SuppliesProductArchetypes
 {
     public function __construct(
         private Repository $config,
@@ -78,5 +81,34 @@ final readonly class ConfigAddonCatalog
         }
 
         return new UnitGrant($meter, $units);
+    }
+
+    /**
+     * What kind of thing this add-on is, from `billing.addons.<key>.archetype`.
+     *
+     * An UNSET key answers null, and an unreadable one REFUSES. The two are different situations: nobody
+     * having classified an add-on yet is an ordinary state on an install that does not use the classification
+     * at all, while a value that is not one of the nine archetypes is a typo — and resolving a typo to null
+     * would hand the caller "unclassified" for a product somebody believed they had classified.
+     */
+    public function archetypeFor(string $key): ?TaxArchetype
+    {
+        $archetype = $this->config->get("billing.addons.{$key}.archetype");
+
+        if ($archetype === null) {
+            return null;
+        }
+
+        $resolved = is_string($archetype) ? TaxArchetype::tryFrom($archetype) : null;
+
+        if (! $resolved instanceof TaxArchetype) {
+            throw new InvalidArgumentException(
+                "Add-on '{$key}': archetype must be one of "
+                .implode(', ', array_map(static fn (TaxArchetype $case): string => $case->value, TaxArchetype::cases()))
+                .'.'
+            );
+        }
+
+        return $resolved;
     }
 }

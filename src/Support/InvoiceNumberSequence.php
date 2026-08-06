@@ -4,13 +4,21 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Support;
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Models\NumberSequence;
 
 /**
- * Hands out gap-free, sequential invoice numbers per scope. The next value is read and advanced
- * inside a transaction under a row lock, so two concurrent invoices never receive the same number
- * and no number is ever skipped — the legal requirement for immutable invoice numbering.
+ * Hands out unique, monotonically increasing numbers per scope. The next value is read and advanced inside
+ * a transaction under a row lock, so two concurrent callers never receive the same number and the counter
+ * only ever moves forward.
+ *
+ * The promise is UNIQUENESS, not gap-freedom — and that is deliberately weaker than "no number is ever
+ * skipped", because the code cannot honor the stronger claim. A caller's surrounding transaction may roll
+ * back after `next()` advanced the counter, and that leaves a gap. What must never happen is a number
+ * issued twice or a number changed after the fact, and neither can: the lock serializes issuance, and a
+ * drawn number is frozen by the record it lands on. Whether a gap is acceptable is a jurisdiction's rule
+ * and lives in its profile; a jurisdiction that forbids gaps must enforce that itself, above this class.
  */
 final class InvoiceNumberSequence
 {
@@ -20,8 +28,8 @@ final class InvoiceNumberSequence
             NumberSequence::query()->insertOrIgnore([
                 'scope' => $scope,
                 'next_number' => 1,
-                'created_at' => now(),
-                'updated_at' => now(),
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
             ]);
 
             $sequence = NumberSequence::query()->where('scope', $scope)->lockForUpdate()->firstOrFail();

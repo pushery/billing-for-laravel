@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Http\Controllers;
 
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Redirect;
+use Illuminate\Support\Facades\Response;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\HostedPortal;
 use Pushery\Billing\Contracts\Invoices;
@@ -16,6 +20,8 @@ use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\Support\SubscriptionReconciler;
 use Pushery\Billing\ValueObjects\InvoiceDownload;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Throwable;
 
 /**
@@ -30,16 +36,20 @@ final class BillingController
     {
         $actor = Auth::user();
 
-        abort_unless($actor instanceof Model, 403);
+        if (! ($actor instanceof Model)) {
+            throw new HttpException(403);
+        }
 
-        $owner = app(BillingEntityResolver::class)->ownerFor($actor);
+        $owner = Container::getInstance()->make(BillingEntityResolver::class)->ownerFor($actor);
         // The portal URL comes from the driver; validate it is an absolute http(s) URL before sending the
         // owner away, so a bad payload can never turn the portal link into a script or open-redirect target.
-        $url = SafeExternalUrl::orNull(app(HostedPortal::class)->url($owner));
+        $url = SafeExternalUrl::orNull(Container::getInstance()->make(HostedPortal::class)->url($owner));
 
-        abort_if($url === null, 404);
+        if ($url === null) {
+            throw new NotFoundHttpException;
+        }
 
-        return redirect()->away($url);
+        return Redirect::away($url);
     }
 
     /**
@@ -52,19 +62,21 @@ final class BillingController
     {
         $actor = Auth::user();
 
-        abort_unless($actor instanceof Model, 403);
+        if (! ($actor instanceof Model)) {
+            throw new HttpException(403);
+        }
 
-        $owner = app(BillingEntityResolver::class)->ownerFor($actor);
+        $owner = Container::getInstance()->make(BillingEntityResolver::class)->ownerFor($actor);
 
         try {
-            app(SubscriptionReconciler::class)->syncFromProvider($owner);
+            Container::getInstance()->make(SubscriptionReconciler::class)->syncFromProvider($owner);
         } catch (Throwable $e) {
-            report($e);
+            Container::getInstance()->make(ExceptionHandler::class)->report($e);
         }
 
         // Flag the subscription screen as "activating": if the webhook has not landed yet the reconcile above
         // may not have recorded the subscription, so the screen shows a pending state and polls until it does.
-        return redirect()->route('billing.account.subscription', ['activating' => 1]);
+        return Redirect::route('billing.account.subscription', ['activating' => 1]);
     }
 
     /**
@@ -77,10 +89,12 @@ final class BillingController
     {
         $actor = Auth::user();
 
-        abort_unless($actor instanceof Model, 403);
+        if (! ($actor instanceof Model)) {
+            throw new HttpException(403);
+        }
 
-        $owner = app(BillingEntityResolver::class)->ownerFor($actor);
-        $document = app(Invoices::class)->download($owner, $invoiceId);
+        $owner = Container::getInstance()->make(BillingEntityResolver::class)->ownerFor($actor);
+        $document = Container::getInstance()->make(Invoices::class)->download($owner, $invoiceId);
 
         // A provider that hosts its own PDFs (Stripe) answers here. A local-engine driver has none,
         // so the package renders the stored invoice itself — a foreign invoice is refused (403), an absent one
@@ -89,9 +103,11 @@ final class BillingController
             $document = $this->renderLocalInvoice($owner, $invoiceId);
         }
 
-        abort_if($document === null, 404);
+        if ($document === null) {
+            throw new NotFoundHttpException;
+        }
 
-        return response()->streamDownload(
+        return Response::streamDownload(
             function () use ($document): void {
                 echo $document->contents;
             },
@@ -119,9 +135,11 @@ final class BillingController
             && is_scalar($ownerKey)
             && (string) $invoice->owner_id === (string) $ownerKey;
 
-        abort_unless($sameOwner, 403);
+        if (! ($sameOwner)) {
+            throw new HttpException(403);
+        }
 
-        $pdf = app(InvoiceDocumentRenderer::class)->pdf($invoice);
+        $pdf = Container::getInstance()->make(InvoiceDocumentRenderer::class)->pdf($invoice);
         $number = $invoice->number ?? (string) $invoice->id;
 
         return new InvoiceDownload("invoice-{$number}.pdf", $pdf);

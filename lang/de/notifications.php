@@ -28,6 +28,14 @@ return [
         'outro' => 'Bis zum Ende des bezahlten Zeitraums (siehe unten) behältst du deinen Zugang.',
     ],
 
+    'tax_status_changed' => [
+        'subject' => 'Dein Steuerstatus hat sich geändert',
+        'intro' => 'Dein Steuerstatus hat sich von :from auf :to geändert. Wir haben das aus unseren eigenen Aufzeichnungen abgeleitet — du hast es nicht beantragt.',
+        'effective' => 'Es gilt ab :date.',
+        'consequence' => 'Ab diesem Datum ist der Betrag, der bei dir ankommt, höher, weil die Steuer mitläuft. Was dir davon bleibt, ändert sich nicht.',
+        'outro' => 'Wenn das nicht zu deiner Lage passt, sag uns Bescheid — wir korrigieren es.',
+    ],
+
     'suspension_warning' => [
         'subject' => 'Handlungsbedarf: Dein Zugang wird gesperrt',
         'intro' => 'Auf deinem Konto ist ein offener Betrag fällig und dein Zugang wird bald gesperrt.',

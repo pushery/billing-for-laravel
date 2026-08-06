@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace Pushery\Billing\Tax;
 
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Support\Carbon;
+use Pushery\Billing\Contracts\SuppliesTaxRates;
 use Pushery\Billing\Contracts\TaxCalculator;
+use Pushery\Billing\Exceptions\InvalidBillingConfig;
+use Pushery\Billing\Preflight\CheckpointRegistry;
 
 /**
  * Selects the tax calculator from config('billing.tax'): the static EU-OSS VAT table, the
@@ -36,13 +40,21 @@ final readonly class TaxCalculatorFactory
      */
     public const array PROVIDER_MODES = ['provider', 'stripe'];
 
-    public function __construct(private Repository $config) {}
+    /**
+     * @param  ?CheckpointRegistry  $profiles  resolves the active jurisdiction profile, which may carry its
+     *                                         country's rates; optional so a caller that only needs a
+     *                                         calculator still constructs this with a config repository alone
+     */
+    public function __construct(
+        private Repository $config,
+        private ?CheckpointRegistry $profiles = null,
+    ) {}
 
     public function make(): TaxCalculator
     {
         return match ($this->config->get('billing.tax', 'none')) {
             // The seller's own country drives the domestic-vs-cross-border reverse-charge decision.
-            'eu_oss' => new EuOssTaxCalculator($this->sellerCountry()),
+            'eu_oss' => new EuOssTaxCalculator($this->sellerCountry(), $this->rateMatrix()),
             'provider', 'stripe' => new StripeTaxCalculator,
             default => new NoTaxCalculator,
         };
@@ -53,5 +65,58 @@ final readonly class TaxCalculatorFactory
         $country = $this->config->get('billing.company.country');
 
         return is_string($country) && $country !== '' ? $country : null;
+    }
+
+    /**
+     * The configured country-and-category rate table, or null when none is configured.
+     *
+     * A malformed table is REFUSED rather than ignored. Ignoring it would leave the standard rate charged on
+     * every reduced-rate supply — the same silent over- or under-charge the configuration exists to prevent,
+     * and with no symptom, since a wrong rate looks exactly like a right one on an invoice. The absent case
+     * is the only quiet one, because absent means "this jurisdiction has one band" rather than "something
+     * went wrong here".
+     */
+    private function rateMatrix(): ?TaxRateMatrix
+    {
+        $matrix = $this->config->get('billing.tax_matrix');
+
+        // Configuration wins where it is present. An operator who has priced their own table has a reason
+        // the package cannot know — a rate the shipped profile has not caught up with, most obviously — and
+        // a profile silently overriding that would be the package deciding it knows better about a number
+        // whose correctness only the operator can be accountable for.
+        if ($matrix === null) {
+            return $this->profileRates();
+        }
+
+        if (! is_array($matrix) || ! is_array($matrix['rates'] ?? null) || ! is_string($matrix['valid_from'] ?? null)) {
+            throw InvalidBillingConfig::forKey(
+                'billing.tax_matrix',
+                'an array with a "valid_from" date string and a "rates" array of country => '
+                .'category => basis points, or null when the jurisdiction has a single rate band'
+            );
+        }
+
+        /** @var array<string, array<string, int>> $rates */
+        $rates = $matrix['rates'];
+
+        return new TaxRateMatrix($rates, Carbon::parse($matrix['valid_from']));
+    }
+
+    /**
+     * The active jurisdiction profile's own rates, where it carries any.
+     *
+     * This is what spares an operator in a shipped jurisdiction from hand-typing their own country's rates.
+     * Hand-typed rates are wrong in a way nothing catches: a wrong rate looks exactly like a right one on an
+     * invoice, and the mistake surfaces at the tax return rather than at the sale.
+     */
+    private function profileRates(): ?TaxRateMatrix
+    {
+        $profile = $this->profiles?->profile();
+
+        if (! $profile instanceof SuppliesTaxRates) {
+            return null;
+        }
+
+        return new TaxRateMatrix($profile->taxRates(), $profile->taxRatesValidFrom());
     }
 }

@@ -9,6 +9,7 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Invoicing\DatevExport;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\Models\ProviderFee;
 use Throwable;
 
 /**
@@ -50,22 +51,52 @@ final class DatevExportCommand extends Command
 
         $invoices = InvoiceRecord::query()
             ->whereBetween('issued_at', [$from, $to])
+            // A restatement — the full invoice a buyer asked for after their receipt — is the same sale
+            // stated again. Booking it would double the revenue and the tax in the books.
+            ->whereNull('reissue_of_invoice_id')
             ->orderBy('issued_at')
             ->orderBy('id')
             ->get();
 
-        $content = $export->export($invoices, $from, $to);
+        // What the provider charged in the same period, and it was missing entirely. `DatevExport::export()`
+        // has taken these as its fifth parameter for as long as the PSP-fee accounts have existed, and this
+        // command — the only production caller of export() in the package — passed three arguments. So the
+        // accounts were configured, the booking was written, and every real monthly batch contained zero
+        // provider fees. Nothing was red, because the test that proves the booking passes the fees itself.
+        //
+        // A dispute fee is what makes the omission expensive rather than untidy: the provider is established
+        // abroad, so the fee is an inbound supply carrying reverse-charge VAT the platform self-assesses AND
+        // deducts. A month that books none declares neither side of it.
+        $providerFees = ProviderFee::query()
+            ->whereBetween('occurred_at', [$from, $to])
+            ->orderBy('occurred_at')
+            ->orderBy('id')
+            ->get();
+
+        // `voucherMovements`, export()'s sixth parameter, is still not passed — and that is stated here rather
+        // than left to be rediscovered, because it is the same shape as the defect above. It is not the same
+        // fix: a provider fee is a persisted row waiting to be loaded, while a voucher movement is a value
+        // object `VoucherLedger::redeem()`/`expire()` return and nothing stores. There is no movements table
+        // and no production caller of either method, so there is nothing here to load yet. Passing an empty
+        // list would look like coverage of a capability that has no producer.
+        $content = $export->export($invoices, $from, $to, providerFees: $providerFees);
         $path = $this->option('path');
+
+        // Both counts, always — including the zeroes. A line that reports only invoices reads as the whole
+        // batch, so an operator could not tell a month whose fees were loaded and empty from a month whose
+        // fees were never loaded at all. For the whole life of this command it was the second.
+        $counted = "{$invoices->count()} invoice(s) and {$providerFees->count()} provider fee(s) for "
+            ."{$from->toDateString()}–{$to->toDateString()}";
 
         if (is_string($path) && $path !== '') {
             $files->put($path, $content);
-            $this->components->info("Wrote {$invoices->count()} invoice(s) for {$from->toDateString()}–{$to->toDateString()} to {$path}.");
+            $this->components->info("Wrote {$counted} to {$path}.");
 
             return self::SUCCESS;
         }
 
         $this->output->write($content);
-        $this->components->info("Exported {$invoices->count()} invoice(s) for {$from->toDateString()}–{$to->toDateString()}.");
+        $this->components->info("Exported {$counted}.");
 
         return self::SUCCESS;
     }

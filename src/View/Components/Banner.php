@@ -7,6 +7,7 @@ namespace Pushery\Billing\View\Components;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\View as ViewFacade;
 use Illuminate\View\Component;
 use Override;
 use Pushery\Billing\Contracts\BillingEntityResolver;
@@ -38,6 +39,6 @@ final class Banner extends Component
 
     public function render(): View
     {
-        return view('billing::components.banner');
+        return ViewFacade::make('billing::components.banner');
     }
 }

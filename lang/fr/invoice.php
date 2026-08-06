@@ -21,5 +21,8 @@ return [
     'vat' => 'TVA',
     'vat_reverse_charge' => 'TVA (autoliquidation)',
     'total' => 'Total',
+    'total_including_vat' => 'Total, TVA de :rate incluse',
     'reverse_charge_note' => 'Autoliquidation : le preneur est redevable de la TVA.',
+    'margin_scheme_note' => 'Régime de la marge bénéficiaire — biens d’occasion',
+    'self_billed_note' => 'Autofacturation : émise par le destinataire au nom du fournisseur, selon accord préalable.',
 ];

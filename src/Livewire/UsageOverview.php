@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Pushery\Billing\Contracts\UsageProvider;
 use Pushery\Billing\Livewire\Concerns\DegradesGracefully;
@@ -27,8 +28,8 @@ final class UsageOverview extends AccountScreen
         $owner = $this->owner();
         // A failing UsageProvider (a project's own code, or a metering backend it calls) degrades to an
         // inline notice instead of 500-ing the whole usage screen — the customer can still reach the rest.
-        $snapshot = $this->orDegrade(fn (): QuotaSnapshot => app(UsageProvider::class)->snapshot($owner), new QuotaSnapshot([]));
-        $ledger = app(PrepaidLedger::class);
+        $snapshot = $this->orDegrade(fn (): QuotaSnapshot => Container::getInstance()->make(UsageProvider::class)->snapshot($owner), new QuotaSnapshot([]));
+        $ledger = Container::getInstance()->make(PrepaidLedger::class);
 
         // The prepaid balance per metered dimension, shown alongside the cycle usage — only where the owner
         // actually bought units. `included` resets each cycle; prepaid rolls over, so the customer can see
@@ -46,7 +47,7 @@ final class UsageOverview extends AccountScreen
             'snapshot' => $snapshot,
             'prepaid' => $prepaid,
             // A read-only trial note: the usage shown is the trial tier's entitlement while the trial runs.
-            'trial' => app(TrialCallouts::class)->for($owner, $state, $this->subscription()?->trial_ends_at),
+            'trial' => Container::getInstance()->make(TrialCallouts::class)->for($owner, $state, $this->subscription()?->trial_ends_at),
         ]);
     }
 }

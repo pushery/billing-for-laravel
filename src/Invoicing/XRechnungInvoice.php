@@ -9,7 +9,10 @@ use DOMElement;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\EInvoice;
+use Pushery\Billing\Contracts\SellerPartyResolver;
+use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Invoicing\Concerns\NormalizesInvoiceModel;
+use Pushery\Billing\Marketplace\ConfigSellerPartyResolver;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -17,9 +20,10 @@ use Pushery\Billing\ValueObjects\Money;
  * A dependency-free EN 16931 / XRechnung invoice writer. It maps a stored invoice to a UBL 2.1 Invoice
  * document with the mandatory business terms — customization id, number, issue date, type code 380,
  * currency, seller and buyer parties, the per-rate tax breakdown, the document totals, and one line per
- * item — using only PHP's built-in DOM. The seller is the platform (config('billing.company')); the
- * buyer, lines and tax split come from the immutable invoice row. ZUGFeRD (embedding this XML in a
- * PDF/A-3) is a separate writer that needs a PDF library; this plain-XML form is the B2G/B2B baseline.
+ * item — using only PHP's built-in DOM. The seller comes from the row's frozen `seller` snapshot, falling
+ * back to the resolver whose default is the platform; the buyer, lines and tax split come from the immutable
+ * invoice row. ZUGFeRD (embedding this XML in a PDF/A-3) is a separate writer that needs a PDF library; this
+ * plain-XML form is the B2G/B2B baseline.
  */
 final readonly class XRechnungInvoice implements EInvoice
 {
@@ -33,7 +37,17 @@ final readonly class XRechnungInvoice implements EInvoice
 
     private const string CUSTOMIZATION = 'urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_3.0';
 
-    public function __construct(private Repository $config) {}
+    private SellerPartyResolver $sellerResolver;
+
+    public function __construct(
+        Repository $config,
+        ?SellerPartyResolver $sellerResolver = null,
+    ) {
+        // Optional and last, so `new XRechnungInvoice($config)` still constructs. It defaults to the platform
+        // company — the single-seller answer — so nothing about the rendered output changes without a binding.
+        // Config is only needed to build that default resolver; the writer keeps no config of its own.
+        $this->sellerResolver = $sellerResolver ?? new ConfigSellerPartyResolver($config);
+    }
 
     public function render(InvoiceRecord $invoice): string
     {
@@ -54,14 +68,39 @@ final readonly class XRechnungInvoice implements EInvoice
         $this->el($doc, $root, 'cbc:CustomizationID', self::CUSTOMIZATION);
         $this->el($doc, $root, 'cbc:ID', $reference);
         $this->el($doc, $root, 'cbc:IssueDate', ($invoice->issued_at ?? Carbon::now())->format('Y-m-d'));
-        // BT-3 Type code: 380 for an invoice, 381 for a correction (EN 16931 names 381 "Credit note").
-        // Expressing a correction in Invoice syntax with type 381 is valid — the code, not a negative
-        // amount, carries the correcting meaning, so the amounts below stay positive. (The 384 amendment
-        // branch is added with the correction roles' XML serialization; today only 381 is produced.)
-        $this->el($doc, $root, 'cbc:InvoiceTypeCode', $correction ? '381' : '380');
+        // BT-3 Type code: 380 invoice, 381 cancellation, 384 amendment, 389 self-billed invoice — derived
+        // once in the shared trait so UBL and CII never disagree. The code, not a negative amount, carries
+        // the correcting meaning, so the amounts below stay positive.
+        //
+        // All FOUR are named on purpose. This sentence used to list three and leave out 384, which reads as
+        // the complete table and is the one omission that matters here: a cancellation and an amendment are
+        // two different documents that a tax authority tells apart by this code alone.
+        $this->el($doc, $root, 'cbc:InvoiceTypeCode', $this->typeCode($invoice));
         $this->el($doc, $root, 'cbc:DocumentCurrencyCode', $currency);
         // BT-10 Buyer reference (the Leitweg-ID for B2G); defaults to the invoice reference for B2B.
         $this->el($doc, $root, 'cbc:BuyerReference', $this->buyerReference($invoice) ?? $reference);
+
+        // BT-22: a self-billed document has to SAY it is one. Without the statement it reads as an ordinary
+        // invoice issued by the wrong party, and the recipient cannot tell it was written under an
+        // arrangement they agreed to. UBL puts a document-level note after the type code and before the
+        // references, so it goes here — and it is absent entirely on every other document.
+        $selfBilled = $this->selfBillingNote($invoice);
+
+        if ($selfBilled !== null) {
+            $this->el($doc, $root, 'cbc:Note', $selfBilled);
+        }
+
+        // BG-14 the period the WHOLE document covers (BT-73 start, BT-74 end). Distinct from the periods on
+        // the lines below: a reader asks which months the document is for before reading a line, and
+        // answering that by reducing a set of line periods means every reader has to agree on how. UBL
+        // orders cac:InvoicePeriod after cbc:BuyerReference and before the references, so it goes here.
+        // Absent entirely on a document that states no period, which keeps every existing one byte-identical.
+        if ($invoice->service_period_start !== null && $invoice->service_period_end !== null) {
+            $period = $doc->createElement('cac:InvoicePeriod');
+            $this->el($doc, $period, 'cbc:StartDate', $invoice->service_period_start->format('Y-m-d'));
+            $this->el($doc, $period, 'cbc:EndDate', $invoice->service_period_end->format('Y-m-d'));
+            $root->appendChild($period);
+        }
 
         // BG-3 Preceding invoice reference: a correction must name the invoice it corrects (BR-55). UBL
         // orders cac:BillingReference after cbc:BuyerReference and before the parties.
@@ -69,16 +108,27 @@ final readonly class XRechnungInvoice implements EInvoice
             $root->appendChild($this->billingReference($doc, $invoice->credited_invoice_number));
         }
 
-        $root->appendChild($this->party($doc, 'cac:AccountingSupplierParty', $this->seller()));
+        $root->appendChild($this->party($doc, 'cac:AccountingSupplierParty', $this->seller($invoice)));
         $root->appendChild($this->party($doc, 'cac:AccountingCustomerParty', $this->buyer($invoice)));
+
+        // BT-72 the date the supply was actually made. Written ONLY from the recorded date, never derived
+        // from the period's end: a subscription billed in advance issues on the first of the month, and a
+        // derived value would state a delivery in the future on a document dated before it. UBL orders
+        // cac:Delivery after the parties and before the payment and tax blocks.
+        if ($invoice->delivered_on !== null) {
+            $delivery = $doc->createElement('cac:Delivery');
+            $this->el($doc, $delivery, 'cbc:ActualDeliveryDate', $invoice->delivered_on->format('Y-m-d'));
+            $root->appendChild($delivery);
+        }
 
         // An intra-EU B2B reverse charge: the buyer accounts for the VAT, so every band and line is VAT
         // category AE at 0%, with an exemption reason on the document band — not the zero-rated Z a 0% rate
         // would otherwise get (a conformant EN 16931 validator rejects Z here).
         $reverseCharge = (bool) $invoice->reverse_charge;
+        $exempt = (bool) $invoice->tax_exempt;
 
         $lines = $this->lines($invoice);
-        $bands = $this->taxBandsFor($lines, $reverseCharge);
+        $bands = $this->taxBandsFor($lines, $reverseCharge, $invoice);
 
         // Derive the document net + tax from the lines so BT-110 equals the sum of the per-band tax
         // (BR-CO-14) and the totals stay internally consistent (BR-CO-13/15). A lineless invoice
@@ -93,11 +143,11 @@ final readonly class XRechnungInvoice implements EInvoice
         // with no stored note falls back to the standard wording), never a hardcoded literal.
         $exemptionReason = $this->vatNote($invoice, $reverseCharge);
 
-        $root->appendChild($this->taxTotal($doc, $bands, $tax, $currency, $reverseCharge, $exemptionReason));
+        $root->appendChild($this->taxTotal($doc, $bands, $tax, $currency, $reverseCharge, $exempt, $exemptionReason, $invoice));
         $root->appendChild($this->monetaryTotal($doc, $net, $tax, $currency));
 
         foreach ($lines as $index => $line) {
-            $root->appendChild($this->line($doc, $index + 1, $line, $currency, $reverseCharge));
+            $root->appendChild($this->line($doc, $index + 1, $line, $currency, $reverseCharge, $exempt, $invoice));
         }
 
         return (string) $doc->saveXML();
@@ -167,7 +217,7 @@ final readonly class XRechnungInvoice implements EInvoice
      *
      * @param  list<array{rate: float, taxable: int, tax: int}>  $bands
      */
-    private function taxTotal(DOMDocument $doc, array $bands, int $tax, string $currency, bool $reverseCharge, ?string $exemptionReason): DOMElement
+    private function taxTotal(DOMDocument $doc, array $bands, int $tax, string $currency, bool $reverseCharge, bool $exempt, ?string $exemptionReason, InvoiceRecord $invoice): DOMElement
     {
         $node = $doc->createElement('cac:TaxTotal');
         $this->money($doc, $node, 'cbc:TaxAmount', $tax, $currency);
@@ -175,10 +225,11 @@ final readonly class XRechnungInvoice implements EInvoice
         foreach ($bands as $band) {
             $subtotal = $doc->createElement('cac:TaxSubtotal');
             $this->money($doc, $subtotal, 'cbc:TaxableAmount', $band['taxable'], $currency);
-            // A reverse-charge (AE) band carries zero tax — the buyer accounts for it (BR-AE-*).
-            $this->money($doc, $subtotal, 'cbc:TaxAmount', $reverseCharge ? 0 : $band['tax'], $currency);
-            // The document-level band carries the exemption reason (BT-120/121) for a reverse charge.
-            $subtotal->appendChild($this->taxCategory($doc, 'cac:TaxCategory', $band['rate'], $reverseCharge, withReason: true, exemptionReason: $exemptionReason));
+            // A reverse-charge (AE) or exempt (E) band carries zero tax — the buyer accounts for it, or there
+            // is none (BR-AE-* / BR-E-*).
+            $this->money($doc, $subtotal, 'cbc:TaxAmount', $reverseCharge || $exempt ? 0 : $band['tax'], $currency);
+            // The document-level band carries the exemption reason (BT-120/121) for a reverse charge or exemption.
+            $subtotal->appendChild($this->taxCategory($doc, 'cac:TaxCategory', $band['rate'], $reverseCharge, $invoice, $exempt, withReason: true, exemptionReason: $exemptionReason));
 
             $node->appendChild($subtotal);
         }
@@ -205,17 +256,34 @@ final readonly class XRechnungInvoice implements EInvoice
      * require. The line-level ClassifiedTaxCategory carries the code + rate only; the reason lives once, on
      * the band. UBL order inside cac:TaxCategory: ID, Percent, TaxExemptionReasonCode/Reason, TaxScheme.
      */
-    private function taxCategory(DOMDocument $doc, string $name, float $rate, bool $reverseCharge, bool $withReason = false, ?string $exemptionReason = null): DOMElement
+    private function taxCategory(DOMDocument $doc, string $name, float $rate, bool $reverseCharge, InvoiceRecord $invoice, bool $exempt = false, bool $withReason = false, ?string $exemptionReason = null): DOMElement
     {
         $category = $doc->createElement($name);
-        $this->el($doc, $category, 'cbc:ID', $reverseCharge ? 'AE' : ($rate > 0 ? 'S' : 'Z'));
-        $this->el($doc, $category, 'cbc:Percent', $this->rate($reverseCharge ? 0.0 : $rate));
 
-        if ($reverseCharge && $withReason) {
-            $this->el($doc, $category, 'cbc:TaxExemptionReasonCode', 'VATEX-EU-AE');
-            // BT-120: the derived reason text (from vat_note), falling back to the standard wording only when
-            // the column carries none — never hardcoded.
-            $this->el($doc, $category, 'cbc:TaxExemptionReason', $exemptionReason ?? 'Reverse charge');
+        // Decided by the shared authority rather than here. Both writers used to carry their own copy of this
+        // rule, and two copies of a rule are two places it can drift — with no symptom, because each document
+        // stays internally consistent and only a reader comparing a UBL and a CII rendering of the SAME
+        // invoice would ever see them disagree.
+        $resolved = EnInvoiceTaxCategory::for(
+            $invoice->tax_exemption_reason ?? ($reverseCharge ? TaxExemptionReason::ReverseCharge : null),
+            $invoice->tax_archetype,
+            $exempt,
+            $rate,
+            $invoice->destination_country,
+        );
+
+        $this->el($doc, $category, 'cbc:ID', $resolved->code);
+        $this->el($doc, $category, 'cbc:Percent', $this->rate($reverseCharge || $exempt ? 0.0 : $rate));
+
+        if ($withReason && $resolved->needsReason()) {
+            // AE, K and G each carry their own VATEX code; an exempt supply (E) needs only its reason text
+            // (BR-E-10 accepts the text alone). BT-120 is the derived reason (from vat_note), falling back to
+            // the wording that belongs to the category — never hardcoded past that fallback.
+            if ($resolved->vatexCode !== null) {
+                $this->el($doc, $category, 'cbc:TaxExemptionReasonCode', $resolved->vatexCode);
+            }
+
+            $this->el($doc, $category, 'cbc:TaxExemptionReason', $exemptionReason ?? $resolved->reason);
         }
 
         $scheme = $doc->createElement('cac:TaxScheme');
@@ -225,7 +293,7 @@ final readonly class XRechnungInvoice implements EInvoice
         return $category;
     }
 
-    private function line(DOMDocument $doc, int $number, Line $line, string $currency, bool $reverseCharge): DOMElement
+    private function line(DOMDocument $doc, int $number, Line $line, string $currency, bool $reverseCharge, bool $exempt, InvoiceRecord $invoice): DOMElement
     {
         $node = $doc->createElement('cac:InvoiceLine');
         $this->el($doc, $node, 'cbc:ID', (string) $number);
@@ -235,9 +303,19 @@ final readonly class XRechnungInvoice implements EInvoice
 
         $this->money($doc, $node, 'cbc:LineExtensionAmount', $line->netMinor, $currency);
 
+        // BG-14 the period this line covers (BT-73 start, BT-74 end). Written only when the line states one,
+        // so a document without periods is byte-for-byte what it always was. UBL orders cac:InvoicePeriod
+        // after the line amount and before the item.
+        if ($line->hasPeriod()) {
+            $period = $doc->createElement('cac:InvoicePeriod');
+            $this->el($doc, $period, 'cbc:StartDate', (string) $line->periodStart);
+            $this->el($doc, $period, 'cbc:EndDate', (string) $line->periodEnd);
+            $node->appendChild($period);
+        }
+
         $item = $doc->createElement('cac:Item');
         $this->el($doc, $item, 'cbc:Name', $line->description);
-        $item->appendChild($this->taxCategory($doc, 'cac:ClassifiedTaxCategory', $line->taxRate, $reverseCharge));
+        $item->appendChild($this->taxCategory($doc, 'cac:ClassifiedTaxCategory', $line->taxRate, $reverseCharge, $invoice, $exempt));
         $node->appendChild($item);
 
         $price = $doc->createElement('cac:Price');
@@ -254,8 +332,8 @@ final readonly class XRechnungInvoice implements EInvoice
         $element->setAttribute('currencyID', $currency);
     }
 
-    private function config(): Repository
+    private function sellerPartyResolver(): SellerPartyResolver
     {
-        return $this->config;
+        return $this->sellerResolver;
     }
 }

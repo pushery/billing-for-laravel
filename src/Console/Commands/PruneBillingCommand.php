@@ -6,11 +6,15 @@ namespace Pushery\Billing\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Support\OwnerScopedTables;
+use Pushery\Billing\Support\RetentionMatrix;
+use Pushery\Billing\Support\SubjectScopedRecords;
 
 /**
  * The retention clock. Personal data the package no longer needs is not data it may keep (GDPR Art. 5(1)(e)
@@ -26,7 +30,16 @@ use Pushery\Billing\Support\OwnerScopedTables;
  * processed twice, and it holds no personal data once the payload is gone.
  *
  * The RETAINED financial rows of erased owners. They outlive the erasure because the law requires them
- * (§147 AO, §14b UStG — about ten years), and they go once it does not.
+ * (§14b Abs. 1 UStG n. F. — EIGHT years, the shipped default of 2920 days), and they go once it does not.
+ *
+ * Eight, not ten, and the difference is the whole point rather than a rounding of it. The ten-year window
+ * (§147 AO, §257 HGB) is a SEPARATE obligation covering books and posting batches — it is `audit_days`
+ * below, deliberately a different number for a different record class. Retaining an invoice to the book
+ * window would keep the buyer's name and address two years past the obligation that justifies holding
+ * them at all, which is a storage-limitation breach (GDPR Art. 5(1)(e)), not a safe margin.
+ *
+ * The shipped config and `RetentionFloorGuard` both say this; this docblock said "about ten years" and
+ * was the only place that disagreed — describing the unlawful variant as though it were what runs.
  */
 final class PruneBillingCommand extends Command
 {
@@ -44,7 +57,7 @@ final class PruneBillingCommand extends Command
 
     protected $description = 'Age out stored webhook payloads and financial records past their retention';
 
-    public function handle(Repository $config): int
+    public function handle(Repository $config, SubjectScopedRecords $records, RetentionMatrix $matrix): int
     {
         $dryRun = $this->option('dry-run') === true;
 
@@ -68,20 +81,19 @@ final class PruneBillingCommand extends Command
         $financialFloor = $this->days($config, 'erased_financial_days', 2920);
         $financialCutoff = Carbon::now()->subDays($financialFloor)->startOfYear();
 
+        // EVERY axis, not just the buyer's. The statutory window is a property of the document, not of whose
+        // name is on it: a merchant's payout statement ages out under the same rule as a buyer's invoice, and
+        // iterating the axes means a new one is covered the day it is added rather than the day somebody
+        // remembers this loop exists.
         $financialCount = 0;
 
-        foreach (OwnerScopedTables::RETAINED as $table) {
-            $issueColumn = self::RETENTION_ISSUE_COLUMN[$table] ?? 'created_at';
-
-            $rows = DB::table($table)
-                ->whereNotNull('owner_erased_at')
-                // COALESCE so a record with no explicit issue date falls back to when it was created — a
-                // null issue date must never read as "infinitely old" and prune early. The cutoff is bound as
-                // a datetime STRING: a raw binding does not go through the datetime caster, so a Carbon here
-                // would compare as an unusable value and quietly match nothing.
-                ->whereRaw("COALESCE({$issueColumn}, created_at) < ?", [$financialCutoff->toDateTimeString()]);
-
-            $financialCount += $dryRun ? $rows->count() : $rows->delete();
+        foreach (OwnerScopedTables::axes() as $axis) {
+            $financialCount += $records->pruneExpired(
+                $axis,
+                $financialCutoff->toDateTimeString(),
+                self::RETENTION_ISSUE_COLUMN,
+                $dryRun,
+            );
         }
 
         // The audit ledger. GDPR storage limitation (Art. 5(1)(e)) says personal data is not kept longer
@@ -105,7 +117,76 @@ final class PruneBillingCommand extends Command
 
         $this->components->info("{$verb} {$payloadCount} stored webhook payload(s), {$financialCount} retained financial record(s) and {$auditCount} audit event(s).");
 
+        // A dry run doubles as the evidence an audit asks for, so it states the rules rather than only the
+        // totals: what is held, for how long, counted from when, on whose authority. A number without its
+        // reason is a number somebody eventually shortens because it looks arbitrary.
+        if ($dryRun) {
+            $this->reportRules($matrix);
+        }
+
+        // A record that must never have been kept is not pruned here — it is REPORTED. Its duty is
+        // discharged where it is processed, so a survivor means a code path did not discharge it, and
+        // quietly cleaning up would hide the defect and leave it happening.
+        $survivors = $this->immediateSurvivors($matrix);
+
+        if ($survivors !== []) {
+            foreach ($survivors as $object => $count) {
+                $this->components->error("{$count} row(s) still hold [{$object}], which must be discarded where it is processed.");
+            }
+
+            return self::FAILURE;
+        }
+
         return self::SUCCESS;
+    }
+
+    /** The rule set, as the record of what this run enforces. */
+    private function reportRules(RetentionMatrix $matrix): void
+    {
+        $this->newLine();
+
+        foreach ($matrix->rules() as $rule) {
+            $window = $rule->days === null ? '—' : $rule->days.' days';
+
+            $this->components->twoColumnDetail(
+                "{$rule->object}  <fg=gray>{$rule->action->value} · {$rule->clock->value}</>",
+                "{$window}  <fg=gray>".Lang::get($rule->basisKey).'</>',
+            );
+        }
+    }
+
+    /**
+     * Rows still holding something that carries no reason to be held.
+     *
+     * @return array<string, int>
+     */
+    private function immediateSurvivors(RetentionMatrix $matrix): array
+    {
+        $found = [];
+
+        foreach ($matrix->rules() as $rule) {
+            if (! $rule->isImmediate()) {
+                continue;
+            }
+            if ($rule->columns === []) {
+                continue;
+            }
+            $query = DB::table($rule->object);
+
+            $query->where(static function (Builder $inner) use ($rule): void {
+                foreach ($rule->columns as $column) {
+                    $inner->orWhereNotNull($column);
+                }
+            });
+
+            $count = $query->count();
+
+            if ($count > 0) {
+                $found[$rule->object] = $count;
+            }
+        }
+
+        return $found;
     }
 
     private function days(Repository $config, string $key, int $default): int

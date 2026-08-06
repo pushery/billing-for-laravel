@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Pushery\Billing\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -59,7 +61,7 @@ final class SyncSubscriptionsCommand extends Command
                         }
                     } catch (Throwable $e) {
                         // One owner's provider hiccup must not abort the whole sweep.
-                        report($e);
+                        Container::getInstance()->make(ExceptionHandler::class)->report($e);
                         $key = $owner->getKey();
                         $this->components->warn('Could not sync owner '.(is_scalar($key) ? (string) $key : '?').": {$e->getMessage()}");
                     }

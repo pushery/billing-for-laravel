@@ -21,5 +21,8 @@ return [
     'vat' => 'USt',
     'vat_reverse_charge' => 'USt (Reverse Charge)',
     'total' => 'Gesamt',
+    'total_including_vat' => 'Gesamt inklusive :rate USt',
     'reverse_charge_note' => 'Reverse Charge: Die Steuerschuld geht auf den Leistungsempfänger über.',
+    'margin_scheme_note' => 'Gebrauchtgegenstände/Sonderregelung',
+    'self_billed_note' => 'Gutschrift: vom Leistungsempfänger im Namen des Leistenden ausgestellt, nach vorheriger Vereinbarung.',
 ];

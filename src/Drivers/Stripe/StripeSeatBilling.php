@@ -11,6 +11,7 @@ use Pushery\Billing\Contracts\SeatBilling;
 use Pushery\Billing\Exceptions\SeatDowngradeBelowOccupied;
 use Pushery\Billing\Models\Subscription;
 use Stripe\Exception\InvalidRequestException;
+use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
 use Stripe\SubscriptionItem;
 
@@ -47,6 +48,10 @@ final readonly class StripeSeatBilling implements SeatBilling
 
         try {
             $subscription = $this->stripe->subscriptions->retrieve($reference);
+        } catch (RateLimitException $e) {
+            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
+            throw $e;
         } catch (InvalidRequestException) {
             return null; // the subscription is gone or already canceled
         }
@@ -78,6 +83,10 @@ final readonly class StripeSeatBilling implements SeatBilling
 
         try {
             $subscription = $this->stripe->subscriptions->retrieve($reference);
+        } catch (RateLimitException $e) {
+            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
+            throw $e;
         } catch (InvalidRequestException) {
             return; // gone or canceled — nothing to update
         }
@@ -97,6 +106,10 @@ final readonly class StripeSeatBilling implements SeatBilling
                 'items' => [['id' => $base->id, 'quantity' => $quantity]],
                 'proration_behavior' => $prorate ? 'create_prorations' : 'none',
             ]);
+        } catch (RateLimitException $e) {
+            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
+            throw $e;
         } catch (InvalidRequestException $e) {
             // Permanent (a 400): log and stop, rather than retry a request that can never succeed.
             $this->log->warning('Seat quantity update failed against Stripe.', [
@@ -113,6 +126,7 @@ final readonly class StripeSeatBilling implements SeatBilling
         $subscription = Subscription::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
+            ->forMerchant(null)
             ->where('type', 'default')
             ->latest('id')
             ->first();

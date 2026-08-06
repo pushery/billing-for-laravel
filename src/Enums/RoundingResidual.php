@@ -23,4 +23,23 @@ enum RoundingResidual: string
 
     /** The leftover minor unit joins the REMAINDER (the second bucket of the split). */
     case ToRemainder = 'to_remainder';
+
+    /**
+     * The direction an installation configured, by the name its configuration uses.
+     *
+     * The mapping lives here rather than at each reader because there are now two of them — the resolver
+     * that prices a sale and the corrector that has to reconstruct one — and two copies of a two-way mapping
+     * is how they end up disagreeing about which side the odd minor unit went to.
+     *
+     * Null for anything unrecognized, so a caller decides what to do about a value it cannot honor rather
+     * than silently getting one of the two directions.
+     */
+    public static function fromConfigured(mixed $value): ?self
+    {
+        return match ($value) {
+            'platform_first' => self::ToPortion,
+            'creator_first' => self::ToRemainder,
+            default => null,
+        };
+    }
 }

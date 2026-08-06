@@ -46,16 +46,16 @@ php artisan migrate
 
 The service provider is registered through package discovery. The Stripe driver builds on [Cashier](https://laravel.com/docs/billing), so set your Stripe keys (`STRIPE_KEY`, `STRIPE_SECRET`, `STRIPE_WEBHOOK_SECRET`) as usual.
 
-> **Billable model isn't `App\Models\User`?** Set `BILLING_CUSTOMER_MODEL` **before** you run `billing:install`, or it adds the billing columns to `users`. See the [installation guide](https://github.com/pushery/billing-for-laravel/blob/main/docs/single-seller/installation.md) for the full detail.
+> **Billable model isn't `App\Models\User`?** Set `BILLING_CUSTOMER_MODEL` **before** you run `billing:install`, or it adds the billing columns to `users`. See the [installation guide](https://docs.pushery.com/billing-for-laravel/single-seller/installation) for the full detail.
 
 ## Documentation
 
-The full documentation lives in **[`docs/`](https://github.com/pushery/billing-for-laravel/blob/main/docs/README.md)** — start there. (It ships in the repository, not in the Composer dist, so these links point at the repository.)
+The full documentation lives at **[docs.pushery.com/billing-for-laravel](https://docs.pushery.com/billing-for-laravel/)** — start there. (It is published as a site rather than carried in the repository, so these links point outward and an installed package stays unchanged.)
 
-- **New here?** [Choosing your setup](https://github.com/pushery/billing-for-laravel/blob/main/docs/choosing-your-setup.md), then the [guide](https://github.com/pushery/billing-for-laravel/blob/main/docs/README.md#the-guide) (installation → configuration → subscriptions → usage → invoicing → …).
-- **Reference:** [configuration](https://github.com/pushery/billing-for-laravel/blob/main/docs/reference/configuration.md) · [commands](https://github.com/pushery/billing-for-laravel/blob/main/docs/reference/commands.md) · [events](https://github.com/pushery/billing-for-laravel/blob/main/docs/reference/events.md) · [contracts](https://github.com/pushery/billing-for-laravel/blob/main/docs/reference/contracts.md) · [database](https://github.com/pushery/billing-for-laravel/blob/main/docs/reference/database.md)
-- **Guides:** [migrating from Cashier](https://github.com/pushery/billing-for-laravel/blob/main/docs/guides/migrating-from-cashier.md) · [migrating from your own billing code](https://github.com/pushery/billing-for-laravel/blob/main/docs/guides/migrating-from-custom-billing.md) · [testing](https://github.com/pushery/billing-for-laravel/blob/main/docs/guides/testing.md) · [upgrading](https://github.com/pushery/billing-for-laravel/blob/main/docs/guides/upgrading.md) · [troubleshooting](https://github.com/pushery/billing-for-laravel/blob/main/docs/guides/troubleshooting.md)
-- **Compliance:** [invariants](https://github.com/pushery/billing-for-laravel/blob/main/docs/compliance/invariants.md) · [retention & erasure](https://github.com/pushery/billing-for-laravel/blob/main/docs/compliance/retention-and-erasure.md) · [security](https://github.com/pushery/billing-for-laravel/blob/main/docs/compliance/security.md)
+- **New here?** [Choosing your setup](https://docs.pushery.com/billing-for-laravel/choosing-your-setup), then the [guide](https://docs.pushery.com/billing-for-laravel/#the-guide) (installation → configuration → subscriptions → usage → invoicing → …).
+- **Reference:** [configuration](https://docs.pushery.com/billing-for-laravel/reference/configuration) · [commands](https://docs.pushery.com/billing-for-laravel/reference/commands) · [events](https://docs.pushery.com/billing-for-laravel/reference/events) · [contracts](https://docs.pushery.com/billing-for-laravel/reference/contracts) · [database](https://docs.pushery.com/billing-for-laravel/reference/database)
+- **Guides:** [migrating from Cashier](https://docs.pushery.com/billing-for-laravel/guides/migrating-from-cashier) · [migrating from your own billing code](https://docs.pushery.com/billing-for-laravel/guides/migrating-from-custom-billing) · [testing](https://docs.pushery.com/billing-for-laravel/guides/testing) · [upgrading](https://docs.pushery.com/billing-for-laravel/guides/upgrading) · [troubleshooting](https://docs.pushery.com/billing-for-laravel/guides/troubleshooting)
+- **Compliance:** [invariants](https://docs.pushery.com/billing-for-laravel/compliance/invariants) · [retention & erasure](https://docs.pushery.com/billing-for-laravel/compliance/retention-and-erasure) · [security](https://docs.pushery.com/billing-for-laravel/compliance/security)
 
 ## Security
 

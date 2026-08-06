@@ -8,6 +8,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Contracts\TierResolver;
+use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\TierIdentity;
 
 /**
@@ -23,7 +24,13 @@ final readonly class ColumnTierResolver implements TierResolver
         private TierCatalog $catalog,
     ) {}
 
-    public function resolve(Model $billable): TierIdentity
+    /**
+     * The merchant scope is accepted to satisfy the contract but deliberately ignored: a single
+     * denormalized column cannot express "Pro on creator A, free on creator B". This resolver stays the
+     * single-seller reading; a marketplace app rebinds TierResolver to SubscriptionTierResolver, which keys
+     * a real per-merchant row.
+     */
+    public function resolve(Model $billable, ?MerchantScope $merchant = null): TierIdentity
     {
         $column = $this->string('billing.tier_column', 'plan');
         $raw = $billable->getAttributes()[$column] ?? null;

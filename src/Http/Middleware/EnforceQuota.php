@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Auth;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Support\UsageGate;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Blocks a request that would take the owner past a BLOCKING metered allowance, with a 429 by default —
@@ -40,7 +41,7 @@ final readonly class EnforceQuota
         $actor = Auth::user();
 
         if ($actor instanceof Model && $this->gate->allows($this->resolver->ownerFor($actor), $meterKey, $this->units($quantity))->blocked()) {
-            abort($this->status());
+            throw new HttpException($this->status());
         }
 
         return $next($request);

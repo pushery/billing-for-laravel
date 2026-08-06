@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest an idea or improvement for Billing for Laravel.
+description: "Suggest an idea or improvement for Billing for Laravel."
 labels: ["enhancement"]
 body:
   - type: textarea

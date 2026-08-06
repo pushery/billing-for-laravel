@@ -23,6 +23,10 @@ final readonly class DriverCapabilities
         public bool $supportsProviderCredit = false,
         public array $availablePaymentMethods = [],
         public array $recurringCapableMethods = [],
+        // Appended LAST, and it has to stay last. The value object is constructed positionally by
+        // driver code outside this package, so inserting a parameter anywhere else silently shifts
+        // every argument after it — a capability flag would start reading a payment-method list.
+        public bool $supportsConnectDestinationCharges = false,
     ) {}
 
     public function offersMethod(string $method): bool

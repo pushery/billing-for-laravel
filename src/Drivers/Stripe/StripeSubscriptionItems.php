@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
-use Pushery\Billing\Catalogs\TierPriceIndex;
+use Pushery\Billing\Catalogs\TierPriceIndexFactory;
+use Pushery\Billing\ValueObjects\MerchantScope;
 use Stripe\Price;
 use Stripe\StripeObject;
 use Stripe\Subscription;
@@ -26,16 +27,23 @@ use Stripe\SubscriptionItem;
  */
 final readonly class StripeSubscriptionItems
 {
-    public function __construct(private TierPriceIndex $tiers) {}
+    public function __construct(private TierPriceIndexFactory $indexes) {}
 
-    /** The item carrying the subscription's tier price, or null when it cannot be identified safely. */
-    public function base(Subscription $subscription): ?SubscriptionItem
+    /**
+     * The item carrying the subscription's tier price, or null when it cannot be identified safely.
+     *
+     * The merchant scope picks which catalog decides what a tier price IS: a marketplace swap must recognize
+     * the item against the creator's own tiers, never the platform's, or it reprices the wrong one. A null
+     * scope reads the platform catalog, unchanged for a single-seller install.
+     */
+    public function base(Subscription $subscription, ?MerchantScope $merchant = null): ?SubscriptionItem
     {
+        $index = $this->indexes->for($merchant);
         $items = $subscription->items->data;
 
         $tierItems = array_values(array_filter(
             $items,
-            fn (SubscriptionItem $item): bool => $this->tiers->isTierPrice($this->priceId($item)),
+            fn (SubscriptionItem $item): bool => $index->isTierPrice($this->priceId($item)),
         ));
 
         if (count($tierItems) === 1) {

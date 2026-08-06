@@ -17,5 +17,15 @@ final readonly class DatevAccount
     public function __construct(
         public string $number,
         public bool $automatic = true,
+        /**
+         * The transaction key a reverse-charge booking on this account has to carry, or null when the chart
+         * declares none.
+         *
+         * It belongs to the account rather than to the exporter because the catalog of keys is specific to
+         * a chart of accounts, exactly like the account number — a value in code would bury a
+         * jurisdiction-specific number in the neutral core. Null means the field is not emitted at all,
+         * which is what keeps an install that never configured one unchanged.
+         */
+        public ?int $reverseChargeTransactionKey = null,
     ) {}
 }

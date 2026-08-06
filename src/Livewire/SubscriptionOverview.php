@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Lang;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Url;
@@ -57,21 +59,26 @@ final class SubscriptionOverview extends AccountScreen
 
         return $this->view('billing::livewire.subscription-overview', [
             'state' => $state,
-            // Post-checkout the state is "activating" until the webhook lands; with broadcasting off, fall back
-            // to a bounded poll that refreshes until it settles, then stops (never a permanent poll).
+            // Post-checkout the state is "activating" until the webhook lands, so a bounded poll refreshes
+            // until it settles, then stops (never a permanent poll). NOT conditional on broadcasting, and
+            // this comment used to say it was: a broadcast notifies the owner rather than re-rendering this
+            // screen, so a poll gated on it would leave the activating state with no refresh at all.
+            // {@see PollsWhileActivating}, which states the rule and the reason for both screens.
             'poll' => $this->activationPoll($state === SubscriptionState::Activating),
             // The next-invoice preview is the one live provider read on this screen. Only an active or
             // subscription-backed trialing state has a next invoice, so skip the call entirely for every other
             // state (it could only answer null) — and degrade it to a notice rather than 500 when it is made.
-            'preview' => $state->hasUpcomingInvoice()
-                ? $this->orDegrade(fn () => app(UpcomingInvoice::class)->preview($this->owner()))
-                : null,
+            // ON ONE LINE, and not a style choice -- do not fold it back. php-code-coverage 14
+            // counts the CONTINUATION line of a multi-line ternary as executable and never records it
+            // as hit, so this file measured 97.5% with `: null` as its only gap. Measured both ways on
+            // the same tests: folded 97.5%, one line 100.0%, with identical behavior.
+            'preview' => $state->hasUpcomingInvoice() ? $this->orDegrade(fn () => Container::getInstance()->make(UpcomingInvoice::class)->preview($this->owner())) : null,
             // The owner's credit balance, so the credit they earned is finally visible and its effect
             // explained. Null when they have none, so the card only shows when there is something to show.
             'credit' => $this->creditBalance(),
             // The one trial CTA for this state (null unless trialing), so a trialing owner sees exactly one
             // next step and no other state CTA competes with it.
-            'trial' => app(TrialCallouts::class)->for($this->owner(), $state, $this->subscription()?->trial_ends_at),
+            'trial' => Container::getInstance()->make(TrialCallouts::class)->for($this->owner(), $state, $this->subscription()?->trial_ends_at),
             // When access ends (grace) or ended, from the LOCAL subscription column — never a provider call.
             'endsAt' => $this->subscription()?->ends_at,
             // Only offer the hosted-portal link when the active driver actually has one — a driver without a
@@ -83,16 +90,16 @@ final class SubscriptionOverview extends AccountScreen
     /** Whether the active driver exposes a hosted billing portal — a config-driven capability, never a call. */
     private function supportsHostedPortal(): bool
     {
-        return app(BillingManager::class)->capabilities()->supportsHostedPortal;
+        return Container::getInstance()->make(BillingManager::class)->capabilities()->supportsHostedPortal;
     }
 
     /** The owner's credit balance in the default currency, or null when it is not positive. */
     private function creditBalance(): ?Money
     {
-        $currency = app(Repository::class)->get('billing.currency', 'EUR');
+        $currency = Container::getInstance()->make(Repository::class)->get('billing.currency', 'EUR');
         $currency = is_string($currency) && $currency !== '' ? $currency : 'EUR';
 
-        $balance = app(CreditLedger::class)->balanceFor($this->owner(), $currency);
+        $balance = Container::getInstance()->make(CreditLedger::class)->balanceFor($this->owner(), $currency);
 
         return $balance->isPositive() ? $balance : null;
     }
@@ -107,7 +114,7 @@ final class SubscriptionOverview extends AccountScreen
             CancellationSurveyRecord::record($this->owner(), $survey);
         }
 
-        app(SubscriptionActions::class)->cancel($this->owner(), $survey);
+        Container::getInstance()->make(SubscriptionActions::class)->cancel($this->owner(), $survey);
 
         // Deliberately NO identity re-confirm here: canceling is reversible (resume() exists), so it is
         // covered by auth + owner-scoping — a re-confirm is reserved for the irreversible (account deletion,
@@ -141,7 +148,7 @@ final class SubscriptionOverview extends AccountScreen
 
         if ($reason->detailRequired() && $detail === null) {
             throw ValidationException::withMessages([
-                'cancelDetail' => __('billing::account.cancel_survey.detail_required'),
+                'cancelDetail' => Lang::get('billing::account.cancel_survey.detail_required'),
             ]);
         }
 
@@ -150,7 +157,7 @@ final class SubscriptionOverview extends AccountScreen
 
     public function resume(): void
     {
-        app(SubscriptionActions::class)->resume($this->owner());
+        Container::getInstance()->make(SubscriptionActions::class)->resume($this->owner());
 
         $this->audit('subscription.resumed');
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Livewire\Concerns\ConfirmsIdentity;
@@ -48,7 +49,7 @@ final class DangerZone extends AccountScreen
         // the moment the action returns, either way.
         $this->confirmIdentity($this->credential);
 
-        app(SubscriptionActions::class)->cancelNow($this->owner());
+        Container::getInstance()->make(SubscriptionActions::class)->cancelNow($this->owner());
 
         $this->audit('subscription.canceled', ['immediate' => true]);
 

@@ -42,8 +42,13 @@ that commit. Emergency bypass: `git push --no-verify`.
 
 - Keep `composer qa` green.
 - Add tests for behavior changes.
-- Update `README.md` and `CHANGELOG.md` (`## [Unreleased]`) when behavior or
-  configuration changes.
+- Update `README.md` when behavior or configuration changes.
+- Add a changelog entry as a **fragment**: a new file `changelog.d/<your-branch>.md`
+  holding a `### Added`/`### Fixed`/… heading and your entry. Do not edit
+  `CHANGELOG.md` directly — every entry landing in the same section of the same file
+  makes two open pull requests conflict over text that is purely additive, and each
+  resolution costs another full CI run. The fragments are folded into a release block
+  at release time. Format and rationale: `changelog.d/README.md`.
 - Keep commits focused and the public API stable, or call out the break explicitly.
 
 ## Upgrading the Stripe API version

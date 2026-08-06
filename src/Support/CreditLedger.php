@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Support;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Pushery\Billing\Models\CreditBalance;
@@ -67,8 +68,8 @@ final class CreditLedger
                 'owner_id' => $owner->getKey(),
                 'currency' => $amount->currency,
                 'balance_minor' => 0,
-                'created_at' => now(),
-                'updated_at' => now(),
+                'created_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
             ]);
 
             $balance = CreditBalance::query()

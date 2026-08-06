@@ -36,6 +36,19 @@ final class OrderItem extends Model
         'order_id', 'description', 'unit_price_minor', 'quantity', 'total_minor', 'currency', 'tax_bps', 'type', 'metadata',
     ];
 
+    /**
+     * The same defaults the schema carries, so a row that was just created reads like one that was read back.
+     *
+     * Without them a model created without these columns holds null for each, while the row the database
+     * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
+     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     *
+     * @var array<string, int>
+     */
+    protected $attributes = [
+        'quantity' => 1,
+    ];
+
     /** @var array<string,string> */
     protected $casts = [
         'order_id' => 'integer',

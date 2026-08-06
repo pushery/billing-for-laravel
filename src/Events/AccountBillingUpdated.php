@@ -7,7 +7,6 @@ namespace Pushery\Billing\Events;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Foundation\Events\Dispatchable;
 use Pushery\Billing\Events\Concerns\BroadcastsToOwner;
 
 /**
@@ -15,12 +14,13 @@ use Pushery\Billing\Events\Concerns\BroadcastsToOwner;
  * (overview, subscription, recovery) live-refresh instead of waiting for a reload. It carries no payload —
  * the client re-fetches — so there is nothing sensitive on the wire. A no-op unless realtime is switched on.
  *
- * Fired from the webhook spine (plan sync, dunning, …); the wiring lands with the webhook milestone.
+ * Fired by the plan sync when a provider event actually MOVES something — a state, a tier, a period. A
+ * redelivery of an event already applied, or one arriving out of order, changes nothing and broadcasts
+ * nothing, so a provider retrying a webhook does not make every open screen re-fetch.
  */
 final readonly class AccountBillingUpdated implements ShouldBroadcast
 {
     use BroadcastsToOwner;
-    use Dispatchable;
 
     public function __construct(public Model $owner) {}
 

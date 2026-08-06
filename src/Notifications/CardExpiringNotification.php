@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\ValueObjects\PaymentMethod;
 
 /**
@@ -19,9 +20,9 @@ final class CardExpiringNotification extends BillingNotification
     public function toMail(object $notifiable): MailMessage
     {
         return new MailMessage()
-            ->subject(__('billing::notifications.card_expiring.subject'))
-            ->line(__('billing::notifications.card_expiring.intro', ['card' => $this->method->label()]))
-            ->line(__('billing::notifications.card_expiring.outro'));
+            ->subject(Lang::get('billing::notifications.card_expiring.subject'))
+            ->line(Lang::get('billing::notifications.card_expiring.intro', ['card' => $this->method->label()]))
+            ->line(Lang::get('billing::notifications.card_expiring.outro'));
     }
 
     /** @return array<string, mixed> */

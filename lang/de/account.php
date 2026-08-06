@@ -223,4 +223,10 @@ return [
         ],
     ],
 
+    // Broadcast-Toasts. Je eine Zeile: ein Toast wird im Vorbeigehen gelesen, neben der Mail, die es ausführlich sagt.
+    'toast' => [
+        'payment_failed' => 'Deine Zahlung konnte nicht verarbeitet werden. Bitte aktualisiere deine Zahlungsdaten.',
+        'subscription_activated' => 'Dein Abo ist aktiv — alles, was dazugehört, ist freigeschaltet.',
+    ],
+
 ];

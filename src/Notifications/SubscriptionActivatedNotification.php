@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Support\Facades\Lang;
 
 /**
  * Confirms the subscription is live and names the tier the customer is now on. It is not the receipt —
@@ -21,9 +22,9 @@ final class SubscriptionActivatedNotification extends BillingNotification
     public function toMail(object $notifiable): MailMessage
     {
         return new MailMessage()
-            ->subject(__('billing::notifications.subscription_activated.subject'))
-            ->line(__('billing::notifications.subscription_activated.intro', ['tier' => $this->tierLabel]))
-            ->line(__('billing::notifications.subscription_activated.outro'));
+            ->subject(Lang::get('billing::notifications.subscription_activated.subject'))
+            ->line(Lang::get('billing::notifications.subscription_activated.intro', ['tier' => $this->tierLabel]))
+            ->line(Lang::get('billing::notifications.subscription_activated.outro'));
     }
 
     /** @return array<string, mixed> */

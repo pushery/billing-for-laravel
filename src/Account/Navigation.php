@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Account;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Translation\Translator;
 use Illuminate\Routing\Exceptions\UrlGenerationException;
+use Illuminate\Routing\UrlGenerator;
+use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\URL;
 
 /**
  * The account-hub navigation renderer: it turns the flat, config-driven `billing.navigation` map into the
@@ -63,7 +67,7 @@ final readonly class Navigation
                 'key' => $item['key'],
                 'label' => $item['label'],
                 'url' => $url,
-                'active' => request()->routeIs($item['route']),
+                'active' => Request::routeIs($item['route']),
                 'order' => $item['order'],
             ];
         }
@@ -94,7 +98,7 @@ final readonly class Navigation
     public function activeTitle(): ?string
     {
         foreach ($this->items() as $item) {
-            if (Route::has($item['route']) && request()->routeIs($item['route'])) {
+            if (Route::has($item['route']) && Request::routeIs($item['route'])) {
                 return $this->translator->get($item['label']);
             }
         }
@@ -106,7 +110,7 @@ final readonly class Navigation
     private function safeUrl(string $route): ?string
     {
         try {
-            return route($route);
+            return Container::getInstance()->make(UrlGenerator::class)->route($route);
         } catch (UrlGenerationException) {
             return null;
         }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Webhooks;
 
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Event;
 use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Events\HasDeprecatedAlias;
@@ -51,13 +52,13 @@ final class WebhookEffectRegistry
         $deliveryId = $delivery->getKey();
 
         foreach ($this->for($event) as $effectClass) {
-            HandleWebhookEffect::dispatch(
+            Bus::dispatch(new HandleWebhookEffect(
                 $effectClass,
                 $event,
                 $delivery->provider,
                 $delivery->event_id,
                 is_int($deliveryId) ? $deliveryId : null,
-            );
+            ));
         }
 
         // Fire through the framework too, so a host app can listen or fake. Resolved here, not injected,

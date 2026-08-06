@@ -15,6 +15,13 @@ use Pushery\Billing\ValueObjects\Money;
  * until the cycle is priced by the resolver named in `preprocessor`). Reading `amount_minor` on a
  * metered line before it is priced yields null, which is a real state and not a missing value.
  *
+ * ## Who writes this row
+ *
+ * The CONSUMING APPLICATION. `plan_key` and `preprocessor` name things in their catalog -- which meter a
+ * line is billed on, and which resolver prices it -- so the package reads them and refuses a line it cannot
+ * resolve (`CycleAmountUnresolvable`) rather than guessing an amount. Neither having a writer in `src/` is
+ * the correct state.
+ *
  * @property int $billing_subscription_id
  * @property string $plan_key
  * @property ?string $price_ref
@@ -32,6 +39,19 @@ final class SubscriptionItem extends Model
     protected $fillable = [
         'billing_subscription_id', 'plan_key', 'price_ref', 'quantity', 'metered',
         'amount_minor', 'currency', 'preprocessor',
+    ];
+
+    /**
+     * The same defaults the schema carries, so a row that was just created reads like one that was read back.
+     *
+     * Without them a model created without these columns holds null for each, while the row the database
+     * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
+     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     *
+     * @var array<string, bool>
+     */
+    protected $attributes = [
+        'metered' => false,
     ];
 
     /** @var array<string,string> */

@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\View as ViewFacade;
 use Livewire\Component;
 use Override;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Enums\ToastLevel;
 use Pushery\Billing\Events\Concerns\BroadcastsToOwner;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * The headless realtime bridge: mounted ONCE in the account-hub shell, it listens on the owner's private
@@ -29,7 +32,9 @@ final class AccountRealtime extends Component
     public function mount(): void
     {
         // Self-gated: the bridge only ever runs for a real, signed-in owner.
-        abort_unless(Auth::user() instanceof Model, 403);
+        if (! (Auth::user() instanceof Model)) {
+            throw new HttpException(403);
+        }
     }
 
     /** @return array<string, string> */
@@ -51,24 +56,38 @@ final class AccountRealtime extends Component
             return;
         }
 
+        // The two key names differ on purpose, and this line is the translation between them.
+        // Inbound, over our own broadcast channel, the key is `level` — that is this package's
+        // event contract ({@see AccountToastNotified::broadcastWith()}). Outbound, the reader is
+        // WireKit's toast region, and it reads `detail.variant`; `level` is a key it looks at
+        // nowhere. Sending `level` therefore did not fail — it fell through to the default
+        // variant, so every severity rendered as `info` and a `danger` toast was announced on
+        // the polite live region instead of the assertive one. Silently, in both channels.
         $this->dispatch(
             'wirekit-toast',
             message: $message,
-            level: ToastLevel::fromWire($payload['level'] ?? null)->value,
+            variant: ToastLevel::fromWire($payload['level'] ?? null)->value,
         );
     }
 
     public function render(): View
     {
-        return view('billing::livewire.account-realtime');
+        return ViewFacade::make('billing::livewire.account-realtime');
     }
 
     private function owner(): Model
     {
+        // Fail-closed, and not redundant with mount()'s identical check. Its caller is
+        // getListeners(), which Livewire runs on every HYDRATION — and hydration does not re-run
+        // mount(). So a session that ends between two requests reaches this method with the mount
+        // gate long past. Answering then would mean deriving a PRIVATE channel name from a guess,
+        // and somebody else may be listening on it.
         $actor = Auth::user();
 
-        abort_unless($actor instanceof Model, 403);
+        if (! ($actor instanceof Model)) {
+            throw new HttpException(403);
+        }
 
-        return app(BillingEntityResolver::class)->ownerFor($actor);
+        return Container::getInstance()->make(BillingEntityResolver::class)->ownerFor($actor);
     }
 }
