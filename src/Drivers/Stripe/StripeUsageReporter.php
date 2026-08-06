@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers\Stripe;
 use Carbon\CarbonInterface;
 use Pushery\Billing\Contracts\UsageReporter;
 use Stripe\Exception\InvalidRequestException;
+use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
 
 /**
@@ -51,6 +52,11 @@ final readonly class StripeUsageReporter implements UsageReporter
                     'value' => (string) $quantity,
                 ],
             ]);
+        } catch (RateLimitException $e) {
+            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // subclass of InvalidRequestException. It must reach UsageFlusher, which retries the
+            // rollup -- swallowed, this usage is never billed and nothing says so.
+            throw $e;
         } catch (InvalidRequestException $e) {
             // Stripe does not dedup a replayed identifier silently — it REJECTS it with
             // `duplicate_meter_event`. That rejection is the success case: it means Stripe already holds
@@ -93,12 +99,28 @@ final readonly class StripeUsageReporter implements UsageReporter
         }
 
         // Stripe requires the window to align to minute boundaries and rejects a second-precise timestamp
-        // outright. A subscription cycle's start/end are second-precise, so the window is floored and ceiled
-        // to the enclosing minutes — it can only widen by under a minute, which cannot pull in usage from an
-        // adjacent cycle.
+        // outright. A subscription cycle's start and end are second-precise, so one of them has to move --
+        // and BOTH ENDS MOVE THE SAME WAY, which is the part that used to be wrong.
+        //
+        // It floored the start and ceiled the end, justified as "it can only widen by under a minute, which
+        // cannot pull in usage from an adjacent cycle". That is an argument about the SIZE of the widening,
+        // not about where it reaches. Cycles touch -- `current_period_end` IS the next `current_period_start`
+        // -- so the widening reaches into the neighbor by definition. Stripe's start_time is inclusive and
+        // its end_time exclusive, so consecutive windows overlapped by exactly the minute containing the
+        // boundary, and every meter event in it was aggregated into both. The reconcile compares each against
+        // a ledger that splits the cycles cleanly, so it reported a drift that was never there.
+        //
+        // Ceiling both ends makes the windows tile: this cycle's end_time is the next one's start_time,
+        // exactly. One minute of boundary usage is still attributed to the neighboring cycle -- that is
+        // unavoidable under a minute-aligned API and a second-precise anchor -- but it is attributed ONCE,
+        // and always to the same side.
+        //
+        // Ceiling rather than flooring, and the direction is the argument: a floored start would reach
+        // BACKWARDS, into a period that may already be closed and reconciled and whose number somebody has
+        // filed. Reaching forward lands in a period that is still open.
         $summaries = $this->stripe->billing->meters->allEventSummaries($meterId, [
             'customer' => $customerReference,
-            'start_time' => intdiv($from->getTimestamp(), 60) * 60,
+            'start_time' => intdiv($from->getTimestamp() + 59, 60) * 60,
             'end_time' => intdiv($to->getTimestamp() + 59, 60) * 60,
         ]);
 

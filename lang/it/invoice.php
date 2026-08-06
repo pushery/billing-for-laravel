@@ -21,5 +21,8 @@ return [
     'vat' => 'IVA',
     'vat_reverse_charge' => 'IVA (inversione contabile)',
     'total' => 'Totale',
+    'total_including_vat' => 'Totale IVA :rate inclusa',
     'reverse_charge_note' => 'Inversione contabile: l’imposta è dovuta dal destinatario.',
+    'margin_scheme_note' => 'Regime del margine — beni usati',
+    'self_billed_note' => 'Autofattura: emessa dal destinatario per conto del fornitore, previo accordo.',
 ];

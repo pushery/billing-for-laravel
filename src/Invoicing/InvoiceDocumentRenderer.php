@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Invoicing;
 
-use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\View\Factory as ViewFactory;
+use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Contracts\PdfRenderer;
+use Pushery\Billing\Contracts\SellerPartyResolver;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -23,9 +24,18 @@ final readonly class InvoiceDocumentRenderer
 {
     public function __construct(
         private ViewFactory $views,
-        private Repository $config,
         private PdfRenderer $pdf,
+        private MarginDocumentGuard $margins,
+        private SellerPartyResolver $sellers,
     ) {}
+
+    /** The prescribed wording, from the jurisdiction, or nothing where none supplies any. */
+    private function marginNote(): ?string
+    {
+        $key = $this->margins->wordingKey();
+
+        return $key === null ? null : (string) Lang::get($key);
+    }
 
     /** The invoice as a complete HTML document — deterministic, browser-free, and testable as a snapshot. */
     public function html(InvoiceRecord $invoice): string
@@ -54,9 +64,31 @@ final readonly class InvoiceDocumentRenderer
         $subtotal = $invoice->subtotal_minor ?? ($invoice->total_minor - ($invoice->tax_minor ?? 0));
         $tax = $invoice->tax_minor ?? 0;
 
+        // A short receipt states the gross with its rate in ONE sum and names nobody. Splitting it into net
+        // and tax, or printing an empty recipient block, would make a document that is deliberately
+        // anonymous look like an incomplete invoice — and a reader would go looking for the missing name.
+        $itemised = $invoice->receipt_tier?->itemisesTax() ?? true;
+
+        // A margin-taxed document states NO tax and no rate — stating either is treated as a separate
+        // statement of tax, which the seller then owes on top of what they already owe on the margin. The
+        // prescribed wording is what makes the document legible as margin-taxed; without it the same page
+        // reads as an ordinary sale that forgot its tax, and a buyer may ask for a figure that must never
+        // be given.
+        $margin = $invoice->taxation_basis?->taxesMarginOnly() ?? false;
+
+        if ($margin) {
+            $this->margins->assertNoStatedTax($invoice);
+            $itemised = false;
+        }
+
         return [
-            'seller' => $this->companyArray('billing.company'),
-            'buyer' => is_array($invoice->buyer) ? $invoice->buyer : [],
+            'marginScheme' => $margin,
+            'marginNote' => $margin ? $this->marginNote() : null,
+            'seller' => $this->seller($invoice)->toArray(),
+            'buyer' => $itemised && is_array($invoice->buyer) ? $invoice->buyer : [],
+            'itemisesTax' => $itemised,
+            // No rate at all on a margin document: naming the rate is itself a statement of tax.
+            'taxRate' => $margin ? null : $this->rateLabel($invoice),
             'number' => $invoice->number ?? (string) $invoice->id,
             'issuedAt' => $invoice->issued_at ?? $invoice->created_at,
             'isCorrection' => $invoice->isCorrection(),
@@ -67,6 +99,14 @@ final readonly class InvoiceDocumentRenderer
             'tax' => Money::of($tax, $currency)->format(),
             'total' => Money::of($invoice->total_minor, $currency)->format(),
         ];
+    }
+
+    /** The single rate a short receipt states beside its gross, or null where the document itemises. */
+    private function rateLabel(InvoiceRecord $invoice): ?string
+    {
+        $bps = $invoice->tax_rate_bps;
+
+        return $bps === null ? null : rtrim(rtrim(number_format($bps / 100, 2, '.', ''), '0'), '.').'%';
     }
 
     /**
@@ -96,10 +136,29 @@ final readonly class InvoiceDocumentRenderer
     }
 
     /** @return array<array-key, mixed> */
-    private function companyArray(string $key): array
+    /**
+     * The seller named on this document, resolved the way the XML writers resolve it.
+     *
+     * This used to be `config('billing.company')` outright, and the two halves of a hybrid ZUGFeRD document
+     * therefore disagreed: `ZugferdPdfInvoice` embeds `ZugferdCiiInvoice`'s XML -- which reads the frozen
+     * per-document `seller` snapshot -- into the PDF this class renders, which named the platform whatever
+     * the row said. On a self-billed settlement the visible page named the platform while the machine-readable
+     * half named the creator, in one file, about the one fact the document exists to state.
+     *
+     * A hybrid format exists so that a person and a machine read the SAME invoice. Two answers to "who
+     * supplied this" is not an imprecision; which one counts depends on which software opens the file.
+     *
+     * Unchanged for a document with no snapshot: the resolver's default is the platform company, so every
+     * single-seller invoice renders byte-for-byte what it did before.
+     */
+    private function seller(InvoiceRecord $invoice): Party
     {
-        $value = $this->config->get($key);
+        $snapshot = $invoice->getAttribute('seller');
 
-        return is_array($value) ? $value : [];
+        if (is_array($snapshot)) {
+            return Party::fromArray($snapshot);
+        }
+
+        return $this->sellers->sellerFor($invoice);
     }
 }

@@ -28,6 +28,14 @@ return [
         'outro' => 'Tu conserves l’accès jusqu’à la fin de la période payée, indiquée ci-dessous.',
     ],
 
+    'tax_status_changed' => [
+        'subject' => 'Ton statut fiscal a changé',
+        'intro' => 'Ton statut fiscal est passé de :from à :to. Nous l\'avons établi à partir de nos propres registres — tu ne l\'as pas demandé.',
+        'effective' => 'Cela s\'applique à partir du :date.',
+        'consequence' => 'À partir de cette date, le montant qui te parvient est plus élevé, car la taxe voyage avec lui. Ce qui te reste ne change pas.',
+        'outro' => 'Si cela ne correspond pas à ta situation, dis-le-nous — nous pouvons le corriger.',
+    ],
+
     'suspension_warning' => [
         'subject' => 'Action requise : ton accès va être suspendu',
         'intro' => 'Ton compte présente un solde impayé et ton accès sera bientôt suspendu.',

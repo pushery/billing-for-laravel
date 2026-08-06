@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers\Stripe;
 use Pushery\Billing\Contracts\MeterInspector;
 use Pushery\Billing\ValueObjects\MeterPriceFacts;
 use Stripe\Exception\InvalidRequestException;
+use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
 
 /**
@@ -43,6 +44,10 @@ final class StripeMeterInspector implements MeterInspector
             // `tiers` is not returned unless asked for — without the expand the graduated allowance is
             // invisible and the check would silently pass a price it never actually read.
             $price = $this->stripe->prices->retrieve($providerPriceId, ['expand' => ['tiers']]);
+        } catch (RateLimitException $e) {
+            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
+            throw $e;
         } catch (InvalidRequestException) {
             return null; // no such price at the provider
         }

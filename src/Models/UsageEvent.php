@@ -42,6 +42,22 @@ final class UsageEvent extends Model
         'last_error', 'rolled_up_into', 'is_rollup',
     ];
 
+    /**
+     * The same defaults the schema carries, so a row that was just created reads like one that was read back.
+     *
+     * Without them a model created without these columns holds null for each, while the row the database
+     * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
+     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     *
+     * @var array<string, bool|int|string>
+     */
+    protected $attributes = [
+        'state' => 'pending',
+        'attempts' => 0,
+        'is_rollup' => false,
+        'prepaid_units' => 0,
+    ];
+
     /** @var array<string, string> */
     protected $casts = [
         'quantity' => 'integer',

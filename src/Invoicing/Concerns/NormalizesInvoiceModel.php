@@ -4,7 +4,11 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Invoicing\Concerns;
 
-use Illuminate\Contracts\Config\Repository;
+use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Contracts\SellerPartyResolver;
+use Pushery\Billing\Enums\InvoiceCorrectionKind;
+use Pushery\Billing\Enums\SettlementDocumentType;
+use Pushery\Billing\Exceptions\InvalidInvoiceCorrection;
 use Pushery\Billing\Invoicing\Line;
 use Pushery\Billing\Invoicing\Party;
 use Pushery\Billing\Models\InvoiceRecord;
@@ -15,16 +19,30 @@ use Pushery\Billing\Models\InvoiceRecord;
  * the SAME semantic model, so this normalization lives once — a tax band computed one way for XRechnung
  * and another for ZUGFeRD would be a silent conformance drift between the two outputs of one invoice.
  *
- * The consuming class must expose a `Repository $config` property (the seller is the platform,
- * config('billing.company')).
+ * The consuming class must expose a {@see SellerPartyResolver} through `sellerPartyResolver()`; its default
+ * names the platform, so a single-seller document is unchanged.
  */
 trait NormalizesInvoiceModel
 {
-    abstract private function config(): Repository;
+    abstract private function sellerPartyResolver(): SellerPartyResolver;
 
-    private function seller(): Party
+    /**
+     * The seller named on this document.
+     *
+     * Read from the frozen per-document snapshot when there is one, so a document keeps naming whoever it
+     * named when it was issued even after the config or the merchant changes. A row written before the
+     * snapshot column existed has none and falls back to the resolver — whose default is the platform
+     * company, byte-identical to what these writers produced before the seller was resolvable.
+     */
+    private function seller(InvoiceRecord $invoice): Party
     {
-        return Party::fromArray($this->companyArray('billing.company'));
+        $snapshot = $invoice->getAttribute('seller');
+
+        if (is_array($snapshot)) {
+            return Party::fromArray($snapshot);
+        }
+
+        return $this->sellerPartyResolver()->sellerFor($invoice);
     }
 
     private function buyer(InvoiceRecord $invoice): Party
@@ -34,12 +52,41 @@ trait NormalizesInvoiceModel
         return Party::fromArray(is_array($buyer) ? $buyer : []);
     }
 
-    /** @return array<array-key, mixed> */
-    private function companyArray(string $key): array
+    /**
+     * The EN 16931 document type code (BT-3), shared by both writers so the two syntaxes never disagree.
+     *
+     * Four codes, selected by the document's ROLE rather than by a boolean. A cancellation is 381 and an
+     * amendment is 384 — two different documents a tax authority reads apart by this code alone, which is
+     * exactly why one boolean could never carry both. A self-billed invoice is 389, a document treated
+     * differently from the ordinary 380. Correction wins first: correcting a self-billed invoice produces a
+     * correction, not another self-bill. In every case the code, not a negative amount, carries the
+     * correcting meaning, so the amounts stay positive.
+     *
+     * A row whose kind was never recorded is a cancellation, which is what every correction written before
+     * the two roles existed is — so the code such a row renders is the code it always rendered.
+     *
+     * An amendment MUST name what it amends (BR-55), and the check sits here rather than only on the model
+     * that creates one: a row that reached the database without a reference — an older row, an import, a
+     * direct write — would otherwise be serialized into a document that is invalid the moment it is read,
+     * and the reader is a tax authority. Refusing to write it is the only honest outcome.
+     */
+    private function typeCode(InvoiceRecord $invoice): string
     {
-        $value = $this->config()->get($key);
+        if (! $invoice->isCorrection()) {
+            return $invoice->settlement_document_type === SettlementDocumentType::SelfBilledInvoice ? '389' : '380';
+        }
 
-        return is_array($value) ? $value : [];
+        if ($invoice->correction_kind !== InvoiceCorrectionKind::Amendment) {
+            return '381';
+        }
+
+        $origin = $invoice->credited_invoice_number;
+
+        if ($origin === null || $origin === '') {
+            throw InvalidInvoiceCorrection::amendmentWithoutReference();
+        }
+
+        return '384';
     }
 
     /**
@@ -102,18 +149,63 @@ trait NormalizesInvoiceModel
      * reverse charge is a SINGLE AE @ 0% band over the whole taxable base — lines at distinct NOTIONAL rates
      * must not emit multiple zero-rated category groups, which is a non-conformant EN 16931 breakdown.
      *
+     * A one-stop-shop supply is banded at the rate the SALE was declared under, read from the invoice's own
+     * frozen column rather than from the lines. The lines carry a rate derived at pricing time from a product
+     * that can be reclassified afterwards; the column is what the return was filed on. Re-rendering a
+     * document from the lines could therefore state a rate the platform never declared for that sale, into a
+     * country it never declared it to — and the document would still add up.
+     *
      * @param  list<Line>  $lines
      * @return list<array{rate: float, taxable: int, tax: int}>
      */
-    private function taxBandsFor(array $lines, bool $reverseCharge): array
+    private function taxBandsFor(array $lines, bool $reverseCharge, ?InvoiceRecord $invoice = null): array
     {
         if (! $reverseCharge) {
-            return $this->taxBands($lines);
+            $declared = $this->declaredOssRate($invoice);
+
+            return $declared === null ? $this->taxBands($lines) : $this->singleBand($lines, $declared);
         }
 
+        return $this->singleBand($lines, 0.0);
+    }
+
+    /**
+     * The rate a one-stop-shop supply was declared at, or null when the invoice is not one.
+     *
+     * Both the flag and the rate are required: a document flagged as such but carrying no rate cannot say
+     * what it was declared at, and falling back to the lines there would silently produce the very
+     * re-derivation this exists to prevent.
+     */
+    private function declaredOssRate(?InvoiceRecord $invoice): ?float
+    {
+        if (! $invoice instanceof InvoiceRecord || ! (bool) $invoice->oss) {
+            return null;
+        }
+
+        $rate = $invoice->oss_rate;
+
+        return is_numeric($rate) ? (float) $rate : null;
+    }
+
+    /**
+     * One band over the whole taxable base at a single rate.
+     *
+     * The tax is the DIFFERENCE from the invoice's own total elsewhere; here it is the rate applied to the
+     * base, which is what a breakdown states. An empty base emits no band at all — a zero-value band is not
+     * a statement EN 16931 has a shape for.
+     *
+     * @param  list<Line>  $lines
+     * @return list<array{rate: float, taxable: int, tax: int}>
+     */
+    private function singleBand(array $lines, float $rate): array
+    {
         $taxable = $this->sum($lines, fn (Line $line): int => $line->netMinor);
 
-        return $taxable === 0 ? [] : [['rate' => 0.0, 'taxable' => $taxable, 'tax' => 0]];
+        if ($taxable === 0) {
+            return [];
+        }
+
+        return [['rate' => $rate, 'taxable' => $taxable, 'tax' => (int) round($taxable * $rate / 100)]];
     }
 
     /**
@@ -166,5 +258,20 @@ trait NormalizesInvoiceModel
     private function rate(float $rate): string
     {
         return rtrim(rtrim(number_format($rate, 2, '.', ''), '0'), '.');
+    }
+
+    /**
+     * The note a self-billed document has to carry, or null where it is not one.
+     *
+     * A document the buyer wrote about the seller's own supply is only a valid invoice if it SAYS so. Read
+     * without the statement it looks like an ordinary invoice issued by the wrong party, and the recipient
+     * has no way to tell that it was written under an arrangement they agreed to. The wording is a
+     * jurisdiction's, so it comes from the translations rather than from here.
+     */
+    private function selfBillingNote(InvoiceRecord $invoice): ?string
+    {
+        return $this->typeCode($invoice) === '389'
+            ? (string) Lang::get('billing::invoice.self_billed_note')
+            : null;
     }
 }

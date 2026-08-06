@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -27,10 +28,10 @@ final class PaymentFailedNotification extends BillingNotification
     public function toMail(object $notifiable): MailMessage
     {
         return new MailMessage()
-            ->subject(__('billing::notifications.payment_failed.subject'))
-            ->line(__('billing::notifications.payment_failed.intro'))
+            ->subject(Lang::get('billing::notifications.payment_failed.subject'))
+            ->line(Lang::get('billing::notifications.payment_failed.intro'))
             ->line($this->amount->format().' · '.$this->invoiceReference)
-            ->line(__('billing::notifications.payment_failed.outro'));
+            ->line(Lang::get('billing::notifications.payment_failed.outro'));
     }
 
     /** @return array<string, string> */

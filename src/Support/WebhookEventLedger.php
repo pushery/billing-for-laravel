@@ -14,8 +14,10 @@ use Pushery\Billing\Models\BillingWebhookEvent;
  * effect REPLAYABLE: when one fails, the package can re-drive it from what the provider already sent,
  * instead of hoping the provider will redeliver (which it stops doing after its own retry window).
  *
- * Recording is idempotent on (provider, event_id): a redelivery of the same event returns the existing
- * row rather than a second one.
+ * Recording is idempotent on (provider, ACCOUNT REFERENCE, event_id) — all three, which is what
+ * `record()` keys its `firstOrCreate` on: a redelivery of the same event from the same account returns the
+ * existing row rather than a second one. The account is empty for the platform's own deliveries, so a
+ * single-seller install behaves exactly as if the key were the pair it used to be.
  */
 final class WebhookEventLedger
 {
@@ -23,11 +25,17 @@ final class WebhookEventLedger
      * Record a verified delivery (or return the row a redelivery already created).
      *
      * @param  array<array-key, mixed>  $payload
+     * @param  string  $accountReference  the merchant account the event came from; empty for the platform's own
      */
-    public function record(string $provider, string $eventId, string $type, array $payload): BillingWebhookEvent
-    {
+    public function record(
+        string $provider,
+        string $eventId,
+        string $type,
+        array $payload,
+        string $accountReference = '',
+    ): BillingWebhookEvent {
         $delivery = BillingWebhookEvent::query()->firstOrCreate(
-            ['provider' => $provider, 'event_id' => $eventId],
+            ['provider' => $provider, 'account_reference' => $accountReference, 'event_id' => $eventId],
             ['type' => $type, 'payload' => $payload, 'status' => WebhookEventState::Pending],
         );
 

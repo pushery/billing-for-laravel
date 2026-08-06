@@ -8,16 +8,30 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Pushery\Billing\Catalogs\MeterCatalog;
+use Pushery\Billing\Contracts\CanReceiveMoney;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\DiscountResolver;
+use Pushery\Billing\Contracts\MerchantAccountDirectory;
+use Pushery\Billing\Contracts\MerchantCatalog;
+use Pushery\Billing\Contracts\MerchantResolver;
 use Pushery\Billing\Contracts\PlanCatalog;
+use Pushery\Billing\Contracts\PlatformFeeResolver;
+use Pushery\Billing\Contracts\SellerOfRecordResolver;
+use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Exceptions\EligibilityDenied;
+use Pushery\Billing\Exceptions\MarketplaceUnsupported;
+use Pushery\Billing\Exceptions\ReceiveEligibilityDenied;
+use Pushery\Billing\Marketplace\ChargeRoutingConsistencyGuard;
+use Pushery\Billing\Marketplace\ConfiguredChargeType;
 use Pushery\Billing\Support\CheckoutUrls;
+use Pushery\Billing\Tax\TaxCalculatorFactory;
 use Pushery\Billing\Trials\TrialPolicy;
 use Pushery\Billing\Trials\Trials;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\Discount;
+use Pushery\Billing\ValueObjects\MerchantAccountReference;
+use Pushery\Billing\ValueObjects\MerchantScope;
 use Stripe\StripeClient;
 
 /**
@@ -46,6 +60,13 @@ final readonly class StripeCheckout implements Checkout
         private CheckoutUrls $urls,
         private Repository $config,
         private CanTransactMoney $eligibility,
+        private MerchantResolver $merchants,
+        private ChargeRoutingConsistencyGuard $routingGuard,
+        private SellerOfRecordResolver $postures,
+        private MerchantCatalog $catalogs,
+        private MerchantAccountDirectory $accounts,
+        private PlatformFeeResolver $fees,
+        private CanReceiveMoney $receiving,
     ) {}
 
     public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null): ClientIntent
@@ -56,7 +77,11 @@ final readonly class StripeCheckout implements Checkout
             throw EligibilityDenied::forMoneyMovement();
         }
 
-        $price = $this->plans->providerPriceFor($tierKey);
+        // The merchant this sale routes to, or null for a platform sale. Resolved only when the marketplace
+        // is on, so a single-seller install never consults the resolver and everything below is unchanged.
+        $merchant = $this->routedMerchant();
+
+        $price = $this->priceFor($tierKey, $merchant);
 
         if ($price === null) {
             throw new InvalidArgumentException("Tier '{$tierKey}' has no provider price to subscribe to.");
@@ -68,7 +93,7 @@ final readonly class StripeCheckout implements Checkout
         // trial/tax/promo/discount groups, a variable line-item list). The payload IS a valid
         // subscription-mode Checkout Session request; its shape is asserted field-by-field in StripeCheckoutTest.
         // @phpstan-ignore argument.type
-        $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode));
+        $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant));
 
         $url = $session->url ?? null;
 
@@ -85,12 +110,12 @@ final readonly class StripeCheckout implements Checkout
      *
      * @return array<string, mixed>
      */
-    private function payload(Model $billable, string $tierKey, string $price, string $customerId, ?string $couponCode): array
+    private function payload(Model $billable, string $tierKey, string $price, string $customerId, ?string $couponCode, ?Model $merchant): array
     {
         $payload = [
             'mode' => 'subscription',
             'customer' => $customerId,
-            'line_items' => $this->lineItems($tierKey, $price),
+            'line_items' => $this->lineItems($tierKey, $price, $merchant),
             'billing_address_collection' => 'required',
             'success_url' => $this->urls->successUrl(),
             'cancel_url' => $this->urls->cancelUrl(),
@@ -129,6 +154,16 @@ final readonly class StripeCheckout implements Checkout
             $payload['customer_update'] = ['address' => 'auto'];
         }
 
+        // A routed sale MERGES its destination and fee into subscription_data rather than assigning it: the
+        // trial block above may already have populated it, and overwriting would silently drop the trial. A
+        // platform sale adds nothing and its payload is byte-for-byte the single-seller one.
+        if ($merchant instanceof Model) {
+            $payload['subscription_data'] = [
+                ...($payload['subscription_data'] ?? []),
+                ...$this->routing($merchant),
+            ];
+        }
+
         return $payload;
     }
 
@@ -138,9 +173,17 @@ final readonly class StripeCheckout implements Checkout
      *
      * @return list<array<string, mixed>>
      */
-    private function lineItems(string $tierKey, string $price): array
+    private function lineItems(string $tierKey, string $price, ?Model $merchant): array
     {
         $items = [['price' => $price, 'quantity' => 1]];
+
+        // A routed sale carries only the merchant's base tier price. Metered components are platform-catalog
+        // concepts — MerchantCatalog scopes a merchant's tiers and plans, not their meters — so adding them
+        // to a creator's subscription would bill the platform's meters against the creator's sale. Merchant-
+        // scoped metering is a separate capability; until it exists a routed tier is flat.
+        if ($merchant instanceof Model) {
+            return $items;
+        }
 
         foreach ($this->meters->forTier($tierKey) as $component) {
             if ($component->isBillable()) {
@@ -176,9 +219,137 @@ final readonly class StripeCheckout implements Checkout
         return is_string($stripeCoupon) && $stripeCoupon !== '' ? $stripeCoupon : null;
     }
 
-    /** Whether the active tax mode defers to the provider (Stripe Tax), which drives automatic_tax. */
+    /**
+     * The merchant this checkout routes to, or null for a platform sale. Consulted only when the marketplace
+     * is switched on — a single-seller install never resolves a merchant, so the resolver is never called and
+     * the payload stays byte-for-byte the single-seller one.
+     */
+    private function routedMerchant(): ?Model
+    {
+        if ($this->config->get('billing.marketplace.enabled', false) !== true) {
+            return null;
+        }
+
+        return $this->merchants->current();
+    }
+
+    /**
+     * The tier's provider price — from the MERCHANT's own catalog for a routed sale, the platform plan
+     * catalog otherwise. The anti-price-injection guarantee holds in both: a tier KEY resolves only to a
+     * price the relevant catalog declares, never one the client submitted.
+     */
+    private function priceFor(string $tierKey, ?Model $merchant): ?string
+    {
+        if (! $merchant instanceof Model) {
+            return $this->plans->providerPriceFor($tierKey);
+        }
+
+        return $this->catalogs->planCatalog(MerchantScope::forMerchant($merchant))->providerPriceFor($tierKey);
+    }
+
+    /**
+     * The destination and fee that route a subscription to a merchant, as a subscription_data fragment.
+     *
+     * Refused before any provider call when the merchant cannot receive — unknown counts as no, because the
+     * capability is reported asynchronously — or has no account on file to route to. The fee is expressed as
+     * application_fee_percent, a PERCENTAGE of each recurring invoice; a flat per-transaction component has no
+     * place in a percentage, and dropping it silently would undercharge the agreed commission on every
+     * renewal, so a flat component is refused loudly instead of quietly discarded.
+     *
+     * ## The basis on this lane is the GROSS, and the configured rate is documented as a net rate
+     *
+     * That difference is stated here because it cannot be fixed here. Stripe defines the field as a
+     * percentage of the subscription's invoice TOTAL, and a total includes the buyer's tax — so a net rate
+     * is not expressible through it. Converting one (`gross_pct = bps / (1 + t)`) fails at the next step:
+     * `t` differs per buyer, while a subscription carries a single percentage for every invoice and every
+     * buyer. No one number is right for 19%, 20% and a reverse-charge buyer at once, and the plausible-looking
+     * one is the worst outcome — right for whoever happens to match, wrong for everyone else, and drifting
+     * further with every market an adopter adds.
+     *
+     * So on a 119.00 invoice at 19% with a 10% rate this lane takes 11.90, where the routed money path takes
+     * 10.00. Which answer the package should settle on is still open; until it is settled, the lane says what
+     * it does rather than inheriting a promise it cannot keep. Silence is what made the same divergence
+     * expensive once already.
+     *
+     * @return array{application_fee_percent: float, transfer_data: array{destination: string}}
+     */
+    private function routing(Model $merchant): array
+    {
+        $chargeType = $this->chargeType();
+
+        // A hosted session cannot serve a separate transfer, exactly as on the one-time lane: the platform
+        // takes the whole payment and the merchant's share moves in a SECOND call, which can only be made
+        // once the payment has succeeded — a webhook away, long after this method has returned.
+        //
+        // This refusal is what closes the seam below. The guard checks the CONFIGURED charge type, but the
+        // payload this method assembles is unconditionally a DESTINATION charge (`transfer_data.destination`).
+        // On the shipped defaults those two disagree: separate_transfer is permitted for the deemed-supplier
+        // posture and passes the guard, while the destination charge it then emits is the one pairing the
+        // table forbids for that posture. A guard on the configured half cannot see a broken seam, and the
+        // money moves the wrong way in silence — straight to the merchant, while the documents about to be
+        // issued name the platform as seller. Refusing here makes the configured type and the emitted one
+        // the same statement.
+        if ($chargeType === ChargeType::SeparateTransfer) {
+            throw MarketplaceUnsupported::separateTransferNeedsRoutedPayment();
+        }
+
+        // The charge type and the seller-of-record posture are independent axes that must agree, and this
+        // lane used to assemble the payment without ever asking. The check happens BEFORE anything is
+        // assembled, which is the only point at which refusing is still free.
+        $this->routingGuard->assertCompatible($chargeType, $this->postures->resolveFor($this->electronic()));
+
+        if (! $this->receiving->check($merchant)) {
+            throw ReceiveEligibilityDenied::forMerchant();
+        }
+
+        $account = $this->accounts->accountFor($merchant);
+
+        if (! $account instanceof MerchantAccountReference) {
+            throw ReceiveEligibilityDenied::forMerchant();
+        }
+
+        $fee = $this->fees->feeFor($merchant);
+
+        if ($fee->flatMinor !== 0) {
+            throw new InvalidArgumentException(
+                'A routed subscription fee must be rate-only: application_fee_percent cannot express a flat fee component.'
+            );
+        }
+
+        return [
+            'application_fee_percent' => $fee->bps / 100,
+            'transfer_data' => ['destination' => $account->accountId],
+        ];
+    }
+
+    /** The configured charge type — one reader, shared with the resolver and the other lane. */
+    private function chargeType(): ChargeType
+    {
+        return new ConfiguredChargeType($this->config)->get();
+    }
+
+    /** Whether this installation's supplies are electronic, which is what decides the posture. */
+    private function electronic(): bool
+    {
+        return (bool) $this->config->get('billing.marketplace.seller_of_record.supplies_are_electronic', true);
+    }
+
+    /**
+     * Whether the active tax mode defers to the provider (Stripe Tax), which drives automatic_tax.
+     *
+     * Read from the CLASSIFICATION, never from a literal. This method used to compare against 'provider'
+     * alone and so missed its alias — a valid, documented mode under which the package computes nothing
+     * (correctly, the provider is meant to) while the provider was never asked to. Every invoice went out
+     * untaxed, and nothing raised anything: the mode is valid, so the boot guard passes; the local
+     * calculator returning zero is the intended behavior for a provider mode; and the flag that would have
+     * told the provider to compute sits inside this very check.
+     *
+     * The classification exists precisely so the two are treated alike. A second literal comparison here
+     * was a copy of the list that could drift from it — and drift silently, because both halves look right
+     * in isolation.
+     */
     private function providerTax(): bool
     {
-        return $this->config->get('billing.tax') === 'provider';
+        return in_array($this->config->get('billing.tax'), TaxCalculatorFactory::PROVIDER_MODES, true);
     }
 }

@@ -42,6 +42,19 @@ final class Order extends Model
         'status', 'period_start', 'period_end', 'processed_at', 'payment_reference',
     ];
 
+    /**
+     * The same defaults the schema carries, so a row that was just created reads like one that was read back.
+     *
+     * Without them a model created without these columns holds null for each, while the row the database
+     * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
+     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     *
+     * @var array<string, string>
+     */
+    protected $attributes = [
+        'status' => 'open',
+    ];
+
     /** @var array<string,string> */
     protected $casts = [
         'subscription_id' => 'integer',

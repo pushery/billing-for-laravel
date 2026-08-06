@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Pushery\Billing\Webhooks;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
-use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -38,7 +38,6 @@ use Throwable;
  */
 final class HandleWebhookEffect implements ShouldQueueAfterCommit
 {
-    use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
 
@@ -64,7 +63,7 @@ final class HandleWebhookEffect implements ShouldQueueAfterCommit
 
     public function handle(WebhookEffectLedger $runs): void
     {
-        $effect = app($this->effectClass);
+        $effect = Container::getInstance()->make($this->effectClass);
 
         if (! is_callable($effect)) {
             throw new RuntimeException("Webhook effect [{$this->effectClass}] is not invokable.");

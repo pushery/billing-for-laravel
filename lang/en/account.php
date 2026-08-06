@@ -223,4 +223,10 @@ return [
         ],
     ],
 
+    // Broadcast toasts. One line each: a toast is read in passing, beside the mail that says it properly.
+    'toast' => [
+        'payment_failed' => 'Your payment could not be processed. Please update your payment details.',
+        'subscription_activated' => 'Your subscription is active — everything it includes is switched on.',
+    ],
+
 ];

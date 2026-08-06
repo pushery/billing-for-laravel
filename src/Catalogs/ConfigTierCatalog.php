@@ -65,6 +65,21 @@ final readonly class ConfigTierCatalog implements TierCatalog
         return is_int($amount) && is_string($currency) ? Money::of($amount, $currency) : null;
     }
 
+    public function level(string $key): int
+    {
+        $tiers = $this->config->get('billing.tiers');
+
+        if (! is_array($tiers)) {
+            return -1;
+        }
+
+        $index = array_search($key, array_map(strval(...), array_keys($tiers)), true);
+
+        // An unknown key ranks below every real tier, so a cumulative "at least" comparison against it can
+        // never pass by accident.
+        return $index === false ? -1 : $index;
+    }
+
     private function identity(string $key): TierIdentity
     {
         return new TierIdentity(
@@ -72,6 +87,7 @@ final readonly class ConfigTierCatalog implements TierCatalog
             label: $this->label($key),
             byok: $this->isByok($key),
             untouchable: $this->isUntouchable($key),
+            level: $this->level($key),
         );
     }
 }

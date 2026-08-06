@@ -69,6 +69,7 @@ final readonly class BillingBanner
         return Subscription::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
+            ->forMerchant(null)
             ->where('type', 'default')
             ->latest('id')
             ->first();

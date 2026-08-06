@@ -6,7 +6,10 @@ namespace Pushery\Billing\Support;
 
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\BillingDriver;
+use Pushery\Billing\Contracts\MarketplaceRails;
+use Pushery\Billing\Contracts\RoutesMoney;
 use Pushery\Billing\Drivers\NullDriver;
+use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\UnsupportedDriver;
 use Pushery\Billing\ValueObjects\DriverCapabilities;
 
@@ -51,6 +54,36 @@ final class BillingManager
     public function capabilities(?string $name = null): DriverCapabilities
     {
         return $this->driver($name)->capabilities();
+    }
+
+    /** Whether the marketplace path is switched on (the single, authoritative key). */
+    public function marketplaceEnabled(): bool
+    {
+        return (bool) $this->config->get('billing.marketplace.enabled', false);
+    }
+
+    /**
+     * The driver's marketplace rails, or a loud failure.
+     *
+     * There is no null-returning variant on purpose. A caller that has reached this point intends to
+     * route money; handing it null would move the decision to whatever dereferences the result, which
+     * is a fatal error one layer further from the cause. The two refusals are told apart because their
+     * fixes are different: billing off is a master-switch problem, a non-routing driver is a driver
+     * choice.
+     */
+    public function marketplaceRails(?string $name = null): MarketplaceRails
+    {
+        if (! $this->enabled()) {
+            throw MarketplaceUnsupported::billingDisabled();
+        }
+
+        $driver = $this->driver($name);
+
+        if (! $driver instanceof RoutesMoney) {
+            throw MarketplaceUnsupported::driverCannotRoute($driver->name());
+        }
+
+        return $driver->marketplaceRails();
     }
 
     private function defaultDriver(): string

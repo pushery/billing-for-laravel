@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Pushery\Billing\Contracts\Invoices;
 use Pushery\Billing\Livewire\Concerns\DegradesGracefully;
@@ -29,7 +30,7 @@ final class InvoiceHistory extends AccountScreen
         return $this->view('billing::livewire.invoice-history', [
             // Listing invoices is a provider read; degrade to a notice rather than 500 the whole screen.
             'page' => $this->orDegrade(
-                fn (): InvoicePage => app(Invoices::class)->recent($this->owner(), $this->perPage),
+                fn (): InvoicePage => Container::getInstance()->make(Invoices::class)->recent($this->owner(), $this->perPage),
                 new InvoicePage([]),
             ),
         ]);

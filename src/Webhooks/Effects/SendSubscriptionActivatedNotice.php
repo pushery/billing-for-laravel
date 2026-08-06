@@ -11,9 +11,11 @@ use Pushery\Billing\Contracts\SubscriptionNotifier;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\SubscriptionState;
+use Pushery\Billing\Enums\ToastLevel;
 use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\Support\BillingEventLog;
+use Pushery\Billing\Support\OwnerToast;
 use RuntimeException;
 
 /**
@@ -34,6 +36,7 @@ final readonly class SendSubscriptionActivatedNotice implements DedupesOnReferen
         private SubscriptionNotifier $notifier,
         private TierCatalog $tiers,
         private BillingEventLog $log,
+        private OwnerToast $toasts,
     ) {}
 
     public function __invoke(SubscriptionStateChanged $event): void
@@ -51,6 +54,13 @@ final readonly class SendSubscriptionActivatedNotice implements DedupesOnReferen
         $label = $event->tierKey === null ? null : $this->tiers->label($event->tierKey);
 
         $this->notifier->subscriptionActivated($owner, $label ?? ($event->tierKey ?? ''));
+
+        // The success toast lives HERE and not on the plan sync, which is where the original design put it.
+        // The sync runs on every subscription event a provider sends — renewals, price changes, a
+        // cancellation — and a toast saying the subscription is live would be wrong on most of them and
+        // absurd on the last. This effect is already the one moment that means "it is on now", and it is
+        // already deduped once per subscription, so a recovery from past_due does not re-congratulate.
+        $this->toasts->notify($owner, 'billing::account.toast.subscription_activated', ToastLevel::Success);
 
         $this->log->record('subscription.activated_notice_sent', $owner, [
             'subscription' => $event->subscriptionReference,

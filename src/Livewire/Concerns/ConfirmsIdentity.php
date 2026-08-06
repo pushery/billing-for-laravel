@@ -6,6 +6,7 @@ namespace Pushery\Billing\Livewire\Concerns;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
 use Pushery\Billing\Livewire\AccountScreen;
@@ -45,7 +46,7 @@ trait ConfirmsIdentity
 
         if (RateLimiter::tooManyAttempts($key, 5)) {
             throw ValidationException::withMessages([
-                'credential' => trans('billing::account.reconfirm.throttled', ['seconds' => RateLimiter::availableIn($key)]),
+                'credential' => Lang::get('billing::account.reconfirm.throttled', ['seconds' => RateLimiter::availableIn($key)]),
             ]);
         }
 
@@ -53,7 +54,7 @@ trait ConfirmsIdentity
             RateLimiter::hit($key, 300);
 
             throw ValidationException::withMessages([
-                'credential' => trans('billing::account.reconfirm.wrong'),
+                'credential' => Lang::get('billing::account.reconfirm.wrong'),
             ]);
         }
 

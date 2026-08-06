@@ -36,7 +36,6 @@ final readonly class UsageGate
         private TierResolver $tiers,
         private PeriodResolver $periods,
         private UsageMeter $counters,
-        private PrepaidLedger $prepaid,
     ) {}
 
     /** The quota decision for consuming $quantity of $meterKey now. An unmetered or ceiling-less meter is always allowed. */
@@ -52,12 +51,11 @@ final readonly class UsageGate
         }
 
         $period = $this->periods->forOwner($owner)->key;
-        $spent = $this->counters->consumed($owner, $meterKey, $period);
-
-        // What the owner still has is the cycle's unspent free allowance PLUS the units they bought. The
-        // free allowance is spent first, so prepaid is what remains of it — measured the same way the
-        // reservation measures it, or the cheap pre-check would disagree with the lock that enforces it.
-        $remaining = max(0, $component->included - $spent) + $this->prepaid->balance($owner, $meterKey);
+        // Measured the same way the reservation measures it — which is now literally true, because it is
+        // the same method. This line used to carry that claim and its own arithmetic, and the two parted
+        // company exactly where it matters: with no free allowance the hold reduced nothing, so the gate let
+        // through requests the lock then refused, and handed out bought units twice.
+        $remaining = $this->counters->remaining($owner, $meterKey, $period, $component->included);
         $withinAllowance = $quantity <= $remaining;
 
         if ($withinAllowance) {

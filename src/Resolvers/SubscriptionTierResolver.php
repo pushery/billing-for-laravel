@@ -11,6 +11,7 @@ use Pushery\Billing\Contracts\TierResolver;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\SubscriptionPresenter;
 use Pushery\Billing\Trials\Trials;
+use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\TierIdentity;
 
 /**
@@ -34,11 +35,12 @@ final readonly class SubscriptionTierResolver implements TierResolver
         private Trials $trials,
     ) {}
 
-    public function resolve(Model $billable): TierIdentity
+    public function resolve(Model $billable, ?MerchantScope $merchant = null): TierIdentity
     {
         $subscription = Subscription::query()
             ->where('owner_type', $billable->getMorphClass())
             ->where('owner_id', $billable->getKey())
+            ->forMerchant($merchant)
             ->where('type', 'default')
             ->latest('id')
             ->first();

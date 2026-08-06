@@ -34,6 +34,20 @@ enum DatevTransaction: string
     /** Creator payout to a German standard-rated business — input VAT 19%. */
     case CreatorInputDeStandard = 'creator_input_de_standard';
 
+    /**
+     * Creator payout to a German REDUCED-rated business — input VAT 7% (books, e-books, cultural supplies).
+     *
+     * Deliberately UNMAPPED in the shipped charts. The package has no account it can confirm for this, and
+     * an unconfirmed account here is not a cosmetic error: the input VAT lands on the wrong line of the
+     * advance return and the amount no longer agrees with the account it sits on. So this case exists in
+     * order to be REFUSED by name — an operator who has agreed an account with their accountant configures
+     * `creator_input_de_reduced` for their chart and it books.
+     *
+     * Before this case existed the branch fell through to CreatorInputDeStandard, so a 7% input booked to
+     * the 19% account with nothing raising anything.
+     */
+    case CreatorInputDeReduced = 'creator_input_de_reduced';
+
     /** Creator payout to a small business, private person or EU small business — no tax. */
     case CreatorInputExempt = 'creator_input_exempt';
 
@@ -67,4 +81,19 @@ enum DatevTransaction: string
 
     /** Other operating income, e.g. an expired voucher — not taxable. */
     case OtherIncome = 'other_income';
+
+    /**
+     * A realized exchange GAIN — the euro that appears between collecting a sale and paying it out.
+     *
+     * It has nothing to do with VAT and is not a correction of the sale. The document's rate is frozen at
+     * the tax point and stays frozen; the payout happens later at whatever rate the bank gave, and the
+     * difference is income of its own. Booking it against the revenue account instead would move a figure
+     * a tax return has already stated.
+     *
+     * NOT an Automatikkonto: the account derives no VAT from the posting, because there is none to derive.
+     */
+    case ExchangeGain = 'exchange_gain';
+
+    /** The same difference in the other direction — an expense, on its own account for the same reason. */
+    case ExchangeLoss = 'exchange_loss';
 }

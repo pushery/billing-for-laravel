@@ -28,6 +28,29 @@ final readonly class Party
         public string $endpointScheme,
     ) {}
 
+    /**
+     * The party as a snapshot array that {@see fromArray} reads back unchanged.
+     *
+     * The resolved endpoint is stored explicitly (as `endpoint_id`, which fromArray takes verbatim), so a
+     * party frozen onto a document reconstructs identically — the same electronic address it was issued
+     * with, not one re-derived later from a changed rule.
+     *
+     * @return array<string, ?string>
+     */
+    public function toArray(): array
+    {
+        return [
+            'name' => $this->name,
+            'address' => $this->address,
+            'postcode' => $this->postcode,
+            'city' => $this->city,
+            'country' => $this->country,
+            'vat_id' => $this->vatId,
+            'endpoint_id' => $this->endpointId,
+            'endpoint_scheme' => $this->endpointScheme,
+        ];
+    }
+
     /** @param array<array-key, mixed> $data */
     public static function fromArray(array $data): self
     {

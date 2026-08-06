@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Notifications;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Notifications\Notification;
@@ -44,7 +45,7 @@ abstract class BillingNotification extends Notification implements ShouldQueueAf
      */
     public function via(object $notifiable): array
     {
-        $channels = app(Repository::class)->get('billing.notifications.channels');
+        $channels = Container::getInstance()->make(Repository::class)->get('billing.notifications.channels');
 
         if (! is_array($channels)) {
             return ['mail'];

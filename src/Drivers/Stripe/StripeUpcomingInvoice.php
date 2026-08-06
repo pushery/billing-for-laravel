@@ -56,6 +56,11 @@ final readonly class StripeUpcomingInvoice implements UpcomingInvoiceContract
         } catch (Throwable) {
             // A provider outage (or nothing to preview) — degrade to null rather than 500 the screen. The
             // failure left remember by throwing, so it was NOT cached and the next render retries.
+            //
+            // @rate-limit-deliberate: a 429 is swallowed here on purpose, and it is the one place in this
+            // driver where that is right. Nothing is written, nothing is marked done, and the failure is not
+            // cached — so the next render simply asks again, which is exactly what a retry would do. Letting
+            // it through would 500 a page whose whole job is to be informational.
             return null;
         }
     }
@@ -83,6 +88,7 @@ final readonly class StripeUpcomingInvoice implements UpcomingInvoiceContract
         $subscription = Subscription::query()
             ->where('owner_type', $billable->getMorphClass())
             ->where('owner_id', $billable->getKey())
+            ->forMerchant(null)
             ->where('type', 'default')
             ->latest('id')
             ->first();

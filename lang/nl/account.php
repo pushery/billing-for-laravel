@@ -223,4 +223,10 @@ return [
         ],
     ],
 
+    // Uitgezonden toasts. Eén regel elk: een toast lees je in het voorbijgaan, naast de mail die het uitlegt.
+    'toast' => [
+        'payment_failed' => 'Je betaling kon niet worden verwerkt. Werk je betaalgegevens bij.',
+        'subscription_activated' => 'Je abonnement is actief — alles wat erbij hoort staat aan.',
+    ],
+
 ];

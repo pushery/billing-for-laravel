@@ -28,6 +28,14 @@ return [
         'outro' => 'Je behoudt toegang tot het einde van de betaalde periode, hieronder aangegeven.',
     ],
 
+    'tax_status_changed' => [
+        'subject' => 'Je fiscale status is gewijzigd',
+        'intro' => 'Je fiscale status is gewijzigd van :from naar :to. Wij hebben dit uit onze eigen administratie afgeleid — je hebt er niet om gevraagd.',
+        'effective' => 'Het geldt vanaf :date.',
+        'consequence' => 'Vanaf die datum is het bedrag dat je ontvangt hoger, omdat de belasting meereist. Wat je overhoudt verandert niet.',
+        'outro' => 'Klopt dit niet met jouw situatie, laat het ons weten — wij kunnen het corrigeren.',
+    ],
+
     'suspension_warning' => [
         'subject' => 'Actie nodig: je toegang wordt opgeschort',
         'intro' => 'Je account heeft een achterstallig bedrag en je toegang wordt binnenkort opgeschort.',

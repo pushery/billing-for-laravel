@@ -21,5 +21,8 @@ return [
     'vat' => 'VAT',
     'vat_reverse_charge' => 'VAT (reverse charge)',
     'total' => 'Total',
+    'total_including_vat' => 'Total including :rate VAT',
     'reverse_charge_note' => 'Reverse charge: the recipient is liable for the VAT.',
+    'margin_scheme_note' => 'Margin scheme — second-hand goods',
+    'self_billed_note' => 'Self-billed invoice: issued by the recipient on behalf of the supplier, by prior agreement.',
 ];

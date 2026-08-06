@@ -21,5 +21,8 @@ return [
     'vat' => 'IVA',
     'vat_reverse_charge' => 'IVA (inversión del sujeto pasivo)',
     'total' => 'Total',
+    'total_including_vat' => 'Total con IVA del :rate incluido',
     'reverse_charge_note' => 'Inversión del sujeto pasivo: el destinatario es responsable del IVA.',
+    'margin_scheme_note' => 'Régimen del margen de beneficio — bienes de ocasión',
+    'self_billed_note' => 'Autofactura: emitida por el destinatario en nombre del proveedor, por acuerdo previo.',
 ];

@@ -8,6 +8,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\CustomerRegistry;
 use Stripe\Exception\InvalidRequestException;
+use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
 
 /**
@@ -81,6 +82,10 @@ final readonly class StripeCustomerRegistry implements CustomerRegistry
 
         try {
             $this->stripe->customers->delete($customerId);
+        } catch (RateLimitException $e) {
+            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
+            throw $e;
         } catch (InvalidRequestException) {
             // Already gone at Stripe. The local reference still has to go.
         }

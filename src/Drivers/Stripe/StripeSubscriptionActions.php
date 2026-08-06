@@ -7,14 +7,16 @@ namespace Pushery\Billing\Drivers\Stripe;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\CanTransactMoney;
-use Pushery\Billing\Contracts\PlanCatalog;
+use Pushery\Billing\Contracts\MerchantCatalog;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\CancellationReason;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
+use Pushery\Billing\ValueObjects\MerchantScope;
 use RuntimeException;
 use Stripe\Exception\InvalidRequestException;
+use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
 use Stripe\SubscriptionItem;
 
@@ -33,14 +35,14 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
 {
     public function __construct(
         private StripeClient $stripe,
-        private PlanCatalog $plans,
+        private MerchantCatalog $catalogs,
         private StripeSubscriptionItems $items,
         private CanTransactMoney $eligibility,
     ) {}
 
-    public function cancel(Model $billable, ?CancellationSurvey $survey = null): void
+    public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null): void
     {
-        $reference = $this->subscriptionReference($billable);
+        $reference = $this->subscriptionReference($billable, $merchant);
 
         if ($reference === null) {
             return;
@@ -82,25 +84,25 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
         };
     }
 
-    public function resume(Model $billable): void
+    public function resume(Model $billable, ?MerchantScope $merchant = null): void
     {
-        $reference = $this->subscriptionReference($billable);
+        $reference = $this->subscriptionReference($billable, $merchant);
 
         if ($reference !== null) {
             $this->ignoringDeadSubscription(fn () => $this->stripe->subscriptions->update($reference, ['cancel_at_period_end' => false]));
         }
     }
 
-    public function cancelNow(Model $billable): void
+    public function cancelNow(Model $billable, ?MerchantScope $merchant = null): void
     {
-        $reference = $this->subscriptionReference($billable);
+        $reference = $this->subscriptionReference($billable, $merchant);
 
         if ($reference !== null) {
             $this->ignoringDeadSubscription(fn () => $this->stripe->subscriptions->cancel($reference));
         }
     }
 
-    public function swap(Model $billable, string $tierKey, bool $prorate = true): void
+    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null): void
     {
         // Defense in depth: a swap reprices the subscription and books a proration — a money movement — so
         // refuse it for an ineligible owner even if a caller bypassed the UI eligibility guard (mirrors
@@ -110,13 +112,16 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
             throw EligibilityDenied::forMoneyMovement();
         }
 
-        $price = $this->plans->providerPriceFor($tierKey);
+        // The price comes from the MERCHANT's catalog, so a marketplace swap reprices against the creator's
+        // own tier — never the platform's, and never a price the client named. A null merchant reads the
+        // platform catalog exactly as before.
+        $price = $this->catalogs->planCatalog($merchant)->providerPriceFor($tierKey);
 
         if ($price === null) {
             throw new InvalidArgumentException("Tier '{$tierKey}' has no provider price to swap to.");
         }
 
-        $reference = $this->subscriptionReference($billable);
+        $reference = $this->subscriptionReference($billable, $merchant);
 
         if ($reference === null) {
             throw new InvalidArgumentException('Cannot swap: the billable has no active subscription.');
@@ -124,11 +129,15 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
 
         try {
             $subscription = $this->stripe->subscriptions->retrieve($reference);
+        } catch (RateLimitException $e) {
+            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
+            throw $e;
         } catch (InvalidRequestException) {
             throw new InvalidArgumentException('Cannot swap: the billable has no active subscription.');
         }
 
-        $base = $this->items->base($subscription);
+        $base = $this->items->base($subscription, $merchant);
 
         if (! $base instanceof SubscriptionItem) {
             throw new RuntimeException("Cannot swap: the tier item on Stripe subscription {$reference} cannot be identified.");
@@ -153,17 +162,27 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
     {
         try {
             $call();
+        } catch (RateLimitException $e) {
+            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
+            throw $e;
         } catch (InvalidRequestException) {
             // Already canceled or no longer exists: nothing to do.
         }
     }
 
-    /** The provider subscription reference from the billable's local subscription row, or null. */
-    private function subscriptionReference(Model $billable): ?string
+    /**
+     * The provider subscription reference from the billable's local subscription row, or null.
+     *
+     * Scoped to the merchant so a marketplace mutation addresses exactly the (fan, creator) subscription; a
+     * null merchant reproduces the single-seller selection exactly (`merchant_uid = 'platform'`).
+     */
+    private function subscriptionReference(Model $billable, ?MerchantScope $merchant = null): ?string
     {
         $subscription = Subscription::query()
             ->where('owner_type', $billable->getMorphClass())
             ->where('owner_id', $billable->getKey())
+            ->forMerchant($merchant)
             ->where('type', 'default')
             ->latest('id')
             ->first();

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -19,10 +20,10 @@ final class SuspensionWarningNotification extends BillingNotification
     public function toMail(object $notifiable): MailMessage
     {
         return new MailMessage()
-            ->subject(__('billing::notifications.suspension_warning.subject'))
-            ->line(__('billing::notifications.suspension_warning.intro'))
+            ->subject(Lang::get('billing::notifications.suspension_warning.subject'))
+            ->line(Lang::get('billing::notifications.suspension_warning.intro'))
             ->line($this->amountDue->format())
-            ->line(__('billing::notifications.suspension_warning.outro'));
+            ->line(Lang::get('billing::notifications.suspension_warning.outro'));
     }
 
     /** @return array<string, string> */

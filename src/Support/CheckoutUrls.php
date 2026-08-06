@@ -6,6 +6,7 @@ namespace Pushery\Billing\Support;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\URL;
 use RuntimeException;
 
 /**
@@ -68,6 +69,6 @@ final readonly class CheckoutUrls
     /** The absolute URL of a hub route when it is registered, or null when the hub is off. */
     private function route(string $name): ?string
     {
-        return Route::has($name) ? route($name) : null;
+        return Route::has($name) ? URL::route($name) : null;
     }
 }

@@ -12,10 +12,23 @@ use Pushery\Billing\Casts\UtcDateTime;
 /**
  * The package's own coupon — a local discount definition the billing engine applies, independent of any
  * provider. `value` is a percentage (for `type = percent`) or an amount in minor units (for `type = fixed`,
- * scoped by `currency`). The Stripe driver may map it to a Stripe coupon via `provider_coupon_id`.
+ * scoped by `currency`).
+ *
+ * `provider_coupon_id` is a column for the CONSUMING APPLICATION's own use. This package does not read it.
+ * The line here used to say the Stripe driver maps a coupon to a Stripe coupon through it; the driver
+ * resolves that mapping from config instead — `StripeCheckout::stripeCouponFor()` reads
+ * `billing.coupons.<code>.stripe_coupon`. An adopter who filled this column expecting the checkout to honor
+ * it got a discount that never applied, and nothing said so.
  *
  * This model is the persistence surface only (the redemption ledger and the discount math live with the
  * DiscountResolver / billing engine); it carries the columns, casts and the redemptions relation.
+ *
+ * ## Who writes this row
+ *
+ * The CONSUMING APPLICATION. Nothing in this package creates a coupon -- a discount is a commercial decision
+ * and its catalog is theirs. The package reads them (`CouponRedeemer` locks and spends one) and writes only
+ * the redemption side. So a column here with no writer in `src/` is the correct state and not a gap; what
+ * would be a defect is a READER that turns an absent value into an answer.
  *
  * @property int $id
  * @property string $code
@@ -38,6 +51,20 @@ final class Coupon extends Model
     protected $fillable = [
         'code', 'type', 'value', 'currency', 'duration', 'duration_in_cycles',
         'max_redemptions', 'redeemed_count', 'expires_at', 'provider_coupon_id', 'active',
+    ];
+
+    /**
+     * The same defaults the schema carries, so a row that was just created reads like one that was read back.
+     *
+     * Without them a model created without these columns holds null for each, while the row the database
+     * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
+     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     *
+     * @var array<string, bool|int>
+     */
+    protected $attributes = [
+        'redeemed_count' => 0,
+        'active' => true,
     ];
 
     /** @var array<string,string> */

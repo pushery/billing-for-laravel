@@ -22,12 +22,44 @@ use Pushery\Billing\ValueObjects\TaxContext;
 final readonly class EuOssTaxCalculator implements TaxCalculator
 {
     /** @var array<string,float> ISO-3166 country → standard VAT rate */
+    /**
+     * The day these rates were last checked against what each member state publishes.
+     *
+     * It is here because a rate table without a date cannot say that it has gone stale, and going stale is
+     * the only thing it reliably does. A member state raises its rate, every sale to that country is priced
+     * too low from that day, and the difference is not the buyer's — it is owed by whoever issued the
+     * document. Nothing about those invoices looks wrong.
+     *
+     * Two entries were corrected on this date after being found two points low, which is exactly the failure
+     * this constant exists to make visible next time.
+     */
+    public const string RATES_CHECKED_ON = '2026-07-25';
+
     private const array RATES = [
         'AT' => 0.20, 'BE' => 0.21, 'BG' => 0.20, 'HR' => 0.25, 'CY' => 0.19, 'CZ' => 0.21,
-        'DK' => 0.25, 'EE' => 0.22, 'FI' => 0.255, 'FR' => 0.20, 'DE' => 0.19, 'GR' => 0.24,
+        'DK' => 0.25, 'EE' => 0.24, 'FI' => 0.255, 'FR' => 0.20, 'DE' => 0.19, 'GR' => 0.24,
         'HU' => 0.27, 'IE' => 0.23, 'IT' => 0.22, 'LV' => 0.21, 'LT' => 0.21, 'LU' => 0.17,
-        'MT' => 0.18, 'NL' => 0.21, 'PL' => 0.23, 'PT' => 0.23, 'RO' => 0.19, 'SK' => 0.23,
+        'MT' => 0.18, 'NL' => 0.21, 'PL' => 0.23, 'PT' => 0.23, 'RO' => 0.21, 'SK' => 0.23,
         'SI' => 0.22, 'ES' => 0.21, 'SE' => 0.25,
+    ];
+
+    /**
+     * Countries whose supplies are treated as another member state's, by that member state's own law.
+     *
+     * These are not third countries and they are not members in their own right — they are places a
+     * jurisdiction has folded into itself for tax purposes. Read as third countries they produce a zero rate
+     * that looks entirely deliberate: the code is a real country, so no guard fires, and the invoice shows a
+     * confident 0% on a supply that owed the full rate of the state it belongs to.
+     *
+     * That is why they are mapped rather than merely removed from the third-country list. Removing them
+     * would make them unknown codes and fail loudly, which is better than silence but still wrong: the
+     * supply is perfectly taxable, and the system knows exactly whose rate applies.
+     *
+     * @var array<string, string>
+     */
+    private const array TREATED_AS = [
+        // Transactions to and from Monaco are treated as French for VAT purposes.
+        'MC' => 'FR',
     ];
 
     /**
@@ -48,7 +80,7 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
         'FJ', 'FK', 'FM', 'FO', 'GA', 'GB', 'GD', 'GE', 'GF', 'GG', 'GH', 'GI', 'GL', 'GM', 'GN',
         'GP', 'GQ', 'GS', 'GT', 'GU', 'GW', 'GY', 'HK', 'HM', 'HN', 'HT', 'ID', 'IL', 'IM', 'IN',
         'IO', 'IQ', 'IR', 'IS', 'JE', 'JM', 'JO', 'JP', 'KE', 'KG', 'KH', 'KI', 'KM', 'KN', 'KP',
-        'KR', 'KW', 'KY', 'KZ', 'LA', 'LB', 'LC', 'LI', 'LK', 'LR', 'LS', 'LY', 'MA', 'MC', 'MD',
+        'KR', 'KW', 'KY', 'KZ', 'LA', 'LB', 'LC', 'LI', 'LK', 'LR', 'LS', 'LY', 'MA', 'MD',
         'ME', 'MF', 'MG', 'MH', 'MK', 'ML', 'MM', 'MN', 'MO', 'MP', 'MQ', 'MR', 'MS', 'MU', 'MV',
         'MW', 'MX', 'MY', 'MZ', 'NA', 'NC', 'NE', 'NF', 'NG', 'NI', 'NO', 'NP', 'NR', 'NU', 'NZ',
         'OM', 'PA', 'PE', 'PF', 'PG', 'PH', 'PK', 'PM', 'PN', 'PR', 'PS', 'PW', 'PY', 'QA', 'RE',
@@ -58,23 +90,66 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
         'VE', 'VG', 'VI', 'VN', 'VU', 'WF', 'WS', 'YE', 'YT', 'ZA', 'ZM', 'ZW',
     ];
 
-    /** @param ?string $sellerCountry the seller's ISO country (config billing.company.country), for the cross-border test */
-    public function __construct(private ?string $sellerCountry = null) {}
+    /**
+     * @param  ?string  $sellerCountry  the seller's ISO country (config billing.company.country), for the cross-border test
+     * @param  ?TaxRateMatrix  $matrix  a configured rate table keyed by country AND supply category; absent
+     *                                  by default, and absent means the built-in standard-rate table answers
+     *                                  exactly as it always did
+     */
+    public function __construct(
+        private ?string $sellerCountry = null,
+        private ?TaxRateMatrix $matrix = null,
+    ) {}
+
+    /**
+     * The rates this package ships, in basis points, for comparison against a source.
+     *
+     * Exposed for exactly one caller: the conformity probe that asks whether these numbers still match what
+     * the publisher says. The table stays private — a reader could otherwise price a supply from it directly
+     * and bypass every refusal `calculate()` makes — and this returns a converted COPY, so nothing can reach
+     * in and edit the constant that answers on every invoice.
+     *
+     * @return array<string, int>
+     */
+    public static function shippedRatesBps(): array
+    {
+        return array_map(static fn (float $rate): int => (int) round($rate * 10_000), self::RATES);
+    }
+
+    /**
+     * Whether this calculator can price a supply into a country at all.
+     *
+     * "Knows" includes a country correctly outside the tax area: zero there is an answer, not an absence.
+     * The market gate asks this at boot so an opened market with no rate is refused on a deploy rather than
+     * discovered on an invoice, where it looks like a sale that simply carried no tax.
+     */
+    public function knowsRateFor(string $country): bool
+    {
+        $code = strtoupper($country);
+
+        return isset(self::RATES[$code]) || in_array($code, self::OUTSIDE_EU_VAT_AREA, true);
+    }
 
     public function calculate(Money $net, TaxContext $context): Money
     {
         // Country codes are matched upper-case: the rate table is keyed by canonical ISO codes, so a
         // lower/mixed-case code ("de") must not miss the table and silently drop to 0% VAT.
-        $country = strtoupper($context->countryCode);
-        $seller = $this->sellerCountry !== null ? strtoupper($this->sellerCountry) : null;
+        $country = self::resolveTerritory($context->countryCode);
+        $seller = $this->sellerCountry !== null ? self::resolveTerritory($this->sellerCountry) : null;
 
-        $rate = self::RATES[$country] ?? null;
+        // The configured matrix answers first where it covers the country, because it is the only source
+        // that knows the SUPPLY as well as the destination. Where it does not cover a country the built-in
+        // table still does — a partial matrix must not turn a country the calculator has always priced into
+        // an unknown one, which is a refusal rather than a smaller table.
+        $rateBps = $this->matrix instanceof TaxRateMatrix && $this->matrix->covers($country)
+            ? $this->matrix->rateFor($country, $context->rateCategory, $context->hasAudioVisualComponent)
+            : $this->standardBpsFor($country);
 
         // "No rate for this code" has two causes that produce the same number but mean opposite things: a
         // supply outside the EU VAT area is correctly zero-rated, a broken code is a data defect that would
         // under-declare VAT. They are separated BEFORE anything can return a zero — including the reverse
         // charge below, which would otherwise zero-rate an unrecognized country on a validated VAT id.
-        if ($rate === null && ! in_array($country, self::OUTSIDE_EU_VAT_AREA, true)) {
+        if ($rateBps === null && ! in_array($country, self::OUTSIDE_EU_VAT_AREA, true)) {
             throw UnknownTaxCountry::code($context->countryCode);
         }
 
@@ -89,10 +164,38 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
 
         // Reached only for a code proven above to be an assigned country: outside the EU VAT area, so no EU
         // VAT is due. This is the named third-country outcome, never a landing spot for an unknown code.
-        if ($rate === null) {
+        if ($rateBps === null) {
             return Money::zero($net->currency);
         }
 
-        return Money::of((int) round($net->minorUnits * $rate), $net->currency);
+        return $net->proportion($rateBps, 10_000);
+    }
+
+    /**
+     * The built-in table's rate for a country, in basis points, or null when it has none.
+     *
+     * The table is written as decimal fractions because that is how rates are published, but every other
+     * rate on the money path is an integer in basis points, and the tax is computed with the same integer
+     * primitive as every other proportion. Converting here rather than keeping a second numeric path is what
+     * stops a rate arriving as 0.19 in one place and 1900 in another.
+     */
+    /**
+     * The country whose rate actually applies to a code, resolving a territorial alias.
+     *
+     * Done once, here, rather than at each caller: the alias is a fact about the code and not about who is
+     * asking, and a caller that forgot to resolve it would silently price a taxable supply at zero.
+     */
+    public static function resolveTerritory(?string $country): string
+    {
+        $code = strtoupper(trim((string) $country));
+
+        return self::TREATED_AS[$code] ?? $code;
+    }
+
+    private function standardBpsFor(string $country): ?int
+    {
+        $rate = self::RATES[$country] ?? null;
+
+        return $rate === null ? null : (int) round($rate * 10_000);
     }
 }

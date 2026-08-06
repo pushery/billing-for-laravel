@@ -14,6 +14,7 @@ use Pushery\Billing\ValueObjects\InvoiceDownload;
 use Pushery\Billing\ValueObjects\InvoicePage;
 use Pushery\Billing\ValueObjects\Money;
 use Stripe\Exception\InvalidRequestException;
+use Stripe\Exception\RateLimitException;
 use Stripe\Invoice as StripeInvoice;
 use Stripe\StripeClient;
 
@@ -62,6 +63,10 @@ final readonly class StripeInvoices implements InvoicesContract
 
         try {
             $invoice = $this->stripe->invoices->retrieve($invoiceId);
+        } catch (RateLimitException $e) {
+            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
+            throw $e;
         } catch (InvalidRequestException) {
             return null;
         }

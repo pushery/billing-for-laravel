@@ -143,7 +143,7 @@ final readonly class UsageFlusher
 
                 UsageEvent::query()
                     ->whereIn('id', $sources->pluck('id'))
-                    ->update(['rolled_up_into' => $rollup->getKey(), 'updated_at' => now()]);
+                    ->update(['rolled_up_into' => $rollup->getKey(), 'updated_at' => Carbon::now()]);
             });
         }
     }
@@ -154,7 +154,7 @@ final readonly class UsageFlusher
         return UsageEvent::query()
             ->where('state', UsageEventState::Pending->value)
             ->where('is_rollup', true)
-            ->where(fn (Builder $query) => $query->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', now()))
+            ->where(fn (Builder $query) => $query->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', Carbon::now()))
             ->orderBy('id')
             ->get();
     }
@@ -227,7 +227,7 @@ final readonly class UsageFlusher
 
             UsageEvent::query()
                 ->where('rolled_up_into', $rollup->getKey())
-                ->update(['state' => UsageEventState::Reported->value, 'reported_at' => now(), 'updated_at' => now()]);
+                ->update(['state' => UsageEventState::Reported->value, 'reported_at' => Carbon::now(), 'updated_at' => Carbon::now()]);
         });
     }
 
@@ -267,7 +267,7 @@ final readonly class UsageFlusher
 
             UsageEvent::query()
                 ->where('rolled_up_into', $rollup->getKey())
-                ->update(['state' => UsageEventState::Failed->value, 'updated_at' => now()]);
+                ->update(['state' => UsageEventState::Failed->value, 'updated_at' => Carbon::now()]);
         });
 
         // Loud on purpose: this is usage a customer incurred and will not be billed for.

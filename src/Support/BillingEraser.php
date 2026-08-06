@@ -6,9 +6,9 @@ namespace Pushery\Billing\Support;
 
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Pushery\Billing\Contracts\CustomerRegistry;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Events\BillableAccountDeleting;
@@ -25,10 +25,22 @@ use Pushery\Billing\ValueObjects\ErasureReport;
  * UNLINKED from the owner and kept, and the retention clock (`billing:prune`) removes it once the law stops
  * requiring it. An implementation that cascaded the invoices away would destroy tax records.
  *
- * Everything else goes. The owner's own provider API keys go FIRST and unconditionally — live payment
- * credentials sitting in a database with no owner are a security incident, not merely a compliance one. The
- * stored webhook payloads are scrubbed too: they carry the customer's email, name, billing address and card
- * last four, and a right to erasure that cannot reach the data is not a right to erasure.
+ * Everything else goes, and the stored webhook payloads are SCRUBBED rather than kept: they carry the
+ * customer's email, name, billing address and card last four, and a right to erasure that cannot reach the
+ * data is not a right to erasure.
+ *
+ * ## What this does NOT reach, and it used to claim it did
+ *
+ * There are no provider API keys here to delete. This package stores no secret of any kind — the merchant
+ * row carries an account REFERENCE (`acct_…`), which is an identifier and goes with the row; a credential
+ * would be a different thing and there is no column for one. `NoStoredCredentialsTest` holds that, so the
+ * sentence cannot quietly stop being true.
+ *
+ * This paragraph used to say the owner's provider API keys go "FIRST and unconditionally", which described a
+ * purge of something that does not exist. Read by an operator answering an erasure request, that is the
+ * expensive direction to be wrong in: **if YOUR app stores a merchant's API keys, erasing them is your job.**
+ * `BillableAccountDeleting` is the hook — dispatched first and outside the transaction, so a listener can
+ * make a provider call — and it is where that deletion belongs.
  *
  * A credit balance is money owed to the customer, so it is recorded to the audit ledger before it goes —
  * otherwise the erase would silently destroy a liability.
@@ -41,6 +53,7 @@ final readonly class BillingEraser
     public function __construct(
         private BillingEventLog $log,
         private CustomerRegistry $customers,
+        private SubjectScopedRecords $records = new SubjectScopedRecords,
     ) {}
 
     public function erase(Model $owner): ErasureReport
@@ -50,41 +63,25 @@ final readonly class BillingEraser
         // erased). Dispatched — not called directly — so the same listener serves an app's own delete flow,
         // and OUTSIDE the erase transaction below so the provider API call never runs inside the DB tx. The
         // listener degrades on a transient provider failure (logs + continues), so the erase is never orphaned.
-        event(new BillableAccountDeleting($owner));
+        Event::dispatch(new BillableAccountDeleting($owner));
 
         $credit = $this->outstandingCredit($owner);
 
         $report = DB::transaction(function () use ($owner, $credit): ErasureReport {
-            $purged = [];
+            // The buyer axis. Every column name below arrives with it, so the same code erases along any
+            // axis the package scopes records to — the merchant axis runs this exact path.
+            $axis = OwnerScopedTables::ownerAxis();
 
-            // Child tables key on their parent row, not on the owner, so the loop below cannot see them —
-            // and they must go FIRST, while the parent rows still exist to join through. Why this is not
-            // left to the foreign key is recorded on the map itself (OwnerScopedTables::CASCADED).
-            foreach (OwnerScopedTables::CASCADED as $table => $link) {
-                $purged[$table] = DB::table($table)
-                    ->whereIn($link['foreign_key'], $this->owned($link['parent'], $owner)->select('id'))
-                    ->delete();
-            }
+            // Child tables go FIRST, while the parent rows still exist to join through. The delivery record
+            // stays and only its payload goes: the row is what makes a failed effect replayable, and the
+            // package's own account of what the provider sent.
+            $purged = [
+                ...$this->records->purgeCascaded($axis, $owner),
+                ...$this->records->purge($axis, $owner),
+                ...$this->records->scrub($axis, $owner),
+            ];
 
-            foreach (OwnerScopedTables::PURGED as $table) {
-                $purged[$table] = $this->owned($table, $owner)->delete();
-            }
-
-            // The delivery record stays — it is what makes a failed effect replayable, and it is the
-            // package's own account of what the provider sent. Only the personal data inside it goes.
-            $purged[OwnerScopedTables::SCRUBBED] = $this->owned(OwnerScopedTables::SCRUBBED, $owner)
-                ->whereNotNull('payload')
-                ->update(['payload' => null]);
-
-            $retained = [];
-
-            foreach (OwnerScopedTables::RETAINED as $table) {
-                $retained[$table] = $this->owned($table, $owner)->update([
-                    'owner_type' => null,
-                    'owner_id' => null,
-                    'owner_erased_at' => Carbon::now(),
-                ]);
-            }
+            $retained = $this->records->unlink($axis, $owner, Carbon::now());
 
             // The owner's own audit rows go with them. Then ONE row records that the erasure happened:
             // accountability (Art. 5(2)) means being able to show it was done — and that record must not
@@ -137,12 +134,5 @@ final readonly class BillingEraser
         }
 
         return $outstanding;
-    }
-
-    private function owned(string $table, Model $owner): Builder
-    {
-        return DB::table($table)
-            ->where('owner_type', $owner->getMorphClass())
-            ->where('owner_id', $owner->getKey());
     }
 }

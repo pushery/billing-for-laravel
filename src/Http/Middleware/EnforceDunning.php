@@ -9,11 +9,13 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Route;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\DunningGuard;
 use Pushery\Billing\Enums\SubscriptionState;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
  * Blocks an owner whose payment has failed (a hard-dunning `past_due`/`incomplete` state) from a
@@ -48,10 +50,10 @@ final readonly class EnforceDunning
             && $this->guard->blockingState($this->resolver->ownerFor($actor)) instanceof SubscriptionState) {
 
             if (! $request->expectsJson() && Route::has('billing.account.recovery')) {
-                return redirect()->route('billing.account.recovery');
+                return Redirect::route('billing.account.recovery');
             }
 
-            abort($this->status());
+            throw new HttpException($this->status());
         }
 
         return $next($request);

@@ -24,6 +24,12 @@ interface TierCatalog
 
     public function isUntouchable(string $key): bool;
 
+    /**
+     * The tier's rank — its position in the configured order, low to high — so a content gate can compare
+     * "at least this tier" without the catalog. An unknown key ranks below every real tier.
+     */
+    public function level(string $key): int;
+
     /** The static catalog price to display for a tier, or null when it has none (e.g. the free tier). */
     public function priceDisplay(string $key): ?Money;
 }

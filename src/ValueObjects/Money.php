@@ -134,6 +134,19 @@ final readonly class Money
      * rounding remainder is distributed one unit at a time to the earliest buckets (Fowler's
      * allocate). Used for credit-balance proration.
      *
+     * ## The remainder goes to the FIRST ratio, and that is a decision about money
+     *
+     * On any split that does not divide evenly, whoever is named first gets the extra unit. At volume that
+     * is real money moving in one direction, so the order is never hardcoded at a call site: it comes from
+     * the operator's setting through {@see self::splitByBps()}, which puts the pair back in a fixed order
+     * afterwards so a caller never has to remember which way it ran.
+     *
+     * ## Not the primitive for a FIXED fee
+     *
+     * A fee of a flat amount is not a ratio of anything — it is `gross->minus(fee)`, and reaching for an
+     * allocation there invents a proportion the parties never agreed to. The two look interchangeable
+     * because both split one amount into two, which is exactly why this is written down here.
+     *
      * @return list<self>
      */
     public function allocate(int ...$ratios): array
@@ -241,6 +254,29 @@ final readonly class Money
         $base = new self($this->halfUpDiv($this->minorUnits * 10_000, 10_000 - $bps), $this->currency);
 
         return [$base, $base->minus($this)];
+    }
+
+    /**
+     * A fraction of the amount, rounded half-up to the nearest minor unit.
+     *
+     * For a value-for-use split: the elapsed part of a period is this proportion of the whole, and the
+     * refund is the DIFFERENCE from the payment — so one side is rounded and the other is exact, and a cent
+     * is never created or lost between them. Integer math throughout, no float on the money path.
+     *
+     * @param  int  $numerator  the elapsed part
+     * @param  int  $denominator  the whole; a non-positive denominator has no meaningful fraction and yields zero
+     */
+    public function proportion(int $numerator, int $denominator): self
+    {
+        if ($denominator <= 0 || $numerator <= 0) {
+            return new self(0, $this->currency);
+        }
+
+        if ($numerator >= $denominator) {
+            return $this;
+        }
+
+        return new self($this->halfUpDiv($this->minorUnits * $numerator, $denominator), $this->currency);
     }
 
     /**

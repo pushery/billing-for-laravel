@@ -8,6 +8,7 @@ use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\DatevAccountResolver;
 use Pushery\Billing\Enums\DatevTransaction;
 use Pushery\Billing\Exceptions\DatevTransactionUnresolvable;
+use Pushery\Billing\Exceptions\InvalidDatevBatch;
 use Pushery\Billing\ValueObjects\DatevAccount;
 
 /**
@@ -83,6 +84,35 @@ final readonly class ConfigDatevAccountResolver implements DatevAccountResolver
             return null;
         }
 
-        return new DatevAccount((string) $number, automatic: (bool) ($entry['automatic'] ?? true));
+        return new DatevAccount(
+            (string) $number,
+            automatic: (bool) ($entry['automatic'] ?? true),
+            reverseChargeTransactionKey: $this->transactionKey($entry, (string) $number),
+        );
+    }
+
+    /**
+     * The reverse-charge transaction key of a chart entry, validated where it is read.
+     *
+     * Unset means the chart declares none and the field stays out of the file. A value that is present but
+     * cannot be one — zero, negative, more than three digits, not a number — is REFUSED here rather than
+     * emitted: the format description says zero is not permitted, and a key that is merely wrong books the
+     * right amount under the wrong tax circumstance, which reconciles perfectly and is wrong all the same.
+     *
+     * @param  array<array-key, mixed>  $entry
+     */
+    private function transactionKey(array $entry, string $account): ?int
+    {
+        $key = $entry['reverse_charge_transaction_key'] ?? null;
+
+        if ($key === null) {
+            return null;
+        }
+
+        if (! is_numeric($key) || (int) $key < 1 || (int) $key > 999 || (float) $key !== (float) (int) $key) {
+            throw InvalidDatevBatch::sachverhaltMustNotBeZero($account, is_scalar($key) ? (string) $key : gettype($key));
+        }
+
+        return (int) $key;
     }
 }

@@ -28,6 +28,14 @@ return [
         'outro' => 'Mantieni l’accesso fino alla fine del periodo pagato, indicato di seguito.',
     ],
 
+    'tax_status_changed' => [
+        'subject' => 'La tua posizione fiscale è cambiata',
+        'intro' => 'La tua posizione fiscale è passata da :from a :to. Lo abbiamo stabilito dai nostri registri: non lo hai richiesto tu.',
+        'effective' => 'Si applica dal :date.',
+        'consequence' => 'Da quella data l\'importo che ricevi è più alto, perché l\'imposta viaggia con esso. Quanto ti resta non cambia.',
+        'outro' => 'Se questo non corrisponde alla tua situazione, faccelo sapere: possiamo correggerlo.',
+    ],
+
     'suspension_warning' => [
         'subject' => 'Azione necessaria: il tuo accesso verrà sospeso',
         'intro' => 'Il tuo account ha un saldo scaduto e l’accesso verrà sospeso a breve.',

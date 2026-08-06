@@ -28,6 +28,14 @@ return [
         'outro' => 'You keep access until the end of the paid period, shown below.',
     ],
 
+    'tax_status_changed' => [
+        'subject' => 'Your tax standing has changed',
+        'intro' => 'Your tax standing changed from :from to :to. We made this change from our own records — you did not ask for it.',
+        'effective' => 'It applies from :date.',
+        'consequence' => 'From that date the amount that reaches you is larger, because tax now travels with it. The share you keep is unchanged.',
+        'outro' => 'If this does not match your situation, tell us — we can correct it.',
+    ],
+
     'suspension_warning' => [
         'subject' => 'Action needed: your access will be suspended',
         'intro' => 'Your account has an overdue balance and access will soon be suspended.',

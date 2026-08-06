@@ -38,6 +38,19 @@ final class BillingEvent extends Model
     /** @var list<string> */
     protected $fillable = ['type', 'source', 'subject_type', 'subject_id', 'actor_type', 'actor_id', 'payload'];
 
+    /**
+     * The same defaults the schema carries, so a row that was just created reads like one that was read back.
+     *
+     * Without them a model created without these columns holds null for each, while the row the database
+     * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
+     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     *
+     * @var array<string, string>
+     */
+    protected $attributes = [
+        'source' => 'system',
+    ];
+
     /** @var array<string,string> */
     protected $casts = ['payload' => 'array', 'source' => AuditSource::class];
 

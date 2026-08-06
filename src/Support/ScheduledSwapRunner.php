@@ -7,9 +7,12 @@ namespace Pushery\Billing\Support;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Contracts\PlanCatalog;
+use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\ValueObjects\Plan;
 
 /**
  * Executes the plan changes that were scheduled for later — a downgrade waiting for the period it was
@@ -26,6 +29,8 @@ final readonly class ScheduledSwapRunner
     public function __construct(
         private SubscriptionActions $actions,
         private BillingEventLog $log,
+        private PlanCatalog $plans,
+        private ProrationStrategy $proration,
     ) {}
 
     /**
@@ -70,6 +75,18 @@ final readonly class ScheduledSwapRunner
             $subscription->cancelScheduledSwap();
 
             return false;
+        }
+
+        // The proration runs first, for the same reason as on the in-app path: it prices the unused
+        // remainder against the tier resolved AT THAT MOMENT, and after the swap that is already the new
+        // one. A scheduled downgrade lands at the period end, where the remainder is normally zero and the
+        // strategy writes nothing — but "normally" is doing work in that sentence. The runner fires from the
+        // cycle tick, so it can arrive minutes early on a busy schedule, and a genuine remainder there is
+        // owed just the same. Calling it unconditionally costs a no-op and removes the assumption.
+        $plan = $this->plans->planFor($targetTier);
+
+        if ($plan instanceof Plan) {
+            $this->proration->applySwap($owner, $plan);
         }
 
         $this->actions->swap($owner, $targetTier);

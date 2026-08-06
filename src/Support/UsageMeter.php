@@ -77,7 +77,7 @@ final class UsageMeter
                 // `used` is not double-counted against prepaid: the free part is capped at `included`, and
                 // whatever went past it has already been taken out of the balance (see drawPrepaid).
                 $prepaidLeft = $prepaid instanceof PrepaidUnits ? max(0, $prepaid->balance) : 0;
-                $available = max(0, max(0, $included - $counter->used) + $prepaidLeft - $counter->reserved);
+                $available = self::availableFrom($included, $counter->used, $counter->reserved, $prepaidLeft);
 
                 if ($amount > $available) {
                     return null;
@@ -202,6 +202,54 @@ final class UsageMeter
             ->where('period', $period)
             ->whereNull('warned_at')
             ->update(['warned_at' => Carbon::now()]) === 1;
+    }
+
+    /**
+     * The available-allowance sum itself, over numbers the caller has already read.
+     *
+     * THE ONE PLACE THIS ARITHMETIC LIVES, and it was three. The gate and the exceeded-quota message each
+     * computed `max(0, included - used - reserved) + prepaid` while their comments claimed to measure it the
+     * way the reservation does — and `reserve()` had its own fourth copy of the correct form, which is how
+     * "one place" was written down while two remained.
+     *
+     * Pure, and taking the numbers rather than the owner, because the two callers cannot share a read.
+     * `reserve()` computes from rows it holds under a FOR UPDATE lock, and re-reading them through a helper
+     * would drop the lock's whole point; `remaining()` is a cheap point-in-time answer with no lock at all.
+     * Sharing the arithmetic is what was wanted; sharing the read would have been wrong.
+     */
+    public static function availableFrom(int $included, int $used, int $reserved, int $prepaid): int
+    {
+        // Holds come off the SUM, not off the free part alone. Subtracted from `included` only, they would
+        // leave the prepaid balance undefended: with no free allowance at all the outer max() swallows the
+        // hold entirely, so it reduces nothing and two concurrent requests are handed the same bought unit —
+        // a unit the customer has already PAID for, sold twice.
+        return max(0, max(0, $included - $used) + $prepaid - $reserved);
+    }
+
+    /**
+     * What the owner may still spend: the cycle's unspent free allowance plus the units they bought, less
+     * everything already promised to requests in flight.
+     *
+     * The two agree until the free allowance runs out, and then they do not: with `included` at zero the
+     * outer `max()` swallows the hold entirely, so it reduces nothing and the BOUGHT units are handed out
+     * twice — the exact case `reserve()` documents as "a unit the customer has already PAID for, sold
+     * twice". The cheap pre-check let requests through that the lock then refused, and the refusal named a
+     * remainder measured on the other formula.
+     *
+     * Kept here rather than in a helper because this class already owns the counters the sum reads.
+     */
+    public function remaining(Model $owner, string $meterKey, string $period, ?int $included): int
+    {
+        $row = PrepaidUnits::query()
+            ->where('owner_type', $owner->getMorphClass())
+            ->where('owner_id', $owner->getKey())
+            ->where('meter_key', $meterKey)
+            ->first();
+
+        $prepaid = $row instanceof PrepaidUnits ? max(0, $row->balance) : 0;
+        $held = $this->counterValue($owner, $meterKey, $period, 'reserved');
+
+        return self::availableFrom($included ?? 0, $this->used($owner, $meterKey, $period), $held, $prepaid);
     }
 
     /**
@@ -332,8 +380,8 @@ final class UsageMeter
             'used' => 0,
             'reserved' => 0,
             'prepaid_used' => 0,
-            'created_at' => now(),
-            'updated_at' => now(),
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
         ]);
 
         return UsageCounter::query()

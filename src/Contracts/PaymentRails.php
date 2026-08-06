@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Contracts;
 
 use Pushery\Billing\ValueObjects\ChargeResult;
+use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\MandateReference;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\RefundResult;
@@ -32,8 +33,13 @@ interface PaymentRails
      * charge safe to retry: pass a stable key derived from the business operation (an order/invoice
      * id) and the provider collapses a duplicate submission onto the first result instead of charging
      * twice.
+     *
+     * The optional routing is the whole marketplace dimension of this contract. Absent, the payment is
+     * exactly today's payment — the provider is sent the same fields it has always been sent, which is
+     * what lets one set of contracts serve a single seller and a marketplace without either paying for
+     * the other.
      */
-    public function charge(Money $amount, string $token, ?string $idempotencyKey = null): ChargeResult;
+    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): ChargeResult;
 
     /** Store a reusable mandate/token for a customer so it can be charged later. */
     public function createMandate(string $customerReference, string $token): MandateReference;
@@ -46,8 +52,14 @@ interface PaymentRails
      * a queued/redelivered merchant-initiated charge retry-safe — pass the invoice/charge id so a
      * re-run collapses onto the first charge rather than billing the customer again.
      */
-    public function offSessionCharge(Money $amount, MandateReference $mandate, ?string $idempotencyKey = null): ChargeResult;
+    public function offSessionCharge(Money $amount, MandateReference $mandate, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): ChargeResult;
 
-    /** Refund a previous charge, in full or in part. The idempotency key prevents a double refund on retry. */
-    public function refund(string $chargeReference, Money $amount, ?string $idempotencyKey = null): RefundResult;
+    /**
+     * Refund a previous charge, in full or in part. The idempotency key prevents a double refund on retry.
+     *
+     * With routing, the merchant's share is reversed with it. Refunding a routed payment WITHOUT reversing
+     * is an unbounded loss path rather than a variation: the buyer is made whole out of the platform's own
+     * money while the merchant keeps theirs, and a lost chargeback is not a call the package can decline.
+     */
+    public function refund(string $chargeReference, Money $amount, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): RefundResult;
 }

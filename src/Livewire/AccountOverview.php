@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Illuminate\Routing\Exceptions\UrlGenerationException;
+use Illuminate\Routing\UrlGenerator;
 use Illuminate\Support\Facades\Route;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Support\Navigation;
@@ -29,14 +31,14 @@ final class AccountOverview extends AccountScreen
         // so a foreign/ancillary route the consumer has not built yet — or one that needs parameters the hub
         // cannot supply — is hidden instead of throwing on route() and 500-ing the whole landing page.
         $items = array_values(array_filter(
-            app(Navigation::class)->items(),
+            Container::getInstance()->make(Navigation::class)->items(),
             static function (NavItem $item): bool {
                 if (! Route::has($item->route)) {
                     return false;
                 }
 
                 try {
-                    route($item->route);
+                    Container::getInstance()->make(UrlGenerator::class)->route($item->route);
 
                     return true;
                 } catch (UrlGenerationException) {
@@ -47,7 +49,7 @@ final class AccountOverview extends AccountScreen
 
         return $this->view('billing::livewire.account-overview', [
             'items' => $items,
-            'tierLabel' => app(TierCatalog::class)->label($this->currentTierKey()),
+            'tierLabel' => Container::getInstance()->make(TierCatalog::class)->label($this->currentTierKey()),
         ]);
     }
 }

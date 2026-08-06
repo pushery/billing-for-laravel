@@ -25,6 +25,20 @@ final class PrepaidUnits extends Model
     /** @var list<string> */
     protected $fillable = ['owner_type', 'owner_id', 'meter_key', 'balance', 'granted_total'];
 
+    /**
+     * The same defaults the schema carries, so a row that was just created reads like one that was read back.
+     *
+     * Without them a model created without these columns holds null for each, while the row the database
+     * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
+     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     *
+     * @var array<string, int>
+     */
+    protected $attributes = [
+        'balance' => 0,
+        'granted_total' => 0,
+    ];
+
     /** @var array<string, string> */
     protected $casts = ['balance' => 'integer', 'granted_total' => 'integer'];
 }

@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a defect in Billing for Laravel.
+description: "Report a defect in Billing for Laravel."
 labels: ["bug"]
 body:
   - type: markdown

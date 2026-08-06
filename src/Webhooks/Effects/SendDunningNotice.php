@@ -9,9 +9,11 @@ use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Contracts\DedupesOnReference;
 use Pushery\Billing\Contracts\DunningNotifier;
 use Pushery\Billing\Enums\AuditSource;
+use Pushery\Billing\Enums\ToastLevel;
 use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Support\BillingEventLog;
+use Pushery\Billing\Support\OwnerToast;
 use RuntimeException;
 
 /**
@@ -30,6 +32,7 @@ final readonly class SendDunningNotice implements DedupesOnReference
         private CustomerDirectory $directory,
         private DunningNotifier $notifier,
         private BillingEventLog $log,
+        private OwnerToast $toasts,
     ) {}
 
     public function __invoke(PaymentFailed $event): void
@@ -41,6 +44,11 @@ final readonly class SendDunningNotice implements DedupesOnReference
         }
 
         $this->notifier->paymentFailed($owner, $event->amount, $event->reference);
+
+        // The toast rides with the mail, under the SAME once-per-invoice claim — never on its own schedule.
+        // Dunning is the one message a customer must not receive twice, and a second delivery path with its
+        // own dedup would be a second chance to get that wrong.
+        $this->toasts->notify($owner, 'billing::account.toast.payment_failed', ToastLevel::Danger);
 
         $this->log->record('dunning.notice_sent', $owner, [
             'invoice' => $event->reference,

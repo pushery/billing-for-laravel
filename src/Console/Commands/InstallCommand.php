@@ -114,7 +114,7 @@ final class InstallCommand extends Command
     private function writeMigration(Filesystem $files, string $table, string $tierColumn, string $customerColumn, array $dropColumns): string
     {
         $name = Carbon::now()->format('Y_m_d_His')."_add_billing_columns_to_{$table}_table.php";
-        $path = database_path("migrations/{$name}");
+        $path = $this->laravel->databasePath("migrations/{$name}");
 
         $files->ensureDirectoryExists(dirname($path));
         $files->put($path, $this->migration($table, $tierColumn, $customerColumn, $dropColumns));

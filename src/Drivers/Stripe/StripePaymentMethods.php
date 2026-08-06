@@ -12,6 +12,7 @@ use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\PaymentMethod as PaymentMethodValue;
 use Stripe\Customer;
 use Stripe\Exception\InvalidRequestException;
+use Stripe\Exception\RateLimitException;
 use Stripe\PaymentMethod as StripePaymentMethod;
 use Stripe\StripeClient;
 
@@ -153,6 +154,10 @@ final readonly class StripePaymentMethods implements PaymentMethodsContract
     {
         try {
             $method = $this->stripe->paymentMethods->retrieve($methodId);
+        } catch (RateLimitException $e) {
+            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
+            throw $e;
         } catch (InvalidRequestException) {
             return false;
         }

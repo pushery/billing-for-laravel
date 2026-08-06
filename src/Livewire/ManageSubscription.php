@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Locked;
 use Pushery\Billing\Catalogs\ConfigAddonCatalog;
 use Pushery\Billing\Contracts\Checkout;
@@ -25,6 +27,8 @@ use Pushery\Billing\Trials\TrialPolicy;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\Plan;
 use Pushery\Billing\ValueObjects\TierIdentity;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * The account-hub plan-change screen — the in-app upgrade/downgrade that replaces delegating plan
@@ -58,22 +62,22 @@ final class ManageSubscription extends AccountScreen
 
     public function render(): View
     {
-        $tiers = app(TierCatalog::class);
+        $tiers = Container::getInstance()->make(TierCatalog::class);
         $key = $this->currentTierKey();
 
         // Fail-soft: even if the owner's tier is not a configured tier, still offer the plans. A visitor
         // on the zero tier must always be able to reach checkout — never a blank screen.
         $current = $tiers->find($key) ?? new TierIdentity(key: $key, label: $tiers->label($key));
 
-        $plans = app(PlanCatalog::class)->options($current);
+        $plans = Container::getInstance()->make(PlanCatalog::class)->options($current);
 
-        $trialPolicy = app(TrialPolicy::class);
+        $trialPolicy = Container::getInstance()->make(TrialPolicy::class);
 
         return $this->view('billing::livewire.manage-subscription', [
             'currentLabel' => $tiers->label($key),
             // When an external merchant of record owns billing (config billing.link_out), the hub links OUT to
             // its portal instead of offering the in-app checkout below — the app is not the merchant of record.
-            'linkOut' => app(LinkOut::class)->url(),
+            'linkOut' => Container::getInstance()->make(LinkOut::class)->url(),
             'canSwap' => $this->hasLiveSubscription(),
             // A downgrade the customer scheduled but that has not taken effect yet: shown as "changes on
             // {date}" with a cancel action, so a pending change is never a surprise on the next invoice.
@@ -83,7 +87,7 @@ final class ManageSubscription extends AccountScreen
             // not belong on a plan row.
             'trialDays' => $trialPolicy->subscriptionTrialEnabled() ? $trialPolicy->days() : null,
             // The trial-status note (remaining days + card hint) shown while the owner is on a trial.
-            'trial' => app(TrialCallouts::class)->for($this->owner(), $this->currentState(), $this->subscription()?->trial_ends_at),
+            'trial' => Container::getInstance()->make(TrialCallouts::class)->for($this->owner(), $this->currentState(), $this->subscription()?->trial_ends_at),
             // Whether the typed coupon code is recognized, so the visitor sees it applied before checkout.
             'couponStatus' => $this->couponStatus(),
             // The card a swap or subscription will charge, mirrored from local columns — never a provider call.
@@ -127,7 +131,7 @@ final class ManageSubscription extends AccountScreen
      */
     private function addonOptions(): array
     {
-        $catalog = app(ConfigAddonCatalog::class);
+        $catalog = Container::getInstance()->make(ConfigAddonCatalog::class);
         $out = [];
 
         foreach ($catalog->all() as $key) {
@@ -161,7 +165,7 @@ final class ManageSubscription extends AccountScreen
         $coupon = trim($this->couponCode);
         $coupon = $coupon !== '' ? $coupon : null;
 
-        $intent = app(Checkout::class)->subscribe($this->owner(), $tierKey, $coupon);
+        $intent = Container::getInstance()->make(Checkout::class)->subscribe($this->owner(), $tierKey, $coupon);
         $url = SafeExternalUrl::orNull($intent->payload['checkout_url'] ?? null);
 
         if ($url !== null) {
@@ -186,9 +190,11 @@ final class ManageSubscription extends AccountScreen
         $this->denyInAppCheckout();
         $this->ensureEligible();
 
-        abort_unless(app(ConfigAddonCatalog::class)->exists($addonKey), 404);
+        if (! (Container::getInstance()->make(ConfigAddonCatalog::class)->exists($addonKey))) {
+            throw new NotFoundHttpException;
+        }
 
-        $intent = app(OneTimeCharge::class)->purchase($this->owner(), $addonKey);
+        $intent = Container::getInstance()->make(OneTimeCharge::class)->purchase($this->owner(), $addonKey);
         $url = SafeExternalUrl::orNull($intent->payload['checkout_url'] ?? null);
 
         if ($url !== null) {
@@ -212,7 +218,7 @@ final class ManageSubscription extends AccountScreen
             return null;
         }
 
-        return app(DiscountResolver::class)->resolve($code) !== null ? 'applied' : 'invalid';
+        return Container::getInstance()->make(DiscountResolver::class)->resolve($code) !== null ? 'applied' : 'invalid';
     }
 
     /**
@@ -222,10 +228,10 @@ final class ManageSubscription extends AccountScreen
      */
     public function preview(string $tierKey): void
     {
-        $plan = app(PlanCatalog::class)->planFor($tierKey);
+        $plan = Container::getInstance()->make(PlanCatalog::class)->planFor($tierKey);
 
         $amount = $plan instanceof Plan
-            ? app(ProrationStrategy::class)->previewSwap($this->owner(), $plan)
+            ? Container::getInstance()->make(ProrationStrategy::class)->previewSwap($this->owner(), $plan)
             : null;
 
         $this->previewTierKey = $tierKey;
@@ -239,7 +245,7 @@ final class ManageSubscription extends AccountScreen
 
         $subscription = $this->subscription();
         $timing = $subscription instanceof Subscription
-            ? app(PlanSwapPlanner::class)->timingFor($this->currentTierKey(), $tierKey)
+            ? Container::getInstance()->make(PlanSwapPlanner::class)->timingFor($this->currentTierKey(), $tierKey)
             : SwapTiming::Immediate;
 
         // A move to the same tier is a no-op the planner reports as null — don't call the provider or
@@ -258,10 +264,28 @@ final class ManageSubscription extends AccountScreen
             $subscription->scheduleSwap($tierKey, $subscription->current_period_end ?? Carbon::now()->utc());
             $this->audit('subscription.swap_scheduled', ['tier' => $tierKey]);
         } else {
-            app(SubscriptionActions::class)->swap($this->owner(), $tierKey);
+            $plan = Container::getInstance()->make(PlanCatalog::class)->planFor($tierKey);
 
-            // An immediate upgrade supersedes any pending downgrade — the customer just chose to move up now.
-            $subscription?->cancelScheduledSwap();
+            // The proration is applied BEFORE the provider is asked to swap, and the order is not a
+            // preference. `applySwap` prices the unused remainder against the tier the resolver answers with
+            // RIGHT NOW; run it afterwards and that is already the new tier, so the credit would be computed
+            // against the price the customer is moving to. It would look entirely reasonable and be wrong.
+            //
+            // Wrapped so a provider that refuses the swap leaves no credit behind. Before this, the two ran
+            // in neither order: nothing in the package called `applySwap` at all, so an install on the
+            // credit-balance strategy showed a customer their proration in the preview and then booked
+            // nothing — the promise was on screen and the money never moved.
+            DB::transaction(function () use ($tierKey, $plan, $subscription): void {
+                if ($plan instanceof Plan) {
+                    Container::getInstance()->make(ProrationStrategy::class)->applySwap($this->owner(), $plan);
+                }
+
+                Container::getInstance()->make(SubscriptionActions::class)->swap($this->owner(), $tierKey);
+
+                // An immediate upgrade supersedes any pending downgrade — the customer just chose to move up now.
+                $subscription?->cancelScheduledSwap();
+            });
+
             $this->audit('subscription.swapped', ['tier' => $tierKey]);
         }
 
@@ -286,7 +310,7 @@ final class ManageSubscription extends AccountScreen
         $tierKey = $subscription->scheduled_tier_key ?? '';
 
         return [
-            'tierLabel' => app(TierCatalog::class)->label($tierKey),
+            'tierLabel' => Container::getInstance()->make(TierCatalog::class)->label($tierKey),
             'date' => ($subscription->scheduled_swap_at ?? Carbon::now())->toFormattedDateString(),
         ];
     }
@@ -312,6 +336,8 @@ final class ManageSubscription extends AccountScreen
      */
     private function denyInAppCheckout(): void
     {
-        abort_if(app(LinkOut::class)->active(), 403);
+        if (Container::getInstance()->make(LinkOut::class)->active()) {
+            throw new HttpException(403);
+        }
     }
 }

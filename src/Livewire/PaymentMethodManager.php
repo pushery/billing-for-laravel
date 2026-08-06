@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Livewire\Concerns\DegradesGracefully;
 use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\PaymentMethod;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * The account-hub payment-method screen: it lists the owner's stored methods (the default first), sets
@@ -28,7 +31,7 @@ final class PaymentMethodManager extends AccountScreen
     {
         return $this->view('billing::livewire.payment-method-manager', [
             // Listing methods is a provider read; degrade to a notice rather than 500 the whole screen.
-            'methods' => $this->orDegrade(fn (): array => app(PaymentMethods::class)->all($this->owner()), []),
+            'methods' => $this->orDegrade(fn (): array => Container::getInstance()->make(PaymentMethods::class)->all($this->owner()), []),
         ]);
     }
 
@@ -39,7 +42,7 @@ final class PaymentMethodManager extends AccountScreen
         // A full-page redirect to the provider's hosted card page — no card data touches this app, and no
         // front-end element is shipped. The card is captured on the provider's side and attached to the
         // customer; the customer returns here. A driver with no hosted page yields null and nothing happens.
-        $url = SafeExternalUrl::orNull(app(PaymentMethods::class)->addMethodUrl($this->owner()));
+        $url = SafeExternalUrl::orNull(Container::getInstance()->make(PaymentMethods::class)->addMethodUrl($this->owner()));
 
         if ($url !== null) {
             $this->redirect($url);
@@ -50,7 +53,7 @@ final class PaymentMethodManager extends AccountScreen
     {
         $this->authorizeMethod($methodId);
 
-        app(PaymentMethods::class)->setDefault($this->owner(), $methodId);
+        Container::getInstance()->make(PaymentMethods::class)->setDefault($this->owner(), $methodId);
     }
 
     public function remove(string $methodId): void
@@ -62,12 +65,12 @@ final class PaymentMethodManager extends AccountScreen
         // message — set another card as default first — rather than a 500 or a silent lapse. This is a
         // correctness guard, not a security one: ownership is already enforced by authorizeMethod().
         if ($this->wouldStrandBilling($methodId)) {
-            $this->addError('remove', __('billing::account.payment_methods.cannot_remove_last_default'));
+            $this->addError('remove', Lang::get('billing::account.payment_methods.cannot_remove_last_default'));
 
             return;
         }
 
-        app(PaymentMethods::class)->remove($this->owner(), $methodId);
+        Container::getInstance()->make(PaymentMethods::class)->remove($this->owner(), $methodId);
     }
 
     /**
@@ -82,7 +85,7 @@ final class PaymentMethodManager extends AccountScreen
             return false;
         }
 
-        $methods = app(PaymentMethods::class)->all($this->owner());
+        $methods = Container::getInstance()->make(PaymentMethods::class)->all($this->owner());
 
         if (count($methods) === 1) {
             return true;
@@ -103,9 +106,11 @@ final class PaymentMethodManager extends AccountScreen
     {
         $owned = array_map(
             static fn (PaymentMethod $method): string => $method->id,
-            app(PaymentMethods::class)->all($this->owner()),
+            Container::getInstance()->make(PaymentMethods::class)->all($this->owner()),
         );
 
-        abort_unless(in_array($methodId, $owned, true), 404);
+        if (! (in_array($methodId, $owned, true))) {
+            throw new NotFoundHttpException;
+        }
     }
 }
