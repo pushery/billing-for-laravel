@@ -124,10 +124,9 @@ final readonly class StripeSeatBilling implements SeatBilling
     private function subscriptionReference(Model $owner): ?string
     {
         $subscription = Subscription::query()
-            ->where('owner_type', $owner->getMorphClass())
-            ->where('owner_id', $owner->getKey())
+            ->forOwner($owner)
             ->forMerchant(null)
-            ->where('type', 'default')
+            ->ofDefaultType()
             ->latest('id')
             ->first();
 

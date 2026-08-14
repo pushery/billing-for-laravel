@@ -12,6 +12,7 @@ use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\RoundingResidual;
 use Pushery\Billing\Enums\SettlementState;
+use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
 
@@ -32,12 +33,20 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property ?RoundingResidual $fee_residual
  * @property ?int $commission_tax_bps
  * @property int $net_minor
+ * @property ?int $transfer_moved_minor what the provider reported it actually moved to the merchant, or
+ *                                      null where nothing reported a figure — a destination charge moves
+ *                                      the share as part of the payment and makes no transfer call
  * @property string $currency
  * @property SettlementState $settlement_state
  * @property ?Carbon $settled_at
  * @property int $refunded_minor
  * @property int $transfer_reversed_minor
  * @property int $fee_refunded_minor
+ * @property ?int $buyer_fee_gross_minor
+ * @property ?int $buyer_fee_net_minor
+ * @property ?int $buyer_fee_tax_minor
+ * @property ?string $buyer_fee_place_of_supply
+ * @property int $buyer_fee_refunded_minor
  * @property ?Carbon $merchant_erased_at
  */
 final class MerchantCharge extends Model
@@ -46,9 +55,10 @@ final class MerchantCharge extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'transfer_reference', 'charge_type',
+        'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'transfer_reference', 'transfer_moved_minor', 'charge_type',
         'gross_minor', 'fee_minor', 'fee_bps', 'fee_flat_minor', 'fee_residual', 'commission_tax_bps', 'net_minor', 'currency', 'settlement_state', 'settled_at',
         'refunded_minor', 'transfer_reversed_minor', 'fee_refunded_minor', 'merchant_erased_at',
+        'buyer_fee_gross_minor', 'buyer_fee_net_minor', 'buyer_fee_tax_minor', 'buyer_fee_place_of_supply', 'buyer_fee_refunded_minor',
     ];
 
     /**
@@ -63,6 +73,7 @@ final class MerchantCharge extends Model
         'refunded_minor' => 0,
         'transfer_reversed_minor' => 0,
         'fee_refunded_minor' => 0,
+        'buyer_fee_refunded_minor' => 0,
     ];
 
     /** @var array<string,string> */
@@ -73,9 +84,16 @@ final class MerchantCharge extends Model
         // unequal to every RoundingResidual case and quietly fall through to the configured fallback.
         'fee_residual' => RoundingResidual::class,
         'net_minor' => 'integer',
+        // Deliberately NOT defaulted. Null means no provider figure was reported — a destination charge
+        // never makes a transfer call — and that is a different claim from "zero moved".
+        'transfer_moved_minor' => 'integer',
         'refunded_minor' => 'integer',
         'transfer_reversed_minor' => 'integer',
         'fee_refunded_minor' => 'integer',
+        'buyer_fee_gross_minor' => 'integer',
+        'buyer_fee_net_minor' => 'integer',
+        'buyer_fee_tax_minor' => 'integer',
+        'buyer_fee_refunded_minor' => 'integer',
         'settlement_state' => SettlementState::class,
         'charge_type' => ChargeType::class,
         'settled_at' => UtcDateTime::class,
@@ -107,6 +125,43 @@ final class MerchantCharge extends Model
     }
 
     /**
+     * The buyer fee this sale carried, read back as the line it was charged as — or null if it carried none.
+     *
+     * All four parts or nothing. A row with a gross and no place would be a taxable supply whose rate cannot
+     * be stated, and answering a partial line would push that ambiguity into a correcting document instead
+     * of ending it here.
+     */
+    public function buyerFee(): ?FeeLine
+    {
+        if ($this->buyer_fee_gross_minor === null || $this->buyer_fee_net_minor === null) {
+            return null;
+        }
+
+        if ($this->buyer_fee_tax_minor === null || $this->buyer_fee_place_of_supply === null) {
+            return null;
+        }
+
+        return new FeeLine(
+            new Money($this->buyer_fee_gross_minor, $this->currency),
+            new Money($this->buyer_fee_net_minor, $this->currency),
+            new Money($this->buyer_fee_tax_minor, $this->currency),
+            $this->buyer_fee_place_of_supply,
+        );
+    }
+
+    /**
+     * What of the buyer fee has not gone back yet.
+     *
+     * Its own remainder, deliberately not folded into {@see self::refundableMinor()}: that one is capped
+     * against the sale's gross, and the fee was never part of it. One counter for two supplies would either
+     * make the fee unreturnable on a fully refunded sale or let the sale be over-refunded by the fee.
+     */
+    public function buyerFeeRefundableMinor(): int
+    {
+        return max(0, ($this->buyer_fee_gross_minor ?? 0) - $this->buyer_fee_refunded_minor);
+    }
+
+    /**
      * How much of the buyer's payment can still be refunded.
      *
      * Read from the gross, because that is what the buyer paid — not from the net, which is only the
@@ -125,7 +180,15 @@ final class MerchantCharge extends Model
      */
     public function reversibleMinor(): int
     {
-        return max(0, $this->net_minor - $this->transfer_reversed_minor);
+        // What MOVED, where the provider said so, and only otherwise what was owed. The two differ whenever
+        // a provider moves less than it was asked to, and reading the ceiling off the owed amount lets the
+        // package try to claw back money that never reached the merchant — on a lost dispute the platform
+        // is then out of pocket for the difference.
+        //
+        // Null is not zero here: it means nobody reported a figure (a destination charge moves the share as
+        // part of the payment, so no transfer call is ever made). There the owed amount is the honest
+        // ceiling, which is what it has always been.
+        return max(0, ($this->transfer_moved_minor ?? $this->net_minor) - $this->transfer_reversed_minor);
     }
 
     /**

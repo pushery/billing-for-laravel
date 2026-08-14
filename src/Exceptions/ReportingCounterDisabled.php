@@ -22,6 +22,17 @@ use RuntimeException;
  */
 final class ReportingCounterDisabled extends RuntimeException
 {
+    public static function forSubdivisionSales(): self
+    {
+        return new self(
+            'Buyer gross per subdivision was asked for, and billing.tax_counters.us_state_gmv.enabled is '
+            .'off. The switch exists so a platform with no subdivision-level obligation stops carrying a '
+            .'counter it does not need — not so the figure can be made to disappear while still being '
+            .'asked for. A zero here would read as "we sold nothing into that state", which is exactly the '
+            .'sentence a nexus threshold is watched for.'
+        );
+    }
+
     public static function forWithheldFees(): self
     {
         return new self(

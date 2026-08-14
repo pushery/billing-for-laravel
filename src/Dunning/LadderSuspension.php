@@ -76,9 +76,8 @@ final readonly class LadderSuspension implements MerchantScopedSuspensionLadder,
         // collapses to the platform sentinel there, so a single-seller install reads exactly the row it
         // always read.
         $since = Subscription::query()
-            ->where('owner_type', $owner->getMorphClass())
-            ->where('owner_id', $owner->getKey())
-            ->where('type', 'default')
+            ->forOwner($owner)
+            ->ofDefaultType()
             ->forMerchant($merchant)
             ->whereNotNull('delinquent_since')
             ->value('delinquent_since');

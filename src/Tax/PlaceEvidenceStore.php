@@ -92,6 +92,22 @@ final readonly class PlaceEvidenceStore
     }
 
     /**
+     * The subdivision that sale settled on, or null where none was.
+     *
+     * The sibling of {@see self::countryFor()}, and the one a subdivision-level counter reads. Null is the
+     * ordinary answer and an honest one — most countries have no subdivisions in scope, and a sale whose
+     * sources disagreed about the state settled on none. A caller writes what this returns onto the
+     * document; what it must never do is fall back to the country or to a raw signal, because a guessed
+     * subdivision raises a threshold in a place nobody sold into.
+     */
+    public function subdivisionFor(string $reference): ?string
+    {
+        $subdivision = PlaceEvidence::query()->where('reference', $reference)->value('resolved_subdivision');
+
+        return is_string($subdivision) && $subdivision !== '' ? $subdivision : null;
+    }
+
+    /**
      * How many agreeing signals this operator requires.
      *
      * Two by default. One is enough below a turnover figure and two are required above it; which applies is

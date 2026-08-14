@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Pushery\Billing\Notifiers;
 
 use DateTimeInterface;
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Notification;
+use Pushery\Billing\Consumer\WithdrawalConsentLedger;
 use Pushery\Billing\Contracts\DunningNotifier;
 use Pushery\Billing\Contracts\MandateNotifier;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
@@ -45,9 +47,25 @@ final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, 
         Notification::send($owner, new PaymentActionRequiredNotification);
     }
 
+    /**
+     * The receipt — and, where one was given, the confirmation the law wants on a durable medium.
+     *
+     * The declarations are FETCHED here rather than passed in, and that is what keeps the seam intact.
+     * `ReceiptNotifier` has one method and is implemented outside this package; a new required parameter
+     * would be a fatal error in code this package does not own. Looking them up means the shipped notifier
+     * carries them without any adopter changing a line, and an adopter with their own notifier decides
+     * deliberately whether to do the same rather than losing them silently.
+     *
+     * Null on every install with no consumer-rights profile, and on every purchase that is not an add-on —
+     * which is to say almost all of them. The notification then renders exactly what it always did.
+     */
     public function paymentSucceeded(Model $owner, Money $amount, string $reference): void
     {
-        Notification::send($owner, new PaymentSucceededNotification($amount, $reference));
+        Notification::send($owner, new PaymentSucceededNotification(
+            $amount,
+            $reference,
+            Container::getInstance()->make(WithdrawalConsentLedger::class)->forPayment($owner, $reference),
+        ));
     }
 
     public function suspensionWarning(Model $owner, Money $amountDue): void

@@ -227,6 +227,7 @@ return [
     'toast' => [
         'payment_failed' => 'O teu pagamento não pôde ser processado. Atualiza os teus dados de pagamento.',
         'subscription_activated' => 'A tua subscrição está ativa — tudo o que inclui está disponível.',
+        'dismiss' => 'Dispensar',
     ],
 
 ];

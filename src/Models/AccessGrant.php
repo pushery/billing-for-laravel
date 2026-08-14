@@ -51,6 +51,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * @property ?string $version_pin_ref
  * @property ?Carbon $update_window_ends_at
  * @property ?Carbon $conformity_update_until
+ * @property ?Carbon $withdrawal_window_ends_at
  * @property bool $conformity_waiver
  * @property ?string $conformity_waiver_ref
  * @property ?WithdrawalType $withdrawal_type
@@ -71,7 +72,7 @@ final class AccessGrant extends Model
         'content_type', 'content_ref', 'source', 'status', 'acquired_at', 'expires_at',
         'revoked_at', 'revoked_reason', 'source_reference',
         'update_policy', 'version_pin_ref', 'update_window_ends_at',
-        'conformity_update_until', 'conformity_waiver', 'conformity_waiver_ref',
+        'conformity_update_until', 'conformity_waiver', 'conformity_waiver_ref', 'withdrawal_window_ends_at',
         'withdrawal_type', 'withdrawal_declaration_ref',
         'bundle_ref', 'max_seats', 'merchant_uid', 'merchant_type', 'merchant_id',
     ];
@@ -102,6 +103,7 @@ final class AccessGrant extends Model
         'revoked_at' => UtcDateTime::class,
         'update_window_ends_at' => UtcDateTime::class,
         'conformity_update_until' => UtcDateTime::class,
+        'withdrawal_window_ends_at' => UtcDateTime::class,
     ];
 
     /** @return MorphTo<Model, $this> */

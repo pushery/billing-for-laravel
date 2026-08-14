@@ -13,15 +13,12 @@ use InvalidArgumentException;
 use Pushery\Billing\Enums\DocumentSeries;
 use Pushery\Billing\Enums\FanReceiptTier;
 use Pushery\Billing\Enums\InvoiceStatus;
-use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\SupplyRegime;
-use Pushery\Billing\Enums\TaxArchetype;
-use Pushery\Billing\Enums\TaxExemptionReason;
-use Pushery\Billing\Enums\TaxRateCategory;
 use Pushery\Billing\Invoicing\Party;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\ServicePeriod;
+use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 
 /**
  * The buyer's document for a routed sale, at the least tier the purchase needs.
@@ -46,6 +43,36 @@ use Pushery\Billing\ValueObjects\ServicePeriod;
  */
 final readonly class FanReceiptIssuer
 {
+    /**
+     * The frozen characteristics a restatement does NOT carry over, and why each one differs.
+     *
+     * Stated rather than achieved by omission. The restatement used to be assembled from a hand-written list
+     * of columns beside the one `issue()` writes, and the two drifted: eight columns were simply absent —
+     * three of them EN 16931 fields both e-invoice writers read. Nothing caught it, because a column nobody
+     * typed is not an error. The row was valid, the totals added up, and the document just no longer said
+     * when the supply happened or why it was exempt.
+     *
+     * So the carried set is now DERIVED from {@see InvoiceRecord::FROZEN_SCALARS} — the same list the
+     * immutability guard reads — and this is the exception list. A column that changes on a restatement is a
+     * decision somebody made; it belongs here with its reason, where the next reader can disagree with it.
+     *
+     * @var list<string>
+     */
+    public const array RESTATED_DIFFERENTLY = [
+        // A new document gets a new number from the buyer-receipt series.
+        'number',
+        // That is the whole point of the restatement: the short receipt becomes a full invoice.
+        'receipt_tier',
+        // Set explicitly to the buyer-receipt series, which is what a restatement always is.
+        'document_series',
+        // A unique index spans period and series, so a second row carrying the same period could not exist.
+        'settlement_period',
+        // The claim on the settled charge belongs to the FIRST document over that sale. A restatement that
+        // claimed it again would hand the sale's exclusive slot to a second row, undoing from inside the
+        // application the constraint the database holds.
+        'charge_claim_key',
+    ];
+
     public function __construct(
         private DocumentNumberAllocator $numbers,
         private Repository $config,
@@ -59,28 +86,26 @@ final readonly class FanReceiptIssuer
      * @param  ?ServicePeriod  $period  the stretch this document covers, where it covers one. A subscription
      *                                  cycle is a PART-SUPPLY and its document says which part; a one-off
      *                                  purchase has no period and states none.
-     * @param  ?TaxArchetype  $archetype  what was sold, in the terms the tax treatment turns on
-     * @param  ?PlaceOfSupplyRule  $placeOfSupply  where the supply was taxed
-     * @param  ?TaxRateCategory  $rateCategory  which rate band it fell in
-     * @param  ?CarbonImmutable  $deliveredOn  when the supply was actually made — EN 16931 BT-72
-     * @param  ?TaxExemptionReason  $exemptionReason  why no tax was charged, where none was
+     * @param  ?SupplyTaxCharacteristics  $characteristics  what the supply WAS, in the terms its tax treatment turns on
+     * @param  ?string  $provider  which provider the charge reference belongs to — the money, not the supply
      *
-     * The delivery date is supplied and never derived, which is what both e-invoice writers already say in
-     * their own comments: a subscription billed in advance issues on the first of the month, and a value
-     * taken from the period's end would state a delivery in the future on a document dated before it. A
-     * document that covers a STRETCH says so with its service period instead, and leaves this null — the two
-     * are different claims and the standard has a term for each.
+     * The tax characteristics are frozen here for the same reason the rate and the tier already are: the
+     * document has to keep saying what the supply WAS, after the product behind it has legitimately
+     * changed. They arrive from the caller rather than being looked up, because nothing in this class is
+     * jurisdictional and the catalog is the consuming application's.
      *
-     * The last three are the sale's tax characteristics, and they are frozen here for the same reason the
-     * rate and the tier already are: the document has to keep saying what the supply WAS, after the product
-     * behind it has legitimately changed. They arrive from the caller rather than being looked up, because
-     * nothing in this class is jurisdictional and the catalog is the consuming application's.
+     * They travel as ONE argument, and they used to be eight. The three original ones were separate on a
+     * stated ground — they are independently known, and an object would have to rule on a partially-filled
+     * one — and the first half of that is still true, which is why every field of
+     * `SupplyTaxCharacteristics` is nullable. The second half did not survive the growth: there is no rule
+     * to invent, because an empty set is exactly as valid as a full one and means what the absent arguments
+     * meant. What broke the old form was the count. At eight characteristics inside a seventeen-parameter
+     * signature, two callers were filling it positionally, and a characteristic inserted in the middle
+     * would have shifted every argument after it past two type-compatible pairs — silently, since the
+     * statics cannot tell one `?CarbonImmutable` from another. A single argument cannot be mis-ordered.
      *
-     * Three parameters rather than one object, deliberately. They are independently known — a caller may
-     * have the archetype from a catalog and the band from a rate matrix — and a wrapper would have to invent
-     * a rule for a partially-filled one. All three default to null, so every existing call site writes the
-     * same row it wrote before: the columns have been nullable since they were added, and until this
-     * assignment existed nothing filled any of them on a document this package issued.
+     * Everything still defaults to null, so a call site that passes no characteristics writes the row it
+     * wrote before: the columns have been nullable since they were added.
      */
     public function issue(
         Model $buyerOwner,
@@ -91,14 +116,14 @@ final readonly class FanReceiptIssuer
         ?string $chargeReference = null,
         ?array $buyer = null,
         ?ServicePeriod $period = null,
-        ?TaxArchetype $archetype = null,
-        ?PlaceOfSupplyRule $placeOfSupply = null,
-        ?TaxRateCategory $rateCategory = null,
-        ?CarbonImmutable $deliveredOn = null,
-        ?TaxExemptionReason $exemptionReason = null,
-        ?TaxArchetype $soldAlongside = null,
+        ?SupplyTaxCharacteristics $characteristics = null,
         ?string $provider = null,
     ): InvoiceRecord {
+        // A caller that knows none of them says so with an empty set rather than by omission. Every field
+        // is nullable, so there is no partially-filled case to rule on: the columns stay null exactly where
+        // the caller had nothing, which is what they already did when these were eight separate arguments.
+        $characteristics ??= SupplyTaxCharacteristics::unknown();
+
         if ($buyer !== null && $tier !== FanReceiptTier::FullInvoice) {
             throw new InvalidArgumentException(
                 'Buyer details belong only on a full invoice, which is issued when the buyer asks for one. '
@@ -150,18 +175,25 @@ final readonly class FanReceiptIssuer
             // this package issued carried null, and both readers treat null as an answer rather than as an
             // absence — the EN 16931 category reads it as "a service", and the return files the sale under
             // the standard band whatever rate it actually carried.
-            'tax_archetype' => $archetype,
+            'tax_archetype' => $characteristics->archetype,
             // What a voluntary payment was paid ON. The two columns beside it are the DERIVED answers; this
             // is what they were derived FROM, and keeping it is what lets a reader check the derivation
             // rather than take it. It is also the transaction line's reference to the thing it accompanied,
             // which a tip otherwise has no way of naming.
-            'sold_alongside_archetype' => $soldAlongside,
-            'place_of_supply_rule' => $placeOfSupply,
-            'tax_rate_category' => $rateCategory,
+            'sold_alongside_archetype' => $characteristics->soldAlongside,
+            'place_of_supply_rule' => $characteristics->placeOfSupply,
+            // WHERE the buyer was, at the grain the obligation is owed at. Supplied rather than looked up,
+            // like every other tax characteristic on this document and for the same reason: nothing in this
+            // class is jurisdictional, and the place evidence belongs to the consuming application. What
+            // the package guarantees is the other half — that an absent subdivision is counted as
+            // `unknown` rather than attributed somewhere plausible.
+            'destination_country' => $characteristics->destinationCountry,
+            'destination_subdivision' => $characteristics->destinationSubdivision,
+            'tax_rate_category' => $characteristics->rateCategory,
             // BT-72, and it had the same shape as the characteristics above: both renderers emit it, the
             // column is frozen against later change, and no issuer wrote it — so the term was absent on
             // every document this package produced while a closed ticket said it rendered.
-            'delivered_on' => $deliveredOn,
+            'delivered_on' => $characteristics->deliveredOn,
             // WHY no tax was charged, where none was. It has to be stated rather than inferred, because the
             // renderer can only infer ONE of the two: with this absent it falls back to "reverse charge, or
             // nothing", so `SuppliedOutsideTheUnion` was unreachable — and with it EN 16931 category `G`.
@@ -172,7 +204,7 @@ final readonly class FanReceiptIssuer
             // IS taxed, by the other party, and belongs in a return on both sides. An export placed outside
             // the union is taxed by nobody. Rendering the first where the second happened tells the recipient
             // to account for tax that nothing is owed on.
-            'tax_exemption_reason' => $exemptionReason,
+            'tax_exemption_reason' => $characteristics->exemptionReason,
             // WHICH provider's reference that is. Frozen beside it because the two are one key: the charge
             // table is unique on the pair, and a reference on its own is a prefix rather than an identifier.
             // A document that stored only the reference could be matched to another provider's sale — and
@@ -209,6 +241,87 @@ final readonly class FanReceiptIssuer
                 'period_end' => $period?->endsOn(),
             ], static fn (mixed $value): bool => $value !== null)],
         ]), $chargeReference, $provider);
+    }
+
+    /**
+     * The platform's commission invoice to the SELLER — the second intermediation supply, and the half that
+     * was missing.
+     *
+     * ## What was wrong before this existed
+     *
+     * Under intermediation the package drew exactly one commission number, and the document it belonged to
+     * was owned by the BUYER. The platform withheld a commission from the seller and invoiced it nowhere: a
+     * taxable supply made and not documented, and a seller holding no document for the tax on money kept
+     * from them. Three places in the package already described this invoice as existing — the regime enum,
+     * the shipped configuration, and `SellerReportingPeriod` — which is why its absence read as a design.
+     *
+     * ## What this document is, and what it deliberately is not
+     *
+     * The platform is the seller of this supply and the merchant is its recipient. That is the opposite of
+     * the mediated sale, where the merchant sells to the buyer and the platform arranges it — and it is why
+     * this document, like the buyer-side commission invoice, carries the regime and NOT a seller-of-record
+     * posture: the posture states who sells THE SALE, and answering it here would make the document
+     * contradict itself.
+     *
+     * The taxable base is the commission alone. The mediated sale is the merchant's supply and appears
+     * nowhere on it — stating it would put somebody else's turnover on the platform's invoice.
+     *
+     * Through `issueOnce()` from the first line it existed, which is the whole reason this was built after
+     * the repeat guard rather than beside it: a second issuer that drew its number unconditionally would
+     * have reproduced the burnt-number defect in a fresh place.
+     */
+    public function issueSellerCommission(
+        Model $sellerOwner,
+        Money $feeGross,
+        int $feeRateBps,
+        CarbonImmutable $soldOn,
+        ?string $chargeReference = null,
+        ?string $provider = null,
+    ): InvoiceRecord {
+        // No role-guard call here, deliberately. Both arguments would be constants at this call site, so the
+        // guard could never refuse and the branch could never run — a check that cannot fail is a line
+        // somebody later reads as protection. The refusal that matters happens earlier, in
+        // `SellerFeeCalculator::feeFor()`, where the regime is a parameter and a commission chain really can
+        // arrive; `DocumentRoleGuardTest` holds the guard itself in both directions.
+        [$feeNet, $feeTax] = $feeGross->baseFromMarkup($feeRateBps);
+
+        return $this->issueOnce(
+            $sellerOwner,
+            null,
+            fn (): InvoiceRecord => InvoiceRecord::query()->create([
+                'owner_type' => $sellerOwner->getMorphClass(),
+                'owner_id' => $sellerOwner->getKey(),
+                'number' => $this->numbers->allocate(DocumentSeries::CommissionInvoice, $soldOn->year),
+                'currency' => $feeGross->currency,
+                'status' => InvoiceStatus::Open,
+                'issued_at' => $soldOn,
+                // The commission alone, on every figure. The mediated sale is the merchant's supply: putting
+                // its gross in the total here would state somebody else's turnover on the platform's invoice.
+                'subtotal_minor' => $feeNet->minorUnits,
+                'tax_minor' => $feeTax->minorUnits,
+                'total_minor' => $feeGross->minorUnits,
+                'tax_rate_bps' => $feeRateBps,
+                'supply_regime' => SupplyRegime::Intermediation,
+                'document_series' => DocumentSeries::CommissionInvoice,
+                'settled_charge_reference' => $chargeReference,
+                'provider' => $provider,
+                'seller' => $this->platformParty(),
+                'buyer' => [],
+                'lines' => [
+                    [
+                        'description' => 'Commission',
+                        'quantity' => 1,
+                        'unit' => 'C62',
+                        'unit_price_minor' => $feeNet->minorUnits,
+                        'net_minor' => $feeNet->minorUnits,
+                        'tax_rate' => $feeRateBps,
+                    ],
+                ],
+            ]),
+            $chargeReference,
+            $provider,
+            DocumentSeries::CommissionInvoice,
+        );
     }
 
     /**
@@ -285,13 +398,14 @@ final readonly class FanReceiptIssuer
         Closure $issue,
         ?string $chargeReference = null,
         ?string $provider = null,
+        DocumentSeries $series = DocumentSeries::BuyerReceipt,
     ): InvoiceRecord {
         if (! $period instanceof ServicePeriod) {
             if ($chargeReference === null || $chargeReference === '') {
                 return $issue();
             }
 
-            $existing = $this->buyerDocuments($buyerOwner)
+            $existing = $this->buyerDocuments($buyerOwner, $series)
                 ->where('settled_charge_reference', $chargeReference)
                 ->when(
                     $provider !== null && $provider !== '',
@@ -386,12 +500,23 @@ final readonly class FanReceiptIssuer
      *
      * @return Builder<InvoiceRecord>
      */
-    private function buyerDocuments(Model $buyerOwner): Builder
+    /**
+     * This owner's documents in one series.
+     *
+     * The SERIES is a parameter, and that is the half of this fix nobody would have missed until it was too
+     * late. It was hard-wired to the buyer receipt, so routing the intermediated issuer through the repeat
+     * guard would have changed nothing: the lookup searched a series the commission document does not carry,
+     * found nothing, and drew a second number anyway. It would have read as fixed in every test that only
+     * checked for the absence of an exception.
+     *
+     * @return Builder<InvoiceRecord>
+     */
+    private function buyerDocuments(Model $buyerOwner, DocumentSeries $series = DocumentSeries::BuyerReceipt): Builder
     {
         return InvoiceRecord::query()
             ->where('owner_type', $buyerOwner->getMorphClass())
             ->where('owner_id', $buyerOwner->getKey())
-            ->where('document_series', DocumentSeries::BuyerReceipt->value);
+            ->where('document_series', $series->value);
     }
 
     /**
@@ -433,61 +558,76 @@ final readonly class FanReceiptIssuer
 
         [$feeNet, $feeTax] = $feeGross->baseFromMarkup($feeRateBps);
 
-        return InvoiceRecord::query()->create([
-            'owner_type' => $buyerOwner->getMorphClass(),
-            'owner_id' => $buyerOwner->getKey(),
-            'number' => $this->numbers->allocate(DocumentSeries::CommissionInvoice, $soldOn->year),
-            'currency' => $feeGross->currency,
-            'status' => InvoiceStatus::Open,
-            'issued_at' => $soldOn,
-            // The taxable base is the FEE alone. The goods are stated on the document but are not part of
-            // what the platform is taxed on, because they are not the platform's supply.
-            'subtotal_minor' => $feeNet->minorUnits,
-            'tax_minor' => $feeTax->minorUnits,
-            'total_minor' => $goodsGross->minorUnits + $feeGross->minorUnits,
-            'tax_rate_bps' => $feeRateBps,
-            'fan_gross_minor' => $goodsGross->minorUnits + $feeGross->minorUnits,
-            'supply_regime' => SupplyRegime::Intermediation,
-            // NO posture on this one, and the omission is the answer rather than the same gap one document
-            // over. The posture states who sells THE SALE toward the buyer, and under intermediation that is
-            // the merchant. This document is not the sale: it is the platform's own invoice for arranging
-            // it, and its seller is correctly the platform. Deriving the posture from the regime here would
-            // therefore make the document contradict itself -- which the seller guard says out loud, and
-            // which is how this was found rather than shipped.
-            //
-            // Same shape as `SelfBillingEngine`, which leaves the posture off a self-billed document because
-            // that one names the CREATOR as seller. In both cases the regime is the field the document can
-            // carry cleanly and the posture is not.
-            'document_series' => DocumentSeries::CommissionInvoice,
-            'receipt_tier' => $tier,
-            'settled_charge_reference' => $chargeReference,
-            'seller' => $this->platformParty(),
-            'buyer' => [],
-            'lines' => [
-                [
-                    'description' => 'Purchase',
-                    'quantity' => 1,
-                    'unit' => 'C62',
-                    'unit_price_minor' => $goodsGross->minorUnits,
-                    'net_minor' => $goodsGross->minorUnits,
-                    // No rate at all rather than zero: zero states that tax was considered and came to
-                    // nothing, which is a claim about a supply the platform did not make.
-                    'tax_rate' => null,
+        // Through the repeat guard, like every other buyer document — and the number is drawn INSIDE the
+        // closure, so a redelivery that finds an existing document never spends one. Writing directly meant
+        // the number came first and the unique constraint second: a number gone from a gapless series with
+        // no document behind it, which is the one failure a retry cannot heal.
+        return $this->issueOnce(
+            $buyerOwner,
+            null,
+            fn (): InvoiceRecord => InvoiceRecord::query()->create([
+                'owner_type' => $buyerOwner->getMorphClass(),
+                'owner_id' => $buyerOwner->getKey(),
+                'number' => $this->numbers->allocate(DocumentSeries::CommissionInvoice, $soldOn->year),
+                'currency' => $feeGross->currency,
+                'status' => InvoiceStatus::Open,
+                'issued_at' => $soldOn,
+                // The taxable base is the FEE alone. The goods are stated on the document but are not part of
+                // what the platform is taxed on, because they are not the platform's supply.
+                'subtotal_minor' => $feeNet->minorUnits,
+                'tax_minor' => $feeTax->minorUnits,
+                'total_minor' => $goodsGross->minorUnits + $feeGross->minorUnits,
+                'tax_rate_bps' => $feeRateBps,
+                'fan_gross_minor' => $goodsGross->minorUnits + $feeGross->minorUnits,
+                'supply_regime' => SupplyRegime::Intermediation,
+                // NO posture on this one, and the omission is the answer rather than the same gap one document
+                // over. The posture states who sells THE SALE toward the buyer, and under intermediation that is
+                // the merchant. This document is not the sale: it is the platform's own invoice for arranging
+                // it, and its seller is correctly the platform. Deriving the posture from the regime here would
+                // therefore make the document contradict itself -- which the seller guard says out loud, and
+                // which is how this was found rather than shipped.
+                //
+                // Same shape as `SelfBillingEngine`, which leaves the posture off a self-billed document because
+                // that one names the CREATOR as seller. In both cases the regime is the field the document can
+                // carry cleanly and the posture is not.
+                'document_series' => DocumentSeries::CommissionInvoice,
+                'receipt_tier' => $tier,
+                'settled_charge_reference' => $chargeReference,
+                'seller' => $this->platformParty(),
+                'buyer' => [],
+                'lines' => [
+                    [
+                        'description' => 'Purchase',
+                        'quantity' => 1,
+                        'unit' => 'C62',
+                        'unit_price_minor' => $goodsGross->minorUnits,
+                        'net_minor' => $goodsGross->minorUnits,
+                        // No rate at all rather than zero: zero states that tax was considered and came to
+                        // nothing, which is a claim about a supply the platform did not make.
+                        'tax_rate' => null,
+                    ],
+                    [
+                        'description' => 'Service fee',
+                        'quantity' => 1,
+                        'unit' => 'C62',
+                        'unit_price_minor' => $feeNet->minorUnits,
+                        'net_minor' => $feeNet->minorUnits,
+                        'tax_rate' => $feeRateBps / 100,
+                    ],
                 ],
-                [
-                    'description' => 'Service fee',
-                    'quantity' => 1,
-                    'unit' => 'C62',
-                    'unit_price_minor' => $feeNet->minorUnits,
-                    'net_minor' => $feeNet->minorUnits,
-                    'tax_rate' => $feeRateBps / 100,
-                ],
-            ],
-        ]);
+            ]),
+            chargeReference: $chargeReference,
+            series: DocumentSeries::CommissionInvoice,
+        );
     }
 
     /**
      * The full invoice a buyer asked for after they already had a receipt.
+     *
+     * NOT routed through the repeat guard, and deliberately so — this is the one entry point that is SUPPOSED
+     * to draw a fresh number. It restates a sale a buyer already has a document for, and a second document
+     * for one sale is the whole point of it. Stated here because the next reader counting direct writes will
+     * otherwise find three and file this as a third instance of the same defect.
      *
      * It is a real document with its own number stating the same sale, and the receipt the buyer already
      * holds is left exactly as it was: reaching back to change an issued document is precisely what a
@@ -511,38 +651,29 @@ final readonly class FanReceiptIssuer
             );
         }
 
+        // Everything that decided how the sale was TAXED comes across unchanged, and it is TAKEN from the
+        // frozen list rather than typed again here. A restatement that lost the destination, the rate
+        // category or the exemption reason would describe a different supply to the one person who asked
+        // for a document they could rely on.
+        $carried = [];
+
+        foreach (InvoiceRecord::FROZEN_SCALARS as $column) {
+            if (in_array($column, self::RESTATED_DIFFERENTLY, true)) {
+                continue;
+            }
+
+            $carried[$column] = $receipt->getAttribute($column);
+        }
+
         return InvoiceRecord::query()->create([
+            ...$carried,
             'owner_type' => $receipt->owner_type,
             'owner_id' => $receipt->owner_id,
             'number' => $this->numbers->allocate(DocumentSeries::BuyerReceipt, $requestedOn->year),
             'currency' => $receipt->currency,
             'status' => $receipt->status,
-            // The sale's own date, not the day the buyer asked. An invoice states when the supply happened;
-            // dating it to the request would put it in the wrong period and misstate the tax point.
-            'issued_at' => $receipt->issued_at,
-            'subtotal_minor' => $receipt->subtotal_minor,
-            'tax_minor' => $receipt->tax_minor,
-            'total_minor' => $receipt->total_minor,
-            'tax_rate_bps' => $receipt->tax_rate_bps,
-            'fan_gross_minor' => $receipt->fan_gross_minor,
-            'supply_regime' => $receipt->supply_regime,
             'document_series' => DocumentSeries::BuyerReceipt,
             'receipt_tier' => FanReceiptTier::FullInvoice,
-            'settled_charge_reference' => $receipt->settled_charge_reference,
-            // Everything that decided how the sale was TAXED comes across unchanged. A restatement that lost
-            // the destination or the rate category would render as a domestic supply and tell the buyer
-            // something the original never said — and the buyer is precisely the person who asked for a
-            // document they could rely on.
-            'oss' => $receipt->oss,
-            'destination_country' => $receipt->destination_country,
-            'oss_rate' => $receipt->oss_rate,
-            'tax_rate_category' => $receipt->tax_rate_category,
-            'tax_archetype' => $receipt->tax_archetype,
-            'place_of_supply_rule' => $receipt->place_of_supply_rule,
-            'reverse_charge' => $receipt->reverse_charge,
-            'tax_exempt' => $receipt->tax_exempt,
-            'recipient_tax_status' => $receipt->recipient_tax_status,
-            'rate_matrix_version' => $receipt->rate_matrix_version,
             'reissue_of_invoice_id' => $receipt->id,
             'seller' => $receipt->seller,
             'buyer' => $buyer,

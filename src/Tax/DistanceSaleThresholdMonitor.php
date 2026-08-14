@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Tax;
 
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\CrossBorderSalesCounter;
 use Pushery\Billing\Contracts\SuppliesDistanceSaleThreshold;
@@ -73,6 +74,27 @@ final readonly class DistanceSaleThresholdMonitor
         $profile = $this->profiles->profile();
 
         return $profile instanceof SuppliesDistanceSaleThreshold ? $profile->distanceSaleThresholdMinor() : 0;
+    }
+
+    /**
+     * The day the active profile's limit was known to be correct, or null where no profile supplies one.
+     *
+     * The exact mirror of `thresholdMinor()`, and the reader the contract was written for: its docblock says
+     * the date exists "so its age can be reported rather than assumed", and until now nothing asked. A
+     * promise with no reader reads exactly like a promise being kept.
+     *
+     * Null rather than a shipped fallback, and that is the difference from the union membership beside it in
+     * the doctor: this package ships no distance-sale limit of its own. The number lives in a consumer's
+     * profile, hard-coded there, and is precisely the sort of figure that goes on working while it goes out
+     * of date — a legislator moves it, the monitor keeps computing, and the result stays plausible. Too high
+     * and the operator books at the destination too late; too low and too early. Either way it is a tax
+     * question, not a display one.
+     */
+    public function thresholdValidFrom(): ?CarbonInterface
+    {
+        $profile = $this->profiles->profile();
+
+        return $profile instanceof SuppliesDistanceSaleThreshold ? $profile->distanceSaleThresholdValidFrom() : null;
     }
 
     /**

@@ -12,6 +12,7 @@ use Pushery\Billing\Enums\VoucherEvent;
 use Pushery\Billing\Enums\VoucherInstrumentType;
 use Pushery\Billing\Exceptions\VoucherNotPermitted;
 use Pushery\Billing\Models\Voucher;
+use Pushery\Billing\Models\VoucherMovementRecord;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\VoucherMovement;
 
@@ -66,7 +67,7 @@ final readonly class VoucherLedger
 
         $expiresAfter = $this->config->get('billing.marketplace.vouchers.expire_after_days');
 
-        return Voucher::query()->create([
+        $voucher = Voucher::query()->create([
             'code' => $code,
             'owner_type' => $owner?->getMorphClass(),
             'owner_id' => $this->ownerKey($owner),
@@ -77,6 +78,13 @@ final readonly class VoucherLedger
             'issued_at' => $issuedAt,
             'expires_at' => is_int($expiresAfter) ? $issuedAt->copy()->addDays($expiresAfter) : null,
         ]);
+
+        // The FIRST producer this event has ever had. `VoucherEvent::Issued` was consumed by the exporter
+        // and produced by nothing, so the liability booking a voucher creates on the day it is sold could
+        // not occur — while the turnover at redemption would eventually appear with no counter-entry.
+        $this->record(new VoucherMovement(VoucherEvent::Issued, $faceValue, $code, $issuedAt));
+
+        return $voucher;
     }
 
     /**
@@ -100,7 +108,9 @@ final readonly class VoucherLedger
         $voucher->remaining_minor -= $amount->minorUnits;
         $voucher->save();
 
-        return new VoucherMovement(VoucherEvent::Redeemed, $amount, $voucher->code, $at, saleGross: $saleGross);
+        return $this->record(
+            new VoucherMovement(VoucherEvent::Redeemed, $amount, $voucher->code, $at, saleGross: $saleGross),
+        );
     }
 
     /**
@@ -117,9 +127,37 @@ final readonly class VoucherLedger
         $voucher->remaining_minor = 0;
         $voucher->save();
 
+        // Null where nothing was left, unchanged: an expiry with no value is not an event the books need,
+        // and persisting a zero would put an income booking on a month where no income arose.
         return $remaining > 0
-            ? new VoucherMovement(VoucherEvent::Expired, Money::of($remaining, $voucher->currency), $voucher->code, $at)
+            ? $this->record(new VoucherMovement(VoucherEvent::Expired, Money::of($remaining, $voucher->currency), $voucher->code, $at))
             : null;
+    }
+
+    /**
+     * Write a movement down, and hand back the same value the caller was always given.
+     *
+     * The persistence sits BESIDE the return value rather than replacing it: every existing caller keeps
+     * working unchanged, and the exporter — which reads the value object — gets the same shape whether it
+     * came from a method call or from the table. What changes is only that the movement now outlives the
+     * method that produced it, which is exactly what it could not do before.
+     *
+     * Written here rather than in an observer. These three methods are the only place a movement comes into
+     * existence at all, and an observer over a RETURN VALUE (rather than over a model event) would be a
+     * construction with no precedent anywhere in this package.
+     */
+    private function record(VoucherMovement $movement): VoucherMovement
+    {
+        VoucherMovementRecord::query()->create([
+            'event' => $movement->event,
+            'reference' => $movement->reference,
+            'amount_minor' => $movement->amount->minorUnits,
+            'currency' => $movement->amount->currency,
+            'sale_gross_minor' => $movement->saleGross?->minorUnits,
+            'occurred_on' => $movement->occurredOn,
+        ]);
+
+        return $movement;
     }
 
     /**

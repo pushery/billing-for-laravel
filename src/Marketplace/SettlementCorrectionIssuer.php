@@ -247,6 +247,10 @@ final readonly class SettlementCorrectionIssuer
             // The month it happened, not the month it corrects. The original stays as issued.
             'issued_at' => $correctedOn,
             'tax_exempt' => (bool) $original->tax_exempt,
+            // Carried from the document being corrected, never re-derived. A correction states the same
+            // supply the original stated; re-deriving the relief here would let a creator's standing change
+            // between the two and quietly restate the earlier supply's legal ground.
+            'tax_exemption_reason' => $original->tax_exemption_reason,
             // An amendment, not a cancellation: it corrects a specific earlier document and says which.
             'correction_kind' => InvoiceCorrectionKind::Amendment,
             // WHY the taxable amount changed. The figures cannot say it — money given back and money that

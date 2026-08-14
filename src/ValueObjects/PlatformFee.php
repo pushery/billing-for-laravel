@@ -5,10 +5,18 @@ declare(strict_types=1);
 namespace Pushery\Billing\ValueObjects;
 
 use InvalidArgumentException;
+use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\RoundingResidual;
 
 /**
  * What the platform keeps of a routed sale: a rate, a fixed amount, or both.
+ *
+ * A GROSS take, not a margin. Under the shipped connected-account type the provider's own processing fee is
+ * paid by the PLATFORM — stated on the account as `controller.fees.payer`, measured on 2026-08-06 against
+ * the pinned API version — so what the platform actually nets is this figure minus that fee. Nothing here
+ * subtracts it, and nothing could: the package does not know a consumer's pricing with their provider, and
+ * a guessed deduction would put every payout figure out by the size of the guess. See
+ * {@see ChargeType} for the measurement and which setting moves the incidence.
  *
  * Both, because both are ordinary — the payment provider's own pricing is a percentage plus a fixed amount
  * per transaction, and a marketplace that could express only one of them would have to approximate the

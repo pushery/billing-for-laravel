@@ -25,6 +25,7 @@ use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Contracts\ProrationStrategy;
+use Pushery\Billing\Contracts\ReadsRoutedInvoiceCommission;
 use Pushery\Billing\Contracts\SeatBilling;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\SubscriptionSync;
@@ -43,11 +44,14 @@ use Pushery\Billing\Events\InvoiceUpcoming;
 use Pushery\Billing\Events\MandateRevoked;
 use Pushery\Billing\Events\MerchantAccountDeauthorized;
 use Pushery\Billing\Events\MerchantAccountUpdated;
+use Pushery\Billing\Events\MerchantPayoutFailed;
+use Pushery\Billing\Events\MerchantTransferReversedByProvider;
 use Pushery\Billing\Events\PaymentActionRequired;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Events\RoutedChargeAbandoned;
 use Pushery\Billing\Events\RoutedChargeConfirmed;
+use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\Events\TrialEnding;
 use Pushery\Billing\Support\BillingManager;
@@ -60,7 +64,10 @@ use Pushery\Billing\Webhooks\Effects\GrantPurchasedContent;
 use Pushery\Billing\Webhooks\Effects\MarkMerchantDeauthorized;
 use Pushery\Billing\Webhooks\Effects\PersistInvoice;
 use Pushery\Billing\Webhooks\Effects\PersistInvoiceCorrection;
+use Pushery\Billing\Webhooks\Effects\RecordFailedMerchantPayout;
 use Pushery\Billing\Webhooks\Effects\RecordProviderFee;
+use Pushery\Billing\Webhooks\Effects\RecordProviderTransferReversal;
+use Pushery\Billing\Webhooks\Effects\RecordRoutedSubscriptionCharge;
 use Pushery\Billing\Webhooks\Effects\RefreshMerchantCapabilities;
 use Pushery\Billing\Webhooks\Effects\ReopenWriteOffOnLateReceipt;
 use Pushery\Billing\Webhooks\Effects\ReverseAddonPurchase;
@@ -96,6 +103,11 @@ final class StripeServiceProvider extends ServiceProvider
     #[Override]
     public function register(): void
     {
+        // The seam the routed-cycle effect reads its commission through. Bound in the DRIVER provider, so
+        // an install on another driver never resolves a Stripe client for it -- and the effect itself never
+        // learns whose API answered.
+        $this->app->bind(ReadsRoutedInvoiceCommission::class, fn (Application $app): StripeRoutedInvoiceCommission => new StripeRoutedInvoiceCommission($app->make(StripeClient::class)));
+
         $this->app->bind(StripeClient::class, fn (Application $app): StripeClient => new StripeClient([
             'api_key' => $this->apiKey($app),
             'stripe_version' => $this->apiVersion($app),
@@ -155,11 +167,23 @@ final class StripeServiceProvider extends ServiceProvider
     {
         $this->app->make(BillingManager::class)->extend(
             'stripe',
-            fn (): StripeDriver => new StripeDriver(new StripePaymentRails(
-                $this->app->make(StripeClient::class),
-                $this->app->make(Repository::class),
-                $this->app->make(SupplyRegimeResolver::class),
-            )),
+            fn (): StripeDriver => new StripeDriver(
+                new StripePaymentRails(
+                    $this->app->make(StripeClient::class),
+                    $this->app->make(Repository::class),
+                    $this->app->make(SupplyRegimeResolver::class),
+                ),
+                // Built unconditionally, and that is not the same as switched on. The marketplace master
+                // switch and the go-live checklist decide whether anything may USE these rails; the driver
+                // only declares that it can. Wiring the capability to the switch would make the checklist
+                // check its own precondition, and a checklist that passes because the feature is off is
+                // the one shape it must never have.
+                new StripeConnectRails(
+                    $this->app->make(StripeClient::class),
+                    $this->app->make(Repository::class),
+                    'stripe',
+                ),
+            ),
         );
 
         $this->registerDefaultEffects($this->app->make(WebhookEffectRegistry::class));
@@ -186,6 +210,11 @@ final class StripeServiceProvider extends ServiceProvider
         // different lifetimes, and folded together a failure in either half would roll back the other —
         // leaving a buyer charged, credited, and without the row saying they own what they paid for.
         $registry->on(AddonPurchased::class, GrantPurchasedContent::class);
+        // The routed subscription cycle, and the one sale the money ledger never saw. A routed subscription
+        // is priced with a RATE, so its commission exists once per cycle and only at the provider — which is
+        // why this is the first effect in the package that reads from one. It asks the local subscription
+        // first and stops there for every unrouted cycle, so an install that routes nothing pays nothing.
+        $registry->on(RoutedSubscriptionInvoicePaid::class, RecordRoutedSubscriptionCharge::class);
         $registry->on(AddonRefunded::class, ReverseAddonPurchase::class);
         // Access beside the money, and switchable independently of it: a refund that leaves the work in place
         // is a real policy, and a build that welded the two together would make it impossible to express.
@@ -231,6 +260,11 @@ final class StripeServiceProvider extends ServiceProvider
         $registry->on(MerchantAccountDeauthorized::class, MarkMerchantDeauthorized::class);
         $registry->on(RoutedChargeConfirmed::class, SettleRoutedChargeOnConfirmation::class);
         $registry->on(RoutedChargeAbandoned::class, SettleRoutedChargeOnConfirmation::class);
+        // A reversal the provider performed on its own. Registered beside the chargeback effects because it
+        // answers the same question from the other direction: money that left the merchant without this
+        // platform asking for it.
+        $registry->on(MerchantTransferReversedByProvider::class, RecordProviderTransferReversal::class);
+        $registry->on(MerchantPayoutFailed::class, RecordFailedMerchantPayout::class);
         $registry->on(ChargebackReceived::class, RecordProviderFee::class);
         // A lost dispute ends access too. Its own effect rather than a branch in the fee one, for the same
         // reason ownership is separate from crediting: different facts, and a failure in one must not undo

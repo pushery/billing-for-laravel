@@ -15,11 +15,9 @@ use Pushery\Billing\Enums\DocumentSeries;
 use Pushery\Billing\Enums\ExchangeRateBasis;
 use Pushery\Billing\Enums\ExchangeRateLayer;
 use Pushery\Billing\Enums\InvoiceStatus;
-use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\SettlementDocumentType;
 use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\TaxArchetype;
-use Pushery\Billing\Enums\TaxRateCategory;
 use Pushery\Billing\Exceptions\ProductNotClassified;
 use Pushery\Billing\Exceptions\SelfBillingDisabled;
 use Pushery\Billing\Invoicing\Party;
@@ -29,6 +27,7 @@ use Pushery\Billing\Tax\FreezeExchangeRateOnDocument;
 use Pushery\Billing\ValueObjects\InboundTaxTreatment;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
+use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 
 /**
  * Settles one creator's supply into the platform: it resolves what document to issue, guards it, and draws
@@ -286,13 +285,12 @@ final readonly class SelfBillingEngine
         int $supplyRateBps,
         CarbonImmutable $supplyDate,
         ?string $settledChargeReference = null,
-        ?TaxArchetype $archetype = null,
-        ?PlaceOfSupplyRule $placeOfSupply = null,
-        ?TaxRateCategory $rateCategory = null,
-        ?TaxArchetype $soldAlongside = null,
+        ?SupplyTaxCharacteristics $characteristics = null,
         ?string $provider = null,
     ): ?InvoiceRecord {
-        $outcome = $this->settle($creator, $regime, $transactionNet, $commission, $supplyRateBps, $supplyDate, $archetype);
+        $characteristics ??= SupplyTaxCharacteristics::unknown();
+
+        $outcome = $this->settle($creator, $regime, $transactionNet, $commission, $supplyRateBps, $supplyDate, $characteristics->archetype);
         $treatment = $outcome->treatment;
 
         if (! $treatment instanceof InboundTaxTreatment) {
@@ -319,21 +317,25 @@ final readonly class SelfBillingEngine
             'total_minor' => $treatment->payoutAmount->minorUnits,
             'reverse_charge' => $treatment->reverseChargeToRecipient,
             'tax_exempt' => $treatment->exempt,
+            // WHY it is relieved, where it is. `tax_exempt` says only THAT a relief applies, and BT-120 then
+            // fell back to a generic phrase naming no statute — on a document the PLATFORM raises in the
+            // creator's name, and on a column that is frozen, so nobody could heal it afterwards.
+            'tax_exemption_reason' => $treatment->exemptionReason,
             // The characteristics of the CREATOR's supply, frozen the same way the amounts are. This
             // document is the one where goods-versus-services actually changes what is rendered: a
             // reverse-charged supply takes `AE` as a service and `K` with VATEX-EU-IC as goods, and the
             // renderer decides that from `tax_archetype` alone. With nothing writing the column every
             // settlement rendered `AE`, which is the right answer for a digital supply and a wrong statement
             // of the provision for any other — arrived at without the document ever being asked.
-            'tax_archetype' => $archetype,
+            'tax_archetype' => $characteristics->archetype,
             // What a voluntary payment was paid ON. Frozen beside the archetype rather than left to the
             // request, because it is the input the reporting run needs and the run happens months later,
             // over documents. Without it a tip settles as `tip` and nothing else, and the rule that decides
             // whether this creator has to be reported answers from the tip alone — which is the one question
             // the taxonomy expressly declines to answer without this reference.
-            'sold_alongside_archetype' => $soldAlongside,
-            'place_of_supply_rule' => $placeOfSupply,
-            'tax_rate_category' => $rateCategory,
+            'sold_alongside_archetype' => $characteristics->soldAlongside,
+            'place_of_supply_rule' => $characteristics->placeOfSupply,
+            'tax_rate_category' => $characteristics->rateCategory,
             // BT-72. Not a new argument here: a settlement documents ONE supply and this method is already
             // told when it happened -- the same date it dates the document to. Asking for it twice would be
             // two places for one fact, and the second one would eventually disagree.

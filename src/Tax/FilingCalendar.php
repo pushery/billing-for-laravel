@@ -6,6 +6,8 @@ namespace Pushery\Billing\Tax;
 
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\FilingObligation;
 use Pushery\Billing\ValueObjects\ReportingPeriod;
@@ -33,6 +35,12 @@ use Pushery\Billing\ValueObjects\ReportingPeriod;
 final readonly class FilingCalendar
 {
     /**
+     * @param  ?Repository  $config  resolved from the container when absent, so the several call sites that
+     *                               build this calendar directly keep working
+     */
+    public function __construct(private ?Repository $config = null) {}
+
+    /**
      * Everything falling due on a given day, as separate obligations.
      *
      * @return list<array{obligation: FilingObligation, period: ?ReportingPeriod, due_on: CarbonImmutable}>
@@ -48,13 +56,36 @@ final readonly class FilingCalendar
             }
         }
 
+        // ONLY where there are sellers to report. The annual report is about what other people earned
+        // through the platform, so an installation that sells nothing but its own products has no such
+        // obligation — and being warned about a duty you do not have is not a harmless extra. It sends
+        // somebody looking, once a year, for a filing interface they have no account for.
+        //
+        // The periodic return above is deliberately NOT gated with it. That one is the platform's own, it
+        // exists whether or not anybody else sells through the platform, and the two share a date — so a
+        // gate hung one line higher would trade a wrong reminder for a missing one, which is the expensive
+        // direction.
         $annual = $this->annualReportDueIn($moment->year);
 
-        if ($annual->startOfDay()->equalTo($moment)) {
+        if ($this->marketplaceEnabled() && $annual->startOfDay()->equalTo($moment)) {
             $due[] = ['obligation' => FilingObligation::AnnualSellerReport, 'period' => null, 'due_on' => $annual];
         }
 
         return $due;
+    }
+
+    /**
+     * Whether this installation reports on other people's sales at all.
+     *
+     * Read through the container when nobody handed a repository in, so a caller that constructs the
+     * calendar directly still gets the installation's real answer rather than a default that would put the
+     * obligation back on every install by the side door.
+     */
+    private function marketplaceEnabled(): bool
+    {
+        $config = $this->config ?? Container::getInstance()->make(Repository::class);
+
+        return $config->get('billing.marketplace.enabled') === true;
     }
 
     /**

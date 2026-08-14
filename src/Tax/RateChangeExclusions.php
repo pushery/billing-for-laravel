@@ -26,6 +26,25 @@ namespace Pushery\Billing\Tax;
  *
  * Because "the automation does not do that" is a claim, and claims that live only in prose stop being true
  * without anybody noticing. Here it can be asserted.
+ *
+ * ## The dry run is REQUIRED of the caller — this package does not enforce it
+ *
+ * The inherited guidance makes a dry run mandatory before a bulk rate change is applied, and the reason is
+ * the same asymmetry the exclusion list rests on: finding out afterwards costs more than looking first.
+ *
+ * **That requirement is addressed to whoever runs the change, and this package is not that.** It ships no
+ * bulk rate-change command and deliberately does not: changing rates across a corpus is an operator act
+ * with a signature behind it, not a package feature.
+ *
+ * This used to be stated as a method — `dryRunRequired()`, returning `true` unconditionally, called by
+ * nobody. It read like an enforced protection and was none: there was no point at which the answer
+ * prevented anything. A reader would reasonably conclude the package guarded the dry run, and shipped
+ * prose that promises a protection the reader does not have is worse than silence. So it says what it is:
+ * an instruction to the caller, in the one place the caller already reads to learn what the automation
+ * must skip.
+ *
+ * `mayTouch()` stays a method because it is the other kind of thing entirely — it ANSWERS a question,
+ * about a specific record kind, and a caller cannot work out the answer without it.
  */
 final readonly class RateChangeExclusions
 {
@@ -49,17 +68,5 @@ final readonly class RateChangeExclusions
     public static function mayTouch(string $kind): bool
     {
         return ! in_array($kind, self::kinds(), true);
-    }
-
-    /**
-     * Whether a dry run has to happen before this change is applied.
-     *
-     * Always. The inherited guidance makes it mandatory rather than advisable, and the reason is the same
-     * one behind the exclusion list: the cost of finding out afterwards is not symmetric with the cost of
-     * looking first.
-     */
-    public static function dryRunRequired(): bool
-    {
-        return true;
     }
 }

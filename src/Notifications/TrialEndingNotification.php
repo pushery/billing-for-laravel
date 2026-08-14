@@ -22,11 +22,23 @@ final class TrialEndingNotification extends BillingNotification
 
     public function toMail(object $notifiable): MailMessage
     {
-        return new MailMessage()
+        $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.trial_ending.subject'))
             ->line(Lang::get('billing::notifications.trial_ending.intro'))
             ->line($this->trialEndsAt->format('Y-m-d'))
             ->line(Lang::get('billing::notifications.trial_ending.outro'));
+
+        // Where the reader is sent depends on what they already have. Somebody with a card on file needs the
+        // plan screen — they are choosing whether to continue. Somebody without one needs the screen that
+        // takes a card, which is the action this mail's own text asks for. Sending both to the same place
+        // makes one of the two do a second hop for no reason.
+        $hasCard = is_string($notifiable->pm_type ?? null) && ($notifiable->pm_type ?? '') !== '';
+
+        return $this->withAction(
+            $mail,
+            Lang::get('billing::notifications.trial_ending.cta'),
+            $this->actionUrl($hasCard ? 'billing.account.plan' : 'billing.account.payment-methods'),
+        );
     }
 
     /** @return array<string, string> */

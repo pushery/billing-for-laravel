@@ -32,9 +32,10 @@ final readonly class ChargeRouting
      *                            platform whatever this says, and the country-specific fee is still billed
      *                            to the platform account. This parameter has now been wrong in BOTH
      *                            directions: first described as cosmetic, then as the axis fee and
-     *                            liability follow. See ChargeType::Destination for what the provider
-     *                            actually documents, and for what is still unverified against a real
-     *                            payload.
+     *                            liability follow. Neither is right: both are stated on the connected
+     *                            ACCOUNT, in `controller.fees.payer` and `controller.losses.payments`, and
+     *                            they follow its type rather than anything chosen per payment. See
+     *                            ChargeType::Destination for the measurement.
      */
     public function __construct(
         public MerchantAccountReference $destination,

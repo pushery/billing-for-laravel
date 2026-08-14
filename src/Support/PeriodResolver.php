@@ -29,10 +29,9 @@ final readonly class PeriodResolver
         $moment = ($at ?? Carbon::now())->utc();
 
         $subscription = Subscription::query()
-            ->where('owner_type', $owner->getMorphClass())
-            ->where('owner_id', $owner->getKey())
+            ->forOwner($owner)
             ->forMerchant(null)
-            ->where('type', 'default')
+            ->ofDefaultType()
             ->latest('id')
             ->first();
 

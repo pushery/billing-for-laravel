@@ -8,24 +8,29 @@ return [
         'subject' => 'Je betaling kon niet worden verwerkt',
         'intro' => 'We konden je laatste betaling niet verwerken.',
         'outro' => 'Werk je betaalgegevens bij om je abonnement actief te houden.',
+        'cta' => 'Betaalgegevens bijwerken',
     ],
 
     'payment_succeeded' => [
         'subject' => 'Je betalingsbewijs',
         'intro' => 'Bedankt — we hebben je betaling ontvangen.',
+        'declarations' => 'Je verklaringen voordat de levering begon:',
         'outro' => 'Een kopie van dit bewijs vind je in je factuurgeschiedenis.',
+        'cta' => 'Bonnen bekijken',
     ],
 
     'trial_ending' => [
         'subject' => 'Je proefperiode eindigt binnenkort',
         'intro' => 'Je gratis proefperiode loopt bijna af.',
         'outro' => 'Voeg vóór het einde een betaalmethode toe zodat je abonnement zonder onderbreking doorloopt.',
+        'cta' => 'Betaalmethode toevoegen',
     ],
 
     'subscription_canceled' => [
         'subject' => 'Je abonnement is opgezegd',
         'intro' => 'Je abonnement is opgezegd en wordt niet verlengd.',
         'outro' => 'Je behoudt toegang tot het einde van de betaalde periode, hieronder aangegeven.',
+        'cta' => 'Abonnement bekijken',
     ],
 
     'tax_status_changed' => [
@@ -40,36 +45,42 @@ return [
         'subject' => 'Actie nodig: je toegang wordt opgeschort',
         'intro' => 'Je account heeft een achterstallig bedrag en je toegang wordt binnenkort opgeschort.',
         'outro' => 'Betaal het onderstaande bedrag om je toegang te behouden.',
+        'cta' => 'Openstaand bedrag voldoen',
     ],
 
     'card_expiring' => [
         'subject' => 'Je kaart verloopt binnenkort',
         'intro' => 'De opgeslagen kaart (:card) verloopt binnenkort.',
         'outro' => 'Werk je betaalmethode bij om een onderbreking van je abonnement te voorkomen.',
+        'cta' => 'Kaart bijwerken',
     ],
 
     'payment_method_removed' => [
         'subject' => 'Een betaalmethode is verwijderd',
         'intro' => 'Een betaalmethode die voor je abonnement kon worden belast, is uit je account verwijderd.',
         'outro' => 'Als jij dit niet was, voeg dan een nieuwe betaalmethode toe om je abonnement actief te houden.',
+        'cta' => 'Betaalmethoden beheren',
     ],
 
     'quota_warning' => [
         'subject' => 'Je nadert je :meter-limiet',
         'intro' => 'Je hebt deze periode :used van je :included inbegrepen :meter gebruikt.',
         'outro' => 'Vul aan of stap over om zonder onderbreking door te gaan.',
+        'cta' => 'Verbruik bekijken',
     ],
 
     'subscription_activated' => [
         'subject' => 'Je abonnement is actief',
         'intro' => 'Je :tier-abonnement is nu actief — alles wat erbij hoort staat aan.',
         'outro' => 'Je kunt je abonnement altijd bekijken of wijzigen in je facturatie-instellingen.',
+        'cta' => 'Abonnement bekijken',
     ],
 
     'payment_action_required' => [
         'subject' => 'Bevestig je betaling om door te gaan',
         'intro' => 'Je bank vraagt je deze betaling te bevestigen voordat je abonnement kan doorlopen.',
         'outro' => 'Bevestig het nu om onderbreking van je dienst te voorkomen.',
+        'cta' => 'Betaling bevestigen',
     ],
 
 ];

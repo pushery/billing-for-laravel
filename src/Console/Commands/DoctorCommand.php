@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Console\Commands;
 
+use Carbon\CarbonInterface;
+use DateTimeInterface;
 use Illuminate\Console\Command;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Consumer\GermanWithdrawalPolicy;
@@ -21,10 +24,15 @@ use Pushery\Billing\Contracts\TaxDisclosurePolicy;
 use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Marketplace\GermanTaxDisclosurePolicy;
+use Pushery\Billing\Models\ExchangeRateRecord;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
 use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
-use Pushery\Billing\Tax\EuOssTaxCalculator;
+use Pushery\Billing\Tax\DatabaseExchangeRateSource;
+use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
+use Pushery\Billing\Tax\ShippedTaxRates;
+use Pushery\Billing\Tax\TaxCalculatorFactory;
+use Pushery\Billing\Tax\TaxRateMatrix;
 use Pushery\Billing\Tax\UnionMembership;
 use Pushery\Billing\ValueObjects\ContentReference;
 use Stripe\StripeClient;
@@ -50,6 +58,14 @@ final class DoctorCommand extends Command
     /** How old a configured rate table may be before the diagnostic calls it out. */
     private const int RATE_TABLE_MAX_AGE_DAYS = 180;
 
+    /**
+     * How old an imported exchange-rate series may be before the diagnostic calls it out.
+     *
+     * Three days rather than the fourteen at which the money path breaks: two missed daily imports plus a
+     * weekend. A limit set at the breaking point reports the incident instead of preventing it.
+     */
+    private const int RATE_SERIES_MAX_AGE_DAYS = 3;
+
     public function __construct(private readonly CheckpointRegistry $profiles)
     {
         parent::__construct();
@@ -73,7 +89,7 @@ final class DoctorCommand extends Command
         ConsumerWithdrawalPolicy::class => GermanWithdrawalPolicy::class,
     ];
 
-    public function handle(Repository $config, StripeClient $stripe, AddonCatalog $addons, AddonContentMap $works): int
+    public function handle(Repository $config, StripeClient $stripe, AddonCatalog $addons, AddonContentMap $works, DistanceSaleThresholdMonitor $thresholds): int
     {
         if (! (bool) $config->get('billing.enabled', true)) {
             $this->components->info('Billing is disabled; nothing to check.');
@@ -81,13 +97,24 @@ final class DoctorCommand extends Command
             return self::SUCCESS;
         }
 
-        $stale = $this->reportRateTableAge($config);
+        // One running verdict rather than a code recomposed at each exit. It used to be the latter, and the
+        // Stripe-unreachable exit was assembled from a SUBSET of the findings — so an aged rate table failed
+        // the command while Stripe answered and passed it while Stripe was down. That is the direction that
+        // hides: a green doctor during an outage reads as "the tax data is fine".
+        //
+        // A finding does not stop being true because a later check could not run, so nothing here ever
+        // subtracts from $failing.
+        $failing = $this->reportRateTableAge($config);
 
         $this->reportUnionMembershipAge();
 
+        $this->reportDistanceSaleThresholdAge($thresholds);
+
+        $failing = $this->reportExchangeRateSeriesAge($config) || $failing;
+
         $this->reportProfileInheritance();
 
-        $uncovered = $this->reportWorksTheProfileDoesNotCover($config, $addons, $works);
+        $failing = $this->reportWorksTheProfileDoesNotCover($config, $addons, $works) || $failing;
 
         $pinned = $this->pinnedVersion($config);
 
@@ -99,7 +126,7 @@ final class DoctorCommand extends Command
             // A diagnostic never fails the app because it could not reach the provider; it reports and stops.
             $this->components->warn('Could not read the Stripe webhook endpoints: '.$e->getMessage());
 
-            return $uncovered ? self::FAILURE : self::SUCCESS;
+            return $this->verdict($failing);
         }
 
         $drift = 0;
@@ -132,18 +159,30 @@ final class DoctorCommand extends Command
         if ($checked === 0) {
             $this->components->warn('No webhook endpoints are configured at Stripe.');
 
-            return $stale || $uncovered ? self::FAILURE : self::SUCCESS;
+            return $this->verdict($failing);
         }
 
         if ($drift > 0) {
             $this->components->error("{$drift} of {$checked} webhook endpoint(s) do not match the pinned version.");
 
-            return self::FAILURE;
+            return $this->verdict(true);
         }
 
         $this->components->info("All {$checked} webhook endpoint(s) render payloads in the pinned version.");
 
-        return $stale || $uncovered ? self::FAILURE : self::SUCCESS;
+        return $this->verdict($failing);
+    }
+
+    /**
+     * The single place a finding becomes an exit code.
+     *
+     * Worth a method rather than a repeated ternary: with the expression written out at each exit, adding a
+     * sixth check means remembering to widen five of them, and forgetting one is invisible — the command
+     * still prints the warning, it just stops counting it.
+     */
+    private function verdict(bool $failing): int
+    {
+        return $failing ? self::FAILURE : self::SUCCESS;
     }
 
     /**
@@ -351,21 +390,33 @@ final class DoctorCommand extends Command
      */
     private function answeringRateTable(Repository $config): array
     {
-        $matrix = $config->get('billing.tax_matrix');
+        // The DATE comes from the table the factory actually built, not from a second reading of the
+        // settings it was built from. Those two agreed — but only because this method reproduced the
+        // factory's precedence by hand, in another file, where a third source added there would never
+        // arrive here. The failure that produces is the one this command exists to prevent: an operator
+        // told the age of a table that is not the one being calculated with.
+        //
+        // Only the LABEL is still derived here, because a matrix does not carry where it came from and
+        // giving it one would put a diagnostic's vocabulary into the calculation path.
+        $answering = Container::getInstance()->make(TaxCalculatorFactory::class)->answeringRateMatrix();
 
-        if (is_array($matrix) && is_string($matrix['valid_from'] ?? null)) {
-            return ['configured', $matrix['valid_from']];
+        if ($answering instanceof TaxRateMatrix) {
+            $matrix = $config->get('billing.tax_matrix');
+            $profile = $this->profiles->profile();
+
+            $label = is_array($matrix) && is_string($matrix['valid_from'] ?? null)
+                ? 'configured'
+                : ($profile instanceof SuppliesTaxRates ? "profile ({$profile->key()})" : 'loaded');
+
+            return [$label, $answering->validFromDate()];
         }
 
-        // A profile answers before the shipped table does, so its date is the one that matters where one is
-        // loaded — reporting the shipped date there would understate the age of what is actually in use.
-        $profile = $this->profiles->profile();
-
-        if ($profile instanceof SuppliesTaxRates) {
-            return ["profile ({$profile->key()})", $profile->taxRatesValidFrom()->toDateString()];
-        }
-
-        return ['shipped', EuOssTaxCalculator::RATES_CHECKED_ON];
+        // Null means no configured table and no profile supplying one, so the shipped snapshot answers —
+        // and it now reports the date from the same file the money path prices from, rather than from a
+        // constant beside it. The age and the numbers were two facts held apart; the date was the half that
+        // could go quietly wrong, and a table whose stated age is wrong answers the staleness question
+        // confidently and incorrectly.
+        return ['shipped', ShippedTaxRates::shipped()->checkedOn()];
     }
 
     /**
@@ -394,6 +445,115 @@ final class DoctorCommand extends Command
         $age = (int) Carbon::parse($validFrom)->diffInDays(Carbon::now(), absolute: false);
 
         $this->components->info("The {$source} union membership was last checked {$age} days ago.");
+    }
+
+    /**
+     * Report how old the imported exchange-rate series is, per configured currency.
+     *
+     * ## The failure this ends
+     *
+     * The import runs daily. When a publisher is down for one currency the command reports it, skips that
+     * currency, and returns SUCCESS anyway — there is no error accumulator and the schedule entry has no
+     * failure hook. Every exit-code monitor therefore sees green while a series quietly stops growing.
+     *
+     * Nothing read the newest `rate_date` anywhere in the package, so the first VISIBLE effect was an invoice
+     * that could not be issued: the lookup walks forward at most `FORWARD_LIMIT_DAYS`, and past that it finds
+     * no row and refuses the document. A warning that arrives then is not a warning, it is the incident.
+     *
+     * ## Why the limit is not simply the forward window
+     *
+     * 14 days is where it BREAKS. Reporting at the breaking point is the same as not reporting, so the
+     * configured limit defaults well under it — three days is two missed daily imports plus a weekend. The
+     * forward window is still the ceiling: a limit set above it would let the doctor stay green while the
+     * money path is already refusing documents, so the effective limit is the lower of the two.
+     *
+     * Silent when the store is switched off: a single-currency install imports nothing and has nothing to age.
+     */
+    private function reportExchangeRateSeriesAge(Repository $config): bool
+    {
+        if (! (bool) $config->get('billing.tax_exchange_rates.enabled', false)) {
+            return false;
+        }
+
+        $currencies = $config->get('billing.tax_exchange_rates.currencies', []);
+        $currencies = is_array($currencies) ? array_values(array_filter($currencies, is_string(...))) : [];
+
+        if ($currencies === []) {
+            return false;
+        }
+
+        $configured = $config->get('billing.tax_exchange_rates.max_age_days', self::RATE_SERIES_MAX_AGE_DAYS);
+        $limit = min(
+            is_int($configured) && $configured > 0 ? $configured : self::RATE_SERIES_MAX_AGE_DAYS,
+            DatabaseExchangeRateSource::FORWARD_LIMIT_DAYS,
+        );
+
+        $failing = false;
+
+        foreach ($currencies as $currency) {
+            // Matched on the TO side, which is the direction the config documents: the key lists the
+            // currencies money is received in, and rates are stored as the publisher writes them — euro to
+            // each of these — never turned around.
+            $newest = ExchangeRateRecord::query()->where('to_currency', $currency)->max('rate_date');
+
+            if (! is_string($newest) && ! $newest instanceof DateTimeInterface) {
+                $this->components->error(
+                    "No exchange rates have ever been imported for {$currency}. Run "
+                    .'billing:exchange-rates:import — until a series exists, every conversion into this '
+                    .'currency is refused rather than answered.'
+                );
+
+                $failing = true;
+
+                continue;
+            }
+
+            $age = (int) Carbon::parse($newest)->diffInDays(Carbon::now(), absolute: false);
+
+            if ($age > $limit) {
+                $this->components->error(
+                    "The {$currency} exchange-rate series is {$age} days old (limit {$limit}). The import is "
+                    .'not keeping it current; past '.DatabaseExchangeRateSource::FORWARD_LIMIT_DAYS
+                    .' days the lookup finds no row and a document cannot be issued.'
+                );
+
+                $failing = true;
+
+                continue;
+            }
+
+            $this->components->info("The {$currency} exchange-rate series is {$age} days old (limit {$limit}).");
+        }
+
+        return $failing;
+    }
+
+    /**
+     * Report how old the distance-sale threshold answering this install is.
+     *
+     * The fourth dated jurisdiction fact, and the one left out. Three of the four `*ValidFrom()` promises had
+     * a reader; this one had none anywhere in the tree, while its own contract said the date exists "so its
+     * age can be reported rather than assumed". An operator seeing the rate table's age and the union
+     * membership's age reasonably concludes the dated facts are being watched — and this one was not.
+     *
+     * Reported, never failed, and with no shipped fallback: this package ships no limit of its own, so with
+     * no profile supplying one there is genuinely no age to state. Whether a two-year-old date is a problem
+     * depends on whether a legislator moved the number in the meantime, which the package cannot know.
+     */
+    private function reportDistanceSaleThresholdAge(DistanceSaleThresholdMonitor $monitor): void
+    {
+        $validFrom = $monitor->thresholdValidFrom();
+
+        if (! $validFrom instanceof CarbonInterface) {
+            $this->components->info('No profile supplies a distance-sale threshold, so there is no age to report (source: none).');
+
+            return;
+        }
+
+        $age = (int) Carbon::parse($validFrom)->diffInDays(Carbon::now(), absolute: false);
+        $source = $this->profiles->profile()?->key() ?? 'none';
+
+        $this->components->info("The profile ({$source}) distance-sale threshold was last checked {$age} days ago.");
     }
 
     /** The version the package pins, honoring an app override, else the tested default. */

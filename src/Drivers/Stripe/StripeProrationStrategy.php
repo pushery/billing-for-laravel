@@ -124,10 +124,9 @@ final readonly class StripeProrationStrategy implements ProrationStrategy
     private function subscriptionReference(Model $billable): ?string
     {
         $subscription = Subscription::query()
-            ->where('owner_type', $billable->getMorphClass())
-            ->where('owner_id', $billable->getKey())
+            ->forOwner($billable)
             ->forMerchant(null)
-            ->where('type', 'default')
+            ->ofDefaultType()
             ->latest('id')
             ->first();
 

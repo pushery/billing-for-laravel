@@ -114,6 +114,11 @@ final readonly class SmallBusinessFlipSweep
         $governing = [];
 
         $records = CreatorTaxStatusRecord::query()
+            // `reconcile()` reads `$record->merchant` on every row that survives `covers()`, so without this
+            // the sweep issues one query per creator -- and under Laravel's strict mode it does not merely
+            // run slowly, it throws. A sweep is the worst place to leave a lazy load: it is the one caller
+            // whose row count grows with the customer base, and it runs unattended.
+            ->with('merchant')
             ->whereNotNull('merchant_type')
             ->whereNotNull('merchant_id')
             // An index-friendly pre-filter and nothing more. What makes a future standing not count is

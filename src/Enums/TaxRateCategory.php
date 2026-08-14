@@ -17,4 +17,17 @@ enum TaxRateCategory: string
 
     /** The reduced band, where a country grants one for this kind of supply. */
     case Reduced = 'reduced';
+
+    /**
+     * The band actually granted once the audio-visual gate has been applied.
+     *
+     * Any audio or video part of a supply, however small, closes the reduced band for the WHOLE supply. The
+     * rule lives on the enum rather than beside a table because it is a fact about the band, not about which
+     * table is answering: the dated interval table and the undated matrix both have to apply it, and a
+     * second copy of a two-line rule is how one table starts pricing a supply differently from the other.
+     */
+    public function withAudioVisual(bool $hasAudioVisualComponent): self
+    {
+        return $this === self::Reduced && $hasAudioVisualComponent ? self::Standard : $this;
+    }
 }

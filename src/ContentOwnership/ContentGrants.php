@@ -77,6 +77,7 @@ final readonly class ContentGrants
             withdrawalType: $withdrawalType,
             declarationReference: $declarationReference,
             acquiredAt: $acquiredAt,
+            consent: $consent,
         );
     }
 
@@ -112,6 +113,10 @@ final readonly class ContentGrants
             withdrawalType: $withdrawalType,
             declarationReference: $declarationReference,
             acquiredAt: $acquiredAt,
+            // The PURCHASER'S, because they are the one with the contract. The recipient has none with us,
+            // so declarations collected from them are worth nothing — and a window computed from them
+            // would be the same mistake wearing a date.
+            consent: $purchaserConsent,
         );
     }
 
@@ -204,6 +209,7 @@ final readonly class ContentGrants
                 withdrawalType: $withdrawalType,
                 declarationReference: $declarationReference,
                 acquiredAt: $acquiredAt,
+                consent: $consent,
             );
         }
 
@@ -266,6 +272,17 @@ final readonly class ContentGrants
         ?WithdrawalType $withdrawalType = null,
         ?string $declarationReference = null,
         ?CarbonInterface $acquiredAt = null,
+        /**
+         * The buyer's declarations, threaded through for the WINDOW rather than for the gate.
+         *
+         * The gate has already run by the time this is called — that ordering is the point of it — so this
+         * is not a second check. What the window needs is a fact the gate does not hand on: whether the
+         * right EXTINGUISHED here, which is what a complete consent on an extinguish-on-delivery sale does.
+         *
+         * Inferring it from "the gate let us through" would work today and would be a rule nobody stated,
+         * one gate change away from silently putting a date on a right that no longer exists.
+         */
+        ?WithdrawalConsent $consent = null,
     ): AccessGrant {
         $existing = $this->existingGrant($owner, $content, $merchant);
 
@@ -290,9 +307,25 @@ final readonly class ContentGrants
             'source_reference' => $sourceReference,
             // Frozen with the sale, like every other fact a document was made under: a creator who changes
             // their policy tomorrow changes it for future sales, not for one already made.
-            'update_policy' => $this->policies->policyFor($content, $merchant),
+            'update_policy' => $policy = $this->policies->policyFor($content, $merchant),
+            // The LENGTH of a windowed promise, beside the promise itself. It had no writer at all: the
+            // column existed, the policy was documented, and every windowed grant came out with a null
+            // window — which the resolver correctly reads as a broken row and bounds at the moment of
+            // purchase. That is what `frozen` does, so two of the four documented values of a shipped
+            // setting were byte-identical, and an operator selling "updates for twelve months" delivered
+            // frozen content.
+            'update_window_ends_at' => $this->policies->windowEndsFor($policy, $content, $merchant, $acquired),
             'conformity_update_until' => $this->conformity->updatesUntil($acquired),
             'withdrawal_type' => $withdrawalType,
+            // Frozen from `$acquired` — the moment provision happened, which is the line above this one and
+            // is why this column can exist at all. The configuration used to state that a window was not
+            // computable because nothing recorded that moment; this row has recorded it since the grant
+            // register landed, and the paragraph outlived its own truth.
+            //
+            // Frozen rather than derived on read, like every other fact the sale was made under: an
+            // operator who changes profile tomorrow changes it for future sales, not for a right somebody
+            // already holds.
+            'withdrawal_window_ends_at' => $this->withdrawal->windowEndsFor($withdrawalType ?? WithdrawalType::NotApplicable, $consent, $acquired),
             'withdrawal_declaration_ref' => $declarationReference,
             'bundle_ref' => $bundleReference,
             'merchant_uid' => $scope->uid(),

@@ -19,11 +19,17 @@ final class SuspensionWarningNotification extends BillingNotification
 
     public function toMail(object $notifiable): MailMessage
     {
-        return new MailMessage()
+        $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.suspension_warning.subject'))
             ->line(Lang::get('billing::notifications.suspension_warning.intro'))
             ->line($this->amountDue->format())
             ->line(Lang::get('billing::notifications.suspension_warning.outro'));
+
+        return $this->withAction(
+            $mail,
+            Lang::get('billing::notifications.suspension_warning.cta'),
+            $this->actionUrl('billing.account.recovery'),
+        );
     }
 
     /** @return array<string, string> */

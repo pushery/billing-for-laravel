@@ -287,9 +287,8 @@ final readonly class SyncPlanFromSubscription
     private function lockRow(Model $owner, ?MerchantScope $merchant): ?Subscription
     {
         return Subscription::query()
-            ->where('owner_type', $owner->getMorphClass())
-            ->where('owner_id', $owner->getKey())
-            ->where('type', 'default')
+            ->forOwner($owner)
+            ->ofDefaultType()
             ->forMerchant($merchant)
             ->lockForUpdate()
             ->latest('id')
@@ -306,7 +305,7 @@ final readonly class SyncPlanFromSubscription
         Subscription::query()->insertOrIgnore([
             'owner_type' => $owner->getMorphClass(),
             'owner_id' => $owner->getKey(),
-            'type' => 'default',
+            'type' => Subscription::TYPE_DEFAULT,
             ...$this->merchantColumns($this->scope($event)),
             ...$this->attributes(null, $event),
             'created_at' => Carbon::now(),

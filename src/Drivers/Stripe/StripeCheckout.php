@@ -14,18 +14,14 @@ use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\DiscountResolver;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\MerchantCatalog;
-use Pushery\Billing\Contracts\MerchantResolver;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
-use Pushery\Billing\Contracts\SellerOfRecordResolver;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\ReceiveEligibilityDenied;
-use Pushery\Billing\Marketplace\ChargeRoutingConsistencyGuard;
-use Pushery\Billing\Marketplace\ConfiguredChargeType;
+use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Support\CheckoutUrls;
-use Pushery\Billing\Tax\TaxCalculatorFactory;
 use Pushery\Billing\Trials\TrialPolicy;
 use Pushery\Billing\Trials\Trials;
 use Pushery\Billing\ValueObjects\ClientIntent;
@@ -60,9 +56,7 @@ final readonly class StripeCheckout implements Checkout
         private CheckoutUrls $urls,
         private Repository $config,
         private CanTransactMoney $eligibility,
-        private MerchantResolver $merchants,
-        private ChargeRoutingConsistencyGuard $routingGuard,
-        private SellerOfRecordResolver $postures,
+        private MarketplaceSaleContext $context,
         private MerchantCatalog $catalogs,
         private MerchantAccountDirectory $accounts,
         private PlatformFeeResolver $fees,
@@ -79,7 +73,7 @@ final readonly class StripeCheckout implements Checkout
 
         // The merchant this sale routes to, or null for a platform sale. Resolved only when the marketplace
         // is on, so a single-seller install never consults the resolver and everything below is unchanged.
-        $merchant = $this->routedMerchant();
+        $merchant = $this->context->routedMerchant();
 
         $price = $this->priceFor($tierKey, $merchant);
 
@@ -146,7 +140,7 @@ final readonly class StripeCheckout implements Checkout
             $payload['allow_promotion_codes'] = true;
         }
 
-        if ($this->providerTax()) {
+        if ($this->context->providerTax()) {
             // Stripe Tax computes VAT on its own invoice. With an existing customer, automatic_tax
             // requires permission to save the address it collects, or Stripe rejects the session.
             $payload['automatic_tax'] = ['enabled' => true];
@@ -220,20 +214,6 @@ final readonly class StripeCheckout implements Checkout
     }
 
     /**
-     * The merchant this checkout routes to, or null for a platform sale. Consulted only when the marketplace
-     * is switched on — a single-seller install never resolves a merchant, so the resolver is never called and
-     * the payload stays byte-for-byte the single-seller one.
-     */
-    private function routedMerchant(): ?Model
-    {
-        if ($this->config->get('billing.marketplace.enabled', false) !== true) {
-            return null;
-        }
-
-        return $this->merchants->current();
-    }
-
-    /**
      * The tier's provider price — from the MERCHANT's own catalog for a routed sale, the platform plan
      * catalog otherwise. The anti-price-injection guarantee holds in both: a tier KEY resolves only to a
      * price the relevant catalog declares, never one the client submitted.
@@ -275,7 +255,7 @@ final readonly class StripeCheckout implements Checkout
      */
     private function routing(Model $merchant): array
     {
-        $chargeType = $this->chargeType();
+        $chargeType = $this->context->chargeType();
 
         // A hosted session cannot serve a separate transfer, exactly as on the one-time lane: the platform
         // takes the whole payment and the merchant's share moves in a SECOND call, which can only be made
@@ -296,7 +276,7 @@ final readonly class StripeCheckout implements Checkout
         // The charge type and the seller-of-record posture are independent axes that must agree, and this
         // lane used to assemble the payment without ever asking. The check happens BEFORE anything is
         // assembled, which is the only point at which refusing is still free.
-        $this->routingGuard->assertCompatible($chargeType, $this->postures->resolveFor($this->electronic()));
+        $this->context->assertRoutingCompatible($chargeType);
 
         if (! $this->receiving->check($merchant)) {
             throw ReceiveEligibilityDenied::forMerchant();
@@ -320,36 +300,5 @@ final readonly class StripeCheckout implements Checkout
             'application_fee_percent' => $fee->bps / 100,
             'transfer_data' => ['destination' => $account->accountId],
         ];
-    }
-
-    /** The configured charge type — one reader, shared with the resolver and the other lane. */
-    private function chargeType(): ChargeType
-    {
-        return new ConfiguredChargeType($this->config)->get();
-    }
-
-    /** Whether this installation's supplies are electronic, which is what decides the posture. */
-    private function electronic(): bool
-    {
-        return (bool) $this->config->get('billing.marketplace.seller_of_record.supplies_are_electronic', true);
-    }
-
-    /**
-     * Whether the active tax mode defers to the provider (Stripe Tax), which drives automatic_tax.
-     *
-     * Read from the CLASSIFICATION, never from a literal. This method used to compare against 'provider'
-     * alone and so missed its alias — a valid, documented mode under which the package computes nothing
-     * (correctly, the provider is meant to) while the provider was never asked to. Every invoice went out
-     * untaxed, and nothing raised anything: the mode is valid, so the boot guard passes; the local
-     * calculator returning zero is the intended behavior for a provider mode; and the flag that would have
-     * told the provider to compute sits inside this very check.
-     *
-     * The classification exists precisely so the two are treated alike. A second literal comparison here
-     * was a copy of the list that could drift from it — and drift silently, because both halves look right
-     * in isolation.
-     */
-    private function providerTax(): bool
-    {
-        return in_array($this->config->get('billing.tax'), TaxCalculatorFactory::PROVIDER_MODES, true);
     }
 }

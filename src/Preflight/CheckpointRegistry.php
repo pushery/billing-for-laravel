@@ -15,6 +15,7 @@ use Pushery\Billing\Preflight\Checkpoints\CustodyAttestationCheckpoint;
 use Pushery\Billing\Preflight\Checkpoints\DuplicateBuyerReceiptCheckpoint;
 use Pushery\Billing\Preflight\Checkpoints\FeeRefundPolicyCheckpoint;
 use Pushery\Billing\Preflight\Checkpoints\JurisdictionProfileCheckpoint;
+use Pushery\Billing\Preflight\Checkpoints\ReceivingGateCheckpoint;
 use Pushery\Billing\Preflight\Checkpoints\RoutingDriverCheckpoint;
 use Pushery\Billing\Preflight\Checkpoints\SellerOfRecordPostureCheckpoint;
 use Pushery\Billing\Preflight\Checkpoints\TaxStatusHoldCheckpoint;
@@ -137,6 +138,7 @@ final class CheckpointRegistry implements GoLiveChecklist
         return [
             new JurisdictionProfileCheckpoint($profile),
             $this->container->make(RoutingDriverCheckpoint::class),
+            $this->container->make(ReceivingGateCheckpoint::class),
             $this->container->make(CustodyAttestationCheckpoint::class),
             $this->container->make(SellerOfRecordPostureCheckpoint::class),
             $this->container->make(FeeRefundPolicyCheckpoint::class),

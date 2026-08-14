@@ -4,15 +4,22 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Support;
 
+use Carbon\Carbon;
+use Carbon\CarbonImmutable;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\Contracts\CreatorTaxStatusResolver;
 use Pushery\Billing\Contracts\RoutesMoney;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\RefundKind;
+use Pushery\Billing\Enums\TaxBaseChangeReason;
 use Pushery\Billing\Exceptions\CommissionTermsUnknown;
 use Pushery\Billing\Marketplace\ClawbackCalculator;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
+use Pushery\Billing\Marketplace\RoutedRefundCorrector;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\RefundAttempt;
@@ -45,6 +52,22 @@ final readonly class BillingAdmin
          * ledger, finds nothing for its charges, and behaves exactly as it did.
          */
         private RoutedChargeLedger $routed = new RoutedChargeLedger,
+        /**
+         * The chain corrector and the standing it needs, for a refund on a ROUTED sale.
+         *
+         * Both nullable and both resolved at the point of use rather than defaulted here: the corrector
+         * takes collaborators of its own, so a hand-built default would be a second wiring of the document
+         * chain living in a constructor signature. Null means "ask the container when it matters", which is
+         * also what keeps a single-seller installation from constructing machinery it never reaches.
+         *
+         * This is the gap they close. Chargeback, statutory withdrawal and prepaid-term cancellation all
+         * corrected the chain; the package's only refund VERB did not. So an ordinary support refund on a
+         * routed sale moved the money and left the creator's settlement and the buyer's receipt claiming the
+         * full amount — and settlement numbers come from a gapless series, so that state can only be
+         * answered by a further correcting document, never tidied away.
+         */
+        private ?RoutedRefundCorrector $corrector = null,
+        private ?CreatorTaxStatusResolver $statuses = null,
     ) {}
 
     /**
@@ -77,7 +100,14 @@ final readonly class BillingAdmin
      * that is not a tracked add-on (a subscription invoice) reverses nothing. The provider round-trip is
      * kept OUTSIDE any transaction; only the local reversal is transactional.
      */
-    public function refund(Model $owner, string $chargeReference, Money $amount, ?string $reason = null, ?string $idempotencyKey = null, ?Model $actor = null): RefundResult
+    /**
+     * @param  ?string  $reason  what happened in THIS case, in somebody's own words
+     * @param  RefundKind  $kind  what KIND of thing it was — a category the books can group by, which a
+     *                            sentence cannot. Trailing and defaulted so every existing call site keeps
+     *                            writing the row it wrote before, and `Goodwill` is what those rows are:
+     *                            nothing in this package could exercise a withdrawal right yet
+     */
+    public function refund(Model $owner, string $chargeReference, Money $amount, ?string $reason = null, ?string $idempotencyKey = null, ?Model $actor = null, RefundKind $kind = RefundKind::Goodwill): RefundResult
     {
         // The routed charge, resolved ONCE. The routing and the ledger work both need it, and reading the
         // row twice is two readings that can differ: a concurrent reversal between them would price this
@@ -110,12 +140,26 @@ final readonly class BillingAdmin
         // a refused refund leaves the three cumulative columns exactly where they were.
         if ($attempt instanceof RefundAttempt) {
             $result->successful
-                ? $this->routed->completeRefund($attempt)
+                // Book what CAME BACK, not what was asked for. On the separate-transfer lane the rails
+                // report no reversal reference on purpose -- the share moved in its own call and refunding
+                // the payment does not touch it -- and booking the intent there told a consumer to unwind a
+                // payout still sitting with the merchant, while spending the room a later chargeback needs.
+                //
+                // A null reference is that honest "nothing came back", so it books zero. A reference with no
+                // amount beside it means the provider reversed but did not say how much, and there the
+                // attempt's own figure is the best available answer, which is what null preserves.
+                ? $this->routed->completeRefund(
+                    $attempt,
+                    $result->reversedTransferReference === null
+                        ? new Money(0, $amount->currency)
+                        : $result->transferReversed,
+                )
                 : $this->routed->failRefund($attempt, 'The provider refused an admin-initiated refund.');
         }
 
         if ($result->successful) {
             $this->refunds->reverse($chargeReference, $amount, $reason, AuditSource::Admin, $actor);
+            $this->correctChain($chargeReference, $result->amount);
         }
 
         $this->log->record('admin.refund', $owner, [
@@ -123,6 +167,119 @@ final readonly class BillingAdmin
             'amount' => $amount->minorUnits,
             'currency' => $amount->currency,
             'reason' => $reason,
+            // Beside the reason rather than instead of it. The sentence says what happened in this one
+            // case; the kind says which of them this was, and only one of the two can be counted.
+            'kind' => $kind->value,
+            'successful' => $result->successful,
+        ], AuditSource::Admin, $actor);
+
+        return $result;
+    }
+
+    /**
+     * Correct the document chain behind a routed sale, after money has actually gone back.
+     *
+     * Called only on SUCCESS, and only from the routed branch. A correcting document for money that never
+     * moved would state a reduction that did not happen — permanently, out of a gapless series.
+     *
+     * Three silences here are answers rather than gaps, and each has already been decided elsewhere on the
+     * chargeback and prepaid paths: a single-seller charge has no chain; a creator whose row is gone leaves
+     * nobody whose standing at the supply can be read, and the money has already gone back, so refusing
+     * would strand the buyer's refund over a bookkeeping input; and a sale the collective run has not
+     * settled yet is answered by the corrector itself with nulls.
+     */
+    private function correctChain(string $chargeReference, Money $refunded): void
+    {
+        // Its OWN lookup, and deliberately not `routedChargeFor()`. That helper gates on the driver being a
+        // `RoutesMoney`, which is the right question for the REVERSAL — the routing handed to the rails is
+        // meaningless without it. It is the wrong question for a document: whether the chain needs
+        // correcting depends on whether a routed charge exists, not on what the current driver can do.
+        //
+        // It is also the question the sibling paths ask. `ConsumerWithdrawal` looks the charge up exactly
+        // this way, and having the two disagree is how the package ended up correcting the chain on three
+        // paths out of four.
+        $charge = $this->routed->find($this->manager->driver()->name(), $chargeReference);
+
+        if (! $charge instanceof MerchantCharge) {
+            return;
+        }
+
+        $merchant = $charge->merchant;
+
+        if (! $merchant instanceof Model) {
+            return;
+        }
+
+        $corrector = $this->corrector ?? Container::getInstance()->make(RoutedRefundCorrector::class);
+        $statuses = $this->statuses ?? Container::getInstance()->make(CreatorTaxStatusResolver::class);
+
+        // Frozen at the supply, not read as of today: a creator who has since registered for VAT must not
+        // retroactively change how a sale made before that is corrected.
+        //
+        // ON ONE LINE, and not a style choice — do not fold it back. php-code-coverage 14 counts the
+        // CONTINUATION line of a multi-line ternary as executable and never records it as hit.
+        $suppliedOn = $charge->settled_at instanceof Carbon ? CarbonImmutable::parse($charge->settled_at) : CarbonImmutable::now();
+
+        $corrector->correct(
+            $charge,
+            $refunded,
+            $statuses->statusAt($merchant, $suppliedOn),
+            CarbonImmutable::now(),
+            // Money went back to the buyer. Not a write-off and not a dispute — both correct a different set
+            // of links, and naming the reason here keeps that decision out of this class.
+            TaxBaseChangeReason::Repaid,
+        );
+    }
+
+    /**
+     * Return money the PLATFORM took for a supply of its own, on a sale it also collected for somebody else.
+     *
+     * ## Why this is not {@see self::refund()} with an argument
+     *
+     * That method returns part of the SALE, and everything it does follows from that: it prices a reversal
+     * of the merchant's transfer, it caps against the sale's gross, and it claws back the entitlement the
+     * purchase granted. None of the three is right here. A buyer fee granted no entitlement, it never
+     * entered the merchant's transfer, and it is not part of the gross those caps are read from — so
+     * routing it through that path would take money back off a creator who was never paid it.
+     *
+     * ## The routing is null ON PURPOSE, and that is the whole mechanism
+     *
+     * With no routing the rails ask the provider for a plain refund: no transfer reversal, no application-fee
+     * refund. The money therefore comes out of the platform's own share, which is exactly where the fee went.
+     * Passing the sale's routing would have been the plausible thing to write and would have moved the wrong
+     * money in silence — a refund that balances, taken from the wrong party.
+     *
+     * The caller is responsible for the ceiling: this method returns what the provider was asked for, and
+     * the counter that makes a retry a no-op belongs with the row that carries the amount.
+     */
+    public function refundPlatformSupply(
+        Model $owner,
+        string $chargeReference,
+        Money $amount,
+        RefundKind $kind,
+        ?string $reason = null,
+        ?Model $actor = null,
+    ): RefundResult {
+        // Derived from the KIND as well as the reference and amount, so the platform's own supply and the
+        // sale it rode on cannot collapse into one another at the provider — two refunds of the same cents
+        // on the same payment are exactly what an idempotency key is supposed to keep apart, not merge.
+        $key = 'refund:'.$kind->value.':'.$chargeReference.':'.$amount->minorUnits.':'.$amount->currency;
+
+        // NO ROUTING ARGUMENT, and its absence is the mechanism rather than an omission. Without one the
+        // rails ask for a plain refund — no transfer reversal, no application-fee refund — so the money
+        // comes out of the platform's own share, which is where the fee went. Passing this sale's routing
+        // would have been the plausible line to write and would have taken the money from the creator.
+        //
+        // Written as three arguments because the fourth defaults to null and the formatter strips an
+        // explicit one; the sentence above is what carries the intent that the argument used to.
+        $result = $this->manager->driver()->rails()->refund($chargeReference, $amount, $key);
+
+        $this->log->record('admin.refund', $owner, [
+            'charge' => $chargeReference,
+            'amount' => $amount->minorUnits,
+            'currency' => $amount->currency,
+            'reason' => $reason,
+            'kind' => $kind->value,
             'successful' => $result->successful,
         ], AuditSource::Admin, $actor);
 

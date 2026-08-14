@@ -38,4 +38,24 @@ enum TaxExemptionReason: string
      * outside it. Distinct from reverse charge in that no counterpart accounts for union tax at all.
      */
     case SuppliedOutsideTheUnion = 'supplied_outside_the_union';
+
+    /**
+     * The supplier is relieved under their own state's small-business scheme.
+     *
+     * Taxable in principle and relieved in fact, which is why it is category E and not Z: there is a supply,
+     * and a relief was claimed on it. The document has to say WHICH relief — a credit note the platform
+     * raises in the creator's name that states only "tax exempt" claims a relief without naming its ground,
+     * and the creator is the one an audit asks.
+     */
+    case DomesticSmallBusiness = 'domestic_small_business';
+
+    /**
+     * The supplier is a small business in ANOTHER member state, relieved under the cross-border scheme.
+     *
+     * Separate from the domestic case rather than folded into it, because the two are relieved under
+     * different law and only one of them is relieved by the platform's own statute. A platform-issued
+     * document that named the domestic statute here would be stating a foreign creator's tax position
+     * for them, wrongly — and they never wrote the document to correct it.
+     */
+    case UnionSmallBusinessScheme = 'union_small_business_scheme';
 }

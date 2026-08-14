@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Override;
 use Pushery\Billing\Casts\UtcDateTime;
-use RuntimeException;
+use Pushery\Billing\Models\Concerns\AppendOnly;
 
 /**
  * A return file that was produced, as the evidence it is.
@@ -30,13 +30,7 @@ use RuntimeException;
  */
 final class TaxReturnExportRecord extends Model
 {
-    /**
-     * Whether a deliberate purge (retention pruning) is in progress.
-     *
-     * Same shape as the audit ledger's, and for the same reason: a produced return is only evidence of what
-     * was filed if it cannot quietly leave. The one authorized way out is a clock — never an ad-hoc delete.
-     */
-    private static bool $purging = false;
+    use AppendOnly;
 
     protected $table = 'billing_tax_return_exports';
 
@@ -62,45 +56,30 @@ final class TaxReturnExportRecord extends Model
      * @param  callable(): T  $callback
      * @return T
      */
-    public static function purging(callable $callback): mixed
-    {
-        self::$purging = true;
 
-        try {
-            return $callback();
-        } finally {
-            self::$purging = false;
-        }
+    /**
+     * Where the file was put may be corrected — a disk gets renamed, a file gets archived elsewhere, and
+     * none of that changes what was filed. The figures and the bytes cannot move.
+     *
+     * @return list<string>
+     */
+    protected static function appendOnlyMutableColumns(): array
+    {
+        return ['written_to', 'updated_at'];
     }
 
     #[Override]
-    protected static function booted(): void
+    protected static function appendOnlyUpdateRefusal(array $columns): string
     {
-        self::updating(function (self $record): void {
-            // Where the file was put may be corrected — a disk gets renamed, a file gets archived elsewhere,
-            // and none of that changes what was filed. The figures and the bytes cannot move.
-            $touched = array_keys($record->getDirty());
-            $allowed = ['written_to', 'updated_at'];
+        return 'A produced return is the record of what was filed and cannot be edited afterwards; '
+            .'attempted to change '.implode(', ', $columns).'. Produce the period again — a second export '
+            .'is a second row, and the fact worth keeping is whether the two agree.';
+    }
 
-            if (array_diff($touched, $allowed) !== []) {
-                throw new RuntimeException(
-                    'A produced return is the record of what was filed and cannot be edited afterwards; '
-                    .'attempted to change '.implode(', ', array_diff($touched, $allowed)).'. Produce the '
-                    .'period again — a second export is a second row, and the fact worth keeping is whether '
-                    .'the two agree.'
-                );
-            }
-        });
-
-        self::deleting(static function (): bool {
-            if (self::$purging) {
-                return true;
-            }
-
-            throw new RuntimeException(
-                'A produced return cannot be deleted; it is the only evidence of which figures were filed. '
-                .'Retention removes it on its schedule, inside purging() — a caller does not.'
-            );
-        });
+    #[Override]
+    protected static function appendOnlyDeleteRefusal(): string
+    {
+        return 'A produced return cannot be deleted; it is the only evidence of which figures were filed. '
+            .'Retention removes it on its schedule, inside purging() — a caller does not.';
     }
 }

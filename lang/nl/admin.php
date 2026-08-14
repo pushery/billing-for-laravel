@@ -27,6 +27,15 @@ return [
         'invalid_tier' => 'Dat tarief is niet geconfigureerd in billing.tiers.',
     ],
 
+    'cancel' => [
+        'heading' => 'Een abonnement opzeggen',
+        'intro' => 'Beëindigt het abonnement van een eigenaar direct. De wijziging wordt met je naam in het auditlogboek vastgelegd.',
+        'owner_id' => 'Eigenaar-ID',
+        'submit' => 'Abonnement opzeggen',
+        'canceled' => 'Abonnement opgezegd.',
+        'not_found' => 'Geen eigenaar gevonden met dat ID.',
+    ],
+
     'audit' => [
         'heading' => 'Recente activiteit',
         'type' => 'Gebeurtenis',

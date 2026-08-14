@@ -9,7 +9,7 @@ use Illuminate\Support\Carbon;
 use Override;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\MarketAccess;
-use RuntimeException;
+use Pushery\Billing\Models\Concerns\AppendOnly;
 
 /**
  * One change in a market's standing.
@@ -24,6 +24,8 @@ use RuntimeException;
  */
 final class MarketAccessEntry extends Model
 {
+    use AppendOnly;
+
     protected $table = 'billing_market_access_log';
 
     /** @var list<string> */
@@ -36,14 +38,17 @@ final class MarketAccessEntry extends Model
     ];
 
     #[Override]
-    protected static function booted(): void
+    protected static function appendOnlyUpdateRefusal(array $columns): string
     {
-        self::updating(static function (): never {
-            throw new RuntimeException(
-                'A market-access entry records a change that happened and cannot be edited. Closing a market '
-                .'that was open writes a second entry — the sales made while it was open are real and need '
-                .'the record that explains them.'
-            );
-        });
+        return 'A market-access entry records a change that happened and cannot be edited. Closing a '
+            .'market that was open writes a second entry — the sales made while it was open are real '
+            .'and need the record that explains them.';
+    }
+
+    #[Override]
+    protected static function appendOnlyDeleteRefusal(): string
+    {
+        return 'This row carries a statutory retention window; retention removes it on its schedule, '
+            .'inside purging(). A caller does not delete it.';
     }
 }

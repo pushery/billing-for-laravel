@@ -22,6 +22,7 @@ use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Events\RoutedChargeAbandoned;
 use Pushery\Billing\Events\RoutedChargeConfirmed;
+use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\Events\TrialEnding;
 use Pushery\Billing\ValueObjects\InvoiceCorrectionSnapshot;
@@ -106,7 +107,15 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             // A paid invoice is both a payment (dunning recovery reads it) and a finalized invoice to
             // persist — with its status now paid. PersistInvoice upserts on (provider, provider_id), so a
             // finalize-then-pay pair converges to one row that ends up paid, whatever order they arrive in.
-            'invoice.payment_succeeded' => [...$this->invoiceEvents($object, failed: false), ...$this->invoiceSnapshotEvents($object)],
+            'invoice.payment_succeeded' => [
+                ...$this->invoiceEvents($object, failed: false),
+                ...$this->invoiceSnapshotEvents($object),
+                // A THIRD reading of the same message, and deliberately its own event. The two above are
+                // about the platform's relationship with the buyer and fire for every payment there is;
+                // this one exists so the handler that reaches the provider is only ever woken for a cycle
+                // that could plausibly route. See RoutedSubscriptionInvoicePaid.
+                ...$this->subscriptionCycleEvents($object),
+            ],
             'checkout.session.completed',
             'checkout.session.async_payment_succeeded' => $this->checkoutEvents($object),
             // `@partially-mapped:` payment_intent.succeeded, payment_intent.payment_failed and
@@ -317,6 +326,34 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     }
 
     /**
+     * The cycle behind a paid invoice, when there is one.
+     *
+     * Emitted for EVERY paid subscription invoice, routed or not — because the delivered payload cannot say
+     * which. It carries no `transfer_data` and no account (measured 2026-08-07 on the pinned version), so
+     * the discrimination has to happen where this package already knows the answer: on the local
+     * subscription row. Deciding here would mean fetching from the provider inside a mapper, which is the
+     * one thing a mapper must never do.
+     *
+     * A one-off invoice with no subscription yields nothing. There is no cycle, so there is no rate, and
+     * the routed one-time lane records its own row at checkout anyway.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function subscriptionCycleEvents(array $object): array
+    {
+        $customer = $this->string($object, 'customer');
+        $invoice = $this->string($object, 'id');
+        $subscription = $this->string($object, 'subscription');
+
+        if ($customer === null || $invoice === null || $subscription === null) {
+            return [];
+        }
+
+        return [new RoutedSubscriptionInvoicePaid($customer, $invoice, $subscription)];
+    }
+
+    /**
      * A subscription's free trial is about to end (Stripe sends this a few days out). Maps to the neutral
      * TrialEnding so the reminder goes out before the first charge. Needs the customer (to notify), the
      * subscription id (to dedup the reminder once per trial end) and the trial-end timestamp; without all
@@ -390,6 +427,12 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             $id,
             // The PaymentIntent — the reversal key a later refund webhook carries (the session id it does not).
             $this->string($object, 'payment_intent'),
+            // THE ROUND TRIP, and the reason the declarations can be found again at all. The package mints
+            // this key before the redirect and writes the two declarations against it; the provider carries
+            // it as opaque metadata and hands it back here. Read from the same metadata bag as the add-on
+            // key, so a session that lost one lost both -- which is far easier to notice than a payment that
+            // quietly arrives with no declaration attached.
+            is_array($metadata) ? $this->string($metadata, 'withdrawal_declaration') : null,
         )];
     }
 

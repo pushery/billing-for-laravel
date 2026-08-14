@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Consumer;
 
+use Carbon\CarbonInterface;
 use Pushery\Billing\Contracts\ConsumerWithdrawalPolicy;
+use Pushery\Billing\Contracts\StatesWithdrawalWindow;
 use Pushery\Billing\Enums\WithdrawalType;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\WithdrawalConsent;
@@ -23,7 +25,7 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  * The statutes live here and in the notice data, never in the neutral core. A consumer elsewhere binds
  * their own reading and never sees the word "Widerruf".
  */
-final readonly class GermanWithdrawalPolicy implements ConsumerWithdrawalPolicy
+final readonly class GermanWithdrawalPolicy implements ConsumerWithdrawalPolicy, StatesWithdrawalWindow
 {
     public function mayProvide(WithdrawalType $type, ?WithdrawalConsent $consent): bool
     {
@@ -34,6 +36,39 @@ final readonly class GermanWithdrawalPolicy implements ConsumerWithdrawalPolicy
         }
 
         return $consent?->isComplete() ?? false;
+    }
+
+    /**
+     * Fourteen days from PROVISION — § 355 Abs. 2 BGB — where a window exists at all.
+     *
+     * ## Provision, not purchase and not payment
+     *
+     * For a pre-ordered work those are three different days, and only one of them can start a clock: the
+     * one on which the buyer could first do something with what they bought. A window anchored to the sale
+     * would already have expired on the day the work arrived.
+     *
+     * ## The three kinds that get no date, and they are not the same thing
+     *
+     * A work whose right EXTINGUISHED on delivery has no window left once the declarations were made and
+     * confirmed — that is what those declarations do. Without them the right survives, so the window runs.
+     *
+     * `NotApplicable` never had one: no consumer contract, nothing for a right to attach to.
+     *
+     * And an UNCLASSIFIED sale gets none either, which is the one that would be tempting to default. The
+     * archetype resolver states plainly that null means unclassified and never "no right applies", so a
+     * date computed here would be a statutory-looking answer produced by a guess.
+     */
+    public function windowEndsFor(WithdrawalType $type, ?WithdrawalConsent $consent, CarbonInterface $providedAt): ?CarbonInterface
+    {
+        if ($type === WithdrawalType::NotApplicable) {
+            return null;
+        }
+
+        if ($type === WithdrawalType::ExtinguishedOnDelivery && ($consent?->isComplete() ?? false)) {
+            return null;
+        }
+
+        return $providedAt->toImmutable()->addDays(14);
     }
 
     public function valueForUse(WithdrawalType $type, Money $periodGross, int $elapsedDays, int $periodDays): Money

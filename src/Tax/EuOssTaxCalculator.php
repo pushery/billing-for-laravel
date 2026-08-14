@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Tax;
 
+use Carbon\CarbonImmutable;
 use Pushery\Billing\Contracts\TaxCalculator;
 use Pushery\Billing\Exceptions\UnknownTaxCountry;
 use Pushery\Billing\ValueObjects\Money;
@@ -22,26 +23,24 @@ use Pushery\Billing\ValueObjects\TaxContext;
 final readonly class EuOssTaxCalculator implements TaxCalculator
 {
     /** @var array<string,float> ISO-3166 country → standard VAT rate */
-    /**
-     * The day these rates were last checked against what each member state publishes.
+    /*
+     * THE RATES USED TO LIVE HERE, AS A `private const array`, BESIDE A FILE THAT SAID IT WAS THE SOURCE.
      *
-     * It is here because a rate table without a date cannot say that it has gone stale, and going stale is
-     * the only thing it reliably does. A member state raises its rate, every sale to that country is priced
-     * too low from that day, and the difference is not the buyer's — it is owed by whoever issued the
-     * document. Nothing about those invoices looks wrong.
+     * Both were shipped. The file carries a header and a digest whose stated purpose is the edit nobody
+     * sees — a digit changed inside `vendor/`, invisible in every diff, repricing every invoice to a
+     * country — and the published documentation told the reader that pricing STOPS when that digest
+     * disagrees.
      *
-     * Two entries were corrected on this date after being found two points low, which is exactly the failure
-     * this constant exists to make visible next time.
+     * Nothing loaded the file. Measured, not reasoned: with the shipped snapshot's `DE` set to 1000 bps and
+     * its digest correctly re-pulled, `calculate()` charged 1900 on 100.00. The guard was real, its test was
+     * green, and the money path never went near either.
+     *
+     * Two copies of the same regulated numbers is the deeper half of that. A lockstep test held them equal,
+     * which proves today's agreement and nothing about tomorrow's. There is one copy now: the rates come
+     * from {@see ShippedTaxRates}, loaded once per boot, and the date they were checked on is the file's own
+     * `situation_on` rather than a constant beside them — a date held apart from its numbers is the half
+     * that goes quietly wrong.
      */
-    public const string RATES_CHECKED_ON = '2026-07-25';
-
-    private const array RATES = [
-        'AT' => 0.20, 'BE' => 0.21, 'BG' => 0.20, 'HR' => 0.25, 'CY' => 0.19, 'CZ' => 0.21,
-        'DK' => 0.25, 'EE' => 0.24, 'FI' => 0.255, 'FR' => 0.20, 'DE' => 0.19, 'GR' => 0.24,
-        'HU' => 0.27, 'IE' => 0.23, 'IT' => 0.22, 'LV' => 0.21, 'LT' => 0.21, 'LU' => 0.17,
-        'MT' => 0.18, 'NL' => 0.21, 'PL' => 0.23, 'PT' => 0.23, 'RO' => 0.21, 'SK' => 0.23,
-        'SI' => 0.22, 'ES' => 0.21, 'SE' => 0.25,
-    ];
 
     /**
      * Countries whose supplies are treated as another member state's, by that member state's own law.
@@ -99,7 +98,33 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
     public function __construct(
         private ?string $sellerCountry = null,
         private ?TaxRateMatrix $matrix = null,
-    ) {}
+        /**
+         * The shipped, digest-checked rate table this calculator prices from.
+         *
+         * Nullable for the convenience of a caller with no container — and null does NOT mean "fall back to a
+         * second copy of the numbers", because there is no second copy any more. It means "load the same file
+         * the singleton would have handed you", so every path ends at one table behind one digest.
+         */
+        ?ShippedTaxRates $shipped = null,
+        /**
+         * The operator's rate HISTORY as dated intervals, where they configured one.
+         *
+         * Null on almost every installation, and inert when it is: the tax point on the context is then
+         * carried and ignored, so a caller that started supplying one sees the answer it always got.
+         */
+        private ?DatedTaxRateTable $history = null,
+    ) {
+        $this->shipped = $shipped ?? ShippedTaxRates::shipped();
+    }
+
+    /**
+     * The rate table in force.
+     *
+     * Resolved once, in the constructor. In a booted application the factory hands in the container
+     * singleton, so the file is read at boot and never again — verifying a digest means hashing the table,
+     * and an invoice must not pay for that.
+     */
+    private ShippedTaxRates $shipped;
 
     /**
      * The rates this package ships, in basis points, for comparison against a source.
@@ -113,7 +138,7 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
      */
     public static function shippedRatesBps(): array
     {
-        return array_map(static fn (float $rate): int => (int) round($rate * 10_000), self::RATES);
+        return ShippedTaxRates::shipped()->bps;
     }
 
     /**
@@ -127,7 +152,7 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
     {
         $code = strtoupper($country);
 
-        return isset(self::RATES[$code]) || in_array($code, self::OUTSIDE_EU_VAT_AREA, true);
+        return isset($this->shipped->bps[$code]) || in_array($code, self::OUTSIDE_EU_VAT_AREA, true);
     }
 
     public function calculate(Money $net, TaxContext $context): Money
@@ -141,9 +166,23 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
         // that knows the SUPPLY as well as the destination. Where it does not cover a country the built-in
         // table still does — a partial matrix must not turn a country the calculator has always priced into
         // an unknown one, which is a refusal rather than a smaller table.
-        $rateBps = $this->matrix instanceof TaxRateMatrix && $this->matrix->covers($country)
-            ? $this->matrix->rateFor($country, $context->rateCategory, $context->hasAudioVisualComponent)
-            : $this->standardBpsFor($country);
+        // The DATED table answers first, and only when both halves are present: the caller knows when the
+        // supply was taxed, and the operator has taken responsibility for that country by putting it in the
+        // history. The law binds the rate to the tax point rather than to the moment of lookup (Art. 93 VAT
+        // Directive), so where both are known there is no other defensible answer.
+        //
+        // A country the history does NOT carry falls through, for the same reason a partial matrix falls
+        // through: opting into intervals for one member state says nothing about the others, and turning
+        // them into refusals would be a smaller table read as an unknown one. Within a country it DOES
+        // carry, a tax point in a gap is a refusal — `intervalAt()` throws rather than reaching for the
+        // nearest rate, because an invention with a date on it cannot be told apart from a fact.
+        $rateBps = $this->history instanceof DatedTaxRateTable
+            && $context->taxPoint instanceof CarbonImmutable
+            && $this->history->knowsCountry($country)
+                ? $this->history->rateAt($country, $context->rateCategory->withAudioVisual($context->hasAudioVisualComponent), $context->taxPoint)
+                : ($this->matrix instanceof TaxRateMatrix && $this->matrix->covers($country)
+                    ? $this->matrix->rateFor($country, $context->rateCategory, $context->hasAudioVisualComponent)
+                    : $this->standardBpsFor($country));
 
         // "No rate for this code" has two causes that produce the same number but mean opposite things: a
         // supply outside the EU VAT area is correctly zero-rated, a broken code is a data defect that would
@@ -194,8 +233,6 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
 
     private function standardBpsFor(string $country): ?int
     {
-        $rate = self::RATES[$country] ?? null;
-
-        return $rate === null ? null : (int) round($rate * 10_000);
+        return $this->shipped->bps[$country] ?? null;
     }
 }

@@ -101,6 +101,22 @@ final class DatedTaxRateTable
         throw UnknownTaxRateAt::forCountry($code, $taxPoint);
     }
 
+    /**
+     * Whether the table carries ANY interval for a country, whatever the moment.
+     *
+     * Date-blind on purpose, and it is the seam that keeps a partial history from becoming a refusal engine.
+     * An operator who configures intervals for one member state has said nothing about the others, so a
+     * country absent here must fall through to the table that has always priced it. A country PRESENT here
+     * is one the operator has taken responsibility for, and a tax point landing in a gap of it is then a
+     * refusal rather than a fallback — which is the whole point of `intervalAt()`.
+     */
+    public function knowsCountry(string $country): bool
+    {
+        $code = strtoupper($country);
+
+        return array_any($this->intervals, fn (TaxRateInterval $interval): bool => $interval->country === $code);
+    }
+
     /** Whether any interval could answer for this country and moment — asked before opening a market. */
     public function covers(string $country, CarbonImmutable $taxPoint): bool
     {

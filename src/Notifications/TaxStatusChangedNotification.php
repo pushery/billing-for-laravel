@@ -30,6 +30,18 @@ final class TaxStatusChangedNotification extends BillingNotification
         private readonly CarbonInterface $effectiveFrom,
     ) {}
 
+    /**
+     * The one billing notice that deliberately carries NO call to action.
+     *
+     * Every other one points at a screen where the reader can do the thing it asks for. This one asks for
+     * nothing: it tells a merchant that the tax standing recorded for them has changed and from when, which
+     * is a statement about a decision somebody else already made. The hub has no screen that edits it —
+     * standing is written by the status ledger, from a registry check or a declaration — so a button here
+     * could only lead somewhere that does not answer the mail.
+     *
+     * A link that lands on the wrong screen is worse than none: it reads as "this is where you fix it", and
+     * the reader arrives, finds nothing to change, and concludes the notice was noise.
+     */
     public function toMail(object $notifiable): MailMessage
     {
         return new MailMessage()

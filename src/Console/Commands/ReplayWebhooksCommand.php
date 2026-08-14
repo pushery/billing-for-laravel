@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Contracts\MarketplaceWebhookEventMapper;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Models\BillingWebhookEvent;
@@ -40,7 +41,7 @@ final class ReplayWebhooksCommand extends Command
 
     protected $description = 'Re-drive stored webhook deliveries whose effects failed';
 
-    public function handle(WebhookEventMapper $mapper, WebhookEffectRegistry $registry): int
+    public function handle(WebhookEventMapper $platform, WebhookEffectRegistry $registry): int
     {
         /** @var list<string> $ids */
         $ids = array_values(array_filter((array) $this->option('event'), is_string(...)));
@@ -62,9 +63,10 @@ final class ReplayWebhooksCommand extends Command
 
         $dryRun = (bool) $this->option('dry-run');
         $queued = 0;
+        $silent = 0;
 
         foreach ($deliveries as $delivery) {
-            $events = $mapper->map($this->rebuild($delivery));
+            $events = $this->mapperFor($delivery, $platform)->map($this->rebuild($delivery));
             $effects = 0;
 
             foreach ($events as $event) {
@@ -84,14 +86,30 @@ final class ReplayWebhooksCommand extends Command
                 $delivery->type,
                 $effects,
             ));
+
+            // A delivery that produced nothing is REPORTED, because "replayed … → 0 effect(s)" reads as
+            // success and is exactly how a merchant delivery used to disappear from a bulk replay. Not a
+            // non-zero exit, though: one unhandled event type in two hundred deliveries would turn the whole
+            // run red, and an operator who learns to ignore a red replay has lost the signal again.
+            if ($effects === 0) {
+                $silent++;
+
+                $this->components->warn(sprintf(
+                    '%s (%s) from %s mapped to nothing — no effect was queued for it.',
+                    $delivery->event_id,
+                    $delivery->type,
+                    $delivery->account_reference === '' ? 'the platform account' : $delivery->account_reference,
+                ));
+            }
         }
 
         $this->info(sprintf(
-            '%s %d effect(s) across %d deliver%s.',
+            '%s %d effect(s) across %d deliver%s, %d mapped to nothing.',
             $dryRun ? 'Would queue' : 'Queued',
             $queued,
             count($deliveries),
             count($deliveries) === 1 ? 'y' : 'ies',
+            $silent,
         ));
 
         return self::SUCCESS;
@@ -129,6 +147,43 @@ final class ReplayWebhooksCommand extends Command
         $limit = (int) $this->option('limit');
 
         return array_values($query->orderBy('id')->limit(max($limit, 1))->get()->all());
+    }
+
+    /**
+     * The mapper the delivery arrived through, chosen by where it came from.
+     *
+     * A merchant delivery and a platform delivery are read by different mappers on the live path, and the
+     * ledger records which endpoint took each one. Replaying everything through the platform mapper is not a
+     * near-miss: it has no `account.*` arm at all, so a merchant delivery fell to `default => []` and was
+     * reported as replayed with zero effects — a capability update that never landed, on an account that
+     * still cannot receive money.
+     *
+     * The second half is the expensive one. A connected-account subscription mapped without a merchant scope
+     * resolves against the PLATFORM catalog: not inaction, but state written for the wrong seller.
+     *
+     * Resolved per delivery rather than injected, because the marketplace mapper is bound only where a
+     * marketplace is set up. An installation with no merchant endpoint has no merchant deliveries either, so
+     * the branch is never taken there — and if it somehow is, falling back with a warning beats fatally
+     * failing a recovery run.
+     */
+    private function mapperFor(BillingWebhookEvent $delivery, WebhookEventMapper $platform): WebhookEventMapper
+    {
+        if ($delivery->account_reference === '') {
+            return $platform;
+        }
+
+        if (! $this->laravel->bound(MarketplaceWebhookEventMapper::class)) {
+            $this->components->warn(sprintf(
+                'No merchant mapper is bound, so %s from %s is read by the platform mapper, which does not '
+                .'know merchant events.',
+                $delivery->event_id,
+                $delivery->account_reference,
+            ));
+
+            return $platform;
+        }
+
+        return $this->laravel->make(MarketplaceWebhookEventMapper::class);
     }
 
     /**

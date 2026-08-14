@@ -7,6 +7,7 @@ return [
     'title' => 'Factura :number',
     'invoice' => 'Factura',
     'correction' => 'Factura rectificativa',
+    'corrects' => 'Corrige :number',
     'number' => 'Número de factura :number',
     'issued' => 'Emitida el :date',
     'from' => 'De',
@@ -23,6 +24,8 @@ return [
     'total' => 'Total',
     'total_including_vat' => 'Total con IVA del :rate incluido',
     'reverse_charge_note' => 'Inversión del sujeto pasivo: el destinatario es responsable del IVA.',
+    'small_business_note' => 'Exento de IVA en virtud del régimen de pequeñas empresas (§ 19 UStG).',
+    'union_small_business_note' => 'Exento de IVA en virtud del régimen de pequeñas empresas del Estado miembro del proveedor.',
     'margin_scheme_note' => 'Régimen del margen de beneficio — bienes de ocasión',
     'self_billed_note' => 'Autofactura: emitida por el destinatario en nombre del proveedor, por acuerdo previo.',
 ];

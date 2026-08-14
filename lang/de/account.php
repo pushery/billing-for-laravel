@@ -227,6 +227,7 @@ return [
     'toast' => [
         'payment_failed' => 'Deine Zahlung konnte nicht verarbeitet werden. Bitte aktualisiere deine Zahlungsdaten.',
         'subscription_activated' => 'Dein Abo ist aktiv — alles, was dazugehört, ist freigeschaltet.',
+        'dismiss' => 'Schließen',
     ],
 
 ];

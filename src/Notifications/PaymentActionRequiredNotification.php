@@ -20,10 +20,16 @@ final class PaymentActionRequiredNotification extends BillingNotification
 {
     public function toMail(object $notifiable): MailMessage
     {
-        return new MailMessage()
+        $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.payment_action_required.subject'))
             ->line(Lang::get('billing::notifications.payment_action_required.intro'))
             ->line(Lang::get('billing::notifications.payment_action_required.outro'));
+
+        return $this->withAction(
+            $mail,
+            Lang::get('billing::notifications.payment_action_required.cta'),
+            $this->actionUrl('billing.account.recovery'),
+        );
     }
 
     /** @return array<string, mixed> */

@@ -19,11 +19,17 @@ final class SubscriptionCanceledNotification extends BillingNotification
 
     public function toMail(object $notifiable): MailMessage
     {
-        return new MailMessage()
+        $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.subscription_canceled.subject'))
             ->line(Lang::get('billing::notifications.subscription_canceled.intro'))
             ->line($this->accessEndsAt->format('Y-m-d'))
             ->line(Lang::get('billing::notifications.subscription_canceled.outro'));
+
+        return $this->withAction(
+            $mail,
+            Lang::get('billing::notifications.subscription_canceled.cta'),
+            $this->actionUrl('billing.account.plan'),
+        );
     }
 
     /** @return array<string, string> */

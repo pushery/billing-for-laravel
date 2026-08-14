@@ -6,16 +6,12 @@ namespace Pushery\Billing\Livewire;
 
 use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
-use Illuminate\Routing\Exceptions\UrlGenerationException;
-use Illuminate\Routing\UrlGenerator;
-use Illuminate\Support\Facades\Route;
+use Pushery\Billing\Account\Navigation;
 use Pushery\Billing\Contracts\TierCatalog;
-use Pushery\Billing\Support\Navigation;
-use Pushery\Billing\ValueObjects\NavItem;
 
 /**
  * The account-hub landing screen: the config-driven navigation to the hub sections plus a one-line
- * summary of the owner's current tier. The nav is whatever config('billing.navigation') lists, so a
+ * summary of the owner's current tier. The nav is the layout's own already-filtered list, so a
  * consumer adds, reorders or removes sections without touching the package.
  *
  * The hub HOSTS ancillary app/auth screens (sessions, connections, set-password, onboarding) without owning
@@ -27,28 +23,13 @@ final class AccountOverview extends AccountScreen
 {
     public function render(): View
     {
-        // Route gate: surface a nav entry only when its route is registered AND resolvable without arguments,
-        // so a foreign/ancillary route the consumer has not built yet — or one that needs parameters the hub
-        // cannot supply — is hidden instead of throwing on route() and 500-ing the whole landing page.
-        $items = array_values(array_filter(
-            Container::getInstance()->make(Navigation::class)->items(),
-            static function (NavItem $item): bool {
-                if (! Route::has($item->route)) {
-                    return false;
-                }
-
-                try {
-                    Container::getInstance()->make(UrlGenerator::class)->route($item->route);
-
-                    return true;
-                } catch (UrlGenerationException) {
-                    return false;
-                }
-            },
-        ));
-
+        // ONE reader of the navigation configuration, and it is the layout's. This method used to walk the
+        // config through a second parser and re-implement two of its three gates by hand — route registered,
+        // route resolvable without arguments — while leaving out the third. The one it left out was
+        // `web_only`, so an operator who suppressed the account-deletion flow on a native runtime saw it
+        // vanish from the sidebar and stay on this page, one click from a working deletion.
         return $this->view('billing::livewire.account-overview', [
-            'items' => $items,
+            'items' => Container::getInstance()->make(Navigation::class)->visibleItems(),
             'tierLabel' => Container::getInstance()->make(TierCatalog::class)->label($this->currentTierKey()),
         ]);
     }

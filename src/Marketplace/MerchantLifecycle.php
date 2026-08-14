@@ -23,8 +23,13 @@ use Pushery\Billing\Models\MerchantAccount;
  * The transitions are guarded rather than free. A terminated merchant is never reinstated by a capability
  * report, because a provider keeps reporting healthy capabilities for an account long after its owner
  * disconnected it from this platform; obeying that report would resume routing into a relationship that no
- * longer exists. Termination is therefore one-way from here — it is undone by onboarding again, not by a
- * webhook.
+ * longer exists. Termination is therefore one-way from any WEBHOOK — what undoes it is `reopen()` below,
+ * an explicit act of an operator, and that separation is the whole point: a provider that keeps reporting
+ * healthy capabilities must never be able to resume a relationship a person ended.
+ *
+ * That sentence used to say termination "is undone by onboarding again", and no such path existed. Onboarding
+ * handed the old, unreceivable row straight back with exit 0, so the documented repair was a statement about
+ * a mechanism nobody had built.
  */
 final readonly class MerchantLifecycle
 {
@@ -58,6 +63,49 @@ final readonly class MerchantLifecycle
 
         $this->moveTo($account, MerchantStatus::Active, null);
 
+        $this->events->dispatch(new MerchantRoutingReinstated($account->provider, $account->account_reference));
+
+        return true;
+    }
+
+    /**
+     * Begin again with a merchant whose relationship had ended — an operator's act, never a webhook's.
+     *
+     * ## Why this is not reachable from an effect
+     *
+     * The class refuses to let a capability report reinstate a terminated merchant, because a provider goes
+     * on reporting healthy capabilities for an account long after its owner disconnected it. That reasoning
+     * survives only if the way back is somewhere a webhook cannot reach — so this is called by
+     * `billing:merchant:reopen` and by nothing else in the package.
+     *
+     * ## Why the capability flags go back to false
+     *
+     * Conservatively, and deliberately not "leave them and wait for the next `account.updated`". Those flags
+     * were gathered BEFORE the disconnection; carrying them forward declares a merchant receivable on the
+     * strength of what was true about a relationship that had since ended. Setting them false says the only
+     * honest thing — the provider has not spoken since — and lets it speak again.
+     *
+     * A merchant who is not terminated is left alone and answered false: reopening what was never closed
+     * would clear a live merchant's capabilities for no reason.
+     */
+    public function reopen(MerchantAccount $account): bool
+    {
+        if ($account->status !== MerchantStatus::Terminated && $account->deauthorized_at === null) {
+            return false;
+        }
+
+        $account->forceFill([
+            'deauthorized_at' => null,
+            'charges_enabled' => false,
+            'payouts_enabled' => false,
+            'details_submitted' => false,
+        ])->save();
+
+        $this->moveTo($account, MerchantStatus::Active, null);
+
+        // The same event a reinstatement announces, and on purpose: to everything downstream this IS a
+        // reinstatement — routing may resume once the provider confirms. A separate event would make every
+        // listener handle two shapes of one fact.
         $this->events->dispatch(new MerchantRoutingReinstated($account->provider, $account->account_reference));
 
         return true;

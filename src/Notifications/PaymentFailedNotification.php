@@ -27,11 +27,17 @@ final class PaymentFailedNotification extends BillingNotification
 
     public function toMail(object $notifiable): MailMessage
     {
-        return new MailMessage()
+        $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.payment_failed.subject'))
             ->line(Lang::get('billing::notifications.payment_failed.intro'))
             ->line($this->amount->format().' · '.$this->invoiceReference)
             ->line(Lang::get('billing::notifications.payment_failed.outro'));
+
+        return $this->withAction(
+            $mail,
+            Lang::get('billing::notifications.payment_failed.cta'),
+            $this->actionUrl('billing.account.recovery'),
+        );
     }
 
     /** @return array<string, string> */

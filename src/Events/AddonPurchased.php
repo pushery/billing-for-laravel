@@ -22,5 +22,15 @@ final readonly class AddonPurchased implements BillingDomainEvent, IdentifiesCus
         public Money $amount,
         public string $reference,
         public ?string $paymentReference = null,
+        /**
+         * The declaration reference the package minted BEFORE the redirect, echoed back by the provider.
+         *
+         * Null on every purchase that carried none -- which is every purchase on an install with no
+         * consumer-rights profile, and every one made before the declarations were collected. Null is
+         * therefore an ordinary state and not a failure; what it must never do is silently read as "the
+         * buyer declared nothing was needed", which is why the grant path treats a missing consent as a
+         * refusal rather than a pass.
+         */
+        public ?string $declarationReference = null,
     ) {}
 }

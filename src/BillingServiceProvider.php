@@ -24,8 +24,11 @@ use Pushery\Billing\Console\Commands\AdvanceBuyerProtectionCommand;
 use Pushery\Billing\Console\Commands\AdvanceDunningCommand;
 use Pushery\Billing\Console\Commands\AnnounceLapsedAttestationsCommand;
 use Pushery\Billing\Console\Commands\AnnounceUpcomingFilingsCommand;
+use Pushery\Billing\Console\Commands\AnnounceVoucherVolumeCommand;
 use Pushery\Billing\Console\Commands\BillingRunCommand;
+use Pushery\Billing\Console\Commands\CancelSubscriptionCommand;
 use Pushery\Billing\Console\Commands\CheckMetersCommand;
+use Pushery\Billing\Console\Commands\CheckTaxRatesCommand;
 use Pushery\Billing\Console\Commands\DatevExportCommand;
 use Pushery\Billing\Console\Commands\DoctorCommand;
 use Pushery\Billing\Console\Commands\EraseOwnerCommand;
@@ -37,15 +40,22 @@ use Pushery\Billing\Console\Commands\GrantTierCommand;
 use Pushery\Billing\Console\Commands\ImportExchangeRatesCommand;
 use Pushery\Billing\Console\Commands\InstallCommand;
 use Pushery\Billing\Console\Commands\MarketplacePreflightCommand;
+use Pushery\Billing\Console\Commands\MerchantOnboardCommand;
+use Pushery\Billing\Console\Commands\MerchantReopenCommand;
+use Pushery\Billing\Console\Commands\MerchantStatusCommand;
 use Pushery\Billing\Console\Commands\ProbeRatesCommand;
 use Pushery\Billing\Console\Commands\PruneBillingCommand;
 use Pushery\Billing\Console\Commands\ReconcileTaxStatusCommand;
 use Pushery\Billing\Console\Commands\ReconcileUsageCommand;
 use Pushery\Billing\Console\Commands\RecordMarketAccessCommand;
+use Pushery\Billing\Console\Commands\RefreshMerchantCapabilitiesCommand;
 use Pushery\Billing\Console\Commands\RemindDelinquentSubscriptionsCommand;
 use Pushery\Billing\Console\Commands\ReplayWebhooksCommand;
+use Pushery\Billing\Console\Commands\ReportingFileCommand;
+use Pushery\Billing\Console\Commands\ReportingRunCommand;
 use Pushery\Billing\Console\Commands\SyncSubscriptionsCommand;
 use Pushery\Billing\Console\Commands\TaxReturnExportCommand;
+use Pushery\Billing\Console\Commands\WarnEndingTrialsCommand;
 use Pushery\Billing\Console\Commands\WarnExpiringCardsCommand;
 use Pushery\Billing\Console\Commands\WarnUnestablishedStandingsCommand;
 use Pushery\Billing\Consumer\GermanConformityUpdatePolicy;
@@ -90,6 +100,7 @@ use Pushery\Billing\Contracts\IpCountryResolver;
 use Pushery\Billing\Contracts\LateFees;
 use Pushery\Billing\Contracts\LedgerBalanceReader;
 use Pushery\Billing\Contracts\License;
+use Pushery\Billing\Contracts\ListsEarningCurrencies;
 use Pushery\Billing\Contracts\MandateNotifier;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\MerchantCatalog;
@@ -106,6 +117,7 @@ use Pushery\Billing\Contracts\ProductTaxonomy;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\PublishesExchangeRates;
 use Pushery\Billing\Contracts\ReceiptNotifier;
+use Pushery\Billing\Contracts\RendersReportingRecord;
 use Pushery\Billing\Contracts\ReportingProfile;
 use Pushery\Billing\Contracts\SeatBilling;
 use Pushery\Billing\Contracts\SellerOfRecordResolver;
@@ -169,6 +181,7 @@ use Pushery\Billing\Livewire\PaymentRecovery;
 use Pushery\Billing\Livewire\SubscriptionOverview;
 use Pushery\Billing\Livewire\UsageHistory;
 use Pushery\Billing\Livewire\UsageOverview;
+use Pushery\Billing\Marketplace\BuyerProtectionClock;
 use Pushery\Billing\Marketplace\ChargeRoutingConsistencyGuard;
 use Pushery\Billing\Marketplace\ConfigPlatformFeeResolver;
 use Pushery\Billing\Marketplace\ConfigSellerOfRecordResolver;
@@ -186,11 +199,14 @@ use Pushery\Billing\Marketplace\FanReceiptTierResolver;
 use Pushery\Billing\Marketplace\GermanTaxDisclosurePolicy;
 use Pushery\Billing\Marketplace\InboundTaxMatrix;
 use Pushery\Billing\Marketplace\MarketAllowlist;
+use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Marketplace\MerchantChargeAnnualEarningsCounter;
 use Pushery\Billing\Marketplace\MerchantChargeLedgerBalanceReader;
 use Pushery\Billing\Marketplace\NullMerchantPartyResolver;
 use Pushery\Billing\Marketplace\NullMerchantResolver;
 use Pushery\Billing\Marketplace\ProductClassifier;
+use Pushery\Billing\Marketplace\Reporting\DelimitedSellerRecord;
+use Pushery\Billing\Marketplace\ReportingPlausibilityRules;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Marketplace\RoutedPayment;
 use Pushery\Billing\Marketplace\SelfBillingAgreementGuard;
@@ -224,6 +240,7 @@ use Pushery\Billing\Tax\NullSmallBusinessIdValidator;
 use Pushery\Billing\Tax\NullVatIdValidator;
 use Pushery\Billing\Tax\PaymentCountryLeadsPolicy;
 use Pushery\Billing\Tax\PlaceOfSupplyResolver;
+use Pushery\Billing\Tax\ShippedTaxRates;
 use Pushery\Billing\Tax\TaxCalculatorFactory;
 use Pushery\Billing\Usage\CounterUsageProvider;
 use Pushery\Billing\Usage\DatabaseUsageHistory;
@@ -329,10 +346,12 @@ final class BillingServiceProvider extends ServiceProvider
             // jurisdiction profile, both of which a consumer can replace. Its own enforcement date decides
             // whether it holds anybody, so wiring it costs an install that has not set one nothing.
             $app->make(CreatorTaxStatusHold::class),
-            // The pairing check and the posture that feeds it. Both sibling charge paths already consult
-            // these; this one is the only place that reaches PaymentRails::charge() and it did not.
+            // The pairing check and the marketplace context that feeds it. Both sibling charge paths already
+            // consult these; this one is the only place that reaches PaymentRails::charge() and it did not.
+            // The context replaced a bare posture resolver: the derivation it wraps stood in three lanes and
+            // one of them had already drifted.
             $app->make(ChargeRoutingConsistencyGuard::class),
-            $app->make(SellerOfRecordResolver::class),
+            $app->make(MarketplaceSaleContext::class),
             $app->make(Repository::class),
             // The classifier, so "no sale without a classification" is enforced where a sale happens rather
             // than only where somebody remembers to ask. It refused correctly and unreachably until this
@@ -346,6 +365,21 @@ final class BillingServiceProvider extends ServiceProvider
             // Resolved only if something bound it. A destination-charge install never needs it, and a
             // separate-transfer sale without it throws BEFORE the buyer is charged rather than after.
             transfers: $app->bound(MovesMerchantShare::class) ? $app->make(MovesMerchantShare::class) : null,
+            // The buyer-protection clock, so the switch can actually stop the transfer. Passed always and
+            // consulted only when the switch is on: the clock alone changes nothing, and an install that
+            // never turns it on takes the same path it always took.
+            protection: $app->make(BuyerProtectionClock::class),
+        ));
+
+        // The clock, with the two seams a release needs and the dispatcher it never had. Bound explicitly
+        // for the same container subtlety documented below: nullable parameters WITH defaults are preferred
+        // over resolution, so autowiring would hand it three nulls — and a hold would open, be decided, and
+        // never pay anybody, silently.
+        $this->app->bind(BuyerProtectionClock::class, fn (Application $app): BuyerProtectionClock => new BuyerProtectionClock(
+            $app->make(Repository::class),
+            $app->bound(MovesMerchantShare::class) ? $app->make(MovesMerchantShare::class) : null,
+            $app->bound(MerchantAccountDirectory::class) ? $app->make(MerchantAccountDirectory::class) : null,
+            $app->make(Dispatcher::class),
         ));
 
         // Bound explicitly, and the reason is a container subtlety that cost a debugging round: the engine's
@@ -372,6 +406,11 @@ final class BillingServiceProvider extends ServiceProvider
         // The read-only earnings balance: a pure projection over the routed-charge record, no state of its
         // own and no provider reach. It cannot move money — that is the whole point of shipping it.
         $this->app->bind(LedgerBalanceReader::class, MerchantChargeLedgerBalanceReader::class);
+        // The enumeration is a SEPARATE binding on purpose, not a widened LedgerBalanceReader: that contract
+        // is documented as implementable by a consumer, and adding a method to it would be a fatal error in
+        // their class on the next update. Bound to the same projection, so both answers come from one query
+        // shape over one table.
+        $this->app->bind(ListsEarningCurrencies::class, MerchantChargeLedgerBalanceReader::class);
 
         // The jurisdiction-neutral per-year earnings count a threshold monitor evaluates. A projection over
         // the same routed-charge record; the profile decides what a limit break means, the count carries none.
@@ -424,8 +463,13 @@ final class BillingServiceProvider extends ServiceProvider
         // reads a table a single-seller install never writes to.
         //
         // The default gate PERMITS, matching the paying side's AlwaysEligible. A marketplace consumer binds
-        // ComposedReceiveGate with ProviderCapabilityCheck and its own predicates — the fail-closed shape —
-        // which is what the routed-charge path and the go-live checklist expect to find.
+        // ComposedReceiveGate with ProviderCapabilityCheck and its own predicates — the fail-closed shape.
+        //
+        // The go-live checklist now ASKS whether they did: `ReceivingGateCheckpoint` fails when a live
+        // marketplace still resolves this binding to AlwaysReceivable. This comment used to say the
+        // checklist expected the composed shape, and it did not — it never asked, so the run came back green
+        // over a marketplace routing money to accounts nobody had looked at. A comment that describes a
+        // guarantee no code provides is worse than none: it is the reason nobody goes looking.
         // Bound to a REFUSAL rather than left unbound, and the difference shows at the moment it fires: an
         // unbound contract produces a container error naming an interface, which reads as a wiring mistake
         // in the consumer's app. This produces a sentence saying the package ships no rates, why it ships
@@ -473,6 +517,20 @@ final class BillingServiceProvider extends ServiceProvider
 
         $this->app->singleton(CheckpointRegistry::class);
         $this->app->alias(CheckpointRegistry::class, GoLiveChecklist::class);
+
+        // A singleton for the same reason the checklist is one: a consumer adds its own rules from a service
+        // provider, and a fresh instance per resolution would drop them and then report a clean period.
+        //
+        // `SuppliesSellerRecords` is deliberately NOT bound here. The seller's own record lives in the
+        // consuming application, and the rule that reads it treats an absent binding as a finding rather
+        // than as a pass — so an installation that never wired it is told so instead of being told nothing.
+        $this->app->singleton(ReportingPlausibilityRules::class);
+
+        // The shipped record format, bound to the contract so a consumer under another duty swaps it for
+        // their own rather than switching a foreign one off. It is a complete and deterministic record and
+        // deliberately not any authority's wire format — a package that guessed at a schema would produce a
+        // file that validates nowhere.
+        $this->app->bind(RendersReportingRecord::class, DelimitedSellerRecord::class);
 
         // VAT-id validation is a seam: the default proves nothing (so the package runs offline and never grants
         // a reverse charge on an unvalidated id), an app that needs real EU B2B zero-rating binds ViesVatIdValidator.
@@ -648,11 +706,17 @@ final class BillingServiceProvider extends ServiceProvider
         // binding the fail-closed ComposedEligibilityGate with its own checks.
         $this->app->bind(CanTransactMoney::class, AlwaysEligible::class);
 
+        // ONE read of the shipped rate file for the whole application. It is a singleton rather than a
+        // per-resolution load because the digest is verified on every load, and hashing a table on every
+        // invoice would be a real cost for a file that cannot change while the process runs.
+        $this->app->singleton(ShippedTaxRates::class, static fn (): ShippedTaxRates => ShippedTaxRates::shipped());
+
         $this->app->bind(
             TaxCalculator::class,
             static fn (Application $app): TaxCalculator => new TaxCalculatorFactory(
                 $app->make(Repository::class),
                 $app->make(CheckpointRegistry::class),
+                $app->make(ShippedTaxRates::class),
             )->make(),
         );
 
@@ -719,8 +783,21 @@ final class BillingServiceProvider extends ServiceProvider
             $this->loadMigrationsFrom(__DIR__.'/../database/migrations/server');
         }
 
-        // The account hub is part of the master switch: when billing is off, the
-        // screens and their routes do not exist at all (a clean no-op clone).
+        // The account hub is part of the master switch: when billing is off, the SCREENS and their routes do
+        // not exist at all (a clean no-op clone).
+        //
+        // The two WEBHOOK routes are the exception, and it is deliberate rather than an oversight in the
+        // ordering above. `loadRoutesFrom()` runs unconditionally, so `billing/webhook` and
+        // `billing/webhook/marketplace` stay MOUNTED with billing off — and both receivers answer 404 in
+        // that state, which is where the switch is actually honored. A provider whose endpoint 404s backs
+        // off and retries; one whose endpoint stops resolving is a delivery that fails differently, and an
+        // installation that switches billing off for a week should not have to re-register with its
+        // provider afterwards.
+        //
+        // Said explicitly because the sentence above used to claim it for every route, and a consumer read
+        // that literally: these two endpoints carry no CSRF middleware (the verifier authenticates by
+        // signature instead), so "the routes do not exist" is exactly the kind of promise somebody stops
+        // checking. `MasterSwitchLeavesOnlyTheWebhooksTest` holds the real answer.
         if ((bool) $this->app->make(Repository::class)->get('billing.enabled', true)) {
             // A tier that bills for usage on a driver that cannot report it would count every unit and
             // invoice none of them. Refuse to boot instead.
@@ -811,6 +888,7 @@ final class BillingServiceProvider extends ServiceProvider
                 BillingRunCommand::class,
                 FlushUsageCommand::class,
                 WarnExpiringCardsCommand::class,
+                WarnEndingTrialsCommand::class,
                 AdvanceBuyerProtectionCommand::class,
                 AdvanceDunningCommand::class,
                 TaxReturnExportCommand::class,
@@ -826,15 +904,24 @@ final class BillingServiceProvider extends ServiceProvider
                 RemindDelinquentSubscriptionsCommand::class,
                 WarnUnestablishedStandingsCommand::class,
                 AnnounceUpcomingFilingsCommand::class,
+                AnnounceVoucherVolumeCommand::class,
                 ImportExchangeRatesCommand::class,
                 FreezeReportingRatesCommand::class,
                 ReconcileTaxStatusCommand::class,
                 ProbeRatesCommand::class,
+                CheckTaxRatesCommand::class,
                 CheckMetersCommand::class,
                 ReconcileUsageCommand::class,
                 DatevExportCommand::class,
+                CancelSubscriptionCommand::class,
                 GrantTierCommand::class,
                 MarketplacePreflightCommand::class,
+                MerchantOnboardCommand::class,
+                MerchantReopenCommand::class,
+                MerchantStatusCommand::class,
+                RefreshMerchantCapabilitiesCommand::class,
+                ReportingRunCommand::class,
+                ReportingFileCommand::class,
             ]);
         }
 
@@ -845,19 +932,37 @@ final class BillingServiceProvider extends ServiceProvider
         // and usage that has not reached the provider by the time the cycle's invoice closes is revenue
         // that will not be collected. withoutOverlapping, because two flushers racing the same outbox is
         // how the same units get reported under two identifiers.
-        $this->callAfterResolving(Schedule::class, static function (Schedule $schedule): void {
+        // Captured rather than reached for with the `config()` helper: that helper is Foundation-only, and
+        // this package requires focused illuminate/* components instead of the framework. The repository is
+        // the live singleton, so a value set after boot is still the value read when the scheduler resolves.
+        $scheduleConfig = $this->app->make(Repository::class);
+
+        $this->callAfterResolving(Schedule::class, static function (Schedule $schedule) use ($scheduleConfig): void {
             // withoutOverlapping like the others: a local-engine cycle advance that runs long must not have
             // a second copy start on top of it and double-advance the same due subscriptions.
             $schedule->command('billing:run')->hourly()->withoutOverlapping();
             $schedule->command('billing:usage:flush')->everyMinute()->withoutOverlapping();
             // A daily proactive nudge before a card expires — the biggest preventable cause of churn.
             $schedule->command('billing:cards:warn')->dailyAt('09:00')->withoutOverlapping();
+            // The same nudge for the trial that has no provider to send one. A subscription trial ends with a
+            // provider event; the GENERIC trial is a date on the owner's own row and nothing could ever
+            // announce it — which made the mode WITHOUT a card, the one where the customer has no other
+            // signal, the one that ended in silence.
+            $schedule->command('billing:trials:warn')->dailyAt('09:05')->withoutOverlapping();
             // The tax-standing deadline, announced BEFORE it bites. Daily and early, because the value of
             // this message is entirely in how much time it leaves: a merchant needs longer to produce a
             // declaration than a checkout takes to fail. It is silent until an operator sets the date.
             $schedule->command('billing:tax-holds:warn')->dailyAt('09:15')->withoutOverlapping();
             // A daily walk up the dunning ladder — escalating warnings + fees for delinquent owners.
             $schedule->command('billing:dunning:advance')->dailyAt('09:15')->withoutOverlapping();
+            // The cure-window half of that ladder, and the half that ENDS things. A payment failing writes a
+            // row somebody can watch; a day passing inside the window writes nothing at all, so without these
+            // two the customer hears once — when the payment failed — and then again only when the
+            // subscription is gone. The reminder runs first and the expiry after it, so a window that ends
+            // today produces the final notice rather than a countdown that stops at zero. Both select
+            // merchant-scoped rows only, so a single-seller install pays two empty queries a day.
+            $schedule->command('billing:dunning:remind')->dailyAt('09:30')->withoutOverlapping();
+            $schedule->command('billing:dunning:expire')->dailyAt('09:45')->withoutOverlapping();
             // The retention clock. Personal data the package no longer needs is not data it may keep.
             $schedule->command('billing:prune')->dailyAt('03:30')->withoutOverlapping();
             // The drift guard: read the provider's own totals back and compare, and alarm on a backlog held
@@ -871,6 +976,14 @@ final class BillingServiceProvider extends ServiceProvider
             // The filing obligations, announced before their day. Daily, because the notice window is
             // measured in days and a weekly sweep would land inside it by chance rather than by design.
             $schedule->command('billing:filings:announce')->dailyAt('06:15')->withoutOverlapping();
+            // The voucher-volume levels, and the only entry here that is registered CONDITIONALLY. Vouchers
+            // are off by default and the whole feature waits on a legal question; a schedule entry that ran
+            // anyway would query an empty table every morning on every install that never issued a voucher.
+            // Gated at registration rather than skipped inside the command, so an operator reading
+            // `schedule:list` sees what actually runs for them instead of a line that always no-ops.
+            if ((bool) $scheduleConfig->get('billing.marketplace.vouchers.enabled', false)) {
+                $schedule->command('billing:vouchers:volume')->dailyAt('06:30')->withoutOverlapping();
+            }
             // The other event nothing can observe, and this one DECIDES rather than announces. A creator
             // crossing a turnover limit writes no row: enough sales accumulate and a threshold is simply
             // past, so the moment the flip should have happened is a moment nothing dispatched. Left
@@ -1028,7 +1141,7 @@ final class BillingServiceProvider extends ServiceProvider
         $country = $config->get('billing.company.country');
 
         $this->app->make(MarketAllowlist::class)->assertEveryOpenMarketIsPriced(
-            new EuOssTaxCalculator(is_string($country) ? $country : null)->knowsRateFor(...),
+            new EuOssTaxCalculator(is_string($country) ? $country : null, shipped: $this->app->make(ShippedTaxRates::class))->knowsRateFor(...),
         );
     }
 }

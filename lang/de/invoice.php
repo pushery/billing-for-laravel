@@ -7,6 +7,7 @@ return [
     'title' => 'Rechnung :number',
     'invoice' => 'Rechnung',
     'correction' => 'Rechnungskorrektur',
+    'corrects' => 'Korrektur zu :number',
     'number' => 'Rechnungsnummer :number',
     'issued' => 'Ausgestellt am :date',
     'from' => 'Von',
@@ -23,6 +24,8 @@ return [
     'total' => 'Gesamt',
     'total_including_vat' => 'Gesamt inklusive :rate USt',
     'reverse_charge_note' => 'Reverse Charge: Die Steuerschuld geht auf den Leistungsempfänger über.',
+    'small_business_note' => 'Steuerfrei nach § 19 UStG (Kleinunternehmerregelung).',
+    'union_small_business_note' => 'Steuerfrei nach der Kleinunternehmerregelung des Ansässigkeitsstaats des Leistenden.',
     'margin_scheme_note' => 'Gebrauchtgegenstände/Sonderregelung',
     'self_billed_note' => 'Gutschrift: vom Leistungsempfänger im Namen des Leistenden ausgestellt, nach vorheriger Vereinbarung.',
 ];
