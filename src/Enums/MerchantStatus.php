@@ -25,10 +25,14 @@ enum MerchantStatus: string
     case Suspended = 'suspended';
 
     /**
-     * The relationship is over and cannot be resumed from here. A merchant who disconnected their account
-     * is unreachable in BOTH directions — transfers and reversals — which is why this is not just a
-     * stronger suspension: it is the state in which a clawback has become impossible, and somebody owed
-     * money has to be able to see that it has.
+     * The relationship is over. A merchant who disconnected their account is unreachable in BOTH directions
+     * — transfers and reversals — which is why this is not just a stronger suspension: it is the state in
+     * which a clawback has become impossible, and somebody owed money has to be able to see that it has.
+     *
+     * No webhook resumes it, and that is the guard rather than the limitation: a provider goes on reporting
+     * healthy capabilities long after an owner disconnected. What resumes it is `MerchantLifecycle::reopen()`,
+     * an operator's deliberate act — which for a while this comment implied existed as "onboarding again",
+     * a path nothing had built.
      */
     case Terminated = 'terminated';
 

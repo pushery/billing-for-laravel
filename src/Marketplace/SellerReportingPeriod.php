@@ -11,6 +11,7 @@ use Pushery\Billing\Enums\ReversalAttribution;
 use Pushery\Billing\Exceptions\SellerModelMissing;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\CountingPeriod;
+use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\SellerPeriodReport;
 use Pushery\Billing\ValueObjects\SellerQuarterFigures;
 
@@ -50,7 +51,6 @@ final readonly class SellerReportingPeriod
     public function __construct(
         private SellerReportingRun $run,
         private SettlementGrossInflowCounter $inflow,
-        private MerchantChargeAnnualEarningsCounter $earnings,
         /**
          * Only to read WHICH window a reversal belongs to.
          *
@@ -106,7 +106,28 @@ final readonly class SellerReportingPeriod
                 quarter: $quarter,
                 grossInflow: $this->inflow->countedIn($seller, $currency, $period),
                 transactions: $this->inflow->transactionsIn($seller, $currency, $period),
-                feesWithheld: $this->earnings->feesWithheldIn($seller, $currency, $period),
+                // Not simply what the platform kept. "Separately withheld fees" asks what the SELLER was
+                // charged, and under a commission chain the answer is nothing at all — the platform's
+                // margin is the difference between two supplies, never billed to them, and the package
+                // deliberately issues them no commission invoice for it. Reporting it here would invent a
+                // service relationship the books do not contain.
+                //
+                // Zero rather than a lookup, and the reason is structural rather than a shortcut: this
+                // roster is built from SETTLEMENT documents, and only a commission chain produces one.
+                // Under intermediation the platform issues the seller a commission invoice for its fee —
+                // `FanReceiptIssuer::issueSellerCommission()`, series P, owned by the merchant — and the
+                // seller documents their own sale. So every seller who can appear in a report at all was
+                // settled under the chain, and the honest figure for all of them is nothing.
+                //
+                // That sentence used to describe a document that did not exist. It was written from the
+                // design, the design was half built, and three places in the package went on describing the
+                // missing half as present — which is how an absence reads as a decision.
+                //
+                // The premise is pinned rather than trusted. `ReportedWithheldFeeByRegimeTest` fails the
+                // day a fee-charging regime gains a settlement-document role, which is the day this line
+                // has to become a per-document read instead. Writing that read TODAY would be a branch no
+                // test could reach, and an unreachable branch is where a wrong answer waits unmeasured.
+                feesWithheld: Money::zero(strtoupper($currency)),
             );
         }
 

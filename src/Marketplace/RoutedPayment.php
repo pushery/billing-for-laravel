@@ -11,7 +11,6 @@ use InvalidArgumentException;
 use Pushery\Billing\Contracts\BillingDriver;
 use Pushery\Billing\Contracts\CanReceiveMoney;
 use Pushery\Billing\Contracts\MovesMerchantShare;
-use Pushery\Billing\Contracts\SellerOfRecordResolver;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
@@ -26,7 +25,9 @@ use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
+use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 use Pushery\Billing\ValueObjects\TaxonomyCell;
+use Pushery\Billing\ValueObjects\TransferResult;
 
 /**
  * Take a routed payment AND write down what was routed, as one operation.
@@ -115,7 +116,7 @@ final readonly class RoutedPayment
          */
         private ChargeRoutingConsistencyGuard $pairing,
         /** Which side is seller of record, resolved here rather than accepted, so a caller cannot legalize its own pairing. */
-        private SellerOfRecordResolver $postures,
+        private MarketplaceSaleContext $context,
         /** Only to read what this installation sells, which is what the posture turns on. */
         private Repository $config,
         /**
@@ -151,7 +152,27 @@ final readonly class RoutedPayment
          * merchant.
          */
         private ?MovesMerchantShare $transfers = null,
+        /**
+         * The buyer-protection clock, where an installation has switched it on.
+         *
+         * Nullable so a caller constructing this by hand — and every existing test does — keeps working
+         * untouched. Null and the switch are two different reasons for the same behavior, and both mean the
+         * share moves now, which is what this lane always did.
+         */
+        private ?BuyerProtectionClock $protection = null,
     ) {}
+
+    /**
+     * Whether this sale's share waits instead of moving now.
+     *
+     * Both halves have to be true: the operator asked for it, AND a clock exists to hold it. Holding without
+     * a clock would be money stopped by nothing, which is worse than not holding at all.
+     */
+    private function protectionHolds(): bool
+    {
+        return $this->protection instanceof BuyerProtectionClock
+            && $this->config->get('billing.marketplace.buyer_protection.enabled', false) === true;
+    }
 
     /**
      * Charge a buyer and record the routed sale in one step.
@@ -191,6 +212,8 @@ final readonly class RoutedPayment
         ?TaxArchetype $archetype,
         ?TaxArchetype $soldAlongside = null,
         ?string $idempotencyKey = null,
+        ?string $destinationCountry = null,
+        ?string $destinationSubdivision = null,
     ): ChargeResult {
         // The archetype is REQUIRED and NULLABLE, which looks like a contradiction and is the point. Required
         // so it cannot be forgotten — a default would make "unclassified" the quiet normal case within a
@@ -274,7 +297,7 @@ final readonly class RoutedPayment
         // Resolved once and reused below, where it decides which document this sale produces. Asking twice
         // would let the two answers differ within one sale — the pairing checked against one posture and the
         // receipt issued under another — and config is re-readable at any point in a request.
-        $posture = $this->postures->resolveFor($this->electronic());
+        $posture = $this->context->posture();
 
         $this->pairing->assertCompatible($routing->type, $posture);
 
@@ -314,11 +337,43 @@ final readonly class RoutedPayment
             return $result;
         }
 
-        $this->ledger->settle($charge, $routesSeparately
-            ? $this->moveMerchantShare($charge, $routing)
-            : $result->transferReference);
+        // BUYER PROTECTION, and the one place in the payment path where it can act at all.
+        //
+        // With it on, the share does NOT move now: a hold opens instead, and the money stays with the
+        // provider until the protection period ends one way or the other. That is precisely what the
+        // shipped documentation has been promising — "funds stay with the payment provider throughout;
+        // what is delayed is the transfer to the seller" — while the transfer in fact happened here,
+        // unconditionally, the moment the payment succeeded.
+        //
+        // Only on the lane this package moves the share on. A destination charge is settled by the provider
+        // as the payment completes, so there is no moment in between for anything here to hold, and
+        // pretending otherwise would open a hold over money that has already left.
+        if ($routesSeparately && $this->protectionHolds()) {
+            $this->protection?->hold(
+                $charge->charge_reference,
+                Money::of($charge->gross_minor, $charge->currency),
+                CarbonImmutable::now(),
+                $merchant,
+            );
 
-        $this->issueBuyerDocument($buyerOwner, $posture, $gross, $taxBps, $buyerIsDomestic, $charge, $archetype, $classification, $soldAlongside);
+            return $result;
+        }
+
+        // On the lane the package moves the share itself, the provider's own figure comes back with the
+        // reference and is recorded beside what was owed. On a destination charge nothing here moves money,
+        // so there is no figure to record and the column stays null rather than claiming one.
+        $moved = $routesSeparately ? $this->moveMerchantShare($charge, $routing) : null;
+
+        $this->ledger->settle(
+            $charge,
+            $moved instanceof TransferResult ? $moved->reference : $result->transferReference,
+            $moved?->moved,
+        );
+
+        $this->issueBuyerDocument(
+            $buyerOwner, $posture, $gross, $taxBps, $buyerIsDomestic, $charge, $archetype, $classification,
+            $soldAlongside, $destinationCountry, $destinationSubdivision,
+        );
 
         return $result;
     }
@@ -345,13 +400,16 @@ final readonly class RoutedPayment
      *   document to issue, and issuing one in its own name would name the wrong seller on a real receipt.
      * - **The platform merely arranges** — its fee is its turnover and the document is an intermediation
      *   receipt, which `issueIntermediated()` writes. Not reached yet, and NOT because it was forgotten.
-     *   Two things have to be settled first. That document states the commission's OWN tax rate, and
-     *   whether this seam carries one is still an open question — the ledger seam treats it as optional,
-     *   and issuing a document that states a rate nobody supplied would put a number on a receipt that no
-     *   decision stands behind. And `issueIntermediated()` writes directly rather than through
-     *   `issueOnce()`, so a redelivery would draw a second number from a gapless series — the one failure
-     *   a repeat cannot heal. Wiring it before both are answered would ship exactly the defect this method
-     *   closes, one posture over.
+     *   ONE thing still has to be settled. That document states the commission's OWN tax rate, and whether
+     *   this seam carries one is an open question — the ledger seam treats it as optional, and issuing a
+     *   document that states a rate nobody supplied would put a number on a receipt that no decision stands
+     *   behind. Wiring it before that is answered would ship exactly the defect this method closes, one
+     *   posture over.
+     *
+     *   The second reason is gone: `issueIntermediated()` used to write directly rather than through
+     *   `issueOnce()`, so a redelivery drew a second number from a gapless series — the one failure a repeat
+     *   cannot heal. It now goes through the repeat guard, and the guard's lookup takes the series rather
+     *   than assuming the buyer receipt, which is what makes it find a commission document at all.
      */
     private function issueBuyerDocument(
         Model $buyerOwner,
@@ -363,6 +421,8 @@ final readonly class RoutedPayment
         ?TaxArchetype $archetype,
         ArchetypeClassification $classification,
         ?TaxArchetype $soldAlongside,
+        ?string $destinationCountry,
+        ?string $destinationSubdivision,
     ): void {
         if ($posture !== SellerOfRecordPosture::PlatformDeemedSupplier) {
             return;
@@ -387,33 +447,42 @@ final readonly class RoutedPayment
             // places. This is what makes a redelivery return the document it already wrote instead of
             // drawing a second number.
             chargeReference: $charge->charge_reference,
-            archetype: $archetype,
-            // Where the supply is taxed and which rate band it falls in — carried from the classification
-            // that already ran above rather than worked out a second time. See `fixedAnswer()` for why
-            // either can legitimately be null.
-            placeOfSupply: $this->fixedAnswer($classification->placeOfSupply, PlaceOfSupplyRule::class),
-            rateCategory: $this->fixedAnswer($classification->rateCategory, TaxRateCategory::class),
-            // BT-72, the date the supply actually happened. For a one-time sale that is the moment it was
-            // sold: there is no stretch of time, and the buyer has what they paid for as soon as they pay.
-            //
-            // Absent where the treatment is DEFERRED, and that is the same answer as the two cells above
-            // rather than a separate rule. A multi-purpose voucher has been paid for and nothing has been
-            // supplied — stating a delivery date for it would date a supply that has not occurred, and
-            // whichever period that lands in is one an authority could be shown.
-            deliveredOn: $classification->placeOfSupply->isDeferred() ? null : $soldOn,
-            // WHAT the two cells above were derived from, kept beside the answers rather than discarded with
-            // the request. The document states where the supply is taxed; only this says why — and the one
-            // consequence a tip's reference decides that no document states, whether the seller behind it has
-            // to be reported, is asked months later by a run that has nothing but these rows to read.
-            soldAlongside: $soldAlongside,
+            characteristics: new SupplyTaxCharacteristics(
+                archetype: $archetype,
+                // WHAT the two cells above were derived from, kept beside the answers rather than discarded with
+                // the request. The document states where the supply is taxed; only this says why — and the one
+                // consequence a tip's reference decides that no document states, whether the seller behind it has
+                // to be reported, is asked months later by a run that has nothing but these rows to read.
+                soldAlongside: $soldAlongside,
+                // Where the supply is taxed and which rate band it falls in — carried from the classification
+                // that already ran above rather than worked out a second time. See `fixedAnswer()` for why
+                // either can legitimately be null.
+                placeOfSupply: $this->fixedAnswer($classification->placeOfSupply, PlaceOfSupplyRule::class),
+                rateCategory: $this->fixedAnswer($classification->rateCategory, TaxRateCategory::class),
+                // BT-72, the date the supply actually happened. For a one-time sale that is the moment it was
+                // sold: there is no stretch of time, and the buyer has what they paid for as soon as they pay.
+                //
+                // Absent where the treatment is DEFERRED, and that is the same answer as the two cells above
+                // rather than a separate rule. A multi-purpose voucher has been paid for and nothing has been
+                // supplied — stating a delivery date for it would date a supply that has not occurred, and
+                // whichever period that lands in is one an authority could be shown.
+                deliveredOn: $classification->placeOfSupply->isDeferred() ? null : $soldOn,
+                // WHERE the buyer was, supplied for the same reason `buyerIsDomestic` already is: the package
+                // has no second opinion about that, and the place evidence lives in the consuming application.
+                // The subdivision comes from what the evidence SETTLED on -- never from a raw signal, and never
+                // from the country when the evidence named no subdivision. Left null it counts as `unknown`,
+                // which is an honest answer; guessed, it would raise a threshold in a state nobody sold into.
+                destinationCountry: $destinationCountry,
+                destinationSubdivision: $destinationSubdivision,
+            ),
             // WHOSE charge reference the line above is. It is the same driver that produced it — taken from
             // the driver rather than named here, so the reference and the provider recorded beside it can
             // never come from two different places.
             //
             // Both of these arrived on separate branches, appended to the SAME parameter position, and this
-            // call passed them positionally. Which value bound to which parameter was going to be decided by
-            // whoever resolved this conflict, and two nulls in the wrong slots are caught by nothing. Named
-            // arguments take the decision away from the merge.
+            // call once passed them positionally. Which value bound to which parameter was going to be
+            // decided by whoever resolved that conflict, and two nulls in the wrong slots are caught by
+            // nothing. Named arguments take the decision away from the merge.
             provider: $this->driver->name(),
         );
     }
@@ -472,7 +541,15 @@ final readonly class RoutedPayment
      *
      * @throws MarketplaceUnsupported when the driver cannot move a share at all
      */
-    private function moveMerchantShare(MerchantCharge $charge, ChargeRouting $routing): string
+    /**
+     * Move the merchant's share and keep the WHOLE answer.
+     *
+     * It used to return only the reference, which threw away the one number the provider contributes that
+     * the package cannot derive: how much actually moved. The journal then recorded the request, and a
+     * journal that records its own request cannot disagree with the provider — so the reconciliation this
+     * milestone promises had nothing to compare, and a divergence was invisible by construction.
+     */
+    private function moveMerchantShare(MerchantCharge $charge, ChargeRouting $routing): TransferResult
     {
         if (! $this->transfers instanceof MovesMerchantShare) {
             throw MarketplaceUnsupported::cannotMoveMerchantShare($this->driver->name());
@@ -483,7 +560,7 @@ final readonly class RoutedPayment
             $charge->net(),
             $charge->charge_reference,
             "billing_merchant_charge_{$charge->id}",
-        )->reference;
+        );
     }
 
     /**
@@ -537,18 +614,5 @@ final readonly class RoutedPayment
             // without the rate it would have to derive the remainder's net from today's configuration.
             commissionTaxBps: $taxBps,
         );
-    }
-
-    /**
-     * What this installation sells, read from config exactly as `StripeCheckout` reads it.
-     *
-     * Read rather than assumed, and rather than taken as an argument. It is an installation-level fact, the
-     * same level the charge type sits at — so config against config is coherent, while a per-call flag would
-     * let one sale claim a nature the rest of the install does not have, which is the loophole the posture
-     * being resolved here instead of passed is meant to close.
-     */
-    private function electronic(): bool
-    {
-        return (bool) $this->config->get('billing.marketplace.seller_of_record.supplies_are_electronic', true);
     }
 }

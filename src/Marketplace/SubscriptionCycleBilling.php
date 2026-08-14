@@ -7,11 +7,9 @@ namespace Pushery\Billing\Marketplace;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Enums\DocumentSeries;
-use Pushery\Billing\Enums\PlaceOfSupplyRule;
-use Pushery\Billing\Enums\TaxArchetype;
-use Pushery\Billing\Enums\TaxRateCategory;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\ServicePeriod;
+use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 
 /**
  * One billing cycle, one document — the caller the period machinery never had.
@@ -65,9 +63,7 @@ final readonly class SubscriptionCycleBilling
         bool $isDomestic,
         ?CarbonImmutable $issuedOn = null,
         ?string $chargeReference = null,
-        ?TaxArchetype $archetype = null,
-        ?PlaceOfSupplyRule $placeOfSupply = null,
-        ?TaxRateCategory $rateCategory = null,
+        ?SupplyTaxCharacteristics $characteristics = null,
     ): InvoiceRecord {
         $existing = $this->documentFor($buyer, $period);
 
@@ -75,20 +71,33 @@ final readonly class SubscriptionCycleBilling
             return $existing;
         }
 
+        // Named throughout, like `RoutedPayment::issueBuyerDocument()` has always called the same method.
+        // This call passed eleven POSITIONAL arguments until the signature was narrowed, which is the form
+        // worth naming here because nothing about it looked wrong: a parameter inserted in its middle would
+        // have shifted every argument after it in silence, and two of the pairs it could have shifted past
+        // were type-compatible — `?CarbonImmutable $deliveredOn` against `CarbonImmutable $soldOn`,
+        // `?string $chargeReference` against `?string $provider`. The statics cannot tell those apart, and a
+        // wrongly dated document is a tax error rather than a display one.
+        //
+        // The characteristics travel as ONE argument now, and the caller's is passed straight through. That
+        // is a widening as well as a tidying: this lane could reach three of the eight and now reaches all
+        // of them, so a cycle that knows its delivery date or its exemption can finally say so. Null stays
+        // null — a caller with nothing to state writes the columns it always wrote.
         return $this->receipts->issue(
-            $buyer,
+            buyerOwner: $buyer,
             // From THIS period's gross. Never the term's — see the note above; it is the whole reason the
             // term is cut up.
-            $this->tiers->tierFor($period->amount, $isDomestic, false),
-            $period->amount,
-            $taxRateBps,
-            $issuedOn ?? $period->from,
-            $chargeReference,
-            null,
-            $period,
-            $archetype,
-            $placeOfSupply,
-            $rateCategory,
+            tier: $this->tiers->tierFor($period->amount, $isDomestic, false),
+            gross: $period->amount,
+            taxRateBps: $taxRateBps,
+            soldOn: $issuedOn ?? $period->from,
+            chargeReference: $chargeReference,
+            // No buyer block. It is not passed at all rather than passed as null — the parameter already
+            // defaults to null and the toolchain removes the redundant argument — but the reason is worth
+            // keeping: a cycle receipt is a simplified document, and a buyer's details belong only on a full
+            // invoice.
+            period: $period,
+            characteristics: $characteristics,
         );
     }
 
@@ -107,9 +116,7 @@ final readonly class SubscriptionCycleBilling
         int $taxRateBps,
         bool $isDomestic,
         ?string $chargeReference = null,
-        ?TaxArchetype $archetype = null,
-        ?PlaceOfSupplyRule $placeOfSupply = null,
-        ?TaxRateCategory $rateCategory = null,
+        ?SupplyTaxCharacteristics $characteristics = null,
     ): array {
         return array_map(
             fn (ServicePeriod $period): InvoiceRecord => $this->issueFor(
@@ -118,9 +125,7 @@ final readonly class SubscriptionCycleBilling
                 $taxRateBps,
                 $isDomestic,
                 chargeReference: $chargeReference,
-                archetype: $archetype,
-                placeOfSupply: $placeOfSupply,
-                rateCategory: $rateCategory,
+                characteristics: $characteristics,
             ),
             $schedule,
         );
@@ -157,9 +162,7 @@ final readonly class SubscriptionCycleBilling
         bool $isDomestic,
         CarbonImmutable $paidOn,
         ?string $chargeReference = null,
-        ?TaxArchetype $archetype = null,
-        ?PlaceOfSupplyRule $placeOfSupply = null,
-        ?TaxRateCategory $rateCategory = null,
+        ?SupplyTaxCharacteristics $characteristics = null,
     ): InvoiceRecord {
         $existing = $this->documentFor($buyer, $term);
 
@@ -168,19 +171,16 @@ final readonly class SubscriptionCycleBilling
         }
 
         return $this->receipts->issue(
-            $buyer,
-            $this->tiers->tierFor($term->amount, $isDomestic, false),
-            $term->amount,
-            $taxRateBps,
+            buyerOwner: $buyer,
+            tier: $this->tiers->tierFor($term->amount, $isDomestic, false),
+            gross: $term->amount,
+            taxRateBps: $taxRateBps,
             // Dated to the RECEIPT, not to the start of what it covers. The document states the whole term as
             // its service period and the payment month as its date, which is exactly the situation.
-            $paidOn,
-            $chargeReference,
-            null,
-            $term,
-            $archetype,
-            $placeOfSupply,
-            $rateCategory,
+            soldOn: $paidOn,
+            chargeReference: $chargeReference,
+            period: $term,
+            characteristics: $characteristics,
         );
     }
 

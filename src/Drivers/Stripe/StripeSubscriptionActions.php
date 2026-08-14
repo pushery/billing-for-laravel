@@ -180,10 +180,9 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
     private function subscriptionReference(Model $billable, ?MerchantScope $merchant = null): ?string
     {
         $subscription = Subscription::query()
-            ->where('owner_type', $billable->getMorphClass())
-            ->where('owner_id', $billable->getKey())
+            ->forOwner($billable)
             ->forMerchant($merchant)
-            ->where('type', 'default')
+            ->ofDefaultType()
             ->latest('id')
             ->first();
 

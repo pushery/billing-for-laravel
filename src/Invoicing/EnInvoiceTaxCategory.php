@@ -111,6 +111,18 @@ final readonly class EnInvoiceTaxCategory
             return new self('O', null, 'Services outside scope of tax');
         }
 
+        // A small-business relief is E, like any other exemption, and carries NO VATEX code on purpose.
+        // BR-E-10 accepts the reason text alone, and the text is where the ground actually gets named —
+        // a code guessed from the published list would be a claim about which article relieves this
+        // supplier, which is precisely the fact the platform is not in a position to assert for them.
+        if ($exemption === TaxExemptionReason::DomesticSmallBusiness) {
+            return new self('E', null, 'Exempt under the domestic small-business scheme');
+        }
+
+        if ($exemption === TaxExemptionReason::UnionSmallBusinessScheme) {
+            return new self('E', null, 'Exempt under the small-business scheme of another member state');
+        }
+
         // An exempt supply is E, and E is NOT Z: a relief from VAT is not a rate of zero, and EN 16931's
         // BR-E-* rules differ from BR-Z-*. BR-E-10 accepts the reason text alone, without a VATEX code.
         if ($exempt) {

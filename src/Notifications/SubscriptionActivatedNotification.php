@@ -21,10 +21,16 @@ final class SubscriptionActivatedNotification extends BillingNotification
 
     public function toMail(object $notifiable): MailMessage
     {
-        return new MailMessage()
+        $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.subscription_activated.subject'))
             ->line(Lang::get('billing::notifications.subscription_activated.intro', ['tier' => $this->tierLabel]))
             ->line(Lang::get('billing::notifications.subscription_activated.outro'));
+
+        return $this->withAction(
+            $mail,
+            Lang::get('billing::notifications.subscription_activated.cta'),
+            $this->actionUrl('billing.account.plan'),
+        );
     }
 
     /** @return array<string, mixed> */

@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Override;
 use Pushery\Billing\Enums\AuditSource;
-use RuntimeException;
+use Pushery\Billing\Models\Concerns\AppendOnly;
 
 /**
  * One row of the billing audit ledger.
@@ -25,13 +25,7 @@ use RuntimeException;
  */
 final class BillingEvent extends Model
 {
-    /**
-     * Whether a deliberate purge (retention pruning, owner erasure) is in progress. An audit ledger is only
-     * evidence if it cannot be quietly rewritten, so the model refuses every update and every delete EXCEPT
-     * inside a call wrapped by {@see self::purging()}. That is the one authorized way rows leave — a clock or
-     * a right-to-erasure request — never an ad-hoc edit.
-     */
-    private static bool $purging = false;
+    use AppendOnly;
 
     protected $table = 'billing_events';
 
@@ -63,34 +57,6 @@ final class BillingEvent extends Model
      * @param  callable(): T  $callback
      * @return T
      */
-    public static function purging(callable $callback): mixed
-    {
-        self::$purging = true;
-
-        try {
-            return $callback();
-        } finally {
-            self::$purging = false;
-        }
-    }
-
-    #[Override]
-    protected static function booted(): void
-    {
-        // An audit row is written once and never changed. An update is always a mistake; a delete is only
-        // legitimate through purging() (retention / erasure). Anything else is someone rewriting history.
-        self::updating(static function (): never {
-            throw new RuntimeException('A billing audit event is append-only and cannot be updated.');
-        });
-
-        self::deleting(static function (): bool {
-            if (! self::$purging) {
-                throw new RuntimeException('A billing audit event can only be deleted by retention pruning or owner erasure.');
-            }
-
-            return true;
-        });
-    }
 
     /** @return MorphTo<Model,$this> */
     public function subject(): MorphTo
@@ -102,5 +68,17 @@ final class BillingEvent extends Model
     public function actor(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    #[Override]
+    protected static function appendOnlyUpdateRefusal(array $columns): string
+    {
+        return 'A billing audit event is append-only and cannot be updated.';
+    }
+
+    #[Override]
+    protected static function appendOnlyDeleteRefusal(): string
+    {
+        return 'A billing audit event can only be deleted by retention pruning or owner erasure.';
     }
 }

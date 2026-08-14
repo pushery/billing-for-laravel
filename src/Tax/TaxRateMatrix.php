@@ -92,7 +92,7 @@ final readonly class TaxRateMatrix
             throw UnknownTaxCountry::code($country);
         }
 
-        return $bands[$this->bandFor($category, $hasAudioVisualComponent)->value]
+        return $bands[$category->withAudioVisual($hasAudioVisualComponent)->value]
             ?? $bands[TaxRateCategory::Standard->value];
     }
 
@@ -102,25 +102,15 @@ final readonly class TaxRateMatrix
         return isset($this->rates[strtoupper($country)]);
     }
 
+    /** The day this table was known correct, as a plain date — what a diagnostic prints beside the age. */
+    public function validFromDate(): string
+    {
+        return $this->validFrom->toDateString();
+    }
+
     /** How old the table is, in whole days, against the moment asked about. */
     public function ageInDays(CarbonInterface $now): int
     {
         return (int) $this->validFrom->diffInDays($now, absolute: false);
-    }
-
-    /**
-     * The band actually granted, after the audio-visual gate.
-     *
-     * Written as its own step because the gate is the whole point of the ticket this comes from: folding it
-     * into the lookup would make "asked for reduced" and "got reduced" the same expression, and the one
-     * thing that must be readable here is that they are not.
-     */
-    private function bandFor(TaxRateCategory $category, bool $hasAudioVisualComponent): TaxRateCategory
-    {
-        if ($category === TaxRateCategory::Reduced && $hasAudioVisualComponent) {
-            return TaxRateCategory::Standard;
-        }
-
-        return $category;
     }
 }

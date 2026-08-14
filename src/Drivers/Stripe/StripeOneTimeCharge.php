@@ -4,26 +4,26 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Lang;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\CanReceiveMoney;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
-use Pushery\Billing\Contracts\MerchantResolver;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
-use Pushery\Billing\Contracts\SellerOfRecordResolver;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\ReceiveEligibilityDenied;
-use Pushery\Billing\Marketplace\ChargeRoutingConsistencyGuard;
-use Pushery\Billing\Marketplace\ConfiguredChargeType;
+use Pushery\Billing\Marketplace\ChargedBuyerFee;
+use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
-use Pushery\Billing\Tax\TaxCalculatorFactory;
 use Pushery\Billing\ValueObjects\ClientIntent;
+use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
@@ -47,12 +47,10 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         private Repository $config,
         private CanTransactMoney $eligibility,
         private StripeCustomerRegistry $customers,
-        private MerchantResolver $merchants,
         private MerchantAccountDirectory $accounts,
         private PlatformFeeResolver $fees,
         private CanReceiveMoney $receiving,
-        private ChargeRoutingConsistencyGuard $routingGuard,
-        private SellerOfRecordResolver $postures,
+        private MarketplaceSaleContext $context,
         /**
          * Where a routed sale is written down.
          *
@@ -63,9 +61,50 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
          * is no row, so every hosted routed sale settled into silence.
          */
         private RoutedChargeLedger $ledger,
+        /**
+         * Whether THIS sale carries a buyer fee — the developer's switch and the sale's regime, together.
+         *
+         * NULLABLE AND RESOLVED FROM THE CONTAINER, never default-constructed here. A hand-built one would
+         * need a configuration repository, and an empty one reads every setting as absent — so the switch
+         * would report itself permanently off and the failure would look exactly like an installation that
+         * chose not to charge fees. Nullable keeps the class constructible by a consumer without making a
+         * silent wrong answer the price of that.
+         */
+        private ?ChargedBuyerFee $buyerFees = null,
     ) {}
 
-    public function purchase(Model $billable, string $addonKey): ClientIntent
+    /** The buyer-fee seam, resolved once from the container when the caller supplied none. */
+    private function buyerFee(): ChargedBuyerFee
+    {
+        return $this->buyerFees ?? Container::getInstance()->make(ChargedBuyerFee::class);
+    }
+
+    /**
+     * The line the buyer fee rides on, priced INCLUSIVE of tax.
+     *
+     * Inclusive is not a preference, it follows from what the number means: a buyer fee is quoted GROSS —
+     * the buyer is told 5.00 and pays 5.00, with the net and the tax read back out of it. Sent exclusive
+     * under a provider tax mode, the provider would add tax ON TOP and the buyer would be charged more than
+     * they were quoted, while the figures this package recorded described the smaller sale.
+     *
+     * @return array{price_data: array{currency: string, unit_amount: int, tax_behavior: string, product_data: array{name: string}}, quantity: int}
+     */
+    private function buyerFeeLine(FeeLine $fee): array
+    {
+        return [
+            'price_data' => [
+                'currency' => strtolower($fee->gross->currency),
+                'unit_amount' => $fee->gross->minorUnits,
+                'tax_behavior' => 'inclusive',
+                // Named from the package's own translations so a buyer sees their language rather than an
+                // internal key, and so an operator can publish a wording of their own.
+                'product_data' => ['name' => (string) Lang::get('billing::checkout.buyer_fee')],
+            ],
+            'quantity' => 1,
+        ];
+    }
+
+    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null): ClientIntent
     {
         // Defense in depth: refuse to open a paid checkout for an ineligible owner even if a caller
         // bypassed the UI eligibility guard.
@@ -81,23 +120,63 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
 
         $customerId = $this->customers->resolve($billable);
 
-        $merchant = $this->routedMerchant();
+        $merchant = $this->context->routedMerchant();
 
         // Resolved ONCE, and that is what makes the ledger row and the payment describe the same sale. The
         // amounts below used to be computed, handed to Stripe and thrown away; recomputing them after the
         // session exists would mean a second provider call and a second chance for the two to disagree.
         $routed = $merchant instanceof Model ? $this->routing($merchant, $price) : null;
 
+        // The buyer fee, if this installation charges one AND this sale's regime has one. Resolved from the
+        // ITEM's price, never from a total: the fee is charged on top, so computing it from a figure that
+        // already contains it would compound.
+        //
+        // Null on every installation that has not switched fees on, which is the default and nearly all of
+        // them -- and then every line below is byte-for-byte what it always was.
+        $buyerFee = $routed === null ? null : $this->buyerFee()->on(
+            $routed['gross'],
+            // The RATE IS NOT THIS LANE'S TO INVENT. Under a provider tax mode Stripe computes it from the
+            // line's own tax_behavior, and the fee line below is sent INCLUSIVE precisely so the figure the
+            // buyer was quoted is the figure they pay. Zero here means "this lane states no rate", which is
+            // what makes the recorded net equal the gross rather than a number nobody computed.
+            0,
+        );
+
+        // Built before the payload so the rise is one statement rather than a condition inside an array
+        // literal — and so PHPStan can see that it only happens where a routing exists at all.
+        $intent = $routed['intent'] ?? null;
+
+        if ($buyerFee instanceof FeeLine && $intent !== null) {
+            // THE WHOLE CORRECTNESS OF THIS LANE. The buyer now pays item + fee, and the provider moves
+            // everything that is not the application fee to the merchant — so leaving it alone would hand
+            // the platform's own intermediation revenue to the seller, on every sale, silently. What must
+            // not move is the merchant's share of the ITEM.
+            $intent['application_fee_amount'] += $buyerFee->gross->minorUnits;
+        }
+
         $payload = array_filter([
             'mode' => 'payment',
             'customer' => $customerId,
-            'line_items' => [['price' => $price, 'quantity' => 1]],
-            // The webhook mapper reads this on checkout.session.completed to credit the owner.
-            'metadata' => ['addon_key' => $addonKey],
+            'line_items' => $buyerFee instanceof FeeLine
+                ? [['price' => $price, 'quantity' => 1], $this->buyerFeeLine($buyerFee)]
+                : [['price' => $price, 'quantity' => 1]],
+            // The webhook mapper reads this on checkout.session.completed to credit the owner -- and, when
+            // the buyer made pre-purchase declarations, to find them again. The declaration key is appended
+            // only when there is one, so a session opened without a consumer-rights profile carries the same
+            // single-entry bag it always did.
+            'metadata' => $declarationReference === null
+                ? ['addon_key' => $addonKey]
+                : ['addon_key' => $addonKey, 'withdrawal_declaration' => $declarationReference],
             'success_url' => $this->returnUrl('success_url'),
             'cancel_url' => $this->returnUrl('cancel_url'),
             // Absent for a single-seller install, so the session it opens is byte-identical to before.
-            'payment_intent_data' => $routed['intent'] ?? null,
+            //
+            // WITH A BUYER FEE THE APPLICATION FEE RISES BY IT, and that is the whole correctness of this
+            // lane. The buyer now pays item + fee, and the provider moves everything that is not the
+            // application fee to the merchant -- so leaving the application fee alone would hand the
+            // platform's own intermediation revenue to the seller, on every sale, silently. The merchant's
+            // share of the ITEM is what must not move.
+            'payment_intent_data' => $intent,
         ]);
 
         // The same question the subscription lane answers, answered the same way — because it is ONE
@@ -110,7 +189,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         //
         // Nothing is red when it happens. Stripe opens a valid session, the money moves, the webhook grants
         // the add-on. The absence surfaces at a VAT return, or never.
-        if ($this->providerTax()) {
+        if ($this->context->providerTax()) {
             $payload['automatic_tax'] = ['enabled' => true];
             $payload['tax_id_collection'] = ['enabled' => true];
             // Stripe rejects automatic_tax against an existing customer without permission to save the
@@ -127,7 +206,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // below (the one case where it is legitimately absent) printed a warning every time it did its
             // job. The null-coalescing operator asks `__isset` first, which looks in the same value bag
             // without complaining.
-            $this->recordPendingSale($routed, $session->payment_intent ?? null);
+            $this->recordPendingSale($routed, $session->payment_intent ?? null, $buyerFee);
         }
 
         $url = $session->url ?? null;
@@ -137,21 +216,6 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             payload: ['checkout_url' => is_string($url) ? $url : '', 'session_id' => $session->id],
             offSessionCapable: false,
         );
-    }
-
-    /**
-     * The merchant this sale is destined for, or null when there is none.
-     *
-     * Gated on the marketplace switch exactly as the subscription lane is: a single-seller install never
-     * resolves a merchant, so the resolver is never called and the session stays byte-for-byte what it was.
-     */
-    private function routedMerchant(): ?Model
-    {
-        if ($this->config->get('billing.marketplace.enabled', false) !== true) {
-            return null;
-        }
-
-        return $this->merchants->current();
     }
 
     /**
@@ -220,7 +284,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      */
     private function routing(Model $merchant, string $priceId): array
     {
-        $chargeType = $this->chargeType();
+        $chargeType = $this->context->chargeType();
 
         // A hosted session cannot serve a separate transfer, and refusing is the honest answer rather than a
         // gap. On that lane the platform takes the whole payment and the merchant's share moves in a SECOND
@@ -233,7 +297,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
 
         // The charge type and the seller-of-record posture are independent axes that have to agree, and the
         // check happens BEFORE anything is assembled — the only point at which refusing is still free.
-        $this->routingGuard->assertCompatible($chargeType, $this->postures->resolveFor(true));
+        $this->context->assertRoutingCompatible($chargeType);
 
         if (! $this->receiving->check($merchant)) {
             throw ReceiveEligibilityDenied::forMerchant();
@@ -312,7 +376,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *     policy: PlatformFee,
      * }  $routed
      */
-    private function recordPendingSale(array $routed, mixed $paymentIntent): void
+    private function recordPendingSale(array $routed, mixed $paymentIntent, ?FeeLine $buyerFee): void
     {
         // Stripe hands this back as an id, and as an expanded object when something asked it to. Both are
         // answered; anything else is the refusal below rather than a silent null.
@@ -352,26 +416,16 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // is the open question `routing()` states above. Zero is the honest record of what was computed
             // here; it is not an assertion that the basis was the net.
             0,
+            // The fee is frozen onto the sale AT THE MOMENT IT IS CHARGED, which is the only moment the
+            // figure is a fact. Without it a withdrawal would have to recompute the fee from whatever the
+            // configuration says on the day it happens — and the withdrawal is precisely the event where an
+            // old sale meets a changed setting.
+            //
+            // Its net and tax carry the same caveat as `commission_tax_bps` two arguments above: this lane
+            // hands tax to the provider and holds no rate, so the line records a gross with no split rather
+            // than asserting one. The gross and the place are exact, and those are what a return needs.
+            $buyerFee,
         );
-    }
-
-    /**
-     * Whether the active tax mode defers to the provider, which is what drives `automatic_tax`.
-     *
-     * Read from the CLASSIFICATION, never from a literal, and that is not style. The sibling lane compared
-     * against 'provider' alone, missed its documented alias 'stripe', and shipped untaxed invoices under a
-     * valid mode with nothing raising anything. A second literal comparison here would be a copy of the
-     * list that drifts from it — silently, because both halves look right in isolation.
-     */
-    private function providerTax(): bool
-    {
-        return in_array($this->config->get('billing.tax'), TaxCalculatorFactory::PROVIDER_MODES, true);
-    }
-
-    /** The configured charge type — one reader, shared with the resolver and the other lane. */
-    private function chargeType(): ChargeType
-    {
-        return new ConfiguredChargeType($this->config)->get();
     }
 
     /** A configured hosted-checkout return URL, or a loud error — Stripe cannot open checkout without it. */

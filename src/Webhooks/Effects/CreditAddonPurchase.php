@@ -48,7 +48,7 @@ final readonly class CreditAddonPurchase
         $grant = $this->addons->grantsFor($event->addonKey);
 
         DB::transaction(function () use ($event, $owner, $grant): void {
-            if (! $this->purchases->recordOnce($owner, $event->reference, $event->addonKey, $event->amount, $event->paymentReference)) {
+            if (! $this->purchases->recordOnce($owner, $event->reference, $event->addonKey, $event->amount, $event->paymentReference, $event->declarationReference)) {
                 return;
             }
 

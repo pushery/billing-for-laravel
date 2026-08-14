@@ -19,10 +19,16 @@ final class CardExpiringNotification extends BillingNotification
 
     public function toMail(object $notifiable): MailMessage
     {
-        return new MailMessage()
+        $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.card_expiring.subject'))
             ->line(Lang::get('billing::notifications.card_expiring.intro', ['card' => $this->method->label()]))
             ->line(Lang::get('billing::notifications.card_expiring.outro'));
+
+        return $this->withAction(
+            $mail,
+            Lang::get('billing::notifications.card_expiring.cta'),
+            $this->actionUrl('billing.account.payment-methods'),
+        );
     }
 
     /** @return array<string, mixed> */

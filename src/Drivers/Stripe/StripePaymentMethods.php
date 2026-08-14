@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\PaymentMethods as PaymentMethodsContract;
@@ -35,6 +36,7 @@ final readonly class StripePaymentMethods implements PaymentMethodsContract
         private StripeClient $stripe,
         private StripeCustomerRegistry $customers,
         private CheckoutUrls $urls,
+        private Repository $config,
     ) {}
 
     public function addMethodUrl(Model $billable): ?string
@@ -49,11 +51,18 @@ final readonly class StripePaymentMethods implements PaymentMethodsContract
             return null;
         }
 
+        $currency = $this->config->get('billing.currency', 'EUR');
+
         $session = $this->stripe->checkout->sessions->create([
             'mode' => 'setup',
             'customer' => $this->customers->resolve($billable),
             'success_url' => $return,
             'cancel_url' => $return,
+            // Required, and the requirement is invisible locally. A setup-mode session carries no line
+            // items, so nothing in the payload states a currency and the provider asks for one explicitly
+            // ("Missing required param: currency"). A faked client accepts the payload without it, which is
+            // how the shipped card-capture path was refused on every real request while the suite was green.
+            'currency' => strtolower(is_string($currency) ? $currency : 'EUR'),
         ]);
 
         return is_string($session->url) ? $session->url : null;

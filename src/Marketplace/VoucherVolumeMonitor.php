@@ -56,6 +56,18 @@ final readonly class VoucherVolumeMonitor
         return is_int($months) && $months > 0 ? $months : 12;
     }
 
+    /**
+     * The figure at which a filing is expected, in minor units.
+     *
+     * Public because an announcement has to carry it: a recipient told "you are close" without being told
+     * close to WHAT has to go and look it up in configuration to phrase a single sentence, and the sweep
+     * would otherwise re-read the same key this class already reads.
+     */
+    public function thresholdMinor(): int
+    {
+        return $this->threshold();
+    }
+
     private function threshold(): int
     {
         $threshold = $this->config->get('billing.marketplace.vouchers.volume_threshold_minor');

@@ -5,23 +5,30 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace;
 
 use Illuminate\Contracts\Config\Repository;
+use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
 
 /**
- * Two thresholds that read almost identically and must never be computed together.
+ * When a platform asks a seller to declare their standing. A platform's OWN setting, and nothing more.
  *
- * One asks a seller to declare their standing once they are clearly trading. It fires when EITHER measure
- * is reached, it is a platform's own setting, and it is meant to be early: asking somebody a question a
- * little sooner than strictly necessary costs nothing.
+ * It fires when EITHER measure is reached and it is meant to be early: asking somebody a question a little
+ * sooner than strictly necessary costs nothing, so the operator is free to move it wherever they like.
  *
- * The other decides whether a seller's data is exempt from a reporting duty. It holds only while BOTH
- * measures stay under, and its boundary is set by law rather than by preference. A step too early there is
- * an over-report — reporting data that need not be reported is itself an incorrect report, and a privacy
- * problem besides.
+ * ## What deliberately does NOT live here, and why it used to
  *
- * At exactly the money figure the two disagree: the declaration fires, the exemption still holds. That is
- * correct, and it is why they live in separate methods that share no helper. Anybody "harmonizing" them
- * would move the legal boundary to match a preference, and the direction that harmonization naturally
- * takes is the one that over-reports.
+ * Whether a seller's data is exempt from the REPORTING DUTY is a different question with a different
+ * authority behind it — set by law, not by preference — and it is answered in one place only, the
+ * jurisdiction's reporting profile ({@see GermanReportingProfile}).
+ *
+ * This class used to answer it too, in an `isExemptFromReporting()` that nothing called. The duplication
+ * was the visible half of the problem; the coupling was the dangerous half. That method read the SAME two
+ * config keys as the declaration below — so a platform asking for declarations earlier would have moved the
+ * statutory exemption with the same switch. In the over-reporting direction, silently, from a class whose
+ * own docblock warned against exactly that. Reporting data that need not be reported is an incorrect report
+ * in its own right and a data protection breach besides, so that direction is not the cautious one.
+ *
+ * The two questions still meet at the money figure and still answer differently there — the declaration
+ * fires at it, the statutory exemption holds at it. Keeping them in separate classes reading separate keys
+ * is what makes that a design rather than a coincidence. Pinned by DeMinimisBoundaryHasOneHomeTest.
  */
 final readonly class SellerActivityThreshold
 {
@@ -41,18 +48,6 @@ final readonly class SellerActivityThreshold
         }
 
         return $proceedsMinor >= $this->proceedsThresholdMinor();
-    }
-
-    /**
-     * Whether this seller stays outside the reporting duty.
-     *
-     * BOTH measures must stay under, and the money comparison is inclusive: at exactly the figure the
-     * exemption still holds. Deliberately NOT expressed in terms of the method above — the two answer
-     * different questions and their boundaries are set by different authorities.
-     */
-    public function isExemptFromReporting(int $sales, int $proceedsMinor): bool
-    {
-        return $sales < $this->salesThreshold() && $proceedsMinor <= $this->proceedsThresholdMinor();
     }
 
     /** How many sales in the period count as trading. */

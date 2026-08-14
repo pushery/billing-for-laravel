@@ -10,6 +10,7 @@ use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Enums\RetentionExecutor;
 use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Support\OwnerScopedTables;
@@ -43,16 +44,6 @@ use Pushery\Billing\Support\SubjectScopedRecords;
  */
 final class PruneBillingCommand extends Command
 {
-    /**
-     * The column that carries a retained record's ISSUE date per table — the date the §147(4) retention
-     * clock counts from. A table not listed falls back to created_at.
-     *
-     * @var array<string,string>
-     */
-    private const array RETENTION_ISSUE_COLUMN = [
-        'billing_invoices' => 'issued_at',
-    ];
-
     protected $signature = 'billing:prune {--dry-run : Report what would be pruned, delete nothing}';
 
     protected $description = 'Age out stored webhook payloads and financial records past their retention';
@@ -87,11 +78,17 @@ final class PruneBillingCommand extends Command
         // remembers this loop exists.
         $financialCount = 0;
 
+        // Which column dates a record comes from the matrix, not from a copy here. This command used to
+        // carry its own — the same table-to-column list under a different name, in the method that already
+        // receives the matrix. Nothing was wrong while both held one identical entry; what was wrong is that
+        // a consumer asking `issueColumnFor()` and the package's own pruner could ever answer differently.
+        $issueColumns = $matrix->issueColumns();
+
         foreach (OwnerScopedTables::axes() as $axis) {
             $financialCount += $records->pruneExpired(
                 $axis,
                 $financialCutoff->toDateTimeString(),
-                self::RETENTION_ISSUE_COLUMN,
+                $issueColumns,
                 $dryRun,
             );
         }
@@ -113,9 +110,35 @@ final class PruneBillingCommand extends Command
                 return is_int($deleted) ? $deleted : 0;
             });
 
+        // The rules nobody was carrying out. A period-scoped document — a produced tax return, a produced
+        // seller-reporting file — names a PERIOD rather than a person, so no erasure axis can reach it: there
+        // is no subject to erase. The matrix declared a window for both and the dry run printed it as "the
+        // record of what this run enforces", while the rows sat there forever.
+        //
+        // Driven off the rule's own stated executor rather than off its shape. The shape cannot decide it:
+        // `billing_place_evidence` carries the same Delete/CreatedAt signature and belongs to an erasure
+        // axis, so a loop that inferred responsibility from the signature would delete it a second time and
+        // behind the axis's back.
+        $timePrunedCount = 0;
+
+        foreach ($matrix->rules() as $rule) {
+            if ($rule->executor !== RetentionExecutor::TimePruner) {
+                continue;
+            }
+
+            if ($rule->days === null) {
+                continue;
+            }
+
+            $expired = DB::table($rule->object)
+                ->where('created_at', '<=', Carbon::now()->subDays($rule->days));
+
+            $timePrunedCount += $dryRun ? $expired->count() : $expired->delete();
+        }
+
         $verb = $dryRun ? 'Would prune' : 'Pruned';
 
-        $this->components->info("{$verb} {$payloadCount} stored webhook payload(s), {$financialCount} retained financial record(s) and {$auditCount} audit event(s).");
+        $this->components->info("{$verb} {$payloadCount} stored webhook payload(s), {$financialCount} retained financial record(s), {$auditCount} audit event(s) and {$timePrunedCount} expired export document(s).");
 
         // A dry run doubles as the evidence an audit asks for, so it states the rules rather than only the
         // totals: what is held, for how long, counted from when, on whose authority. A number without its

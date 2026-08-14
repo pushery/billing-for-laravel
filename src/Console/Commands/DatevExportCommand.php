@@ -10,6 +10,8 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Invoicing\DatevExport;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\ProviderFee;
+use Pushery\Billing\Models\VoucherMovementRecord;
+use Pushery\Billing\ValueObjects\VoucherMovement;
 use Throwable;
 
 /**
@@ -73,20 +75,33 @@ final class DatevExportCommand extends Command
             ->orderBy('id')
             ->get();
 
-        // `voucherMovements`, export()'s sixth parameter, is still not passed — and that is stated here rather
-        // than left to be rediscovered, because it is the same shape as the defect above. It is not the same
-        // fix: a provider fee is a persisted row waiting to be loaded, while a voucher movement is a value
-        // object `VoucherLedger::redeem()`/`expire()` return and nothing stores. There is no movements table
-        // and no production caller of either method, so there is nothing here to load yet. Passing an empty
-        // list would look like coverage of a capability that has no producer.
-        $content = $export->export($invoices, $from, $to, providerFees: $providerFees);
+        // The voucher movements, which for the whole life of this command were not passed — and could not
+        // be. All three bookings were built and both chart configurations named the liability account, but
+        // `Issued` had no producer at all, and `Redeemed`/`Expired` were value objects the ledger returned
+        // and nothing stored. An operator selling vouchers exported none of it: the liability never
+        // appeared, and the turnover at redemption arrived with no counter-entry.
+        $voucherMovements = VoucherMovementRecord::query()
+            ->whereBetween('occurred_on', [$from, $to])
+            ->orderBy('occurred_on')
+            ->orderBy('id')
+            ->get();
+
+        $content = $export->export(
+            $invoices,
+            $from,
+            $to,
+            providerFees: $providerFees,
+            voucherMovements: $voucherMovements->map(static fn (VoucherMovementRecord $record): VoucherMovement => $record->toMovement()),
+        );
         $path = $this->option('path');
 
-        // Both counts, always — including the zeroes. A line that reports only invoices reads as the whole
-        // batch, so an operator could not tell a month whose fees were loaded and empty from a month whose
-        // fees were never loaded at all. For the whole life of this command it was the second.
-        $counted = "{$invoices->count()} invoice(s) and {$providerFees->count()} provider fee(s) for "
-            ."{$from->toDateString()}–{$to->toDateString()}";
+        // EVERY count, always, including the zeroes. A line that reports only some of what was loaded reads
+        // as the whole batch, so an operator cannot tell a month whose vouchers were loaded and empty from
+        // a month whose vouchers were never loaded at all. For the whole life of this command it was the
+        // second, for both fees and vouchers, and that is precisely why the number goes in the line rather
+        // than being left to be rediscovered.
+        $counted = "{$invoices->count()} invoice(s), {$providerFees->count()} provider fee(s) and "
+            ."{$voucherMovements->count()} voucher movement(s) for {$from->toDateString()}–{$to->toDateString()}";
 
         if (is_string($path) && $path !== '') {
             $files->put($path, $content);

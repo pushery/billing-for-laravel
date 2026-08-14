@@ -95,6 +95,29 @@ final readonly class Navigation
      * The localized label of the active nav item (the one whose route the current request matches), or null
      * when nothing matches — the layout then falls back to the app name.
      */
+    /**
+     * The same visible items as {@see self::visible()}, flat — for a view that shows cards rather than groups.
+     *
+     * Offered here rather than left to a caller to assemble, because the alternative is what this replaced:
+     * a second parser of the same configuration, which knew two of the three gates and silently kept
+     * rendering a `web_only` link on a native runtime. A flat reader that goes through this method cannot
+     * disagree with the sidebar about what is visible; one that walks the config itself always can.
+     *
+     * @return list<array{key: string, label: string, url: string, active: bool}>
+     */
+    public function visibleItems(): array
+    {
+        $flat = [];
+
+        foreach ($this->visible() as $group) {
+            foreach ($group['items'] as $item) {
+                $flat[] = $item;
+            }
+        }
+
+        return $flat;
+    }
+
     public function activeTitle(): ?string
     {
         foreach ($this->items() as $item) {

@@ -43,10 +43,12 @@ final readonly class ConfiguredChargeType
     {
         $configured = $this->config->get('billing.marketplace.charge_type');
 
-        // Absent, not merely unreadable: the shipped default, which the config file also states. It refuses
-        // rather than charges today, deliberately — the separate-transfer shape needs a second provider call
-        // that is not built yet, and taking the whole payment while never paying the merchant is the one
-        // outcome worse than a refusal.
+        // Absent, not merely unreadable: the shipped default, which the config file also states. The
+        // separate-transfer shape needs a SECOND provider call to pay the merchant their share, and that
+        // call ships — `StripeMerchantTransfers::transferShare()`, made by `RoutedPayment::charge()`. What
+        // refuses is the bare rail: `PaymentRails::charge()` has already returned by the time a transfer
+        // could go out, so accepting the routing there would take the buyer's money with no moment left in
+        // which to pay the merchant. That refusal is permanent rather than a placeholder.
         if ($configured === null) {
             return ChargeType::SeparateTransfer;
         }

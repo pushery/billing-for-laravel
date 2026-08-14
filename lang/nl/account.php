@@ -227,6 +227,7 @@ return [
     'toast' => [
         'payment_failed' => 'Je betaling kon niet worden verwerkt. Werk je betaalgegevens bij.',
         'subscription_activated' => 'Je abonnement is actief — alles wat erbij hoort staat aan.',
+        'dismiss' => 'Sluiten',
     ],
 
 ];

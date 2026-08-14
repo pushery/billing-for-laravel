@@ -72,6 +72,45 @@
         </form>
     </section>
 
+    {{-- Cancel a subscription --------------------------------------------------------------------------- --}}
+    <section aria-labelledby="cancel-heading" class="space-y-4">
+        <h2 id="cancel-heading" class="text-base font-semibold">{{ __('billing::admin.cancel.heading') }}</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('billing::admin.cancel.intro') }}</p>
+
+        {{-- Persistent live regions, like the comp action's: the wrappers stay in the DOM and only their text
+             toggles, so Livewire's morph patches a real content change a screen reader announces. --}}
+        <div aria-live="polite" role="status">
+            @if ($cancelResult === 'canceled')
+                <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200">
+                    {{ __('billing::admin.cancel.canceled') }}
+                </div>
+            @endif
+        </div>
+        <div aria-live="assertive" role="alert">
+            @if ($cancelResult === 'not_found')
+                <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+                    {{ __('billing::admin.cancel.not_found') }}
+                </div>
+            @endif
+        </div>
+
+        <form wire:submit="cancel" class="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div class="flex-1">
+                <label for="cancel-owner" class="block text-sm font-medium">
+                    {{ __('billing::admin.cancel.owner_id') }} <span aria-hidden="true" class="text-red-600 dark:text-red-400">*</span>
+                </label>
+                <input id="cancel-owner" type="text" wire:model="cancelOwnerId" required
+                    class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base shadow-sm focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900 sm:text-sm dark:border-gray-700 dark:bg-gray-900 dark:focus:ring-gray-100">
+            </div>
+            {{-- Destructive, and colored to say so. A support agent reaches this form beside the comp form,
+                 and the two must not look like the same kind of button. --}}
+            <button type="submit"
+                class="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-700 focus:ring-offset-2 dark:focus:ring-offset-gray-950">
+                {{ __('billing::admin.cancel.submit') }}
+            </button>
+        </form>
+    </section>
+
     {{-- Audit viewer ------------------------------------------------------------------------------------ --}}
     <section aria-labelledby="audit-heading" class="space-y-4">
         <h2 id="audit-heading" class="text-base font-semibold">{{ __('billing::admin.audit.heading') }}</h2>

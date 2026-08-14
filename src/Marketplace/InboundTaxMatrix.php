@@ -7,6 +7,7 @@ namespace Pushery\Billing\Marketplace;
 use Pushery\Billing\Enums\CreatorTaxStatus;
 use Pushery\Billing\Enums\SettlementDocumentType;
 use Pushery\Billing\Enums\SupplyRegime;
+use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Exceptions\RegimeNotPermitted;
 use Pushery\Billing\ValueObjects\InboundTaxTreatment;
 use Pushery\Billing\ValueObjects\Money;
@@ -70,11 +71,25 @@ final class InboundTaxMatrix
             ),
 
             // Exempt on their own supply: a self-billed invoice with no tax, and exempt is marked so the
-            // document renders EN 16931 category E (with a reason) rather than zero-rated. Both small-business
-            // standings share this row — tax-free is tax-free.
-            CreatorTaxStatus::DomesticSmallBusiness,
+            // document renders EN 16931 category E (with a reason) rather than zero-rated.
+            //
+            // The two standings shared ONE row while `exempt` was the whole answer — tax-free is tax-free, as
+            // the comment here used to say, and for the amount that is still true. It stopped being true for
+            // the DOCUMENT: the relief has to be named, and these two are relieved under different law. A
+            // creator in another member state is not relieved by the recipient state's own statute, and a
+            // platform-issued credit note asserting that would state a foreign creator's position for them.
+            //
+            // Which law, in words, is still not decided here — this names the ground, the profile and the
+            // locale supply the sentence. The matrix reads no statute, and that line is the reason it can be
+            // reused by an adopter in another jurisdiction at all.
+            CreatorTaxStatus::DomesticSmallBusiness => new InboundTaxTreatment(
+                SettlementDocumentType::SelfBilledInvoice, false, Money::zero($currency), false, $payout,
+                exempt: true, exemptionReason: TaxExemptionReason::DomesticSmallBusiness,
+            ),
+
             CreatorTaxStatus::UnionSmallBusinessExempt => new InboundTaxTreatment(
-                SettlementDocumentType::SelfBilledInvoice, false, Money::zero($currency), false, $payout, exempt: true,
+                SettlementDocumentType::SelfBilledInvoice, false, Money::zero($currency), false, $payout,
+                exempt: true, exemptionReason: TaxExemptionReason::UnionSmallBusinessScheme,
             ),
 
             // Not in business: no invoice is written for them at all, only a settlement note, and it states

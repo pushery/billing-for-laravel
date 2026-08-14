@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Pushery\Billing\ContentOwnership;
 
 use Carbon\CarbonInterface;
+use Carbon\CarbonInterval;
 use Illuminate\Contracts\Config\Repository;
+use Pushery\Billing\Contracts\SuppliesUpdateWindows;
 use Pushery\Billing\Contracts\UpdatePolicyCatalog;
 use Pushery\Billing\Enums\UpdatePolicy;
 use Pushery\Billing\Exceptions\InvalidBillingConfig;
@@ -53,6 +55,39 @@ final readonly class UpdatePolicyResolver
         return $this->catalog->policyForContent($content)
             ?? $this->catalog->policyForMerchant($merchant)
             ?? $this->configuredDefault();
+    }
+
+    /**
+     * When a windowed sale's update window closes, or null when nobody said.
+     *
+     * Asked ONCE, at the moment of sale, and frozen onto the row beside the policy it belongs to — a
+     * creator who shortens their window tomorrow shortens it for future sales, not for one already made.
+     *
+     * The precedence is the policy's: the work's own answer, then the merchant's default. Reversed, a
+     * merchant's blanket setting would quietly overrule a creator's explicit decision about one book.
+     *
+     * Null is returned for two different situations that are the same answer here: a catalog that does not
+     * implement {@see SuppliesUpdateWindows} at all — the published-contract promise, so an existing
+     * consumer keeps working untouched — and one that does but has no preference. Either way the row is
+     * written without a window and the fail-closed reading below stands, with the difference that it is now
+     * somebody's answer rather than a column nothing could fill.
+     *
+     * Only the windowed policy has a window. Writing one for a `latest` sale would put a lapse on a policy
+     * that has none.
+     */
+    public function windowEndsFor(
+        UpdatePolicy $policy,
+        ContentReference $content,
+        ?MerchantScope $merchant,
+        CarbonInterface $acquiredAt,
+    ): ?CarbonInterface {
+        if ($policy !== UpdatePolicy::Windowed || ! $this->catalog instanceof SuppliesUpdateWindows) {
+            return null;
+        }
+
+        $window = $this->catalog->windowForContent($content) ?? $this->catalog->windowForMerchant($merchant);
+
+        return $window instanceof CarbonInterval ? $acquiredAt->avoidMutation()->add($window) : null;
     }
 
     /**

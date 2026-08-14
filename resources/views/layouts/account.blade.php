@@ -76,6 +76,13 @@
          not native — off by default, so nothing is required to render the hub. --}}
     @if (config('billing.realtime.enabled') && config('billing.runtime') !== 'native')
         <livewire:billing.account-realtime />
+
+        {{-- And somewhere for those toasts to land, for a consumer whose host renders no region of its own.
+             Off by default: a WireKit host already reads this event, and a second region would show every
+             toast twice. --}}
+        @if (config('billing.realtime.render_toast_region'))
+            @include('billing::components.toast-region')
+        @endif
     @endif
 
     @livewireScripts

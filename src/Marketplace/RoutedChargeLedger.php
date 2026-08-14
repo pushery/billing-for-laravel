@@ -17,6 +17,7 @@ use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Events\MerchantTransferReversed;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\RefundAttempt;
+use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
 
@@ -92,6 +93,19 @@ final readonly class RoutedChargeLedger
          * not a gap in them. A new row always states its rate, including 0.
          */
         ?int $commissionTaxBps = null,
+        /**
+         * The buyer fee this sale carried, frozen onto the row — or null when it carried none.
+         *
+         * FROZEN, and that is the whole reason it is stored rather than recomputed. A withdrawal returns the
+         * fee that was CHARGED, and recomputing it later would price an old sale at today's rate, today's
+         * model and today's place of supply — three settings an operator may change without leaving any
+         * trace that they did. The number would come out plausible, which is what makes it the dangerous
+         * kind of wrong.
+         *
+         * Null is the shipped default and the overwhelming majority of rows; it means no such supply
+         * happened, which is a different statement from a fee of nought.
+         */
+        ?FeeLine $buyerFee = null,
     ): MerchantCharge {
         return MerchantCharge::query()->firstOrCreate(
             ['provider' => $provider, 'charge_reference' => $chargeReference],
@@ -111,6 +125,12 @@ final readonly class RoutedChargeLedger
                 'commission_tax_bps' => $commissionTaxBps,
                 'net_minor' => $net->minorUnits,
                 'currency' => $gross->currency,
+                // All four parts together. A gross with no place would be a taxable supply whose rate cannot
+                // be stated, and the reader treats a partial line as no line at all rather than guessing.
+                'buyer_fee_gross_minor' => $buyerFee?->gross->minorUnits,
+                'buyer_fee_net_minor' => $buyerFee?->net->minorUnits,
+                'buyer_fee_tax_minor' => $buyerFee?->tax->minorUnits,
+                'buyer_fee_place_of_supply' => $buyerFee?->placeOfSupply,
             ],
         );
     }
@@ -122,7 +142,7 @@ final readonly class RoutedChargeLedger
      * actually moved there is nothing to name. A second settlement notice changes nothing: the first one
      * already established when the merchant's share became real.
      */
-    public function settle(MerchantCharge $charge, ?string $transferReference = null): bool
+    public function settle(MerchantCharge $charge, ?string $transferReference = null, ?Money $actuallyMoved = null): bool
     {
         // UNDER THE LOCK, like every other advance of this column — which this one was not.
         //
@@ -140,6 +160,11 @@ final readonly class RoutedChargeLedger
         return $this->advanceFromPending($charge, fn (MerchantCharge $locked): array => [
             'settlement_state' => SettlementState::Settled,
             'transfer_reference' => $transferReference ?? $locked->transfer_reference,
+            // What the provider says it moved, where it said anything. Kept beside what was owed rather
+            // than replacing it: the two answer different questions, and a reconciliation needs both.
+            'transfer_moved_minor' => $actuallyMoved instanceof Money
+                ? $actuallyMoved->minorUnits
+                : $locked->transfer_moved_minor,
             'settled_at' => Carbon::now(),
         ]);
     }
@@ -260,10 +285,10 @@ final readonly class RoutedChargeLedger
      *
      * @return array{refunded: int, reversed: int, fee: int} what each total actually moved by
      */
-    public function completeRefund(RefundAttempt $attempt): array
+    public function completeRefund(RefundAttempt $attempt, ?Money $actuallyReversed = null): array
     {
         /** @var array{0: ?MerchantCharge, 1: array{refunded: int, reversed: int, fee: int}} $result */
-        $result = DB::transaction(function () use ($attempt): array {
+        $result = DB::transaction(function () use ($attempt, $actuallyReversed): array {
             $nothing = ['refunded' => 0, 'reversed' => 0, 'fee' => 0];
 
             $charge = MerchantCharge::query()
@@ -285,7 +310,20 @@ final readonly class RoutedChargeLedger
             // Each amount is capped against its OWN ceiling, read fresh under the lock. The caps are a
             // backstop against a confirmation arriving twice, not the calculation: what comes back from
             // the merchant was decided when the refund was, and is carried on the attempt.
-            $reversed = min($attempt->transfer_reversal_minor, $charge->reversibleMinor());
+            // What the attempt INTENDED, unless the caller learned what the provider actually did. Those are
+            // the same number on the lane that reverses as part of the refund, and they are 0 and "the whole
+            // share" on the lane that does not: a separate transfer moved in its own call, so refunding the
+            // payment leaves it untouched and the rails deliberately report no reversal reference.
+            //
+            // Booking the intent there spends reversibleMinor() on a reversal nobody made and announces a
+            // clawback to a consumer whose merchant is still holding the money. So a caller that KNOWS may
+            // say so, and the default stays the attempt's own figure for the chargeback path, where the
+            // reversal was performed by the job that then books it.
+            $intended = $actuallyReversed instanceof Money
+                ? min($attempt->transfer_reversal_minor, $actuallyReversed->minorUnits)
+                : $attempt->transfer_reversal_minor;
+
+            $reversed = min($intended, $charge->reversibleMinor());
 
             $feeRefunded = min(
                 $attempt->fee_refund_minor,
@@ -298,9 +336,22 @@ final readonly class RoutedChargeLedger
                 'fee_refunded_minor' => $charge->fee_refunded_minor + $feeRefunded,
             ])->save();
 
+            // How much less came back than was asked for, written down rather than computed and dropped.
+            // Without it a charge that came back short is indistinguishable from one that came back whole,
+            // so nothing downstream can aim a top-up at the difference.
+            //
+            // Null is the starting value because it is the meaningful one: "nobody compared". It is a
+            // different claim from "compared, nothing missing", and a reader acts on the two differently.
+            $shortfall = null;
+
+            if ($actuallyReversed instanceof Money) {
+                $shortfall = max(0, $attempt->transfer_reversal_minor - $actuallyReversed->minorUnits);
+            }
+
             $attempt->forceFill([
                 'status' => RefundAttemptStatus::Succeeded,
                 'completed_at' => Carbon::now(),
+                'transfer_reversal_short_minor' => $shortfall,
             ])->save();
 
             return [$charge, ['refunded' => $refunded, 'reversed' => $reversed, 'fee' => $feeRefunded]];
@@ -383,6 +434,60 @@ final readonly class RoutedChargeLedger
     }
 
     /** Record that the provider refused an attempt, so a later reading knows it was tried. */
+    /**
+     * Count a buyer fee that has gone back, and answer how much of it actually did.
+     *
+     * ## Why the fee has a counter of its own
+     *
+     * `refunded_minor` is capped against the sale's gross, and the buyer fee was never part of that gross —
+     * it rode on top of the item price and went to the platform's application fee, not into the merchant's
+     * transfer. Sharing one counter would break in both directions at once: a fully refunded sale would have
+     * no headroom left to return the fee, and a sale whose fee came back would read as over-refunded.
+     *
+     * ## Under a lock, and capped, because a withdrawal gets retried
+     *
+     * A provider timeout or an operator clicking twice is the ordinary case. The cap is what makes the
+     * second run a no-op instead of a second five euros, and it is read fresh under the row lock rather than
+     * from the instance the caller happens to be holding — which may have been loaded before the first run.
+     */
+    public function recordBuyerFeeRefund(MerchantCharge $charge, Money $amount): Money
+    {
+        /** @var int $applied */
+        $applied = DB::transaction(function () use ($charge, $amount): int {
+            $fresh = MerchantCharge::query()
+                ->whereKey($charge->getKey())
+                ->lockForUpdate()
+                ->first();
+
+            if (! $fresh instanceof MerchantCharge) {
+                return 0;
+            }
+
+            $applied = min($amount->minorUnits, $fresh->buyerFeeRefundableMinor());
+
+            if ($applied <= 0) {
+                return 0;
+            }
+
+            $fresh->forceFill(['buyer_fee_refunded_minor' => $fresh->buyer_fee_refunded_minor + $applied])->save();
+
+            return $applied;
+        });
+
+        // The caller's instance is refreshed rather than left stale, because it is the same object a caller
+        // reads back from to decide whether anything happened.
+        //
+        // Only when there is still a row behind it. `refresh()` THROWS on a deleted model, so a charge
+        // erased between the provider call and this one would turn "nothing was counted" — an honest zero —
+        // into an exception on a path where the money has already moved. Surfaced by pushing this branch to
+        // coverage, which is the whole reason the floor is where it is.
+        if ($applied > 0) {
+            $charge->refresh();
+        }
+
+        return new Money($applied, $charge->currency);
+    }
+
     public function failRefund(RefundAttempt $attempt, string $reason): void
     {
         $attempt->forceFill([

@@ -27,6 +27,15 @@ return [
         'invalid_tier' => 'Ce forfait n’est pas configuré dans billing.tiers.',
     ],
 
+    'cancel' => [
+        'heading' => 'Résilier un abonnement',
+        'intro' => 'Met fin immédiatement à l\'abonnement d\'un titulaire. La modification est consignée dans le journal d\'audit à ton nom.',
+        'owner_id' => 'ID du titulaire',
+        'submit' => 'Résilier l\'abonnement',
+        'canceled' => 'Abonnement résilié.',
+        'not_found' => 'Aucun titulaire trouvé pour cet ID.',
+    ],
+
     'audit' => [
         'heading' => 'Activité récente',
         'type' => 'Événement',

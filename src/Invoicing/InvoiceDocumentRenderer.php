@@ -92,6 +92,11 @@ final readonly class InvoiceDocumentRenderer
             'number' => $invoice->number ?? (string) $invoice->id,
             'issuedAt' => $invoice->issued_at ?? $invoice->created_at,
             'isCorrection' => $invoice->isCorrection(),
+            // The two statements the machine-readable half has always carried and this one did not. Read
+            // from the same source the XML writers read, so the halves of one document cannot drift apart
+            // again -- which they did, silently, because only one half is checked by a validator.
+            'selfBilled' => $invoice->isSelfBilled(),
+            'correctsNumber' => $invoice->credited_invoice_number,
             'reverseCharge' => (bool) $invoice->reverse_charge,
             'vatNote' => is_string($invoice->vat_note) ? $invoice->vat_note : null,
             'lines' => $lines,

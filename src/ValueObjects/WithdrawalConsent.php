@@ -32,11 +32,33 @@ final readonly class WithdrawalConsent
         public string $noticeVersion,
         /** When it was given. */
         public CarbonImmutable $givenAt,
+        /**
+         * The wording of the first declaration, exactly as the buyer was shown it.
+         *
+         * Carried rather than looked up: the confirmation the law wants is of the text they actually read,
+         * and a version identifier alone cannot produce it. Null means the wording was not captured — which
+         * a receipt renders as nothing at all, never as an empty confirmation.
+         */
+        public ?string $immediateProvisionNotice = null,
+        /** The wording of the second declaration, on the same terms. */
+        public ?string $forfeitureNotice = null,
     ) {}
 
     /** Whether both declarations were made. Neither alone is enough. */
     public function isComplete(): bool
     {
         return $this->consentedToImmediateProvision && $this->acknowledgedForfeiture;
+    }
+
+    /**
+     * Whether the wording of BOTH declarations is on file.
+     *
+     * Both, because a receipt carrying one of them is worse than one carrying neither: it looks like a
+     * confirmation and is not. What the law asks for is the confirmation of what the buyer agreed to, and
+     * half of that confirms half a thing.
+     */
+    public function hasWording(): bool
+    {
+        return $this->immediateProvisionNotice !== null && $this->forfeitureNotice !== null;
     }
 }

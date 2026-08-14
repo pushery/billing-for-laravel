@@ -27,6 +27,15 @@ return [
         'invalid_tier' => 'Dieser Tarif ist nicht in billing.tiers konfiguriert.',
     ],
 
+    'cancel' => [
+        'heading' => 'Abo kündigen',
+        'intro' => 'Beendet das Abo eines Owners sofort. Die Änderung wird mit deinem Namen im Audit-Log festgehalten.',
+        'owner_id' => 'Owner-ID',
+        'submit' => 'Abo kündigen',
+        'canceled' => 'Abo gekündigt.',
+        'not_found' => 'Kein Owner mit dieser ID gefunden.',
+    ],
+
     'audit' => [
         'heading' => 'Letzte Aktivität',
         'type' => 'Ereignis',

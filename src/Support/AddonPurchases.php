@@ -22,7 +22,15 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final class AddonPurchases
 {
-    public function recordOnce(Model $owner, string $reference, string $addonKey, Money $amount, ?string $paymentReference = null): bool
+    /**
+     * @param  ?string  $declarationReference  the key the buyer's pre-purchase declarations were recorded
+     *                                         against, minted before the redirect and echoed back by the
+     *                                         provider. Kept on the row because the receipt knows the
+     *                                         PAYMENT id and the declarations are not keyed on it -- without
+     *                                         it that lookup answers null, and null there reads as "the
+     *                                         buyer declared nothing"
+     */
+    public function recordOnce(Model $owner, string $reference, string $addonKey, Money $amount, ?string $paymentReference = null, ?string $declarationReference = null): bool
     {
         return AddonPurchase::query()->firstOrCreate(
             ['reference' => $reference],
@@ -33,6 +41,7 @@ final class AddonPurchases
                 'amount_minor' => $amount->minorUnits,
                 'currency' => $amount->currency,
                 'payment_reference' => $paymentReference,
+                'declaration_reference' => $declarationReference,
             ],
         )->wasRecentlyCreated;
     }

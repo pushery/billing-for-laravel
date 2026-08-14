@@ -7,6 +7,7 @@ return [
     'title' => 'Invoice :number',
     'invoice' => 'Invoice',
     'correction' => 'Invoice correction',
+    'corrects' => 'Corrects :number',
     'number' => 'Invoice number :number',
     'issued' => 'Issued :date',
     'from' => 'From',
@@ -23,6 +24,8 @@ return [
     'total' => 'Total',
     'total_including_vat' => 'Total including :rate VAT',
     'reverse_charge_note' => 'Reverse charge: the recipient is liable for the VAT.',
+    'small_business_note' => 'Exempt from VAT under the small business scheme (§ 19 UStG).',
+    'union_small_business_note' => 'Exempt from VAT under the small business scheme of the supplier\'s member state.',
     'margin_scheme_note' => 'Margin scheme — second-hand goods',
     'self_billed_note' => 'Self-billed invoice: issued by the recipient on behalf of the supplier, by prior agreement.',
 ];

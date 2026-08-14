@@ -114,7 +114,19 @@ final readonly class SaleTaxDecision
         $placement = $this->places->place($productRule, $buyer);
         $context = $this->places->taxContextFor($productRule, $buyer);
 
-        $tax = $this->calculator->calculate($net, $context);
+        // Decided BEFORE the rate is asked for, which is the whole change. The tax point was already being
+        // worked out here — it just arrived after the calculation and went straight into the facts, so the
+        // rate came from the moment the code ran rather than the moment the supply was taxed. The law binds
+        // it the other way round (Art. 93 VAT Directive), and on an installation with a rate history the two
+        // are different numbers.
+        //
+        // Absent a period there is nothing to place — a one-off is taxed when it happens — and the context
+        // then carries null, which takes the undated answer rather than inventing today.
+        $taxPoint = $period instanceof ServicePeriod
+            ? $this->taxPoint->decideFor($period, $paidOn ?? $period->from)
+            : null;
+
+        $tax = $this->calculator->calculate($net, $context->at($taxPoint?->on));
 
         return new SaleTaxFacts(
             tax: $tax,
@@ -128,11 +140,9 @@ final readonly class SaleTaxDecision
             exemption: $this->exemptionFor($net, $tax, $placement, $buyer),
             // Decided here rather than left to the caller, for the same reason the rate is: this is the one
             // place a sale's tax is settled, and a tax point worked out somewhere else is a second answer to
-            // a question that must have exactly one. Absent a period there is nothing to place — a one-off
-            // is taxed when it happens — and the facts say so by carrying null rather than inventing today.
-            taxPoint: $period instanceof ServicePeriod
-                ? $this->taxPoint->decideFor($period, $paidOn ?? $period->from)
-                : null,
+            // a question that must have exactly one. It is the SAME value the rate was asked for above,
+            // computed once — a second call here would be a second answer to that same question.
+            taxPoint: $taxPoint,
         );
     }
 

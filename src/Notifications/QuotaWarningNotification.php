@@ -26,7 +26,7 @@ final class QuotaWarningNotification extends BillingNotification
 
     public function toMail(object $notifiable): MailMessage
     {
-        return new MailMessage()
+        $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.quota_warning.subject', ['meter' => $this->label]))
             ->line(Lang::get('billing::notifications.quota_warning.intro', [
                 'meter' => $this->label,
@@ -34,6 +34,12 @@ final class QuotaWarningNotification extends BillingNotification
                 'included' => $this->included,
             ]))
             ->line(Lang::get('billing::notifications.quota_warning.outro'));
+
+        return $this->withAction(
+            $mail,
+            Lang::get('billing::notifications.quota_warning.cta'),
+            $this->actionUrl('billing.account.usage'),
+        );
     }
 
     /** @return array<string, mixed> */

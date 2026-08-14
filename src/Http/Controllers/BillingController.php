@@ -9,8 +9,11 @@ use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Storage;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\HostedPortal;
 use Pushery\Billing\Contracts\Invoices;
@@ -121,6 +124,13 @@ final class BillingController
      * Render one of the package's OWN stored invoices as a document — the local path for a driver without
      * hosted PDFs. The invoice is looked up by id and ownership-checked here: a row belonging to another
      * owner is refused (403), so a shared id space cannot leak one owner's document to another.
+     *
+     * The KEPT file wins over a fresh render where there is one. That is not an optimization: everything
+     * under a renderer moves over the years an invoice must stay readable — a corrected rate table, an
+     * updated address, an improved writer — so a re-render years later resembles the document the recipient
+     * holds without being it, and the disagreement surfaces in a dispute, where the other party is the one
+     * holding the original. It is the same reasoning `DocumentArtifactStore` applies to the XML forms; this
+     * is the human-readable half, which only the consumer can keep.
      */
     private function renderLocalInvoice(Model $owner, string $invoiceId): ?InvoiceDownload
     {
@@ -139,9 +149,68 @@ final class BillingController
             throw new HttpException(403);
         }
 
-        $pdf = Container::getInstance()->make(InvoiceDocumentRenderer::class)->pdf($invoice);
         $number = $invoice->number ?? (string) $invoice->id;
+        $kept = $this->keptPdf($invoice);
+
+        if ($kept !== null) {
+            return new InvoiceDownload("invoice-{$number}.pdf", $kept);
+        }
+
+        $pdf = Container::getInstance()->make(InvoiceDocumentRenderer::class)->pdf($invoice);
 
         return new InvoiceDownload("invoice-{$number}.pdf", $pdf);
+    }
+
+    /**
+     * The issued PDF as it was kept, or null when there is none to serve.
+     *
+     * Null covers three DIFFERENT situations on purpose, and only one of them is quiet:
+     *
+     *  - **No path recorded.** Nobody kept a PDF. Nothing to say — this is the shipped default and the
+     *    route renders exactly as it always has.
+     *  - **A path recorded but no disk configured.** The consumer wrote where they keep files and never
+     *    told the package which disk that is. Logged as a warning: the value is being ignored, and an
+     *    operator who set one and not the other should learn it from something other than a support case.
+     *  - **A path recorded, a disk configured, and the file GONE.** Logged as an ERROR, because the row
+     *    promises an archived document and the archive did not keep it. That is an incident.
+     *
+     * It renders rather than 404s in every one of them, deliberately. Refusing would lock an owner out of
+     * their own invoice to make a point about an archive they do not control, and the document the package
+     * can still produce is worth more to them than a dead link. What must not happen is the substitution
+     * going UNRECORDED — so the divergence is loud in the log and invisible in the response, which is the
+     * right way round: the reader gets their invoice, the operator gets the incident.
+     */
+    private function keptPdf(InvoiceRecord $invoice): ?string
+    {
+        $path = $invoice->pdf_path;
+
+        if (! is_string($path) || trim($path) === '') {
+            return null;
+        }
+
+        $disk = Config::get('billing.invoices.pdf_disk');
+
+        if (! is_string($disk) || trim($disk) === '') {
+            Log::warning('An invoice records a kept PDF but billing.invoices.pdf_disk is not configured, so the stored file cannot be served and the document is being re-rendered instead.', [
+                'invoice' => $invoice->number ?? $invoice->id,
+                'pdf_path' => $path,
+            ]);
+
+            return null;
+        }
+
+        $filesystem = Storage::disk($disk);
+
+        if (! $filesystem->exists($path)) {
+            Log::error('An invoice records a kept PDF that is not on the configured disk. The document served is a fresh render and may differ from the one its recipient holds.', [
+                'invoice' => $invoice->number ?? $invoice->id,
+                'pdf_path' => $path,
+                'disk' => $disk,
+            ]);
+
+            return null;
+        }
+
+        return $filesystem->get($path);
     }
 }

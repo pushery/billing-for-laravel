@@ -97,7 +97,7 @@ final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
         }
 
         try {
-            $transfers->reverseShare(
+            $reversal = $transfers->reverseShare(
                 $this->transferReference,
                 new Money($attempt->transfer_reversal_minor, $attempt->currency),
                 // The attempt's own key, written before this job existed. A key derived from the amount
@@ -111,6 +111,9 @@ final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
             throw $e;
         }
 
-        $ledger->completeRefund($attempt);
+        // The provider's own figure, not the one this job asked for. The answer was discarded here for as
+        // long as the job existed, so the ledger recorded the REQUEST — and a ledger that records its own
+        // request agrees with itself no matter what the provider did.
+        $ledger->completeRefund($attempt, $reversal->reversed);
     }
 }

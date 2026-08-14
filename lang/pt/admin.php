@@ -27,6 +27,15 @@ return [
         'invalid_tier' => 'Esse plano não está configurado em billing.tiers.',
     ],
 
+    'cancel' => [
+        'heading' => 'Cancelar uma subscrição',
+        'intro' => 'Termina imediatamente a subscrição de um titular. A alteração fica registada no histórico de auditoria no teu nome.',
+        'owner_id' => 'ID do titular',
+        'submit' => 'Cancelar subscrição',
+        'canceled' => 'Subscrição cancelada.',
+        'not_found' => 'Nenhum titular encontrado para esse ID.',
+    ],
+
     'audit' => [
         'heading' => 'Atividade recente',
         'type' => 'Evento',

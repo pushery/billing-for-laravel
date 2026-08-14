@@ -10,8 +10,8 @@ use Illuminate\Support\Carbon;
 use Override;
 use Pushery\Billing\Enums\ExchangeRateBasis;
 use Pushery\Billing\Enums\ExchangeRateLayer;
+use Pushery\Billing\Models\Concerns\AppendOnly;
 use Pushery\Billing\Tax\FrozenExchangeRate;
-use RuntimeException;
 
 /**
  * One conversion of one document, as it was made — and it never changes afterwards.
@@ -27,6 +27,8 @@ use RuntimeException;
  */
 final class InvoiceExchangeRate extends Model
 {
+    use AppendOnly;
+
     protected $table = 'billing_invoice_exchange_rates';
 
     /** @var list<string> */
@@ -44,21 +46,6 @@ final class InvoiceExchangeRate extends Model
         'rate_date' => 'date',
     ];
 
-    #[Override]
-    protected static function booted(): void
-    {
-        // Refused as a whole row rather than field by field, unlike the invoice's own frozen list. There is
-        // no column here that may legitimately change after the document was issued: a rate, its date, its
-        // rule and its publisher are one statement about one moment. Naming protected fields would invite
-        // the question of which ones are not.
-        self::updating(static function (): never {
-            throw new RuntimeException(
-                'A frozen exchange rate cannot change after the document was issued. A correction reads what '
-                .'was recorded here; re-deriving the rate would reverse an amount nobody ever declared.'
-            );
-        });
-    }
-
     /** The value object this row is a persisted copy of. */
     public function frozen(): FrozenExchangeRate
     {
@@ -70,5 +57,19 @@ final class InvoiceExchangeRate extends Model
             $this->source,
             $this->basis,
         );
+    }
+
+    #[Override]
+    protected static function appendOnlyUpdateRefusal(array $columns): string
+    {
+        return 'A frozen exchange rate cannot change after the document was issued. A correction reads '
+            .'what was recorded here; re-deriving the rate would reverse an amount nobody ever declared.';
+    }
+
+    #[Override]
+    protected static function appendOnlyDeleteRefusal(): string
+    {
+        return 'This row carries a statutory retention window; retention removes it on its schedule, '
+            .'inside purging(). A caller does not delete it.';
     }
 }

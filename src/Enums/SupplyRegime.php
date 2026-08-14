@@ -29,6 +29,33 @@ enum SupplyRegime: string
     case Intermediation = 'intermediation';
 
     /**
+     * Whether a seller under this regime is CHARGED a fee that could be reported as withheld from them.
+     *
+     * The two shapes differ in kind here, not in amount, and a reporting record has a field that asks
+     * exactly this question — "separately withheld fees" — with only one honest answer per regime:
+     *
+     * - **Commission chain: no.** The platform buys and resells. Its margin is the DIFFERENCE between two
+     *   supplies; it is never charged to the merchant, never deducted from a payment owed to them, and the
+     *   package deliberately issues them no commission invoice for it. Reporting that margin as a withheld
+     *   fee invents a service relationship the books do not contain, and states an amount the seller never
+     *   bore as a fee.
+     * - **Intermediation: yes.** The platform arranges somebody else's sale and charges the seller for
+     *   arranging it. That fee is real, it is taken out of what reaches them, and it is what the field is
+     *   for.
+     *
+     * The platform's margin does not vanish under the first answer — it is simply not a fee, and the gross
+     * inflow the seller received is unaffected either way. Confusing the two is the expensive direction:
+     * reducing the reported inflow instead of emptying the fee field understates what the seller received.
+     */
+    public function chargesTheSellerAFee(): bool
+    {
+        return match ($this) {
+            self::CommissionChain => false,
+            self::Intermediation => true,
+        };
+    }
+
+    /**
      * The seller posture this regime requires.
      *
      * They are one decision seen twice — a regime is the document view, a posture is the receipt view — so

@@ -31,14 +31,14 @@ use Pushery\Billing\Enums\TaxationBasis;
 use Pushery\Billing\Enums\TaxBaseChangeReason;
 use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Enums\TaxRateCategory;
-use Pushery\Billing\Exceptions\RegimeNotPermitted;
-use Pushery\Billing\Exceptions\SellerContradictsPosture;
-use Pushery\Billing\Invoicing\Party;
+use Pushery\Billing\Invoicing\Guards\ChargeClaimKeyDeriver;
+use Pushery\Billing\Invoicing\Guards\ImmutableIssuedInvoiceGuard;
+use Pushery\Billing\Invoicing\Guards\RegimePostureGuard;
+use Pushery\Billing\Invoicing\Guards\SellerMatchesPostureGuard;
 use Pushery\Billing\Marketplace\DocumentRoleGuard;
 use Pushery\Billing\ValueObjects\CountingPeriod;
 use Pushery\Billing\ValueObjects\Invoice;
 use Pushery\Billing\ValueObjects\Money;
-use RuntimeException;
 
 /**
  * A stored invoice. Maps to the neutral {@see Invoice} DTO the Invoices contract returns, so views
@@ -50,6 +50,7 @@ use RuntimeException;
  * @property ?string $provider
  * @property ?string $provider_id
  * @property ?string $number
+ * @property ?string $pdf_path
  * @property ?int $credited_invoice_id
  * @property ?string $credited_invoice_number
  * @property ?int $reissue_of_invoice_id
@@ -70,6 +71,9 @@ use RuntimeException;
  * @property ?string $vat_note
  * @property bool $oss
  * @property ?string $destination_country
+ * @property ?string $destination_subdivision the subdivision of that country, where the obligation is a
+ *                                            subdivision's rather than the country's — `CA`, `NY`, `BY`.
+ *                                            Null means none was settled, which is an answer and not a gap
  * @property ?string $oss_rate
  * @property ?TaxArchetype $tax_archetype
  * @property ?TaxArchetype $sold_alongside_archetype
@@ -86,6 +90,11 @@ use RuntimeException;
  * @property ?InvoiceCorrectionKind $correction_kind
  * @property ?TaxBaseChangeReason $tax_base_change_reason
  * @property ?string $settled_charge_reference
+ * @property ?string $charge_claim_key `provider|reference` for the document that claims a settled charge
+ *                                     as the sale's FIRST one; null on a reissue, on every correction and
+ *                                     on anything carrying a period, which is what lets a unique index
+ *                                     hold the invariant without refusing documents that must exist.
+ *                                     Derived when the row is created — never assigned by a caller
  * @property ?int $commission_bps
  * @property ?int $commission_flat_minor
  * @property ?RoundingResidual $commission_residual
@@ -107,16 +116,66 @@ final class InvoiceRecord extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'owner_type', 'owner_id', 'provider', 'provider_id', 'number', 'total_minor', 'currency',
+        'owner_type', 'owner_id', 'provider', 'provider_id', 'number', 'pdf_path', 'total_minor', 'currency',
         'status', 'issued_at', 'due_at', 'credited_invoice_id', 'credited_invoice_number', 'reissue_of_invoice_id',
         'buyer', 'subtotal_minor',
-        'tax_minor', 'reverse_charge', 'tax_exempt', 'tax_exemption_reason', 'buyer_reference', 'vat_note', 'oss', 'destination_country', 'oss_rate',
+        'tax_minor', 'reverse_charge', 'tax_exempt', 'tax_exemption_reason', 'buyer_reference', 'vat_note', 'oss', 'destination_country', 'destination_subdivision', 'oss_rate',
         'tax_archetype', 'sold_alongside_archetype', 'place_of_supply_rule', 'tax_rate_category', 'tax_rate_bps', 'platform_reporting',
         'rate_matrix_version', 'recipient_tax_status', 'taxation_basis', 'margin_minor', 'supply_regime', 'seller_posture', 'seller',
         'settlement_document_type', 'document_series', 'receipt_tier', 'settlement_period',
         'service_period_start', 'service_period_end', 'delivered_on',
         'invoice_effect_revoked_at', 'invoice_effect_revoked_channel', 'fan_gross_minor', 'correction_kind', 'tax_base_change_reason', 'settled_charge_reference',
         'commission_bps', 'commission_flat_minor', 'commission_residual', 'lines',
+    ];
+
+    /**
+     * The scalar columns an issued document may never change.
+     *
+     * A constant rather than an inline list because there is a THIRD copy of this knowledge — the test that
+     * proves each column is refused — and a third copy that repeats rather than derives is one that rots.
+     * It did: `tax_exemption_reason` was missing from the list and from the test at the same time, so the
+     * guard against an editable tax characteristic was green while one stayed editable.
+     *
+     * @var list<string>
+     */
+    public const array FROZEN_SCALARS = [
+        'number', 'total_minor', 'subtotal_minor', 'tax_minor', 'currency', 'reverse_charge', 'tax_exempt',
+        // WHY it was exempt, frozen beside the fact THAT it was. The two were split for a while — the
+        // flag frozen, the reason editable — and they are not interchangeable: a reverse-charged
+        // supply IS taxed and an export outside the union is not. Both e-invoice renderers read this
+        // column as the EN 16931 exemption reason, so an editable one lets a numbered document claim
+        // afterwards that it was an export, with every amount on it still adding up.
+        'tax_exemption_reason',
+        'buyer_reference', 'vat_note', 'oss', 'destination_country', 'destination_subdivision', 'oss_rate', 'issued_at',
+        // The tax characteristics of the sale, frozen for the same reason as the amounts: they were
+        // read back from the product until now, and a product can be reclassified after it has been
+        // sold. A correction that re-derived them would reverse an amount nobody ever declared, and
+        // report it into a country the original sale never touched — without looking wrong.
+        // …and WHAT a voluntary payment was paid on, for the same reason one step removed: it is the
+        // input every one of those characteristics was derived from, so an amendable reference would
+        // let a settled tip be re-pointed at a different product and silently change whether the
+        // seller behind it has to be reported at all.
+        'tax_archetype', 'sold_alongside_archetype', 'place_of_supply_rule', 'tax_rate_category', 'tax_rate_bps',
+        'platform_reporting', 'rate_matrix_version', 'recipient_tax_status', 'taxation_basis', 'margin_minor',
+        // The shape of the sale and who it named as seller. Re-classifying a settled transaction
+        // does not adjust a number: it makes every document already issued about it describe a
+        // transaction that did not happen. The only correct path is to cancel and re-issue.
+        'supply_regime', 'seller_posture', 'settlement_document_type', 'document_series', 'receipt_tier', 'settlement_period',
+        // WHICH months the document is for. Frozen with the amounts, because it is the same kind of
+        // claim: moving a period on an issued document silently re-declares the supply into another
+        // return, and the totals stay perfectly consistent while doing it. Cancel and re-issue.
+        'service_period_start', 'service_period_end', 'delivered_on',
+        // …and WHOSE reference that is. The two are one key, and freezing half of it froze nothing:
+        // an update could re-point a numbered tax document at another payment provider while the
+        // reference it belongs to stayed put.
+        'provider',
+        'fan_gross_minor', 'correction_kind', 'tax_base_change_reason', 'settled_charge_reference',
+        // The claim on that reference. It is derived at creation and it is what a unique index reads,
+        // so an update that cleared it would hand the sale's exclusive slot back and let a second
+        // first-document be written for a charge that already has one — undoing the constraint from
+        // inside the application, which is the one direction a database cannot defend itself in.
+        'charge_claim_key',
+        'commission_bps', 'commission_flat_minor', 'commission_residual',
     ];
 
     /**
@@ -212,160 +271,91 @@ final class InvoiceRecord extends Model
     #[Override]
     protected static function booted(): void
     {
-        // The regime and the posture are one decision seen twice, and the pair is checked at CREATION —
-        // the only moment it can be wrong. Both columns are frozen by the guard below, so a pair that was
-        // coherent when the row was written stays coherent forever, and a contradictory one would be
-        // immutable from the moment it existed with no correction but canceling the document.
+        // Five delegations, and that shape is the point. Every rule below used to live here as a closure —
+        // a third of this class in one static method — which meant each of them could only be exercised by
+        // saving a real row against a real database. A rule that expensive to reach is a rule whose edge
+        // cases do not get written, and the ungiven edge cases are the ones that come back as defects.
         //
-        // Creation rather than every save, deliberately: on an update the frozen guard is the one with
-        // something to say. Refusing a mutation of a frozen column by complaining about the pair would
-        // answer a question nobody asked and hide the actual mistake.
+        // Registered HERE rather than in an observer so no second caller — a job, a console command,
+        // consumer code writing its own document — can route around them. What moved is where the rules
+        // LIVE, not where they are enforced.
+
+        // The regime and the posture are one decision seen twice, checked at CREATION because that is the
+        // only moment either can be wrong: both columns are frozen afterwards.
         self::creating(static function (self $invoice): void {
             $regime = $invoice->supply_regime;
             $posture = $invoice->seller_posture;
 
-            if (! $regime instanceof SupplyRegime || ! $posture instanceof SellerOfRecordPosture) {
-                return;
-            }
-
-            // Naming the merchant is neither the platform reselling nor the platform arranging, so no
-            // regime maps to it and no document chain follows. Answered before the mismatch below, because
-            // "this posture has no regime at all" is a different mistake from "not THAT regime".
-            if (! in_array($posture, array_map(
-                static fn (SupplyRegime $case): SellerOfRecordPosture => $case->requiredPosture(),
-                SupplyRegime::cases(),
-            ), true)) {
-                throw RegimeNotPermitted::postureHasNoRegime($posture);
-            }
-
-            if ($regime->requiredPosture() !== $posture) {
-                throw RegimeNotPermitted::contradictsPosture($regime, $posture);
+            if ($regime instanceof SupplyRegime && $posture instanceof SellerOfRecordPosture) {
+                new RegimePostureGuard()->assertCoherent($regime, $posture);
             }
         });
 
-        // The seller a document names must agree with its frozen posture: the deemed supplier is the platform,
-        // anyone else is the merchant. Checked at creation, independent of the regime — a document may carry a
-        // posture and a seller without a regime — and skipped entirely when no seller was snapshotted, so a
-        // single-seller row (which never names a seller) is untouched.
+        // Which document holds the exclusive claim on a settled charge. Assigned rather than defaulted: any
+        // value a caller passed is overwritten, because a column deciding whether a duplicate is possible
+        // must not be settable.
+        self::creating(static function (self $invoice): void {
+            $invoice->setAttribute('charge_claim_key', new ChargeClaimKeyDeriver()->keyFor(
+                $invoice->settled_charge_reference,
+                $invoice->provider,
+                coversAPeriod: $invoice->settlement_period !== null,
+                isReissue: $invoice->reissue_of_invoice_id !== null,
+                isCorrection: $invoice->credited_invoice_id !== null,
+            ));
+        });
+
+        // The seller a document names against the posture it carries. Skipped where no seller was
+        // snapshotted, so a single-seller row is untouched.
         self::creating(static function (self $invoice): void {
             $posture = $invoice->seller_posture;
             $seller = $invoice->getAttribute('seller');
-
-            if (! $posture instanceof SellerOfRecordPosture || ! is_array($seller)) {
-                return;
-            }
-
-            // Identity by legal name + tax id: the named seller either IS the platform company or is not.
-            //
-            // BOTH SIDES GO THROUGH `Party`, and that is not decoration. The snapshot on the document was
-            // written through it, so an absent name is the empty string there; raw configuration leaves it
-            // null. Comparing the two directly makes `''` and `null` different parties, and an install with
-            // no company configured could then never satisfy this check — every commission-chain document it
-            // issued would be refused for naming "a different party" than the one it just snapshotted.
-            //
-            // That was invisible for as long as nothing wrote `seller_posture`: the guard returned early and
-            // its own comparison was never run. Arming the column is what surfaced it, which is the argument
-            // for arming guards rather than leaving them correct-looking and unreachable.
             $company = Config::get('billing.company');
-            $company = Party::fromArray(is_array($company) ? $company : [])->toArray();
-            $sellerIsPlatform = ($seller['name'] ?? null) === $company['name']
-                && ($seller['vat_id'] ?? null) === $company['vat_id'];
 
-            if ($posture === SellerOfRecordPosture::PlatformDeemedSupplier) {
-                if (! $sellerIsPlatform) {
-                    throw SellerContradictsPosture::platformMustSell($posture);
-                }
-            } elseif ($sellerIsPlatform) {
-                throw SellerContradictsPosture::merchantMustSell($posture);
+            if ($posture instanceof SellerOfRecordPosture && is_array($seller)) {
+                new SellerMatchesPostureGuard()->assertMatches($posture, $seller, is_array($company) ? $company : []);
             }
         });
 
-        // The document's ROLE must belong to the sale's regime: the commission chain (K) receipts the buyer,
-        // self-bills the creator or settles a private party — never a commission invoice; intermediation (V)
-        // issues a commission invoice and settles no creator. Checked at creation from the frozen role and
-        // regime, so a role from the wrong regime can never be written, not merely rejected afterwards.
-        //
-        // Keyed on the regime rather than the posture on purpose: the regime is the posture's locked twin
-        // (the guard above holds them equal), and it is the field a self-billed document can carry without
-        // the seller check firing — a self-billed invoice names the CREATOR as seller, which reads as "not
-        // the platform", so the posture is not a clean key for a creator-facing document's role. Skipped when
-        // either is absent, so a single-seller row (no regime, no role) is untouched.
+        // The document's ROLE against the sale's regime. Keyed on the regime rather than the posture: a
+        // self-billed invoice names the CREATOR as seller, which reads as "not the platform", so the posture
+        // is not a clean key for a creator-facing document's role.
         self::creating(static function (self $invoice): void {
             $regime = $invoice->supply_regime;
             $series = $invoice->document_series;
 
-            if (! $regime instanceof SupplyRegime || ! $series instanceof DocumentSeries) {
-                return;
+            if ($regime instanceof SupplyRegime && $series instanceof DocumentSeries) {
+                new DocumentRoleGuard()->assertPermitted($regime, $series);
             }
-
-            (new DocumentRoleGuard)->assertPermitted($regime, $series);
         });
 
+        // And what an issued document may no longer change.
         self::updating(static function (self $invoice): void {
-            // Scalar frozen fields: isDirty is a reliable, engine-neutral comparison. The tax treatment of an
-            // issued document is frozen just like its amounts — reverse-charge, the OSS scheme/destination/rate
-            // and the routing reference all determine what an already-emitted e-invoice claims, so none may change.
-            foreach ([
-                'number', 'total_minor', 'subtotal_minor', 'tax_minor', 'currency', 'reverse_charge', 'tax_exempt',
-                'buyer_reference', 'vat_note', 'oss', 'destination_country', 'oss_rate', 'issued_at',
-                // The tax characteristics of the sale, frozen for the same reason as the amounts: they were
-                // read back from the product until now, and a product can be reclassified after it has been
-                // sold. A correction that re-derived them would reverse an amount nobody ever declared, and
-                // report it into a country the original sale never touched — without looking wrong.
-                // …and WHAT a voluntary payment was paid on, for the same reason one step removed: it is the
-                // input every one of those characteristics was derived from, so an amendable reference would
-                // let a settled tip be re-pointed at a different product and silently change whether the
-                // seller behind it has to be reported at all.
-                'tax_archetype', 'sold_alongside_archetype', 'place_of_supply_rule', 'tax_rate_category', 'tax_rate_bps',
-                'platform_reporting', 'rate_matrix_version', 'recipient_tax_status', 'taxation_basis', 'margin_minor',
-                // The shape of the sale and who it named as seller. Re-classifying a settled transaction
-                // does not adjust a number: it makes every document already issued about it describe a
-                // transaction that did not happen. The only correct path is to cancel and re-issue.
-                'supply_regime', 'seller_posture', 'settlement_document_type', 'document_series', 'receipt_tier', 'settlement_period',
-                // WHICH months the document is for. Frozen with the amounts, because it is the same kind of
-                // claim: moving a period on an issued document silently re-declares the supply into another
-                // return, and the totals stay perfectly consistent while doing it. Cancel and re-issue.
-                'service_period_start', 'service_period_end', 'delivered_on',
-                // …and WHOSE reference that is. The two are one key, and freezing half of it froze nothing:
-                // an update could re-point a numbered tax document at another payment provider while the
-                // reference it belongs to stayed put.
-                'provider',
-                'fan_gross_minor', 'correction_kind', 'tax_base_change_reason', 'settled_charge_reference',
-                'commission_bps', 'commission_flat_minor', 'commission_residual',
-            ] as $field) {
-                if ($invoice->isDirty($field)) {
-                    throw new RuntimeException("An issued invoice is immutable; '{$field}' cannot change after it is recorded.");
-                }
-            }
-
-            // Lines is a JSON column, and isDirty compares the ENCODED string: a provider engine re-serializes
-            // the SAME content differently (a MySQL JSON round-trip is not byte-identical to PHP's json_encode),
-            // so a faithful re-persist of the same lines would falsely trip. Compare the DECODED content with a
-            // loose inequality instead — that catches a real edit while ignoring serialization noise.
-            $rawOriginalLines = $invoice->getRawOriginal('lines');
-            $originalLines = is_string($rawOriginalLines) ? json_decode($rawOriginalLines, true) : null;
-
-            if ($originalLines != $invoice->lines) {
-                throw new RuntimeException("An issued invoice is immutable; 'lines' cannot change after it is recorded.");
-            }
-
-            // The seller is a JSON column too, and it is frozen for the same reason as the amounts: a document
-            // must keep naming whoever it named when it was issued. It is decoded-compared, not isDirty'd,
-            // because a JSON round-trip re-serializes the same content differently. This is deliberately UNLIKE
-            // `buyer`, which is left mutable so a credit note persisted before its original can backfill it — a
-            // seller that mirrored buyer would be mutable and break its own immutability.
-            $rawOriginalSeller = $invoice->getRawOriginal('seller');
-            $originalSeller = is_string($rawOriginalSeller) ? json_decode($rawOriginalSeller, true) : null;
-
-            if ($originalSeller != $invoice->seller) {
-                throw new RuntimeException("An issued invoice is immutable; 'seller' cannot change after it is recorded.");
-            }
+            new ImmutableIssuedInvoiceGuard()->assertUnchanged($invoice);
         });
     }
 
     public function total(): Money
     {
         return Money::of($this->total_minor, $this->currency);
+    }
+
+    /**
+     * Whether this document was produced here rather than hydrated from a provider's invoice.
+     *
+     * DERIVED on purpose, and the absence of a column is the design. `provider_id` is written by exactly
+     * two writers, both webhook effects mirroring a provider's own invoice ({@see PersistInvoice},
+     * {@see PersistInvoiceCorrection}); the four issuers that produce a document here never set it. So
+     * "locally generated" is not a second fact about a row — it IS `provider_id === null`, and a stored
+     * boolean would be a copy that can disagree with the thing it copies. This package has paid for that
+     * shape twice already, and both times the copy was the one that answered.
+     *
+     * The equivalence is structural rather than lucky, and `InvoicePdfAndOriginTest` holds it across both
+     * families of writer: the day something hydrates a local document with a provider's id, that case goes
+     * red and names the decision instead of letting the meaning drift.
+     */
+    public function locallyGenerated(): bool
+    {
+        return $this->provider_id === null;
     }
 
     /**
@@ -378,6 +368,20 @@ final class InvoiceRecord extends Model
     public function isCorrection(): bool
     {
         return $this->credited_invoice_id !== null || $this->credited_invoice_number !== null;
+    }
+
+    /**
+     * Whether the recipient wrote this document on the supplier's behalf — a Gutschrift in the settlement
+     * sense, not a correction.
+     *
+     * Here rather than in the XML writers' trait because BOTH halves of a hybrid document need it and they
+     * are rendered by different code. It lived only in the trait, so the machine-readable half said 389 and
+     * the half a person opens said nothing — one file contradicting itself, with the conformance-checked
+     * half being the correct one, which is why no validator ever complained.
+     */
+    public function isSelfBilled(): bool
+    {
+        return $this->settlement_document_type === SettlementDocumentType::SelfBilledInvoice;
     }
 
     /**

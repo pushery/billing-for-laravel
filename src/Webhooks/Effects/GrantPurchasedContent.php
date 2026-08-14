@@ -7,14 +7,10 @@ namespace Pushery\Billing\Webhooks\Effects;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Consumer\WithdrawalConsentLedger;
+use Pushery\Billing\Consumer\WithdrawalTypeResolver;
 use Pushery\Billing\ContentOwnership\ContentGrants;
-use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\AddonContentMap;
 use Pushery\Billing\Contracts\CustomerDirectory;
-use Pushery\Billing\Contracts\ProductTaxonomy;
-use Pushery\Billing\Contracts\SuppliesProductArchetypes;
-use Pushery\Billing\Enums\TaxArchetype;
-use Pushery\Billing\Enums\WithdrawalType;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\ValueObjects\ContentReference;
 
@@ -43,8 +39,7 @@ final readonly class GrantPurchasedContent
         private AddonContentMap $works,
         private ContentGrants $grants,
         private Repository $config,
-        private AddonCatalog $addons,
-        private ProductTaxonomy $taxonomy,
+        private WithdrawalTypeResolver $types,
         private WithdrawalConsentLedger $consents,
     ) {}
 
@@ -78,54 +73,13 @@ final readonly class GrantPurchasedContent
             $owner,
             $content,
             $event->reference,
-            withdrawalType: $this->withdrawalTypeFor($event->addonKey),
-            consent: $this->consents->for($owner, $event->reference),
+            withdrawalType: $this->types->forAddon($event->addonKey),
+            // The MINTED key first, the session reference second. The minted one is what the declarations
+            // were actually written against -- it had to be, because at the moment they were made this
+            // purchase had no reference of any kind. The fallback covers an install that records against
+            // the session reference itself out of band, which is the only other shape this ledger has ever
+            // been written in.
+            consent: $this->consents->for($owner, $event->declarationReference ?? $event->reference),
         );
-    }
-
-    /**
-     * What kind of withdrawal right this add-on carries, or null when nothing classifies it.
-     *
-     * Two hops, and both may legitimately answer nothing. A catalog that does not supply archetypes at all
-     * is the shipped state — `AddonCatalog` is implemented outside this package, so the capability is asked
-     * for by type rather than assumed. And an add-on nobody has classified answers null.
-     *
-     * Null travels on rather than being resolved to a default, and it means "not classified, so nothing to
-     * gate" — **on every install, whether or not a consumer-rights profile is set**. `ContentGrants` returns
-     * on a null type before the gate is asked, so the profile is never read on this path.
-     *
-     * That is deliberate: it is what keeps classification from becoming mandatory for an install that does
-     * not use it. It is also a hole, and naming it is the point. The withdrawal gate needs TWO conditions to
-     * bite — a profile AND a classified archetype — so an operator who sets `BILLING_CONSUMER_RIGHTS_PROFILE`
-     * and leaves one work without an `archetype` key gets that work delivered with no consent recorded, and
-     * nothing anywhere says so. `billing:doctor` reports exactly that combination; whether the runtime should
-     * refuse instead is an open decision rather than a settled one this comment may describe.
-     */
-    private function withdrawalTypeFor(string $addonKey): ?WithdrawalType
-    {
-        if (! $this->addons instanceof SuppliesProductArchetypes) {
-            return null;
-        }
-
-        $archetype = $this->addons->archetypeFor($addonKey);
-
-        if (! $archetype instanceof TaxArchetype) {
-            return null;
-        }
-
-        // A cell is a fixed value, a delegation to the product a tip was given on, or a state deferred until
-        // a later event. Only a fixed one names a withdrawal type here — reading a value out of the other two
-        // is what `TaxonomyCell::value()` refuses to allow, and rightly: a tip's withdrawal type belongs to
-        // what it was given on, and a voucher's is not decided until it is redeemed. Neither is an add-on this
-        // effect can classify on its own, so both answer null and the gate stays out of it.
-        $cell = $this->taxonomy->classify($archetype)->withdrawal;
-
-        if (! $cell->isFixed()) {
-            return null;
-        }
-
-        $value = $cell->value();
-
-        return $value instanceof WithdrawalType ? $value : null;
     }
 }

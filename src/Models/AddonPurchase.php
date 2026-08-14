@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property int $amount_minor
  * @property string $currency
  * @property ?string $payment_reference
+ * @property ?string $declaration_reference
  * @property int $reversed_minor
  * @property ?Carbon $revoked_at
  * @property ?string $revoked_reason
@@ -30,7 +31,7 @@ final class AddonPurchase extends Model
     /** @var list<string> */
     protected $fillable = [
         'owner_type', 'owner_id', 'reference', 'addon_key', 'amount_minor', 'currency',
-        'payment_reference', 'reversed_minor', 'revoked_at', 'revoked_reason',
+        'payment_reference', 'declaration_reference', 'reversed_minor', 'revoked_at', 'revoked_reason',
     ];
 
     /**

@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Locked;
 use Pushery\Billing\Catalogs\ConfigAddonCatalog;
+use Pushery\Billing\Consumer\PurchaseDeclarations;
 use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\DiscountResolver;
 use Pushery\Billing\Contracts\OneTimeCharge;
@@ -185,7 +186,7 @@ final class ManageSubscription extends AccountScreen
      * and an unknown key is refused before any charge. The hosted URL is scheme-validated before the redirect;
      * a driver with no checkout URL yields nothing (no redirect).
      */
-    public function purchaseAddon(string $addonKey): void
+    public function purchaseAddon(string $addonKey, ?string $declarationReference = null): void
     {
         $this->denyInAppCheckout();
         $this->ensureEligible();
@@ -194,7 +195,24 @@ final class ManageSubscription extends AccountScreen
             throw new NotFoundHttpException;
         }
 
-        $intent = Container::getInstance()->make(OneTimeCharge::class)->purchase($this->owner(), $addonKey);
+        // BEFORE the provider is asked for anything. The gate at provision already refuses a work whose
+        // right of withdrawal has not been safely extinguished, but by then the buyer has paid — the
+        // operator is left refunding a sale the package could have declined for free. Same rule, both ends.
+        //
+        // Silent on an install with no consumer-rights profile: the check returns before it looks anything
+        // up, so nothing about this method changes for the installs that are the overwhelming majority.
+        //
+        // It is left to surface as the domain exception rather than folded into the 403 the two guards above
+        // raise, and that is deliberate. A 403 says "you may not", which is not what happened: the install
+        // turned a consumer-rights profile on and is selling, through the package's own button, a product
+        // whose declarations this screen cannot collect — the notice wording is the operator's and their
+        // adviser's, so the package will never render it. That is a wiring mistake with a precise remedy,
+        // and the exception names it. Dressing it as an authorization failure would hide the one sentence
+        // an operator needs.
+        Container::getInstance()->make(PurchaseDeclarations::class)
+            ->assertMayCheckout($this->owner(), $addonKey, $declarationReference);
+
+        $intent = Container::getInstance()->make(OneTimeCharge::class)->purchase($this->owner(), $addonKey, $declarationReference);
         $url = SafeExternalUrl::orNull($intent->payload['checkout_url'] ?? null);
 
         if ($url !== null) {

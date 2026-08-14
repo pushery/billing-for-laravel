@@ -24,6 +24,8 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  * @property bool $consented_to_immediate_provision
  * @property bool $acknowledged_forfeiture
  * @property string $notice_version
+ * @property ?string $immediate_provision_notice
+ * @property ?string $forfeiture_notice
  * @property Carbon $given_at
  * @property ?Carbon $owner_erased_at
  */
@@ -35,7 +37,7 @@ class WithdrawalConsentRecord extends Model
     protected $fillable = [
         'owner_type', 'owner_id', 'reference',
         'consented_to_immediate_provision', 'acknowledged_forfeiture',
-        'notice_version', 'given_at', 'owner_erased_at',
+        'notice_version', 'immediate_provision_notice', 'forfeiture_notice', 'given_at', 'owner_erased_at',
     ];
 
     /** @var array<string,string> */
@@ -54,6 +56,8 @@ class WithdrawalConsentRecord extends Model
             acknowledgedForfeiture: $this->acknowledged_forfeiture,
             noticeVersion: $this->notice_version,
             givenAt: CarbonImmutable::parse($this->given_at),
+            immediateProvisionNotice: $this->immediate_provision_notice,
+            forfeitureNotice: $this->forfeiture_notice,
         );
     }
 }

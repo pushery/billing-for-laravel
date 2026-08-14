@@ -6,7 +6,9 @@ namespace Pushery\Billing\Marketplace;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\LedgerBalanceReader;
+use Pushery\Billing\Contracts\ListsEarningCurrencies;
 use Pushery\Billing\Enums\BuyerProtectionState;
 use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Models\BuyerProtectionHold;
@@ -26,7 +28,7 @@ use Pushery\Billing\ValueObjects\Money;
  * because a merchant reading "available" is reading what they can be paid, and money a clock is still
  * sitting on is not that. Nothing here reaches a provider or writes a row.
  */
-final readonly class MerchantChargeLedgerBalanceReader implements LedgerBalanceReader
+final readonly class MerchantChargeLedgerBalanceReader implements LedgerBalanceReader, ListsEarningCurrencies
 {
     public function availableFor(Model $party, string $currency): Money
     {
@@ -64,12 +66,17 @@ final readonly class MerchantChargeLedgerBalanceReader implements LedgerBalanceR
             array_filter(BuyerProtectionState::cases(), static fn (BuyerProtectionState $state): bool => ! $state->settled()),
         ));
 
+        // The MERCHANT's share, not the price the buyer paid. `availableFor()` subtracts this from
+        // `net_minor`, which is already net of the platform's commission — so subtracting the gross would
+        // take the commission out a second time and, where the whole settled turnover sits under one open
+        // hold, drive the balance below zero. The contract says the quantity out loud: "settled EARNINGS
+        // withheld under buyer protection".
         $held = BuyerProtectionHold::query()
             ->where('merchant_type', $party->getMorphClass())
             ->where('merchant_id', $this->key($party))
             ->where('currency', $this->code($currency))
             ->whereIn('state', $open)
-            ->sum('charge_minor');
+            ->sum(DB::raw('charge_minor - platform_fee_minor'));
 
         return Money::of((int) $held, $this->code($currency));
     }
@@ -99,5 +106,30 @@ final readonly class MerchantChargeLedgerBalanceReader implements LedgerBalanceR
     private function code(string $currency): string
     {
         return strtoupper($currency);
+    }
+
+    /**
+     * Every currency this party has earned in — the enumeration the per-currency readers needed and lacked.
+     *
+     * A failed charge contributes nothing here for the same reason it contributes nothing to a balance: it
+     * is neither settled nor pending, and a currency that only ever appeared on a failed charge is a currency
+     * nobody was paid in. Listing it would send a caller to fetch a balance that is structurally zero.
+     *
+     * Sorted and uppercase so two calls read identically and a caller can compare lists without normalizing.
+     *
+     * @return list<string>
+     */
+    public function currenciesFor(Model $party): array
+    {
+        $currencies = MerchantCharge::query()
+            ->where('merchant_type', $party->getMorphClass())
+            ->where('merchant_id', $party->getKey())
+            ->where('settlement_state', '!=', SettlementState::Failed->value)
+            ->distinct()
+            ->orderBy('currency')
+            ->pluck('currency')
+            ->all();
+
+        return array_values(array_map($this->code(...), array_filter($currencies, is_string(...))));
     }
 }

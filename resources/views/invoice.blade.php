@@ -31,7 +31,19 @@
         @if ($issuedAt)
             &middot; {{ __('billing::invoice.issued', ['date' => $issuedAt->format('d.m.Y')]) }}
         @endif
+        @if ($correctsNumber)
+            {{-- A correction that does not name what it corrects is one nobody can act on. The XML has
+                 carried this as BT-25 all along; the half a person opens said nothing. --}}
+            <br>{{ __('billing::invoice.corrects', ['number' => $correctsNumber]) }}
+        @endif
     </p>
+
+    @if ($selfBilled)
+        {{-- Who wrote the document, stated where the recipient will see it. A settlement note the platform
+             wrote on the supplier's behalf is a different thing from an invoice the supplier issued, and
+             the difference decides who owes the tax. --}}
+        <p class="note">{{ __('billing::invoice.self_billed_note') }}</p>
+    @endif
 
     <table class="parties">
         <tr>

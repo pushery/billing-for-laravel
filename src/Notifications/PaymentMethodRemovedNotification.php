@@ -17,10 +17,16 @@ final class PaymentMethodRemovedNotification extends BillingNotification
 {
     public function toMail(object $notifiable): MailMessage
     {
-        return new MailMessage()
+        $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.payment_method_removed.subject'))
             ->line(Lang::get('billing::notifications.payment_method_removed.intro'))
             ->line(Lang::get('billing::notifications.payment_method_removed.outro'));
+
+        return $this->withAction(
+            $mail,
+            Lang::get('billing::notifications.payment_method_removed.cta'),
+            $this->actionUrl('billing.account.payment-methods'),
+        );
     }
 
     /** @return array<string, mixed> */

@@ -660,6 +660,24 @@ return [
 
     'realtime' => [
         'enabled' => env('BILLING_REALTIME', false),
+
+        /*
+         * Whether this package renders somewhere for those toasts to LAND.
+         *
+         * OFF by default, and that default is the whole decision. The bridge dispatches a `wirekit-toast`
+         * browser event; the consumer for whom that already works is a WireKit host, whose own toast region
+         * reads exactly this event. Shipping a second region on by default would show that consumer every
+         * toast twice — a regression visible only in a browser.
+         *
+         * Turn it on if your application has no toast region of its own. You then get a minimal one: two
+         * `aria-live` containers (polite for info and success, assertive for warning and danger) and a small
+         * inline listener that appends the message and dismisses it after a few seconds. It brings no UI kit
+         * and no build step.
+         *
+         * The third option is neither: leave this off and write your own one-line listener on
+         * `wirekit-toast`, reading `detail.message` and `detail.variant`.
+         */
+        'render_toast_region' => env('BILLING_REALTIME_TOAST_REGION', false),
     ],
 
     /*
@@ -836,6 +854,45 @@ return [
     | because the answer depends on the table: a hand-maintained one for two
     | countries can sit longer than a broad one, and the person who wrote the table
     | is the person who knows which.
+    |
+    | An optional 'history' holds the SAME rates as dated intervals, for documents
+    | written today about a supply taxed earlier. The law binds the rate to the tax
+    | point rather than to the moment of lookup, so a late invoice, a re-billing or
+    | a migration of historic sales must be able to ask for the rate that applied
+    | THEN. Without a history that question cannot be asked and every such document
+    | takes today's rate:
+    |
+    | 'history' => [
+    |     [
+    |         'valid_from' => '2024-01-01',
+    |         'valid_to' => '2025-07-01',
+    |         'source' => 'Estonian Tax and Customs Board',
+    |         'source_version' => '2024-01',
+    |         'fetched_at' => '2024-01-02',
+    |         'approved_by' => null,
+    |         'rates' => ['EE' => ['standard' => 2200, 'reduced' => 900]],
+    |     ],
+    |     [
+    |         'valid_from' => '2025-07-01',
+    |         'valid_to' => null,
+    |         'source' => 'Estonian Tax and Customs Board',
+    |         'source_version' => '2025-07',
+    |         'fetched_at' => '2025-07-01',
+    |         'rates' => ['EE' => ['standard' => 2400, 'reduced' => 900]],
+    |     ],
+    | ],
+    |
+    | Absent, nothing changes: a tax point traveling on the money path is simply
+    | ignored and every sale prices exactly as it does today. Present, a country
+    | the history CARRIES is answered from it, and a tax point falling in a gap is
+    | REFUSED rather than answered with the nearest rate — a made-up rate with a
+    | date on it cannot be told apart from a real one. A country the history says
+    | nothing about keeps being priced by the table above, so opting in for one
+    | member state does not turn every other into an unknown.
+    |
+    | Intervals are append-only: an overlapping pair is refused at boot, because
+    | one supply cannot have two rates and picking the first match would decide
+    | that silently. A rate change appends an interval and closes the previous one.
     |
     */
 
@@ -1132,6 +1189,36 @@ return [
         'always' => env('BILLING_E_INVOICE_ALWAYS'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Invoice documents
+    |--------------------------------------------------------------------------
+    |
+    | Where the ISSUED PDF of an invoice is kept, when you keep one.
+    |
+    | The package stores no PDF. Storage is your decision, with a disk, a
+    | retention policy and a bill behind it. What it can do is SERVE what you
+    | kept instead of rendering a fresh one — and that difference is the whole
+    | point: everything under a renderer moves over the years an invoice must
+    | stay readable, so a re-render years later resembles the document your
+    | customer holds without being it.
+    |
+    | Name the disk your `billing_invoices.pdf_path` values address, and the
+    | download route serves the stored file. Leave it null — the default — and
+    | the route behaves exactly as before: it renders, and no disk is ever
+    | touched.
+    |
+    | A recorded path whose file is GONE renders too, rather than 404-ing an
+    | owner out of their own invoice — but it is logged as an error naming the
+    | invoice and the path, because a lost archive file is an incident and the
+    | quiet version of it is the expensive one.
+    |
+    */
+
+    'invoices' => [
+        'pdf_disk' => env('BILLING_INVOICE_PDF_DISK'),
+    ],
+
     'tax_us' => [
         'enabled' => (bool) env('BILLING_TAX_US_ENABLED', false),
 
@@ -1195,6 +1282,27 @@ return [
     'tax_counters' => [
         'reversal_attribution' => env('BILLING_TAX_COUNTER_REVERSAL_ATTRIBUTION', 'original_period'),
 
+        // Buyer gross per subdivision of a destination country — the early warning for an obligation that
+        // is reached per state rather than nationally.
+        //
+        // OFF by default, and the opposite default from the reporting counter on purpose. That one is on
+        // because it is what the package has always done; this one is new, most installations have no
+        // subdivision-level obligation anywhere, and a counter nobody needs is a column nobody reads.
+        //
+        // A SIBLING of `dac7`, never a child of `billing.tax_profile` — that key is a scalar, and a child
+        // under it breaks every reader that takes the profile name as a string.
+        //
+        // Independent of the other two switches in both directions: turning this on does not start the
+        // reporting counter, and turning the reporting counter off does not stop this. They answer
+        // different questions about different parties and share nothing but a config section.
+        //
+        // It is also independent of any geoblock. A counter that started when a market opened would produce
+        // its first useful figure after the first year that could have breached a threshold — which is the
+        // year it exists for.
+        'us_state_gmv' => [
+            'enabled' => env('BILLING_TAX_COUNTER_US_STATE_GMV', false),
+        ],
+
         // The reporting counter, and whether this installation is in a regime that has one at all.
         //
         // On by default, because the default is what the package has always done and a switch that changes
@@ -1225,6 +1333,13 @@ return [
     // network-dependent check in the push gate goes red on the first DNS hiccup and gets disabled.
     'tax_rate_probe' => [
         'enabled' => (bool) env('BILLING_RATE_PROBE', false),
+
+        // Where `billing:tax-rates:check` writes its proposal. Null means beside the shipped snapshot, so the
+        // two share a dating convention and can be diffed side by side.
+        //
+        // Worth setting when the installed package is read-only, or when the next release would take the
+        // file with it. A proposal is meant to be reviewed by a person, which can be days later.
+        'proposal_path' => env('BILLING_RATE_PROPOSAL_PATH'),
     ],
 
     // Locally held exchange rates. OFF by default, and the default is a refusal rather than a silence: with
@@ -1251,6 +1366,14 @@ return [
         // Rates are stored in the direction the bank publishes — euro to each of these — and never turned
         // around, so list the currencies you receive money in rather than the ones you report in.
         'currencies' => [],
+
+        // How many days old the newest imported rate may be before `billing:doctor` calls the series out.
+        //
+        // Three, deliberately well under the fourteen at which the lookup gives up and a document cannot be
+        // issued: three days is two missed daily imports plus a weekend, which is a warning, while fourteen
+        // is the incident. The forward window stays the ceiling — a value above it would let the diagnostic
+        // stay green while the money path is already refusing documents, so the lower of the two applies.
+        'max_age_days' => 3,
 
         // How far back a scheduled import re-fetches. Deliberately more than a day: a publisher revises, a
         // run gets missed, a machine sleeps through a night. Re-importing is idempotent, so the only cost of
@@ -1406,13 +1529,21 @@ return [
     // whose right extinguishes on delivery is not provided until the buyer's double consent is recorded.
     'consumer_rights' => [
         'profile' => env('BILLING_CONSUMER_RIGHTS_PROFILE'),
-        // There is deliberately no withdrawal-window length here. One used to be, defaulting to 14 and
-        // read by nobody: the package computes no withdrawal window at all, and it cannot — nothing records
-        // the moment a work was provided, which is what a window would have to be measured from.
+        // There is deliberately no withdrawal-window length here, and the reason is no longer that one
+        // cannot be computed — it is that the length is not a setting. Which sales have a window at all,
+        // and how long it runs, are a jurisdiction's reading: the profile answers both through
+        // `StatesWithdrawalWindow`, and a number in this file would either duplicate it or contradict it.
         //
-        // A statutory-looking number that changes nothing is worse than no number, because an operator who
-        // raises it for their jurisdiction gets silence. The sibling below already takes this position for
-        // the same reason. It comes back when something records a provision moment to measure against.
+        // The window is measured from PROVISION and frozen onto the grant as
+        // `billing_access_grants.withdrawal_window_ends_at`. Provision, not purchase and not payment: for a
+        // pre-ordered work those are three different days, and a window anchored to the sale would have
+        // expired before the buyer could open anything.
+        //
+        // (This paragraph used to say the package could not compute a window because nothing recorded the
+        // moment a work was provided. That was true when it was written and stopped being true when the
+        // grant register landed — `acquired_at` is written immediately after the fail-closed withdrawal
+        // gate, which IS that moment. It is recorded here because a reason does not age visibly: for weeks
+        // it went on reading as a decision rather than as a gap, and the gap survived because of it.)
 
         // How long a seller owes CONFORMITY updates on a sale — defect fixes, security fixes, staying
         // compatible. A different axis from what the creator sells: `content_ownership.default_update_policy`
@@ -1478,11 +1609,14 @@ return [
     // their tier does. This answers "what did this person BUY, and is it still theirs" — a fact that
     // outlives the plan, the creator's account, and the work's own publication.
     //
-    // Off by default. NOTHING READS THIS KEY YET, and that is worth stating rather than leaving to be
-    // discovered: today the register is inert because the code that reads and writes grants does not exist,
-    // not because this switch holds it back. The switch becomes load-bearing in the read/write strands of
-    // this milestone, and until then a sentence promising that "off means absent" would be describing a
-    // guard that is not there — the difference between a lock and a picture of one.
+    // Off by default, and off is FAIL-CLOSED rather than merely unused. With the switch off the read seam
+    // resolves to a reader that answers no to everything — an answer, not a resolution error, so "off" and
+    // "miswired" stay distinguishable at the call site. The three effects that would otherwise write or
+    // withdraw a grant (a completed purchase, a refund, a chargeback) read this key first and return before
+    // touching anything.
+    //
+    // So turning it on is what makes the register exist for an installation, and turning it off is a
+    // guarantee about behavior rather than an absence of code.
     //
     // NAMING — deliberate deviation, worth reading once. The ticket that specified this layer called the
     // key `billing.entitlements.enabled`, while its own opening says the collision with the existing
@@ -1591,14 +1725,33 @@ return [
         // pairing the table forbids was the one an untouched installation produced. Nothing caught it,
         // because the guard that checks the pair had no call site until 2026-07-25.
         //
-        // HEADS UP — this default currently REFUSES rather than charges. The separate-transfer shape needs
-        // a second provider call to move the merchant their share, and that call is not implemented yet, so
-        // the driver throws instead of taking the whole payment and never paying them. Until it lands, a
-        // routed sale needs `destination` here AND a posture that permits it (see charge_type_by_posture),
-        // which is why turning the marketplace on is not yet a one-line change.
+        // HEADS UP — which ENTRY POINT you use matters on this shape, and one of the two refuses on purpose.
+        //
+        // Separate transfer takes the whole payment and then makes a SECOND provider call to move the
+        // merchant their share. That call ships: `StripeMerchantTransfers::transferShare()`, bound
+        // unconditionally, made by `RoutedPayment::charge()` — which is the supported way to start such a
+        // sale, and the one that writes the ledger row the transfer is reconciled against.
+        //
+        // `PaymentRails::charge()` refuses it, and that refusal is PERMANENT rather than a placeholder: the
+        // transfer can only go out after the payment has succeeded, which is after that method has already
+        // returned. A rail that accepted the routing would take the buyer's money and have no moment left in
+        // which to pay the merchant.
         'charge_type' => env('BILLING_MARKETPLACE_CHARGE_TYPE', 'separate_transfer'),
 
         'buyer_protection' => [
+            /*
+            | Whether the merchant's share WAITS instead of moving the moment the payment succeeds.
+            |
+            | OFF by default, and the default is the whole safety of this switch: with it off the payment
+            | path is byte-identical to what it always was, so no existing installation changes behavior on
+            | an upgrade. Turning it on is a decision about when a seller is paid, which is not one a package
+            | may make on an operator's behalf.
+            |
+            | It applies to the `separate_transfer` lane only — the one where this package moves the share
+            | itself. On a destination charge the provider moves the money as the payment settles, and there
+            | is no moment in between for anything here to hold.
+            */
+            'enabled' => (bool) env('BILLING_BUYER_PROTECTION', false),
             'account_type' => env('BILLING_BUYER_PROTECTION_ACCOUNT_TYPE', 'express'),
             'confirm_after_days' => (int) env('BILLING_BUYER_PROTECTION_CONFIRM_AFTER_DAYS', 14),
             'decide_after_days' => (int) env('BILLING_BUYER_PROTECTION_DECIDE_AFTER_DAYS', 60),
@@ -1654,6 +1807,21 @@ return [
         // choice with a real cost on both sides: asking somebody for an identifier no law demands is an
         // imposition, and not asking means the later chase. The fields needed to settle at all — where to
         // send the document, where to send the money — are never affected either way.
+        /*
+        | Where a produced seller-reporting record is copied to, beside the row that
+        | keeps its exact bytes.
+        |
+        | Null is a supported answer rather than a missing setting: an operator whose
+        | accounting collects the file from the record itself needs no second copy, and
+        | writing one anyway would put a document containing sellers' figures somewhere
+        | nobody asked for it. The record is kept either way — the copy is a convenience,
+        | never the evidence.
+        */
+        'reporting' => [
+            'export_disk' => env('BILLING_REPORTING_EXPORT_DISK'),
+            'export_path' => env('BILLING_REPORTING_EXPORT_PATH', 'reporting'),
+        ],
+
         'seller_record' => [
             'collect_precautionary' => (bool) env('BILLING_MARKETPLACE_COLLECT_PRECAUTIONARY', true),
         ],
@@ -1879,6 +2047,37 @@ return [
             'bps' => (int) env('BILLING_MARKETPLACE_BUYER_FEE_BPS', 0),
             'fixed_minor' => (int) env('BILLING_MARKETPLACE_BUYER_FEE_FIXED_MINOR', 0),
             'revenue_account' => env('BILLING_MARKETPLACE_BUYER_FEE_ACCOUNT', '8510'),
+
+            // WHERE THE MEDIATED SALE HAPPENS — the fee's place of supply, and NOT where the buyer banks.
+            // A mediation is supplied where the transaction it mediates is, so the buyer's own seat never
+            // moves this. Left unset, the shipped checkout states the sale's currency region, which is what
+            // that lane actually knows about the transaction; an installation that can answer more precisely
+            // sets it, or supplies its own checkout.
+            'place_of_supply' => env('BILLING_MARKETPLACE_BUYER_FEE_PLACE'),
+        ],
+
+        // THE SELLER'S COMMISSION — the platform's second intermediation supply, and the mirror of the
+        // buyer fee above. Under intermediation the platform arranges somebody else's sale and charges the
+        // seller for arranging it; that fee is a taxable supply of the platform's own, and the seller needs
+        // a document for it to deduct the tax on what was kept from them.
+        //
+        // Off by default, so no existing installation changes: with this switched off a mediated sale still
+        // produces exactly the one document it produces today.
+        //
+        // TWO DIFFERENCES FROM THE BUYER FEE, both deliberate. A fixed commission is CAPPED by the sale — it
+        // comes out of the payout, and a fee larger than the sale would owe the seller a negative amount.
+        // And the calculator REFUSES outside intermediation rather than returning nothing: a commission in
+        // the commission chain is the named red line, and refusing before a number is drawn keeps a gapless
+        // series from spending one on a document that must not exist.
+        'seller_fee' => [
+            'enabled' => (bool) env('BILLING_MARKETPLACE_SELLER_FEE', false),
+            'model' => env('BILLING_MARKETPLACE_SELLER_FEE_MODEL', 'percent'),
+            'bps' => (int) env('BILLING_MARKETPLACE_SELLER_FEE_BPS', 0),
+            'fixed_minor' => (int) env('BILLING_MARKETPLACE_SELLER_FEE_FIXED_MINOR', 0),
+
+            // Its own account, because it is its own supply. Booking both intermediation fees to one account
+            // would make the two indistinguishable in an export that has to tell them apart.
+            'revenue_account' => env('BILLING_MARKETPLACE_SELLER_FEE_ACCOUNT', '8511'),
         ],
 
         'fee' => [
@@ -1919,6 +2118,14 @@ return [
             // nobody set is far more likely to be an oversight than an intention.
             //
             // The rate is a NET rate: it is applied to the transaction's net, not to what the buyer paid.
+            //
+            // It is also a GROSS take: what the platform keeps BEFORE the provider's own processing fee.
+            // Under the shipped account type (`marketplace.onboarding.account_type` = `express`) that fee
+            // comes out of the platform's balance — measured, see that setting — so the margin is this
+            // figure minus the provider's percentage and per-transaction amount. The package does not
+            // subtract it, and could not: it does not know your pricing with the provider, and inventing a
+            // deduction would make every payout figure wrong by a guess. On a small sale the difference is
+            // the whole margin.
             //
             // TWO LANES CANNOT HONOR THAT, and saying so here is the point. Stripe's hosted subscription
             // takes a percentage of the invoice TOTAL, which includes the buyer's tax; the hosted one-off
@@ -1996,9 +2203,23 @@ return [
             // unsupported value is refused at BOOT rather than defaulted quietly.
             //
             //   express  — the provider owns onboarding, identity and the merchant's own dashboard. The
-            //              default: the least the platform has to build, and the least it carries.
+            //              default: the least the platform has to build, and the MOST it carries.
             //   standard — the merchant has a full account of their own with the provider, and a direct
             //              relationship with them. More capable for the merchant, less controllable here.
+            //
+            // This setting is ALSO where the money risk is decided, which is not obvious from the names.
+            // Measured against the live API on 2026-08-06 (pinned version 2025-08-27.basil), identical for
+            // DE and US accounts, and readable on any account as `controller.fees.payer` and
+            // `controller.losses.payments`:
+            //
+            //   express  — the PLATFORM pays the provider's processing fee, and the PLATFORM absorbs a
+            //              chargeback. Neither is visible in a charge; both are properties of the account.
+            //   standard — the merchant pays the fee, and a loss is not debited from the platform balance.
+            //
+            // So a platform on `express` nets its commission MINUS the provider's fee, and carries the
+            // disputes. `billing.marketplace.fee` states a GROSS take rate; the package cannot
+            // subtract a processing fee it does not know your pricing for. Price accordingly — that
+            // difference is the whole margin on a small sale.
             'account_type' => env('BILLING_MARKETPLACE_ACCOUNT_TYPE', 'express'),
         ],
 

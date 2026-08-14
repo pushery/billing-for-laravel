@@ -14,6 +14,8 @@ use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\Events\MerchantAccountDeauthorized;
 use Pushery\Billing\Events\MerchantAccountUpdated;
+use Pushery\Billing\Events\MerchantPayoutFailed;
+use Pushery\Billing\Events\MerchantTransferReversedByProvider;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -74,8 +76,88 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
             'customer.subscription.updated',
             'customer.subscription.deleted' => $this->subscriptionEvents($object, $this->strictAccount($payload), $this->int($payload, 'created')),
             'charge.dispute.closed' => $this->disputeClosedEvents($object, $account),
+            // A reversal the PROVIDER performed. Only here, never on the platform mapper: a single-seller
+            // installation receives no connected transfers, and teaching the shipped mapper this event would
+            // make every existing install start running an effect it has never run, on the next deploy.
+            'transfer.reversed' => $this->transferReversedEvents($object),
+            // Whether the money ARRIVED, which is a different question from whether it was sent. Only the
+            // failure: the success is the ordinary case and the provider's own dashboard already shows it,
+            // while the failure is the one somebody has to answer for. Merchant endpoint only, for the same
+            // reason as the reversal above — a single-seller installation has no connected payouts, and
+            // teaching the shipped platform mapper this event would start an effect running on every
+            // existing install at the next deploy.
+            'payout.failed' => $this->payoutFailedEvents($object, $account),
             default => [],
         };
+    }
+
+    /**
+     * A transfer the provider reversed on its own.
+     *
+     * Attributed on the TRANSFER id, which is the only field that ties the event to a sale this package
+     * recorded — the connected account alone would name a merchant, not a charge, and a merchant can have
+     * many.
+     *
+     * `amount_reversed` is the provider's CUMULATIVE figure, and carrying it as such is what makes the
+     * effect idempotent without a dedup table: a redelivery states the same total, a second reversal states
+     * a higher one, and both are handled by writing what was reported.
+     *
+     * Zero is dropped rather than recorded. `transfer.reversed` fires with the whole transfer object, and a
+     * body that states nothing reversed is either a shape this package does not understand or an event about
+     * something else — either way it is not an instruction to write a zero over a real figure.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<MerchantTransferReversedByProvider>
+     */
+    private function transferReversedEvents(array $object): array
+    {
+        $transfer = $object['id'] ?? null;
+        $reversed = $object['amount_reversed'] ?? null;
+
+        if (! is_string($transfer) || $transfer === '' || ! is_int($reversed) || $reversed <= 0) {
+            return [];
+        }
+
+        return [new MerchantTransferReversedByProvider('stripe', $transfer, $reversed)];
+    }
+
+    /**
+     * A payout the provider could not deliver to the merchant's bank.
+     *
+     * Attributed to the ACCOUNT, never to a charge: a payout bundles many transfers, so it has no 1:1
+     * relation to a recorded sale, and picking one would be a wrong attribution that reads as a right one.
+     *
+     * A body with no payout id is dropped rather than recorded under a blank. The id is what makes a
+     * redelivery recognizable and a support case traceable, and an entry without one answers neither.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<MerchantPayoutFailed>
+     */
+    private function payoutFailedEvents(array $object, string $account): array
+    {
+        $payout = $object['id'] ?? null;
+        $amount = $object['amount'] ?? null;
+        $currency = $object['currency'] ?? null;
+
+        if (! is_string($payout) || $payout === '' || ! is_int($amount) || ! is_string($currency) || $currency === '') {
+            return [];
+        }
+
+        $code = $object['failure_code'] ?? null;
+        $message = $object['failure_message'] ?? null;
+
+        return [new MerchantPayoutFailed(
+            provider: 'stripe',
+            accountReference: $account,
+            payoutReference: $payout,
+            amountMinor: $amount,
+            // Upper-cased here, because the provider reports it lower-case and every amount this package
+            // stores is keyed by the canonical code. A currency that arrives in one case and is compared in
+            // the other is a mismatch nothing reports.
+            currency: strtoupper($currency),
+            failureCode: is_string($code) && $code !== '' ? $code : null,
+            failureMessage: is_string($message) && $message !== '' ? $message : null,
+        )];
     }
 
     /**

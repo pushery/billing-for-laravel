@@ -64,7 +64,7 @@ final class Subscription extends Model
      * @var array<string, int|string>
      */
     protected $attributes = [
-        'type' => 'default',
+        'type' => self::TYPE_DEFAULT,
         'dunning_level' => 0,
         // The single-seller sentinel. A subscription created without a merchant reads as the platform's
         // own, exactly as the schema default records it — so the row and the freshly-built instance agree
@@ -197,6 +197,47 @@ final class Subscription extends Model
     public function merchant(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    /**
+     * The subscription type an owner has when they have exactly one.
+     *
+     * A constant because the string had thirteen readers and two writers, and a literal with fifteen sites
+     * is a literal that gets typed slightly wrong once.
+     */
+    public const string TYPE_DEFAULT = 'default';
+
+    /**
+     * Narrow a query to one owner's rows.
+     *
+     * The other half of the selection {@see self::scopeForMerchant()} already spells once, and it was
+     * written out by hand at every call site that uses that one. The cost was paid in commit 96f982e2:
+     * a single rule arrived as six identical one-liners in six files, and the reason it was six of the
+     * thirteen sites rather than all thirteen lived only in the commit message.
+     *
+     * Returns a builder rather than a row, deliberately. The call sites differ in ways that matter — one
+     * takes every merchant, one locks for update, one asks for all rows rather than the newest — and a
+     * helper that returned a subscription would have flattened those differences into a marketplace defect.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeForOwner(Builder $query, Model $owner): void
+    {
+        $query->where('owner_type', $owner->getMorphClass())->where('owner_id', $owner->getKey());
+    }
+
+    /**
+     * Narrow a query to the DEFAULT subscription type.
+     *
+     * Separate from {@see self::scopeForOwner()} rather than combined with it, because the two conditions
+     * are asked separately as well: there are owner queries that do not care about the type. Combining them
+     * would be shorter here and would tie them together for good.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeOfDefaultType(Builder $query): void
+    {
+        $query->where('type', self::TYPE_DEFAULT);
     }
 
     /**

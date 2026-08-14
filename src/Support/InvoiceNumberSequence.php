@@ -6,6 +6,7 @@ namespace Pushery\Billing\Support;
 
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Pushery\Billing\Marketplace\DocumentNumberAllocator;
 use Pushery\Billing\Models\NumberSequence;
 
 /**
@@ -19,6 +20,13 @@ use Pushery\Billing\Models\NumberSequence;
  * issued twice or a number changed after the fact, and neither can: the lock serializes issuance, and a
  * drawn number is frozen by the record it lands on. Whether a gap is acceptable is a jurisdiction's rule
  * and lives in its profile; a jurisdiction that forbids gaps must enforce that itself, above this class.
+ *
+ * It counts and does nothing else — turning a counter value into a document number belongs to
+ * {@see DocumentNumberAllocator}, which knows the series and can resolve its configured prefix. A
+ * formatting helper used to sit here too, and the split matters more than it looks: that helper produced a
+ * shape no real document carries (no prefix, no year, a narrower running part), so anyone who reached for
+ * the obvious-looking method on the obvious-looking class would have minted a plausible number outside the
+ * configured series rather than getting an error.
  */
 final class InvoiceNumberSequence
 {
@@ -38,11 +46,5 @@ final class InvoiceNumberSequence
 
             return $number;
         });
-    }
-
-    /** Format a sequence value as a display invoice number, e.g. "2026-000042". */
-    public function format(string $scope, int $number): string
-    {
-        return sprintf('%s-%06d', $scope, $number);
     }
 }

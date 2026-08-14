@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Marketplace;
 
-use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
@@ -50,7 +49,7 @@ use Pushery\Billing\ValueObjects\Money;
 final readonly class ChargeRoutingResolver
 {
     public function __construct(
-        private Repository $config,
+        private MarketplaceSaleContext $context,
         private ChargeRoutingConsistencyGuard $guard,
         private SellerOfRecordResolver $postures,
         private MerchantAccountDirectory $accounts,
@@ -69,7 +68,7 @@ final readonly class ChargeRoutingResolver
      */
     public function resolveFor(Model $merchant, Money $gross, int $taxBps, bool $suppliesAreElectronic = true): ChargeRouting
     {
-        $type = $this->chargeType();
+        $type = $this->context->chargeType();
         $posture = $this->postures->resolveFor($suppliesAreElectronic);
 
         // First, before anything is assembled and long before anything is sent.
@@ -88,11 +87,5 @@ final readonly class ChargeRoutingResolver
         $fee = $this->fees->feeFor($merchant)->of($gross->baseFromMarkup($taxBps)[0]);
 
         return new ChargeRouting($account, $fee, $type);
-    }
-
-    /** Which money flow this installation uses with its provider — one reader, shared with the two lanes. */
-    private function chargeType(): ChargeType
-    {
-        return new ConfiguredChargeType($this->config)->get();
     }
 }

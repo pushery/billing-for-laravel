@@ -33,7 +33,7 @@ final class RefundAttempt extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'provider', 'charge_reference', 'amount_minor', 'currency', 'transfer_reversal_minor',
+        'provider', 'charge_reference', 'amount_minor', 'currency', 'transfer_reversal_minor', 'transfer_reversal_short_minor',
         'fee_refund_minor', 'idempotency_key', 'status', 'failure_reason', 'completed_at',
         'cause', 'dispute_fee_minor',
     ];
@@ -53,6 +53,9 @@ final class RefundAttempt extends Model
     protected $casts = [
         'amount_minor' => 'integer',
         'transfer_reversal_minor' => 'integer',
+        // Also deliberately NOT defaulted. Null means nobody compared what the provider actually moved
+        // against what was asked for; zero means somebody did and nothing was missing.
+        'transfer_reversal_short_minor' => 'integer',
         'fee_refund_minor' => 'integer',
         'status' => RefundAttemptStatus::class,
         'completed_at' => UtcDateTime::class,

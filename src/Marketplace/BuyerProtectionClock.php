@@ -6,10 +6,19 @@ namespace Pushery\Billing\Marketplace;
 
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Pushery\Billing\Contracts\MerchantAccountDirectory;
+use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Enums\BuyerProtectionState;
+use Pushery\Billing\Events\BuyerProtectionHoldRefunded;
+use Pushery\Billing\Events\BuyerProtectionHoldReleased;
+use Pushery\Billing\Events\BuyerProtectionResolutionRequired;
 use Pushery\Billing\Exceptions\BuyerProtectionMisconfigured;
 use Pushery\Billing\Models\BuyerProtectionHold;
+use Pushery\Billing\Models\MerchantCharge;
+use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -52,7 +61,28 @@ final readonly class BuyerProtectionClock
     /** The account types that let a payout be held back at all. */
     private const array ACCOUNT_TYPES_WITH_PAYOUT_CONTROL = ['express', 'custom'];
 
-    public function __construct(private Repository $config) {}
+    public function __construct(
+        private Repository $config,
+        /**
+         * How the money actually reaches the seller when a hold is released.
+         *
+         * Nullable because a driver may not move shares at all — a destination-charge installation never
+         * opens a hold in the first place, so it never needs this. Where it IS null and a release happens
+         * anyway, the state stops at `ReleasePending`: the platform has decided, the money has not moved,
+         * and saying so is the honest outcome. Marking it `Released` would record a payment nobody made.
+         */
+        private ?MovesMerchantShare $transfers = null,
+        /** Where the accounts live, so a release can name the destination the transfer goes to. */
+        private ?MerchantAccountDirectory $accounts = null,
+        /**
+         * How the outcome is announced.
+         *
+         * This was the one cron-driven class in this directory with no dispatcher, and the one that writes
+         * money-bearing columns. An auto-release at 05:00 was invisible to a consuming application: its only
+         * channel was the console output of the sweep.
+         */
+        private ?Dispatcher $events = null,
+    ) {}
 
     /**
      * Start the clock on a sale.
@@ -74,10 +104,33 @@ final readonly class BuyerProtectionClock
             'merchant_id' => $this->merchantKey($merchant),
             'currency' => $charge->currency,
             'charge_minor' => $charge->minorUnits,
+            // The commission, taken off at the moment the hold OPENS rather than only when it is released.
+            //
+            // It used to default to zero here, which had two consequences and both were quiet. A release
+            // pays out `charge_minor - platform_fee_minor`, so every released hold handed the merchant the
+            // buyer's full price, commission included. And the balance reader subtracted the buyer's price
+            // from the merchant's net, which is two different bases against each other — enough to drive a
+            // merchant's available balance below zero while nothing looked wrong.
+            'platform_fee_minor' => $this->commissionOn($chargeReference),
             'state' => BuyerProtectionState::AwaitingConfirmation,
             'confirm_by' => $paidAt->copy()->addDays($this->confirmAfterDays()),
             'decide_by' => $paidAt->copy()->addDays($this->decideAfterDays()),
         ]);
+    }
+
+    /**
+     * What the platform kept on the sale this hold sits over.
+     *
+     * Read from the charge rather than passed in, because the split was already decided when the sale was
+     * recorded and a second calculation here would be a second place for it to drift. Zero where no routed
+     * charge exists — an unrouted sale has no platform share to take off, and inventing one would withhold
+     * money nobody kept.
+     */
+    private function commissionOn(string $chargeReference): int
+    {
+        $charge = MerchantCharge::query()->where('charge_reference', $chargeReference)->first();
+
+        return $charge instanceof MerchantCharge ? (int) $charge->fee_minor : 0;
     }
 
     /** A merchant's key as the morph column stores it, or nothing where the sale names no merchant. */
@@ -208,15 +261,113 @@ final readonly class BuyerProtectionClock
 
     private function settleAsRelease(BuyerProtectionHold $hold): BuyerProtectionHold
     {
+        // Already settled: a sweep that runs twice, an overlapping cron, a retried confirmation. Paying a
+        // merchant a second time is the expensive direction, so the guard is here rather than in each of
+        // the four callers that can reach this.
+        if ($hold->settled_at !== null) {
+            return $hold;
+        }
+
         // The seller gets what is left after the platform's own fee. The three figures are written together
         // and always sum to the charge, so no end state can quietly lose or invent a cent.
-        $hold->state = BuyerProtectionState::Released;
         $hold->seller_net_minor = $hold->charge_minor - $hold->platform_fee_minor;
         $hold->buyer_refund_minor = 0;
-        $hold->settled_at = $hold->freshTimestamp();
+
+        // RELEASE PENDING, before the money moves. The state existed and nothing ever set it, and this is
+        // the moment it describes: the platform has decided, the provider has not confirmed. A row that went
+        // straight to `Released` would claim a payment that had not happened yet — and if the transfer
+        // throws, that claim is what an operator would be left reading.
+        $hold->state = BuyerProtectionState::ReleasePending;
         $hold->save();
 
+        $moved = $this->payOut($hold);
+
+        // `ReleasePending` is left behind only when the transfer actually happened — or when there was
+        // nothing to transfer. If `payOut()` THROWS, the state stays pending and the exception travels: that
+        // is the one case the state was declared for and never reached, and it is exactly the case an
+        // operator has to see. A row that said `Released` after a failed transfer would be a payment claimed
+        // and not made.
+        if ($moved) {
+            $hold->state = BuyerProtectionState::Released;
+            $hold->settled_at = $hold->freshTimestamp();
+            $hold->save();
+
+            $this->announce(new BuyerProtectionHoldReleased(
+                $hold->charge_reference,
+                $hold->merchant_type,
+                $hold->merchant_id,
+                Money::of($hold->seller_net_minor, $hold->currency),
+                $hold->state,
+            ));
+        }
+
         return $hold;
+    }
+
+    /**
+     * Instruct the provider to move the seller's share.
+     *
+     * Keyed on the CHARGE row, the same idempotency rule the immediate lane already documents — so a sweep
+     * that runs twice over one hold instructs one transfer. The key has to be the sale rather than the hold
+     * because the two lanes must not be able to pay for the same sale twice between them.
+     */
+    private function payOut(BuyerProtectionHold $hold): bool
+    {
+        // Nothing to move, so the release is COMPLETE rather than stuck. An unrouted sale has no merchant to
+        // pay: the platform kept the money and the protection period simply ended. Reporting that as
+        // "decided but not paid" would leave a hold hanging forever over a payment nobody was owed.
+        if ($hold->merchant_type === null || $hold->merchant_id === null) {
+            return true;
+        }
+
+        // No way to move a share at all — a driver that does not support it, an installation that never
+        // bound one. Nothing is owed to the provider here, so the release is complete rather than stuck:
+        // leaving it pending would park a hold forever over a transfer this arrangement was never going to
+        // make. `assertOperable()` is what refuses an arrangement that claims protection it cannot deliver;
+        // this method's job is only to move money where there is a way to.
+        if (! $this->transfers instanceof MovesMerchantShare || ! $this->accounts instanceof MerchantAccountDirectory) {
+            return true;
+        }
+
+        // Resolved from the morph columns rather than through a relation the model does not declare, and
+        // by hand rather than lazily: a class that no longer exists — deleted, renamed, never migrated — is
+        // an ordinary answer here and must not take a sweep down for one row.
+        $class = Relation::getMorphedModel((string) $hold->merchant_type) ?? (string) $hold->merchant_type;
+
+        if (! class_exists($class) || ! is_a($class, Model::class, true)) {
+            return false;
+        }
+
+        $merchant = $class::query()->find($hold->merchant_id);
+
+        if (! $merchant instanceof Model) {
+            return false;
+        }
+
+        $destination = $this->accounts->accountFor($merchant);
+
+        // A merchant with no account at the provider. There is nobody to transfer TO, and the hold must not
+        // hang on it — the money is the platform's problem to resolve, not a state machine's.
+        if (! $destination instanceof MerchantAccountReference) {
+            return true;
+        }
+
+        $charge = MerchantCharge::query()->where('charge_reference', $hold->charge_reference)->first();
+
+        $this->transfers->transferShare(
+            $destination,
+            Money::of($hold->seller_net_minor, $hold->currency),
+            $hold->charge_reference,
+            $charge instanceof MerchantCharge ? "billing_merchant_charge_{$charge->id}" : "billing_protection_hold_{$hold->id}",
+        );
+
+        return true;
+    }
+
+    /** Announce an outcome, where anything is listening. */
+    private function announce(object $event): void
+    {
+        $this->events?->dispatch($event);
     }
 
     private function settleAsRefund(BuyerProtectionHold $hold, Money $refund): BuyerProtectionHold
@@ -231,6 +382,14 @@ final readonly class BuyerProtectionClock
         $hold->settled_at = $hold->freshTimestamp();
         $hold->save();
 
+        $this->announce(new BuyerProtectionHoldRefunded(
+            $hold->charge_reference,
+            $hold->merchant_type,
+            $hold->merchant_id,
+            $refund,
+            $hold->state,
+        ));
+
         return $hold;
     }
 
@@ -238,6 +397,16 @@ final readonly class BuyerProtectionClock
     {
         $hold->state = BuyerProtectionState::ResolutionRequired;
         $hold->save();
+
+        // The one outcome that NEEDS somebody to hear it: the package has deliberately not decided, and if
+        // nothing is listening the hold sits in that state indefinitely with a buyer's money in it.
+        $this->announce(new BuyerProtectionResolutionRequired(
+            $hold->charge_reference,
+            $hold->merchant_type,
+            $hold->merchant_id,
+            Money::of($hold->charge_minor, $hold->currency),
+            $hold->state,
+        ));
 
         return $hold;
     }

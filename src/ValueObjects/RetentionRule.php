@@ -6,6 +6,7 @@ namespace Pushery\Billing\ValueObjects;
 
 use Pushery\Billing\Enums\RetentionAction;
 use Pushery\Billing\Enums\RetentionClock;
+use Pushery\Billing\Enums\RetentionExecutor;
 
 /**
  * One retention rule: what is held, for how long, on whose authority, counted from when, and what happens
@@ -43,6 +44,15 @@ final readonly class RetentionRule
          * @var list<literal-string>
          */
         public array $columns = [],
+        /**
+         * Which mechanism actually carries this rule out.
+         *
+         * Nullable because a consumer's own rule predates this field and because "nobody said" is a real
+         * state worth being able to see — it is exactly the state two shipped rules were in, declared and
+         * executed by nothing. `RetentionRulesAreExecutedTest` fails on a null here, so the gap is loud at
+         * the moment the rule is written rather than silent until somebody audits a deletion concept.
+         */
+        public ?RetentionExecutor $executor = null,
     ) {}
 
     /** Whether this rule describes a duty to discard rather than a period to wait out. */

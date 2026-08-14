@@ -15,6 +15,7 @@ use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Invoicing\Concerns\NormalizesInvoiceModel;
 use Pushery\Billing\Marketplace\ConfigSellerPartyResolver;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\ValueObjects\EnInvoiceTaxTreatment;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -65,32 +66,23 @@ final readonly class ZugferdCiiInvoice implements EInvoice
 
         $currency = $invoice->currency;
         $reference = $invoice->number ?? (string) $invoice->id;
-        $reverseCharge = (bool) $invoice->reverse_charge;
-        $exempt = (bool) $invoice->tax_exempt;
+        // How this document is taxed, derived ONCE — the same call the UBL writer makes. These five lines
+        // used to stand here and, byte for byte, over there; two readings of one rule drift, and the drift
+        // shows up in whichever of the two formats nobody is looking at.
+        $treatment = $this->taxTreatmentFor($invoice);
 
         $root->appendChild($this->documentContext($doc));
         $root->appendChild($this->document($doc, $reference, $this->typeCode($invoice), $invoice->issued_at ?? Carbon::now(), $this->selfBillingNote($invoice)));
 
-        $lines = $this->lines($invoice);
-        $bands = $this->taxBandsFor($lines, $reverseCharge, $invoice);
-
-        // Derive the document net + tax from the lines so the header totals equal the sum of the per-band
-        // figures (BR-CO-13/14/15); a lineless invoice falls back to the stored figures.
-        $net = $lines === [] ? ($invoice->subtotal_minor ?? $invoice->total_minor) : $this->sum($lines, fn (Line $line): int => $line->netMinor);
-        // A reverse charge shifts the VAT to the buyer: the seller charges zero. The per-band CalculatedAmount
-        // is already forced to zero (headerTax), so the document tax MUST be zero too — otherwise BT-110 would
-        // not equal the sum of the zero bands (BR-CO-14) and the payable would overstate the true net.
-        $tax = $reverseCharge ? 0 : ($lines === [] ? ($invoice->tax_minor ?? 0) : $this->sum($bands, fn (array $band): int => $band['tax']));
-
         $transaction = $doc->createElement('rsm:SupplyChainTradeTransaction');
 
-        foreach ($lines as $index => $line) {
-            $transaction->appendChild($this->line($doc, $index + 1, $line, $currency, $reverseCharge, $exempt, $invoice));
+        foreach ($treatment->lines as $index => $line) {
+            $transaction->appendChild($this->line($doc, $index + 1, $line, $currency, $treatment));
         }
 
         $transaction->appendChild($this->headerAgreement($doc, $invoice, $reference));
         $transaction->appendChild($this->headerDelivery($doc, $invoice));
-        $transaction->appendChild($this->headerSettlement($doc, $bands, $net, $tax, $currency, $reverseCharge, $exempt, $invoice));
+        $transaction->appendChild($this->headerSettlement($doc, $currency, $treatment));
 
         $root->appendChild($transaction);
 
@@ -151,7 +143,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
     }
 
     /** One line item (BG-25): product, net unit price, billed quantity, the line's VAT category and net. */
-    private function line(DOMDocument $doc, int $number, Line $line, string $currency, bool $reverseCharge, bool $exempt, InvoiceRecord $invoice): DOMElement
+    private function line(DOMDocument $doc, int $number, Line $line, string $currency, EnInvoiceTaxTreatment $treatment): DOMElement
     {
         $item = $doc->createElement('ram:IncludedSupplyChainTradeLineItem');
 
@@ -175,7 +167,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
         $item->appendChild($delivery);
 
         $settlement = $doc->createElement('ram:SpecifiedLineTradeSettlement');
-        $settlement->appendChild($this->lineTax($doc, $line->taxRate, $reverseCharge, $exempt, $invoice));
+        $settlement->appendChild($this->lineTax($doc, $line->taxRate, $treatment));
 
         // BG-14 the period this line covers (BT-73 start, BT-74 end). Written only when the line states one,
         // so a document without periods is byte-for-byte what it always was. CII orders the billing period
@@ -210,12 +202,12 @@ final readonly class ZugferdCiiInvoice implements EInvoice
     }
 
     /** The line-level VAT category (BT-151/152): code + rate only; the exemption reason lives on the header band. */
-    private function lineTax(DOMDocument $doc, float $rate, bool $reverseCharge, bool $exempt, InvoiceRecord $invoice): DOMElement
+    private function lineTax(DOMDocument $doc, float $rate, EnInvoiceTaxTreatment $treatment): DOMElement
     {
         $tax = $doc->createElement('ram:ApplicableTradeTax');
         $this->el($doc, $tax, 'ram:TypeCode', 'VAT');
-        $this->el($doc, $tax, 'ram:CategoryCode', $this->categoryFor($invoice, $rate, $reverseCharge, $exempt)->code);
-        $this->el($doc, $tax, 'ram:RateApplicablePercent', $this->rate($reverseCharge || $exempt ? 0.0 : $rate));
+        $this->el($doc, $tax, 'ram:CategoryCode', $this->categoryFor($rate, $treatment)->code);
+        $this->el($doc, $tax, 'ram:RateApplicablePercent', $this->rate($treatment->reverseCharge || $treatment->exempt ? 0.0 : $rate));
 
         return $tax;
     }
@@ -264,20 +256,19 @@ final readonly class ZugferdCiiInvoice implements EInvoice
     /**
      * The trade settlement (BG-22): currency, one tax band per rate (BG-23), the totals, and — for a
      * credit note — the preceding-invoice reference (BG-3, BR-55).
-     *
-     * @param  list<array{rate: float, taxable: int, tax: int}>  $bands
      */
-    private function headerSettlement(DOMDocument $doc, array $bands, int $net, int $tax, string $currency, bool $reverseCharge, bool $exempt, InvoiceRecord $invoice): DOMElement
+    private function headerSettlement(DOMDocument $doc, string $currency, EnInvoiceTaxTreatment $treatment): DOMElement
     {
         $settlement = $doc->createElement('ram:ApplicableHeaderTradeSettlement');
         $this->el($doc, $settlement, 'ram:InvoiceCurrencyCode', $currency);
 
-        // BT-120: the exemption reason text, derived from the invoice's vat_note column — the SAME derivation
-        // XRechnung uses, so the two syntaxes of one invoice never carry different reason text.
-        $exemptionReason = $this->vatNote($invoice, $reverseCharge);
+        // The exemption reason (BT-120) travels ON the treatment now, derived once for both syntaxes rather
+        // than read again here — which is what guarantees the two renderings of one invoice cannot carry
+        // different reason text.
+        $invoice = $treatment->invoice;
 
-        foreach ($bands as $band) {
-            $settlement->appendChild($this->headerTax($doc, $band, $currency, $reverseCharge, $exempt, $invoice, $exemptionReason));
+        foreach ($treatment->bands as $band) {
+            $settlement->appendChild($this->headerTax($doc, $band, $currency, $treatment));
         }
 
         // BG-14 the period the WHOLE document covers. CII orders ram:BillingSpecifiedPeriod after the tax
@@ -290,7 +281,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
             $settlement->appendChild($period);
         }
 
-        $settlement->appendChild($this->monetarySummation($doc, $net, $tax, $currency));
+        $settlement->appendChild($this->monetarySummation($doc, $treatment->net, $treatment->tax, $currency));
 
         if ($invoice->isCorrection() && $invoice->credited_invoice_number !== null) {
             $referenced = $doc->createElement('ram:InvoiceReferencedDocument');
@@ -333,18 +324,20 @@ final readonly class ZugferdCiiInvoice implements EInvoice
      *
      * @param  array{rate: float, taxable: int, tax: int}  $band
      */
-    private function headerTax(DOMDocument $doc, array $band, string $currency, bool $reverseCharge, bool $exempt, InvoiceRecord $invoice, ?string $exemptionReason = null): DOMElement
+    private function headerTax(DOMDocument $doc, array $band, string $currency, EnInvoiceTaxTreatment $treatment): DOMElement
     {
+        $zeroRated = $treatment->reverseCharge || $treatment->exempt;
+
         $tax = $doc->createElement('ram:ApplicableTradeTax');
-        $this->amount($doc, $tax, 'ram:CalculatedAmount', $reverseCharge || $exempt ? 0 : $band['tax'], $currency);
+        $this->amount($doc, $tax, 'ram:CalculatedAmount', $zeroRated ? 0 : $band['tax'], $currency);
         $this->el($doc, $tax, 'ram:TypeCode', 'VAT');
 
-        $category = $this->categoryFor($invoice, $band['rate'], $reverseCharge, $exempt);
+        $category = $this->categoryFor($band['rate'], $treatment);
 
         if ($category->needsReason()) {
             // Derived from vat_note where the document carries one, and otherwise the wording that belongs to
             // the category — never hardcoded past that fallback.
-            $this->el($doc, $tax, 'ram:ExemptionReason', $exemptionReason ?? $category->reason);
+            $this->el($doc, $tax, 'ram:ExemptionReason', $treatment->exemptionReason ?? $category->reason);
         }
 
         $this->amount($doc, $tax, 'ram:BasisAmount', $band['taxable'], $currency);
@@ -356,7 +349,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
             $this->el($doc, $tax, 'ram:ExemptionReasonCode', $category->vatexCode);
         }
 
-        $this->el($doc, $tax, 'ram:RateApplicablePercent', $this->rate($reverseCharge || $exempt ? 0.0 : $band['rate']));
+        $this->el($doc, $tax, 'ram:RateApplicablePercent', $this->rate($zeroRated ? 0.0 : $band['rate']));
 
         return $tax;
     }
@@ -386,12 +379,14 @@ final readonly class ZugferdCiiInvoice implements EInvoice
      * are two places it can drift — and a drift between them has no symptom: each document stays internally
      * consistent, and only a reader comparing a UBL and a CII rendering of the SAME invoice would see it.
      */
-    private function categoryFor(InvoiceRecord $invoice, float $rate, bool $reverseCharge, bool $exempt): EnInvoiceTaxCategory
+    private function categoryFor(float $rate, EnInvoiceTaxTreatment $treatment): EnInvoiceTaxCategory
     {
+        $invoice = $treatment->invoice;
+
         return EnInvoiceTaxCategory::for(
-            $invoice->tax_exemption_reason ?? ($reverseCharge ? TaxExemptionReason::ReverseCharge : null),
+            $invoice->tax_exemption_reason ?? ($treatment->reverseCharge ? TaxExemptionReason::ReverseCharge : null),
             $invoice->tax_archetype,
-            $exempt,
+            $treatment->exempt,
             $rate,
             $invoice->destination_country,
         );

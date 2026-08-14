@@ -12,6 +12,7 @@ use Pushery\Billing\Enums\DocumentSeries;
 use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Enums\SettlementDocumentType;
 use Pushery\Billing\Enums\SupplyRegime;
+use Pushery\Billing\Exceptions\CollectiveSettlementSpansCurrencies;
 use Pushery\Billing\Exceptions\CollectiveSettlementSpansTaxCategories;
 use Pushery\Billing\Exceptions\SettlementTransactionOutsidePeriod;
 use Pushery\Billing\Invoicing\Party;
@@ -68,6 +69,7 @@ final readonly class CollectiveSelfBillingEngine
         $series = null;
         $exempt = null;
         $reverseCharge = null;
+        $exemptionReason = null;
         $currency = null;
 
         foreach ($transactions as $transaction) {
@@ -108,12 +110,30 @@ final readonly class CollectiveSelfBillingEngine
             // the VAT category must be single because it is a document-level property here. A mid-month
             // threshold flip is the one case that breaks the category rule; it is refused, not mis-rendered.
             $series ??= $plan->series;
+
+            // The currency is document-level like the category above it, and it is the one homogeneity the
+            // accumulation below cannot enforce for itself: the totals are summed as raw minor units, so two
+            // currencies produce a number in neither and the document is stamped with whichever arrived
+            // first. Money::plus() raises CurrencyMismatch for exactly this and is bypassed here for speed,
+            // so the refusal has to be stated rather than inherited.
             $currency ??= $transaction->net->currency;
 
+            if ($currency !== $transaction->net->currency) {
+                throw CollectiveSettlementSpansCurrencies::make($period, $currency, $transaction->net->currency);
+            }
+
+            // The REASON is compared alongside the two booleans, and that is not belt-and-braces. Two
+            // standings are relieved under different law while both answering `exempt === true` — a creator
+            // who moved between them mid-month passed this check and produced ONE document naming ONE
+            // relief for lines that had two. The booleans cannot see it; only the reason can.
             if ($exempt === null) {
                 $exempt = $treatment->exempt;
                 $reverseCharge = $treatment->reverseChargeToRecipient;
-            } elseif ($exempt !== $treatment->exempt || $reverseCharge !== $treatment->reverseChargeToRecipient) {
+                $exemptionReason = $treatment->exemptionReason;
+            } elseif ($exempt !== $treatment->exempt
+                || $reverseCharge !== $treatment->reverseChargeToRecipient
+                || $exemptionReason !== $treatment->exemptionReason
+            ) {
                 throw CollectiveSettlementSpansTaxCategories::make($period);
             }
 
@@ -170,6 +190,9 @@ final readonly class CollectiveSelfBillingEngine
             'total_minor' => $totalMinor,
             'reverse_charge' => $reverseCharge ?? false,
             'tax_exempt' => $exempt ?? false,
+            // BT-120's ground, carried from the month's treatments rather than left for the renderer to
+            // guess. Every line in this document shares it — the loop above refuses a month that does not.
+            'tax_exemption_reason' => $exemptionReason,
             // The frozen tax characteristics are deliberately NOT set here, and the omission is the answer
             // rather than the same gap one document over. A collective settlement is one document over many
             // transactions, and the archetype is a fact about each of them: a creator who sold a download and

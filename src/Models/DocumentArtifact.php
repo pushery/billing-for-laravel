@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Override;
 use Pushery\Billing\Casts\UtcDateTime;
-use RuntimeException;
+use Pushery\Billing\Enums\AppendOnlyDeletion;
+use Pushery\Billing\Models\Concerns\AppendOnly;
 
 /**
  * The bytes of an electronic document, as issued.
@@ -27,6 +28,8 @@ use RuntimeException;
  */
 final class DocumentArtifact extends Model
 {
+    use AppendOnly;
+
     protected $table = 'billing_document_artifacts';
 
     /** @var list<string> */
@@ -41,22 +44,35 @@ final class DocumentArtifact extends Model
         'owner_erased_at' => UtcDateTime::class,
     ];
 
-    #[Override]
-    protected static function booted(): void
+    /**
+     * Erasure unlinks the person from a record whose CONTENT is untouched. Everything else would be
+     * re-deciding after the fact what was already decided and acted on.
+     *
+     * @return list<string>
+     */
+    protected static function appendOnlyMutableColumns(): array
     {
-        self::updating(function (self $artifact): void {
-            // Erasure unlinks the person from an artifact whose CONTENT is untouched — the same exception the
-            // delivery log makes, and for the same reason. Anything else would be editing what was issued.
-            $touched = array_keys($artifact->getDirty());
-            $allowed = ['owner_type', 'owner_id', 'owner_erased_at', 'updated_at'];
+        return ['owner_type', 'owner_id', 'owner_erased_at', 'updated_at'];
+    }
 
-            if (array_diff($touched, $allowed) !== []) {
-                throw new RuntimeException(
-                    'A stored document is the artifact that left this system and cannot be edited; attempted '
-                    .'to change '.implode(', ', array_diff($touched, $allowed)).'. What the recipient holds '
-                    .'did not change, so neither does this.'
-                );
-            }
-        });
+    /** Never, by any path: an erasure axis holds this table as RETAINED — unlinked rather than removed. */
+    protected static function appendOnlyDeletion(): AppendOnlyDeletion
+    {
+        return AppendOnlyDeletion::Never;
+    }
+
+    #[Override]
+    protected static function appendOnlyUpdateRefusal(array $columns): string
+    {
+        return 'A stored document is the artifact that left this system and cannot be edited; attempted '
+            .'to change '.implode(', ', $columns).'. What the recipient holds did not change, so '
+            .'neither does this.';
+    }
+
+    #[Override]
+    protected static function appendOnlyDeleteRefusal(): string
+    {
+        return 'This record is retained and unlinked when its subject is erased, never deleted — the fact '
+            .'it holds stays true with nobody\'s name on it.';
     }
 }

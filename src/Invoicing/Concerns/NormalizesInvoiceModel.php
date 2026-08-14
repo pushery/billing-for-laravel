@@ -7,11 +7,12 @@ namespace Pushery\Billing\Invoicing\Concerns;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Contracts\SellerPartyResolver;
 use Pushery\Billing\Enums\InvoiceCorrectionKind;
-use Pushery\Billing\Enums\SettlementDocumentType;
+use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Exceptions\InvalidInvoiceCorrection;
 use Pushery\Billing\Invoicing\Line;
 use Pushery\Billing\Invoicing\Party;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\ValueObjects\EnInvoiceTaxTreatment;
 
 /**
  * The syntax-agnostic invoice model shared by every EN 16931 writer: the seller and buyer parties, the
@@ -73,7 +74,7 @@ trait NormalizesInvoiceModel
     private function typeCode(InvoiceRecord $invoice): string
     {
         if (! $invoice->isCorrection()) {
-            return $invoice->settlement_document_type === SettlementDocumentType::SelfBilledInvoice ? '389' : '380';
+            return $invoice->isSelfBilled() ? '389' : '380';
         }
 
         if ($invoice->correction_kind !== InvoiceCorrectionKind::Amendment) {
@@ -110,26 +111,97 @@ trait NormalizesInvoiceModel
     }
 
     /**
-     * The BT-120 tax exemption / reverse-charge reason text, from the invoice's `vat_note` column.
+     * The BT-120 tax exemption / reverse-charge reason text.
      *
-     * It is DERIVED, not a literal: a reverse charge without an explicit note falls back to the standard
-     * "Reverse charge" wording, but a stored note (an OSS reference, a specific exemption clause) is used as
-     * written. Null when the supply carries no exemption reason at all.
+     * Three sources, in falling order of authority, and the order is the whole design.
+     *
+     * A stored `vat_note` wins: it is a sentence somebody wrote down on purpose (an OSS reference, a
+     * specific clause), and it is frozen with the document.
+     *
+     * Otherwise the wording is DERIVED from the frozen `tax_exemption_reason` and the current locale. This
+     * is the half that was missing, and its absence was expensive: nothing wrote `vat_note`, so BT-120 fell
+     * straight through to the category's generic English fallback — `Tax exempt` on a small-business
+     * settlement, naming no statute at all, on a document the platform raises in the creator's name and on a
+     * column no consumer can heal afterwards.
+     *
+     * Deriving the WORDING from a frozen REASON is what keeps this honest. The legal fact is on the row and
+     * cannot move; only its rendering is computed, which is what makes it translatable — a frozen free-text
+     * string could never be. Deriving the fact itself would be the opposite move and would be wrong.
+     *
+     * Null when the supply carries no exemption at all, and null matters: a standard-rated band must carry
+     * no reason (BR-S-*), so returning a sentence here would produce a document a validator rejects.
      */
-    private function vatNote(InvoiceRecord $invoice, bool $reverseCharge): ?string
+    private function vatNote(InvoiceRecord $invoice): ?string
     {
+        $reverseCharge = (bool) $invoice->reverse_charge;
+
         $note = $invoice->vat_note;
 
         if (is_string($note) && $note !== '') {
             return $note;
         }
 
-        return $reverseCharge ? 'Reverse charge' : null;
+        $reason = $invoice->tax_exemption_reason ?? ($reverseCharge ? TaxExemptionReason::ReverseCharge : null);
+
+        // Only the grounds whose statutory sentence this package actually ships are named here. The others
+        // fall through to the category's own wording rather than to an invented one — an exemption named
+        // wrongly is worse than one named generically, because it claims a specific relief nobody asserted.
+        //
+        // Each key is written out WHOLE rather than assembled from a suffix, and that is not style. The
+        // guard that proves every shipped translation is reachable greps for literal keys; built from a
+        // variable, these two were invisible to it — and a guard blind to a key it should see would also be
+        // blind to one that had genuinely died. It said so, correctly, the first time this was written.
+        $note = match ($reason) {
+            TaxExemptionReason::ReverseCharge => Lang::get('billing::invoice.reverse_charge_note'),
+            TaxExemptionReason::DomesticSmallBusiness => Lang::get('billing::invoice.small_business_note'),
+            TaxExemptionReason::UnionSmallBusinessScheme => Lang::get('billing::invoice.union_small_business_note'),
+            default => null,
+        };
+
+        return is_string($note) ? $note : null;
     }
 
     /**
      * @return list<Line>
      */
+    /**
+     * How this document is taxed — the derivation that used to stand byte-identically in both writers.
+     *
+     * Eight places read these same five lines. Correct the rule in one renderer and the other keeps the old
+     * reading, and the defect is then format-specific: it shows up in whichever of the two nobody is looking
+     * at. One derivation cannot disagree with itself.
+     */
+    private function taxTreatmentFor(InvoiceRecord $invoice): EnInvoiceTaxTreatment
+    {
+        $reverseCharge = (bool) $invoice->reverse_charge;
+        $lines = $this->lines($invoice);
+        $bands = $this->taxBandsFor($lines, $invoice);
+
+        // Derive the document net + tax from the lines so BT-110 equals the sum of the per-band tax
+        // (BR-CO-14) and the totals stay internally consistent (BR-CO-13/15). A lineless invoice cannot
+        // carry a breakdown, so it falls back to the stored figures.
+        $net = $lines === [] ? ($invoice->subtotal_minor ?? $invoice->total_minor) : $this->sum($lines, fn (Line $line): int => $line->netMinor);
+
+        // A reverse charge shifts the VAT to the buyer: the seller charges zero. The document tax and every
+        // AE band's tax must be zero (BR-AE-*), or the AE category would carry VAT and the payable would
+        // overstate the net — so force zero here rather than trust a line's notional rate.
+        $tax = $reverseCharge ? 0 : ($lines === [] ? ($invoice->tax_minor ?? 0) : $this->sum($bands, fn (array $band): int => $band['tax']));
+
+        return new EnInvoiceTaxTreatment(
+            invoice: $invoice,
+            lines: $lines,
+            bands: $bands,
+            net: $net,
+            tax: $tax,
+            reverseCharge: $reverseCharge,
+            exempt: (bool) $invoice->tax_exempt,
+            // BT-120: the exemption reason text, DERIVED from the invoice's vat_note column (a reverse
+            // charge with no stored note falls back to the standard wording), never a hardcoded literal.
+            exemptionReason: $this->vatNote($invoice),
+        );
+    }
+
+    /** @return list<Line> */
     private function lines(InvoiceRecord $invoice): array
     {
         $lines = $invoice->getAttribute('lines');
@@ -158,9 +230,9 @@ trait NormalizesInvoiceModel
      * @param  list<Line>  $lines
      * @return list<array{rate: float, taxable: int, tax: int}>
      */
-    private function taxBandsFor(array $lines, bool $reverseCharge, ?InvoiceRecord $invoice = null): array
+    private function taxBandsFor(array $lines, ?InvoiceRecord $invoice = null): array
     {
-        if (! $reverseCharge) {
+        if (! $invoice instanceof InvoiceRecord || ! (bool) $invoice->reverse_charge) {
             $declared = $this->declaredOssRate($invoice);
 
             return $declared === null ? $this->taxBands($lines) : $this->singleBand($lines, $declared);

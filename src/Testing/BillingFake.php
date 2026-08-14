@@ -60,9 +60,12 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         return $this->intent();
     }
 
-    public function purchase(Model $billable, string $addonKey): ClientIntent
+    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null): ClientIntent
     {
-        $this->purchases[] = ['owner' => $billable, 'addon' => $addonKey];
+        // Recorded, not dropped. A consumer asserting that their checkout collected the declarations has
+        // nothing else to assert against -- the key is the only observable the package produces before the
+        // buyer leaves, and a fake that swallowed it would make the round trip untestable from outside.
+        $this->purchases[] = ['owner' => $billable, 'addon' => $addonKey, 'declaration' => $declarationReference];
 
         return $this->intent();
     }

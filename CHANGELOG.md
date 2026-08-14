@@ -4,7 +4,1522 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-08-14
+
+### Added
+
+- **A failed payout reaches the journal.** The package knew what the platform had SENT a merchant, and since
+  the provider-reversal event what had been taken back. It did not know whether any of it arrived. `payout.*`
+  appeared nowhere in the shipped code, the tests, the configuration or the documentation.
+
+  Those are different questions about different objects. A transfer moves money from the platform's balance
+  to a merchant's connected balance; a payout moves it from there to their bank, and it fails on its own
+  terms — a wrong IBAN, a closed account, a bank that refuses it — with nothing wrong about the transfer that
+  fed it. Between the two there is a window where the merchant's money is neither on the platform nor at
+  their bank, and a failed payout leaves it there. The support case is "I have not been paid", and nothing
+  answered it.
+
+  **Only the failure is recorded, and that is a decision rather than an omission.** The success is the
+  ordinary case that the provider's own dashboard already shows — a row per merchant per cycle nobody reads.
+  A per-payout table reconcilable against a provider statement is a reconciliation ledger and belongs to that
+  line of work. It is attributed to the MERCHANT and never to a charge, because a payout bundles many
+  transfers and has no 1:1 relation to a recorded sale.
+
+  Mapped on the merchant endpoint only. The platform mapper is unchanged and a test holds it so, because
+  teaching it this event would start an effect running on every existing single-seller installation at the
+  next deploy.
+
+- **Every billing notice that asks the reader to do something now links to it.** The trial-ending mail told
+  the customer to add a payment method and gave them no way to get there — and so did the other ten. Across
+  all eleven, the shipped code called exactly `->subject()` and `->line()` and nothing else.
+
+  The targets had been there the whole time, and the package already used `Route::has()` in five places for
+  exactly the "link only if the app mounted it" case. `BillingNotification::actionUrl()` is that guard, in
+  one place: the account hub registers only when Livewire is installed and Livewire is a `suggest`, so a
+  consumer installation may genuinely not have those routes, and a bare `route()` would fatal while sending
+  somebody a notice about their money. Where the route is absent the mail renders exactly as before.
+
+  Where a notice points depends on what it is for — a failed payment and a suspension warning to recovery, a
+  card about to expire to payment methods, a receipt to the invoice history — and the trial notice picks by
+  payment-method status: a card already on file means the reader is deciding whether to continue, so they
+  get the plan screen rather than the one that takes a card.
+
+  **One notice deliberately has none.** The tax-standing change reports a decision somebody else already
+  recorded and asks for nothing, and the hub has no screen that edits it. A button there would read as "this
+  is where you fix it" and land somewhere that cannot — worse than no button. The reason is written at the
+  code, and a test holds both the exception and its explanation.
+
+- **The admin console can end a subscription — it could only ever give a tier away.** `BillingAdmin` builds
+  three out-of-band support operations and its own docblock names them as one set: comp, refund, cancel. One
+  of them reached an operator. `BillingAdmin::cancel()` had no console action, no command, and no wording in
+  any of the seven shipped locales.
+
+  So a support agent asked to end a subscription — an abuse case, a threatened chargeback, a customer on the
+  phone — had no path to it in the package. What was left was the provider's own dashboard, where the local
+  row drifts and this package's audit trail stays empty, or consumer code reinventing an authorization gate
+  that already exists and already fronts the at-least-as-consequential comp action.
+
+  The console now carries a cancel action behind the same fail-closed `billing.admin.ability` gate, checked
+  at mount, at render AND at the action; `billing:subscription:cancel {owner} {--reason=}` is its terminal
+  twin, because an operation reachable only through a UI is unreachable exactly when the UI is what is
+  broken. An unknown owner is reported, never fataled, and the command FAILS on one rather than reporting
+  success over a no-op. Every execution writes an `admin.cancel` audit row naming the actor and the reason.
+
+- **Somewhere for the realtime toasts to land — opt-in, and off by default.** The account hub's headless
+  bridge relays a broadcast as a `wirekit-toast` browser event, and the package shipped nothing that
+  listened: not one JavaScript file and not one `<script>` tag anywhere in what it ships. On an installation
+  that switched realtime on, every toast reached the browser and vanished.
+
+  That failure is entirely green. The broadcast goes out, the component is mounted, its test passes, the
+  event is visible in the browser's own tooling, and nothing is drawn — so the consumer looks for the fault
+  in their own application, and the documentation, which described a toast region without saying whose,
+  agreed with them.
+
+  `billing.realtime.render_toast_region` (`BILLING_REALTIME_TOAST_REGION`, default `false`) now renders a
+  minimal one: two `aria-live` containers — polite for `info` and `success`, assertive for `warning` and
+  `danger` — and a small inline listener that appends the message as TEXT and dismisses it after a few
+  seconds. No UI kit, no build step.
+
+  **It is off by default on purpose.** The consumer for whom toasts already work is a WireKit host, whose
+  own region reads exactly this event; a second region would show them every toast twice, and that
+  duplicate is visible only in a browser. The documentation now names all three answers — a WireKit host,
+  this region, or a one-line listener of your own — because choosing none of them is the silent no-op above.
+
+- **Every frozen column on an issued invoice is now proven frozen, not six of forty-three.** The model froze
+  forty-three scalars; the suite that exists to prove it listed six by hand — the ones somebody had thought
+  of. The other thirty-seven were unproven, and one of them, the EN 16931 exemption reason, was genuinely
+  editable on a document that had already gone out.
+
+  The rejection set is derived from the model's own frozen list, with a written table of a DIFFERENT valid
+  value per column. Written rather than generated on purpose: a generator can land on the value already
+  there, `forceFill` then marks nothing dirty, and the case passes having proven nothing — silently, and more
+  so the more columns it covers. A newly frozen column without a value now fails with a sentence naming it.
+
+- **The two lanes that can spend something now have their event lists held by a test.** Each names three
+  brakes "all of which have to hold"; two were held by nothing. The live-provider suite had no assertion
+  keeping it out of `phpunit.xml.dist` — the one edit that would pull real provider calls into every push,
+  every pull request and every local run on a machine with a key — while its sibling eval suite had exactly
+  that assertion, with a paragraph explaining why.
+
+  Worse was the first brake. Adding `push` to a lane turned exactly one arm red, and its message said the
+  lane "belongs on the gate pool". Following that instruction turned every arm green again with `push` still
+  in the event list: the only reflex to a credential leak was a request to finish it. That arm now steps
+  aside for a cost-bearing lane and defers to an assertion pinning its events to exactly cron and manual.
+
+  The third brake — the event list of the CI secret itself — lives outside this repository and is named as a
+  hand-check rather than implied to be covered.
+
+- **Two shipped config comments described a package that no longer exists, and a guard now catches the
+  shape.** `config/billing.php` told every adopter that the second provider call needed to pay a merchant
+  their share "is not implemented yet" — it ships, bound unconditionally and made by `RoutedPayment::charge()`
+  — and advised routing sales the other way because of it. A second key's comment said "NOTHING READS THIS
+  KEY YET" about a key with five readers, one of them the fail-closed binding the same paragraph insisted did
+  not exist.
+
+  A claim that a capability is missing is the only kind of documentation falsified by SUCCESS: nothing fails
+  when the thing is built, the tests go green, and the sentence quietly becomes untrue in the file an adopter
+  opens first. One earlier commit had already fixed three copies of the same claim and missed the fourth; a
+  fifth turned up in `ConfiguredChargeType` while this was being written. Both corrected texts now describe
+  what the code DOES, which cannot go stale by succeeding, and a guard fails the build on the claim shape.
+
+  The distinction the old text lost is kept: `PaymentRails::charge()` really does refuse a separate-transfer
+  routing, permanently and on purpose — it has already returned by the time a transfer could go out. What was
+  wrong was calling that a missing feature and steering operators to another lane over it.
+
+- **The account hub's actions are now enumerated rather than remembered.** `EligibilityGateTest` promised in
+  its own name that it blocked "every money-initiating entrypoint" and then listed five by hand. The list was
+  right and stayed right; it was simply never derived, so a sixth action that skipped the eligibility check
+  fell into no set at all.
+
+  A census now discovers every public action on a hub screen by reflection and requires each to be classified
+  as money-initiating — proven from the METHOD'S OWN SOURCE, not against a second list — or as starting no
+  payment, with the reason written down. The overclaiming comment is corrected too, including its stake: an
+  ungated action was never a money bug, because the money seams are guarded a layer deeper; what breaks is
+  the error path, and a restricted customer is told the site is broken instead of that their access is
+  limited.
+
+- **A guard now holds the Postgres and MySQL suites in step.** They are deliberate filename twins — the
+  repository instruction says a DB-touching test belongs in both engine suites, and the files say so about
+  each other — and nothing compared the two directories. The relationship existed only in the care of
+  whoever was writing a test at the time.
+
+  The failure direction is the quiet one: a missing file looks like "there is nothing to test there", never
+  like "somebody forgot", and six months on the asymmetry reads as a decision nobody can explain. The
+  temptation is strongest exactly where the suites matter most — "MySQL cannot do this anyway" — and the
+  twin already in the tree shows the right answer is a DIFFERENT test on the other engine rather than none.
+  A deliberate one-sided file now stands in a named exception map with its reason.
+
+- **`revokeContent()` and `revokeForMerchant()` — a takedown finally has a call, and the index built for it
+  finally has a reader.** The revocation surface offered one grant, one purchase, one payment, and nothing
+  that took a WORK. So an operator served with a legal order, or deleting a creator's account, had no way in
+  the package to end access across every owner: they queried the table themselves, or worked the order by
+  hand. The migration had built the index for exactly that read and named it in its own comment; nothing in
+  the repository had ever used it, and `RevokeReason::CreatorDeleted` had no producer anywhere, not even in
+  a test.
+
+  Both are chunked — a popular work has tens of thousands of owners — and both walk by id rather than offset,
+  because revoking changes the very column the query filters on and an offset walk would skip every second
+  page while reporting success.
+
+  **A delisting is not this, and the distinction is stated in both the code and the reference.** A work whose
+  publication ended answers `ContentAvailability::ContentGone` and the grant is deliberately left alone;
+  somebody owning a work that is no longer sold is the ordinary case. Reaching for a revocation there would
+  take away something people bought.
+
+- **A statutory withdrawal now reaches the ownership register with its own reason.** `RevokeReason::Withdrawal`
+  had no producer anywhere in the package. The withdrawal entry point never touched the register: the refund
+  it triggers came back as a webhook, the effect stamped the grant `refund`, and because a revocation keeps
+  its FIRST reason, `withdrawal` could not be written afterwards — a correction that failed by doing nothing.
+
+  So in an operator's data every exercise of a statutory right looked exactly like a goodwill refund they had
+  chosen to give, which is the one distinction the trail exists to make. Two places in the package promised
+  it out loud while the shipped path could not produce it.
+
+  Withdrawal now revokes the purchase's grants itself, before the refund comes back — so the later delivery
+  finds a row already revoked and the reason survives without anybody coordinating the two. Gated by exactly
+  the two switches the refund effect reads, so no new policy is introduced by omission. A refund the provider
+  REFUSED revokes nothing: the same rule the correcting documents follow, because taking access away from a
+  buyer who is still out of pocket is worse than doing nothing.
+
+- **A merchant whose relationship ended can be reopened, and onboarding stops claiming it already can.** A
+  merchant who disconnects their provider account is terminated here and cannot receive money. Nothing in the
+  package could undo that: the column recording the disconnection was set in one place and cleared nowhere,
+  the only writer of the active status refuses a terminated merchant by design, and onboarding handed the old
+  unreceivable row straight back — with exit 0 and a link to an account the provider no longer releases funds
+  through. The class docblock meanwhile said termination "is undone by onboarding again".
+
+  So the documented repair produced a plausible success and changed nothing, and the remaining option was an
+  UPDATE against the table by hand, past every invariant the package holds, with no event and no audit trail.
+
+  `billing:merchant:reopen` is the way back, and it is deliberately a command rather than a webhook effect:
+  the lifecycle refuses to let a capability report reinstate a terminated merchant — a provider goes on
+  reporting healthy capabilities long after an owner disconnected — and that guard only means something while
+  the way back is somewhere a webhook cannot reach. A test derives the effect list from disk and fails if one
+  ever calls it.
+
+  Reopening resets the three capability flags rather than carrying them forward: they were gathered before the
+  disconnection, and declaring a merchant receivable on that basis is the mistake the conservative answer
+  avoids. Onboarding an ended relationship now throws `MerchantRelationshipEnded`, and the command reports it
+  with a non-zero exit.
+
+- **The seller's commission invoice — the half of intermediation that was described everywhere and built
+  nowhere.** Under intermediation the platform makes two supplies of its own: a fee to the buyer and a
+  commission to the seller. Only the buyer's half existed. Every commission number the package drew belonged
+  to a document owned by the BUYER, so a platform withheld a commission and invoiced it nowhere — a taxable
+  supply made and not documented, and a seller holding no document with which to deduct the tax on money
+  kept from them.
+
+  What hid it is that the package already described the missing half as present, in three places: the regime
+  enum answers true to "does this charge the seller a fee", the shipped configuration calls the buyer fee "a
+  separate supply from the seller-side commission", and the reporting period states that the platform issues
+  the seller a commission invoice. Three descriptions of something that had never existed in the
+  repository's history.
+
+  `SellerFeeCalculator` and `FanReceiptIssuer::issueSellerCommission()` build it, off by default
+  (`billing.marketplace.seller_fee.enabled`) so no existing installation changes. Two deliberate asymmetries
+  with the buyer side: a fixed commission is CAPPED by the sale, because it comes out of the payout and an
+  uncapped one would owe the seller a negative amount; and the calculator REFUSES outside intermediation
+  rather than returning nothing, since a commission in the commission chain is a named red line and refusing
+  before a number is drawn keeps a gapless series from spending one. The taxable base is the commission
+  alone — the mediated sale is the merchant's turnover and appears nowhere on the platform's invoice.
+
+- **`ListsEarningCurrencies` — a consumer can finally ask which currencies a creator has earned in.** Every
+  per-merchant reader takes the currency as a required parameter, which is right: a currency is a bucket and
+  is never converted. What was missing is the question one step earlier — which buckets exist for this party
+  — so "balance per currency" had exactly one route, querying `billing_merchant_charges` directly and
+  coupling an application to a schema this package owns.
+
+  The near-miss was the worse half: `billing.tax_exchange_rates.currencies` looks like the answer and is
+  silently incomplete, listing what rates are imported for rather than what money is settled in. A creator
+  earning in an unimported currency was shown one balance fewer with nothing reporting a problem.
+
+  A sibling contract rather than a fourth method on `LedgerBalanceReader`, because that interface is
+  documented as implementable by a consumer and a method added to it would stop their class from satisfying
+  it. Both bind to the same projection, and the marketplace guide now documents the read layer, which it
+  never did.
+
+- **`billing:doctor` now reports how old the imported exchange-rate series is, per currency.** The import
+  runs daily; when a publisher is down for one currency the command reports it, skips that currency and
+  returns SUCCESS anyway — no error accumulator, no failure hook on the schedule entry. Every exit-code
+  monitor read green while a series quietly stopped growing.
+
+  Nothing anywhere read the newest `rate_date`, so the first visible effect of a broken import was an invoice
+  that could not be issued: the lookup walks forward at most fourteen days and then refuses the document. A
+  warning that arrives at that point is not a warning, it is the incident. `billing.tax_exchange_rates.max_age_days`
+  defaults to three days — two missed imports plus a weekend — and the forward window stays the ceiling, so a
+  limit set above it cannot make the diagnostic agree with an operator against the money path. Silent where
+  the local store is off or no currency is listed.
+
+- **`billing:vouchers:volume` — the supervisory threshold stops being passed in silence.** The monitor that
+  computes rolling voucher volume was called by no line of production code: its only occurrence in `src/` was
+  its own declaration, and `breached()` had exactly one caller, inside the same class. So the package knew
+  the threshold had been passed and the person who has to file did not. The ordinary way to find out was a
+  letter, months later, about a notification due eleven months ago.
+
+  Two events, deliberately separate rather than one with a level: `VoucherVolumeThresholdApproaching` says
+  there is still time, `VoucherVolumeThresholdBreached` says there is not, and a recipient treating them as
+  one message would let the early notice stand for the late one. Both carry the figure, because the window is
+  rolling and what triggered the message is not what a recipient would compute on reading it.
+
+  Announced once per level, per currency, per calendar year — daily would turn the channel into noise, and
+  once-ever would swallow a genuinely new crossing years later. The currencies come from the vouchers
+  themselves rather than a configured list, so a currency somebody sells in cannot go uncounted by omission.
+  The schedule entry is registered only where `billing.marketplace.vouchers.enabled` is on: it is the one
+  conditional entry in the package, so `schedule:list` shows what actually runs.
+
+- **`billing:doctor` now reports how old the distance-sale threshold is.** Four dated jurisdiction facts
+  each promise a `*ValidFrom()`; three had a reader and this one had none anywhere in the package, while its
+  own contract said the date exists "so its age can be reported rather than assumed". An operator seeing the
+  rate table's age and the union membership's age reasonably concludes the dated facts are watched.
+
+  The limit is hard-coded in a consumer's profile and is exactly the sort of number that goes on working
+  while it goes out of date: a legislator moves it, the monitor keeps computing, the result stays plausible.
+  Too high and the operator books at the destination too late, too low and too early — a tax question, not a
+  display one. Reported, never failed, and with no borrowed date: this package ships no limit of its own, so
+  where no profile supplies one the doctor says exactly that. `DistanceSaleThresholdMonitor::thresholdValidFrom()`
+  is the reader, the mirror of `thresholdMinor()`.
+
+- **`RetentionMatrix::datesBy()` — a consumer can now say which column dates their own table.** The
+  companion to `extendWith()`, and the half that was missing: a consumer could declare a retention rule for
+  a table the package does not own, but not that the table is dated by anything other than its creation. So
+  such a table ran on the wrong clock, by up to a year, in the direction that deletes too early.
+
+- **`billing:reporting:run {year}`** and **`billing:reporting:file {year}`** — a shipped operator path for
+  the reporting chain. The seams behind it (`ReportingExport`, `ReportingFilingRegister`) deliberately had
+  no internal caller: when a return is prepared is the host application's decision, and this package
+  transmits nothing. That stands. What was missing is a path shipped **with** it — without one, every
+  adopter writes the same three calls and each decides afresh whether a plausibility refusal is fatal and
+  whether a second submission is a correction. Those are answers this package already has, and leaving them
+  to be re-derived per install is how they get derived differently.
+
+  **The plausibility check blocks rather than warns**, and the command carries that through: a period with
+  open findings produces no bytes at all. Producing a file and then saying "do not send this" leaves an
+  artifact indistinguishable from a filed record.
+
+  **Producing and filing are separate verbs.** Producing is repeatable — rebuilding is how somebody checks
+  whether the figures moved. Filing is not, and making it a flag on the repeatable command would put an
+  irreversible act one character away from every rebuild.
+
+  The package still **transmits nothing**: it holds no portal credentials. What `file` records is that an
+  operator submitted *these exact bytes* on this day, which is why it takes the produced record and not a
+  year. `--by` is recorded verbatim, defaulting to the shell user rather than to an invented label — a filing
+  is somebody's act, and "system" on that column would name nobody at the moment somebody has to be named.
+
+- `ReportingFilingRefused::nothingToCorrect()` — a period whose first filing never happened is not
+  corrected, it is *filed*. A correction with no predecessor would put a record into the chain claiming to
+  amend something nobody ever sent.
+
+- A counter for buyer gross per subdivision of a destination country — the early warning for an obligation
+  that is reached per state rather than nationally, which a country-level total cannot see coming. It is
+  its own measurement rather than a view of the reporting counter: that one measures what reached a
+  *seller*, this one what a *buyer* paid, and on one sale those are different numbers.
+- A sale whose subdivision was never settled is counted in an explicit `unknown` bucket. A guessed state is
+  not a smaller error than a missing one — it raises a threshold in a place nobody sold into.
+- `billing.tax_counters.us_state_gmv.enabled` switches it, off by default and independently of the other
+  counters in both directions. Asking a disabled counter refuses rather than answering zero, because zero
+  here reads as "we sold nothing into that state".
+- Buyer receipts now carry `destination_subdivision` beside the destination country, and
+  `PlaceEvidenceStore::subdivisionFor()` gives a caller the settled value to write there.
+
+- `RecordRoutedSubscriptionCharge` writes one row per paid cycle, keyed on the INVOICE. Keying on the
+  subscription would collapse every cycle onto one row: `firstOrCreate` would find the first cycle's row for
+  the twelfth cycle's payment and write nothing, and every reversal cap afterwards would answer for the
+  wrong month.
+- `ReadsRoutedInvoiceCommission` is the seam the commission comes back through, and the first time an effect
+  in this package reaches a provider at all. The boundary is crossed through a contract rather than
+  dissolved: the effect asks "what was withheld on this invoice, and for whom" and never learns whose API
+  answered, which is what makes it testable with no provider present.
+
+- A § 18 plausibility step that runs *before* a reporting period is exported and refuses it while findings
+  are open. It names every finding at once — undecided classification, a seller record that cannot be
+  filed, quarters that do not add up to the year, a seller reported twice — instead of stopping at the
+  first, so a period is worked through in one pass rather than one run per problem.
+- Each finding can be acknowledged individually, on the record, with who and why. An acknowledgement
+  clears one finding for one period: the same finding in the next period is a new finding, so an answer
+  can never quietly become a switched-off rule.
+- `SuppliesSellerRecords` lets an application expose its seller master data to the check. Leaving it
+  unbound is reported as a finding rather than treated as a pass — "we could not look" and "we looked and
+  it was fine" must not produce the same answer.
+- The rule catalog is open: `ReportingPlausibilityRules::add()` takes a consumer's own rules, and what
+  varies by jurisdiction comes from the bound `ReportingProfile` rather than from rules that would have to
+  be switched off.
+
+- A produced seller-reporting record can now be recorded as **filed**, which is what separates a period that
+  may be produced again from one that is settled. `ReportingFilingRegister` files a period once — a second
+  first filing is refused rather than absorbed, because over-reporting is the direction an authority
+  sanctions and the duplicate is otherwise found by the seller whose figures went out twice. Anything that
+  moves afterwards goes out as a **correction naming the filing it supersedes**: a correction that names
+  nothing cannot be recorded, one that answers an already-corrected filing is refused, and one carrying the
+  same bytes corrects nothing. `needsCorrection()` answers whether a freshly produced period still matches
+  what was filed, and both the export and the filing stay immutable, so a period's history is a list of
+  facts in the order they happened rather than a state somebody maintains.
+
+- An archive for produced seller-reporting records. It keeps the exact bytes with the moment they were
+  produced, a fingerprint over them, and which format and format version they were built to — because a
+  file on a disk can be moved, regenerated or edited between production and filing, and none of that leaves
+  a trace. A second run of a period is a second row, never an overwrite: figures move as late corrections
+  land, and whether the two runs agree is the fact worth keeping. A written record cannot be edited.
+- `billing.marketplace.reporting.export_disk` optionally puts a copy on a disk. Leaving it null keeps the
+  record and writes no file, which is a supported answer rather than a missing setting.
+
+- A reporting export that produces a period's record **after** the plausibility check and never instead of
+  it: `assertClear()` runs before a byte is rendered, so a period with open findings produces nothing at
+  all — no file, no row, no partial state to decide what to do with.
+- `RendersReportingRecord` lets a consumer register their own target format with its own version, so a
+  platform under a different duty reports what it owes without having to switch off a foreign format that
+  was never theirs. The shipped renderer is a complete, deterministic delimited record; it is deliberately
+  not any authority's wire format, because a guessed schema validates nowhere.
+- Two runs over one unchanged period produce identical bytes — the property the archive's fingerprint
+  comparison rests on, and one that is lost silently by an unordered iteration, a locale-dependent number
+  or a timestamp inside the payload.
+
+- `PurchaseDeclarations` is the point where a buyer's two pre-purchase declarations are taken, and the gate
+  that will not let a checkout start without them. `WithdrawalConsentLedger::record()` had no caller
+  anywhere in the package: the two declarations, the frozen wording version, the fail-closed gate before
+  provision and the profile deciding the jurisdiction were all built, and every one of them read a record
+  nothing ever wrote. With a profile active that meant the gate saw `null` for every purchase and refused
+  every provision of a work whose right ends at delivery — safe, and unusable, because there was no way to
+  give the consent it demanded.
+- The package mints the key the declarations are written against, rather than taking one from the caller. A
+  declaration has to be recorded before the buyer leaves for the provider, and at that moment the purchase
+  has no reference of any kind. A caller-supplied key (a cart id, an order number) stays welcome beside it
+  but cannot carry the uniqueness: a declaration is evidence, and evidence whose uniqueness depends on the
+  discipline of whoever passes it lets a reused order number silently cover today's purchase with last
+  month's declaration.
+- The key makes a round trip — stamped on the provider's checkout session as opaque metadata, read back off
+  the completion webhook, and used to find the record. That trip is what the whole path rests on, and its
+  failure mode is the cruel one: a metadata field the provider drops comes back as "no declaration on file",
+  indistinguishable from a buyer who declared nothing. It is pinned end to end, not hop by hop.
+
+- `BillingAdmin::refund()` takes a `RefundKind`, so a statutory withdrawal is distinguishable from a
+  goodwill refund in the audit trail. The two move the same money and are different events in the books:
+  one is a decision the platform could have made otherwise, the other a right the buyer exercised. The
+  free-text reason stays — it says what happened in one case — but only a category can be grouped, counted
+  or filtered, and two operators describing one event write two different sentences.
+- The default is `goodwill` rather than an unspecified value, because that is what every refund this
+  package has issued so far actually was; nothing in it could exercise a withdrawal right yet.
+
+- `ConsumerWithdrawal` gives `ConsumerWithdrawalPolicy::valueForUse()` the caller it never had. A
+  subscription withdrawal now keeps the value of the part already provided and returns the difference,
+  instead of refunding everything or nothing depending on what an operator typed. The refund is the
+  subtraction rather than its own rounding, so the two halves add back to the payment exactly — 29.75 is
+  6.94 retained plus 22.81 returned. A period used in full moves no money at all, which is not a refund of
+  zero. Without an active consumer-rights profile nothing is retained, and that answer comes from the gate
+  rather than from any jurisdiction's rule.
+- A withdrawal on a routed sale now corrects BOTH links of the chain, not only the buyer's receipt. The
+  creator had already been settled for the whole period, so a correction on the buyer side alone left the
+  self-billed invoice saying the creator earned all of it — the creator kept a share of days nobody
+  received and the platform covered the gap out of its own margin. Both documents add up on their own,
+  which is why nothing caught it. The correction goes through the existing `RoutedRefundCorrector`, the
+  same path a lost chargeback and a canceled prepaid term take, so document issuance and period assignment
+  stay in one place. Only what the provider actually returned is corrected, and only after it moved.
+
+- **The receipt now repeats both pre-purchase declarations in the wording the buyer was shown.** § 312f
+  wants both: the declarations collected *and* confirmed on a durable medium, and the right of withdrawal
+  ends only once that confirmation exists. A declaration collected, recorded and never confirmed leaves the
+  right standing — the most expensive failure on this path, because everything about it looks like success:
+  the ledger holds the consent, the gate lets the provision through, and the buyer can still withdraw for
+  fourteen days.
+- `billing_withdrawal_consents` keeps the wording of each declaration beside the version that names it.
+
+  **The wording is a snapshot, not a lookup, and that follows the ticket's own argument one level up.** A
+  receipt linking to "our withdrawal policy" confirms nothing: the linked text changes and the purchase does
+  not. A registry keyed on the version is the same reference with a key in front of it — it can be edited and
+  it can lose a row, and when it does, a legal proof becomes a 404 years later at exactly the purchase
+  somebody is arguing about. This package already draws that line: `billing_invoices` freezes the buyer's
+  gross, the rate it was taxed at and the seller's standing onto the document. The text of a declaration is
+  the same kind of fact, and duplication across rows is the price of provability.
+
+  **Two columns, not one.** They are two declarations about different things, and the package refuses to treat
+  them as one checkbox. Both or neither reaches the receipt: one of the two reads as a complete confirmation
+  and is not.
+
+  **`ReceiptNotifier` is unchanged.** It has one method and is implemented outside this package, so a new
+  required parameter would be a fatal error in code this package does not own. The shipped notifier looks the
+  declarations up itself, which means no adopter has to change a line — and an adopter with their own notifier
+  decides deliberately whether to do the same rather than losing them silently.
+
+- The fee now goes back as **its own position**, recorded as `RefundKind::WithdrawnBuyerFee`. Not tidiness:
+  it is a second supply between a different pair of parties, with its own rate and its own place, so one
+  combined refund would be a figure no document could carry and one nobody could find again.
+- **It comes out of the platform's share alone.** The fee rode on the application fee and never entered the
+  merchant's transfer, so returning it through the ordinary routed-refund path would claw back from a
+  creator who was never paid it. `BillingAdmin::refundPlatformSupply()` is that path: no transfer reversal,
+  no entitlement clawback, no cap against a sale gross the fee was never part of.
+- The charged fee is **frozen onto the sale** — `buyer_fee_gross_minor`, `buyer_fee_net_minor`,
+  `buyer_fee_tax_minor`, `buyer_fee_place_of_supply` on `billing_merchant_charges`. A withdrawal returns
+  what was *charged*, and recomputing it later would price an old sale at today's rate, model and place —
+  three settings an operator can change without leaving a trace. The result would be plausible, which is
+  what makes it the dangerous kind of wrong.
+- `buyer_fee_refunded_minor` counts what has gone back, so a retried withdrawal returns the fee once. Its
+  own counter, deliberately: `refunded_minor` is capped against the sale's gross, and sharing it would
+  break in both directions — a fully refunded sale would have no headroom left for the fee, and a sale
+  whose fee came back would read as over-refunded.
+
+  **C2C between private parties keeps the fee, and that is not an oversight.** With no consumer contract
+  there is no right to withdraw, so nothing undoes the mediated sale — but the mediation was still performed
+  and is still a service. `WithdrawalType::NotApplicable` is the case, and it has an assertion of its own
+  rather than a comment, because it is the one that an ordinary reading of "fees share the fate of the
+  transaction" gets backwards.
+
+  The frozen line records a gross with **no tax split** on the hosted lane, exactly as the commission beside
+  it records `commission_tax_bps` as `0`: that lane hands tax to the provider and holds no rate of its own.
+  Deriving 20 % from `AT` would look like knowledge and be a guess. The gross and the place are exact, and
+  those are what a return needs.
+
+  Installations without buyer fees are unaffected: the columns stay `null` — which means *no such supply
+  happened*, a different statement from a fee of nought.
+
+- A guard requiring every braced variable meant for the shell to be escaped. The line is drawn where the
+  audience changes: `CI_*` belongs to the server and is left alone; everything else needs two dollars to
+  survive that far. Red-probed on both real shapes — the defect above, and a placeholder in a **comment**,
+  which the substituter also reads.
+
+  `woodpecker-cli lint` calls all of this valid: it checks the schema, and the substituter runs afterwards on
+  the server. A green lint is not a signal here, which is why the rule lives in a test rather than in a
+  comment. The exemption is exercised in the test too — nothing in this repository writes `${CI_…}` today, so
+  an unexercised escape hatch would be one nobody has checked.
+
+- The routed one-time checkout now charges the fee as its own line when an installation asks for one, and
+  **raises the application fee by it**. That second half is the whole correctness of the lane: the provider
+  moves everything that is not the application fee to the merchant, so leaving it alone would hand the
+  platform's own intermediation revenue to the seller — on every sale, with both figures looking ordinary.
+  The merchant's share of the item does not move.
+- The fee line is priced **tax-inclusive**. Not a preference: a buyer fee is quoted gross, so the buyer is
+  told 5.00 and pays 5.00. Sent exclusive under a provider tax mode, the provider would add tax on top and
+  the buyer would be charged more than they were quoted, while the figures recorded here described the
+  smaller sale.
+- `billing.marketplace.buyer_fee.place_of_supply` — the country whose rate the fee carries. It is where the
+  *mediated sale* happens, never where the buyer banks. **Required once fees apply, and asked only then:** an
+  install with fees switched off never reaches it. It is not derived from anything, because there is nothing
+  honest to derive it from — a first draft fell back to the currency, and `EUR` is not a country.
+
+- **`billing:merchant:onboard {type} {id}`** — creates a merchant's connected account and prints the
+  onboarding link they open. Both verbs behind it had shipped with the marketplace lane and nothing could
+  reach them: twenty-eight artisan commands, none of which touched onboarding, so connecting a creator
+  meant a tinker script against the rails.
+- **`billing:merchant:status`** — the three capability flags per account plus what the provider is still
+  waiting for. It answers the question that comes up first on every marketplace install, *where do I turn
+  `charges_enabled` on*, by replacing it: nowhere, because it is not a switch. The provider raises it after
+  its own review, and the useful question is what is still outstanding.
+- `ReportsOnboardingRequirements` — an OPTIONAL contract for the live requirements read. Segregated on
+  purpose: `MerchantOnboarding` is public surface you may implement, and a new method on it would break
+  your implementation on upgrade with nothing to do but write the method. A driver that does not opt in
+  still gets the whole flag table.
+
+  `billing:merchant:status` exits **zero** while accounts are still blocked. A merchant part-way through the
+  provider's form is the normal state of an onboarding funnel, not a fault in the installation — a non-zero
+  exit there would make the command unusable in the deploy check where you would first reach for it, and
+  would train people to ignore it.
+
+  Both commands work **before** `billing.marketplace.enabled` is flipped, and that is deliberate: merchants
+  are connected before the switch, not after, so a command that required it could never be run at the moment
+  it is for. They need billing enabled and a driver that can route, which is what `marketplaceRails()` has
+  always required.
+
+  A merchant is stored polymorphically, so `onboard` takes a type and a key rather than a bare id — the morph
+  alias where you have a morph map, the class name where you do not.
+
+- **The consumer-withdrawal window is computed and frozen onto the grant** —
+  `billing_access_grants.withdrawal_window_ends_at`. It measures from **provision**, not from the purchase
+  and not from the payment: for a pre-ordered work those are three different days, and only one of them is
+  the day the buyer could first do anything with what they bought.
+- `StatesWithdrawalWindow` — an OPTIONAL contract beside `ConsumerWithdrawalPolicy`. Which sales have a
+  window at all, and how long it runs, are a jurisdiction's reading rather than a setting. Segregated
+  because `ConsumerWithdrawalPolicy` is public surface you may implement, and a third method on it would
+  break your profile on upgrade.
+
+- A guard that a CI detector may not accept a marker its extractor cannot read. The difference between
+  the two sets is exactly the set of cases that vanish in silence, and silence reads as health. It carries
+  its own red probe against the literal pair the failing run produced, so a pattern that stopped matching
+  cannot pass for a clean tree.
+
+  Nothing here is shipped code — the lane, its aggregator and the guard are all private to this repository.
+  It is recorded because the honest mutation score this package owes itself has been blocked on it, and a
+  run that reports success over no measurement is the failure mode every other check in this tree is built
+  to refuse.
+
+- `WithdrawalWindowClosed`, raised **before anything moves**. A refusal after the refund would be the worst
+  of both — money gone and the record saying it never happened.
+
+  **It refuses the classification, never the money.** A platform may refund out of goodwill whenever it
+  likes, and that path is untouched; the exception names it so an operator ends up in the right lane rather
+  than at "the package will not let me refund".
+
+  Two things pass on purpose. A sale with **no grant** — a subscription is not a content purchase, and
+  turning *nothing to compare against* into *too late* would refuse the ordinary case rather than the exotic
+  one. And a grant whose window is **null**: null means no honest date exists, and one of the four ways to
+  get there is a right that extinguished on delivery. Refusing on that would say "too late" about a sale
+  where the right ended immediately — a true sentence with the wrong reason attached. Whether such a sale is
+  a statutory withdrawal at all is a question about the *type*, answered where the type is.
+
+  The comparison is **inclusive** of the last day: fourteen days means the fourteenth counts, and an
+  exclusive one would refuse a buyer who was in time on the single day it matters most. It reads the date
+  **frozen on the row**, so an operator who shortens the profile's window tomorrow does not shorten a right
+  somebody already holds.
+
+- `StripeConnectRails` assembles the two verbs, and `StripeDriver` declares `RoutesMoney`. The account
+  directory is constructed with this driver's own name rather than resolved from a shared binding: it is
+  keyed on the provider, and a shared one would answer for whichever driver registered last — a merchant
+  lookup quietly returning the wrong account.
+
+  **The refund reversal is deliberately not on these rails.** The obvious reading would put
+  `refundWithReversal()` and `reverseTransfer()` here, and this package already answers both through
+  `MovesMerchantShare` and `ReversesMerchantShare` — which `StripeMerchantTransfers` implements and which
+  `RoutedPayment` and `BillingAdmin` actually call. A second path to the same money would be two places
+  deciding capping, idempotency and rounding, and they drift; for a clawback that means a merchant is either
+  short-changed or paid twice, in silence.
+
+  One existing case had to be re-based rather than merely fixed: the proof that the support guard fires at
+  boot leaned on the shipped driver *not* routing. That premise is now gone, so the case brings its own
+  non-routing driver — which is what it was ever really about — and a second arm asserts the boot goes through
+  on the shipped one, so the first cannot be satisfied by a guard that refuses everything.
+
+### Changed
+
+- **The invoice record's five creation rules are callable classes instead of a third of the model.**
+  `InvoiceRecord::booted()` held five model-event closures, seven refusals and 186 of the class's lines —
+  the most complex method in the package. Nothing in it was wrong. All of it was reachable only by saving a
+  real row against a real database.
+
+  That is the cost worth naming: a rule like "a deemed-supplier document must name the platform" was
+  exercised by building an invoice row and catching an exception message by substring, so an edge case of it
+  was expensive enough not to get written — and the unwritten edge cases are the ones that return as
+  defects. The pattern was already in the package and the fourth closure was already using it:
+  `DocumentRoleGuard` is pure, unit-callable and separately tested. Its four siblings now are too —
+  `RegimePostureGuard`, `ChargeClaimKeyDeriver`, `SellerMatchesPostureGuard` and
+  `ImmutableIssuedInvoiceGuard`, the first three taking values rather than the record.
+
+  `booted()` is 37 lines of code and registers the same five events at the same moments, so nothing routes
+  around them. No behavior changes: every test that exercised these rules through a model save stayed green
+  without one assertion being touched.
+
+- **The three purchase lanes read what this installation is from one place instead of four.** Whether
+  marketplace routing is on and who the merchant is, which charge type the installation uses, whether the
+  provider computes the tax, and whether the supplies are electronic — each of those stood byte for byte in
+  `StripeCheckout`, `StripeOneTimeCharge` and `RoutedPayment`, deriving the same answer from the same keys
+  independently.
+
+  It held until one of them stopped: the one-off lane hard-wired the supply nature where the other two read
+  it, which is the defect fixed separately above. This removes the condition that produced it — a single
+  `MarketplaceSaleContext` that cannot disagree with itself. `StripeCheckout` goes from seventeen
+  constructor dependencies (the widest in the package) to fifteen, `StripeOneTimeCharge` from thirteen to
+  eleven, and the reader of the supply nature drops from four independent copies to two: this collaborator,
+  and the preflight checkpoint that reports the setting to an operator before they go live.
+
+  No behavior changes. Consumers who construct these classes by hand rather than through the container pass
+  a `MarketplaceSaleContext` where they previously passed a `SellerOfRecordResolver`.
+
+- **A rate now belongs to the tax point, not to the moment it was looked up.** `DatedTaxRateTable` and
+  `TaxRateInterval` had been built to hold rates as dated intervals and nothing ever called them: the class
+  had no caller in the shipped code, its constructor was reached only from its own test, and
+  `UnknownTaxRateAt` — an exception the troubleshooting guide describes to the reader — could not be thrown
+  from the package at all. None of the three rate lookups carried a date. `SaleTaxDecision` even decided a
+  tax point and then handed it to the facts AFTER asking for the rate.
+
+  Today's sale was never affected, and neither was any correction: a correction copies the rate from the
+  document it corrects, so a 2027 credit note for a 2025 supply already carried the 2025 rate. What took
+  today's rate was a NEW document for a PAST tax point — a late invoice, a re-billing, a migration of
+  historic sales. Where a rate had moved in between, such a document is wrong by exactly the size of the
+  move, and both numbers look equally plausible on the page.
+
+  `TaxContext` gained an appended, optional `taxPoint`; `TaxCalculator::calculate()` is unchanged, so an
+  implementation written outside this package still satisfies the contract. `billing.tax_matrix` gained an
+  optional `history` of dated intervals. Absent — which is every installation until somebody opts in — a tax
+  point is carried and ignored and every sale prices exactly as before. Present, a country the history
+  carries is answered from it, a country it omits keeps being priced by the table beside it, and a tax point
+  falling in a gap is REFUSED rather than answered with the nearest rate: an invented rate with a date on it
+  cannot be told apart from a real one.
+
+  The audio-visual gate — any audio or video part of a supply closes the reduced band for the whole of it —
+  moved onto `TaxRateCategory` itself, so the dated and undated tables apply one rule instead of two copies
+  that could drift into pricing the same supply differently.
+
+- **BREAKING — the sale's tax characteristics reach an issuer as one `SupplyTaxCharacteristics` object.**
+  `FanReceiptIssuer::issue()` took seventeen parameters, eight of them tax characteristics, and the clump
+  `?TaxArchetype $archetype, ?PlaceOfSupplyRule $placeOfSupply, ?TaxRateCategory $rateCategory` stood word
+  for word in five signatures across three classes. The signature is now ten parameters wide and the clump
+  has one home.
+
+  Nothing was wrong with any line of it, which is why it is worth naming. The hazard was a parameter
+  inserted in the MIDDLE of that signature: two callers filled it positionally with eleven arguments each,
+  so every argument after the insertion point would have shifted one place — past two pairs that are
+  type-compatible, `?CarbonImmutable $deliveredOn` against `CarbonImmutable $soldOn` and `?string
+  $chargeReference` against `?string $provider`. Static analysis cannot tell those apart, and a document
+  that comes out with the wrong date is a tax error rather than a display one.
+
+  Every field of the object is nullable and defaults to null, so an empty set is exactly as valid as a full
+  one and writes the columns an omitted argument always wrote. It also WIDENS the subscription lane: a
+  cycle could state three of the eight characteristics and can now state all eight, so one that knows its
+  delivery date or its exemption reason can finally say so.
+
+  Adopting it: pass `characteristics: new SupplyTaxCharacteristics(archetype: …, placeOfSupply: …)` in
+  place of the individual arguments to `FanReceiptIssuer::issue()`, `SelfBillingEngine::issue()`,
+  `SubscriptionCycleBilling::issueFor()`, `::issueSchedule()` and `::issuePrepaid()`. A caller that passed
+  none of them needs no change.
+
+- **`billing:prune` reads the issue-date map from the retention matrix instead of a copy of its own.** The
+  map "which column dates a document for the retention clock" existed twice, word for word — once on the
+  matrix and once as a private constant in the command that already receives the matrix by injection.
+
+  No value was ever wrong: both copies held the same single entry. What was wrong is that they could
+  disagree. `RetentionMatrix::issueColumnFor()` is public and exists, by its own documented reason, for a
+  consumer writing their own pruning query — so a second dated table added to one map would have answered
+  that consumer one way while the package pruned the other, and the resulting window moves by up to a year
+  with nothing red anywhere. A scan now fails the build if a second copy of the map appears in `src/`.
+- **Buyer protection is wired at both ends, behind a switch that ships off.** The delayed payout the
+  documentation promised — *"funds stay with the payment provider throughout; what is delayed is the
+  transfer to the seller"* — did not exist as behavior. On the `separate_transfer` lane the merchant's share
+  moved unconditionally the moment the payment succeeded, nothing in the payment path knew about buyer
+  protection, and `BuyerProtectionClock::hold()` had no production caller at all.
+
+  The other end was unwired too. Releasing, refunding and escalating set columns and nothing else: no domain
+  event, and no instruction to the provider to move the money. An auto-release at 05:00 was invisible to a
+  consuming application — its only channel the console output of a cron run — and
+  `BuyerProtectionState::ReleasePending` was declared and never set by anything.
+
+  Both ends land together on purpose. Building only the first half would be worse than building neither:
+  holds would accumulate that nothing ever releases, with the money sitting at the provider while a cron job
+  dutifully wrote columns nobody reads.
+
+  `billing.marketplace.buyer_protection.enabled` is **off** by default, so no installation changes behavior
+  on upgrade — turning it on decides when a seller is paid, which is not a call a package makes for an
+  operator. It applies to the `separate_transfer` lane only; on a destination charge the provider settles as
+  the payment completes and there is no moment in between to hold.
+
+  A release sets `ReleasePending`, instructs the transfer keyed on the charge row — the same idempotency
+  rule the immediate lane documents, so a sweep that runs twice pays once — and only then records
+  `Released`. Where no driver can move shares the hold stays pending, which says what is true: decided, not
+  paid. Three domain events announce the outcomes, including the escalation the package deliberately refuses
+  to decide: releasing on silence would pay a seller over an open complaint, refunding on silence would take
+  money from a seller who may have done nothing wrong.
+
+- **`billing:merchant:refresh` — the capability flags can finally be ASKED for, not only told.** The three
+  flags on a merchant account had one writer and one production caller: the webhook effect on
+  `MerchantAccountUpdated`. Nothing could ask the provider what the state is. A lost delivery — endpoint
+  down, wrong secret, retry window closed — left the merchant at "cannot receive" while their account was
+  fully enabled at the provider, with no money routed to them and no way to find out why.
+
+  The asymmetry was the finding. `billing:sync` has repaired subscriptions after a webhook outage since it
+  was built, saying so in its own docblock; the receiving side had nothing for the same ordinary failure.
+
+  The report goes through the same single writer the webhook uses, so "only a provider report lifts a flag"
+  stays one rule in one place, and a **deauthorized** merchant is not made receivable again — the provider
+  does not know they disconnected from this platform and will report every flag true. The driver seam is a
+  new **optional** contract, so an implementation that cannot answer says so by name instead of dying.
+
+  `billing:merchant:status` gains a **Heard** column. Three `false` with `never` means nobody ever told us
+  anything; three `false` with a timestamp means we asked and were told no. That distinction is the reason
+  `capabilities_refreshed_at` was added — its migration says so — and until now nothing read it.
+- **A reversal the provider performs on its own now reaches the journal.** `transfer_reversed_minor` had one
+  writer, reachable only through the admin refund and the chargeback job — both platform-initiated. A
+  reversal Stripe performs itself, from the dashboard or automatically, had no entry point at all, and the
+  balance reader subtracts exactly that column. The creator went on being shown money the provider had
+  already taken back, and a payout on that figure came out of a pot that no longer existed.
+
+  The failure direction was the silent one: no error path, no rejected webhook, no red log. The event
+  arrived at the provider and this package simply had no door for it, while the journal looked internally
+  consistent throughout.
+
+  `transfer.reversed` is mapped on the **merchant** endpoint only — a single-seller installation receives no
+  connected transfers, and teaching the shipped mapper this event would make every existing install start
+  running an effect it has never run on the next deploy. The provider's figure is cumulative, so it is
+  recorded as an absolute value: a redelivery states the same total and changes nothing, a second reversal
+  states a higher one and is followed. A transfer this package did not create is left alone rather than
+  attributed to the nearest row.
+
+  It **records** and does not adjudicate. A provider figure lower than one the platform has already booked
+  is a disagreement, and which ledger wins is a separate open question — the larger figure stands rather
+  than money quietly reappearing on a creator's balance on the strength of a webhook.
+
+  `transfer.failed` is deliberately absent: it does not exist in the pinned Stripe SDK. The four loose
+  matches for it are Treasury events — a different object with different attribution — and the failure side
+  of a payout is a separate question about whether money reached the merchant's bank.
+- **Voucher movements are recorded, so the bookings that were built can finally happen.** `DatevExport`
+  knew all three voucher bookings and both chart configurations named the liability account, and none of
+  them could arise from a real monthly run: `VoucherEvent::Issued` had no producer anywhere, `Redeemed` and
+  `Expired` existed only as value objects the ledger returned and nothing stored, and the export command
+  never passed the sixth parameter.
+
+  A voucher is a **liability** when issued and only becomes turnover when redeemed; what lapses unredeemed
+  is income rather than turnover. An operator selling vouchers exported none of that — the liability never
+  appeared, and the turnover at redemption arrived with no counter-entry.
+
+  It hid behind a correct-looking file: the export ran green and was well-formed, and an empty voucher block
+  is indistinguishable from one that was never loaded. So the command's count line now names the movements
+  too, which is what makes this class of defect visible the next time.
+
+  The persistence sits **beside** the return values rather than replacing them, so every existing caller
+  keeps working; what changes is that a movement now outlives the method that produced it. An expiry with
+  nothing left still records nothing — a zero there would put an income booking on a month where no income
+  arose.
+
+- **`billing:marketplace:preflight` now asks whether a receiving gate was ever composed.** `CanReceiveMoney`
+  binds to `AlwaysReceivable`, whose check is a literal `return true` — the right default for a single-seller
+  install and fail-*open* the moment a marketplace is switched on. Nothing asked, so the checklist came back
+  green over a marketplace routing money to accounts whose capabilities nobody had looked at, and which may
+  be deauthorized or suspended.
+
+  Running the checklist is the act by which an operator satisfies themselves they have forgotten nothing, so
+  it is where the question belongs. Blocking, and waivable: the package cannot judge a gate it did not write,
+  and a point that refused to be waived would block every legitimate custom implementation. A single-seller
+  install is unaffected.
+- **`billing:trials:warn` — the generic trial no longer ends in silence.** `TrialEndingNotification` had one
+  trigger in the whole package: the provider's `customer.subscription.trial_will_end`. A generic trial has no
+  provider — it is a date on the owner's own row, written by `Trials::grant()` with a `save()` and nothing
+  else — so nobody could send that event, and nothing looked for the date. Worse than unwired: `TrialEnding`
+  takes a non-nullable subscription reference, which excludes the generic trial structurally.
+
+  That is the trial mode **without a card**, which is exactly the one where the customer has no other signal.
+  They lost access on the day having been told nothing, and for the operator it was churn that appeared in no
+  error list. The published documentation promised the reminder for all three trial modes.
+
+  The command runs daily, takes `--days` and `--dry-run`, and marks each reminder against the owner **and the
+  end date** — so an extended trial is announced again rather than silenced for good, and a nightly schedule
+  does not mail the same customer repeatedly. Owners who have a subscription are skipped: both paths firing
+  is how a reminder stops being read.
+- **`billing:tax-rates:check` — the proposing half of the rate seam now has a door.** `billing:rates:probe`
+  reports *that* the shipped VAT table differs from what the source publishes. Everything that turns that
+  into something actionable — plausibility, triage against the countries an installation has actually billed
+  into, a reviewable proposal on disk — was built and tested, and had no entry point at all: `RateImporter`
+  sat at the head of that cluster with zero callers, so all of it was unreachable from shipped code while
+  every one of its own tests stayed green.
+
+  The command shares the probe's switch (`BILLING_RATE_PROBE`) and its three exit codes, with `1` meaning a
+  proposal was written. **It proposes and never applies:** the proposal lands beside the snapshot as
+  `proposal-<date>.json` and the snapshot is not touched. A rate is a legal statement about what a member
+  state charges, and a package that edited its own priced-from file on the strength of one HTTP response
+  would be making that statement on the operator's behalf. `billing.tax_rate_probe.proposal_path` points it
+  somewhere writable when the installed package is read-only.
+
+  Both commands now read the source through one parser. Two hand-written readers over one response drift
+  without throwing — the drifted one returns fewer rows, and the caller reports "no change" over a response
+  it failed to read.
+
+- **`billing.invoices.pdf_disk`** — name the disk your `billing_invoices.pdf_path` values address and
+  the invoice download serves the PDF **you kept** instead of rendering a new one.
+
+  A re-render is not the document that was issued. Everything under a renderer moves over the years an
+  invoice must stay readable — a corrected rate table, an updated address, an improved writer — so a
+  fresh render years later resembles the one your customer holds without being it, and the
+  disagreement surfaces in a dispute, where the other party is the one holding the original. The
+  package already applies that reasoning to the XML forms in `billing_document_artifacts`; this is the
+  human-readable half, which only you can keep.
+
+  **Defaults to `null`, and then nothing changes at all:** no disk is touched and the route renders
+  exactly as before.
+
+  **A recorded path whose file is gone still renders**, so an owner is never locked out of their own
+  invoice over an archive they do not control — but it is logged as an **error** naming the invoice,
+  the path and the disk, because a lost archive file is an incident and the quiet version of it is the
+  expensive one. A path recorded with no disk configured is logged as a warning instead: that is a
+  half-finished setup, not a lost file, and telling an operator the wrong one sends them looking in
+  the wrong place.
+
+- **`TaxCalculatorFactory::answeringRateMatrix()`** — the rate table that actually answers for an
+  installation, or `null` when the shipped calculator does. It exists so something outside can ASK
+  which table is in use rather than work it out a second time.
+
+  `billing:doctor` reports how old the rates are, and it used to re-derive that precedence by hand:
+  configured table, then profile, then the shipped constant, written again in a second file. The two
+  agreed — but only for as long as nobody added a further source to the factory, and the failure that
+  produces is the one the command exists to prevent: an operator told the age of a table that is not
+  the one being calculated with. On an invoice a wrong rate looks exactly like a right one.
+
+  `TaxRateMatrix::validFromDate()` comes with it, so a diagnostic can print that day beside the age.
+  The command now asks the factory and derives only the LABEL itself — a matrix does not carry where
+  it came from, and giving it one would put a diagnostic's vocabulary into the calculation path.
+
+
+- **`Subscription` spells "this owner's default subscription" once.** The four-condition selection was
+  written out by hand at thirteen call sites in twelve files, with no scope, no constant for the `default`
+  literal and no test holding the copies together. Nobody was harmed by that — all thirteen were correct.
+  What it cost had already been paid once: a single rule arrived as six identical one-liners in six files,
+  and the reason it was six of thirteen rather than all of them lived only in a commit message.
+
+  `forOwner()` and `ofDefaultType()` are separate scopes rather than one combined helper, and both return a
+  builder. The call sites differ in ways that matter — one deliberately spans every merchant, one locks for
+  update, one asks for all rows rather than the newest — and a helper that returned a subscription would
+  have flattened those into a marketplace defect. A guard now refuses a fourteenth copy, in any spelling.
+
+- **`RateChangeExclusions::dryRunRequired()` is gone; the requirement it stated now sits in the class
+  docblock.** It returned `true` unconditionally and nothing called it, while its own docblock said
+  "mandatory" — so the file read as an enforced protection and enforced nothing. Shipped prose that
+  promises a reader a protection they do not have is worse than silence.
+
+  The dry run is still required. It is required **of the caller**: this package ships no bulk rate-change
+  command and deliberately does not, because changing rates across a corpus is an operator act. The
+  requirement now lives in the one docblock a caller already reads to learn what the automation must skip.
+  `mayTouch()` stays a method because it answers a question rather than declaring a rule.
+
+- **The reporting record's treatment of sellers the duty does not cover is now stated rather than
+  implied.** `render()` receives every seller the period examined, and the shipped renderer writes the
+  reportability verdict as a column instead of dropping the row — so a produced record carries
+  non-reportable sellers together with their quarterly figures. That was the behavior before this
+  release too. What was missing was anyone saying so: no test excluded them and no test recorded that
+  carrying them is meant, which left the one direction where being wrong is expensive as the one
+  direction the tree did not describe.
+
+  `NonReportableSellerInTheRecordTest` now pins it, including the part that makes it matter — the row
+  carries the seller's income, not merely a flag — and that `seller_count` counts the **examined**
+  rather than the reported, so it answers a different question from the one its name suggests.
+
+  Whether the archived artifact *should* carry them is a legal question with defensible answers on both
+  sides and is deliberately left open; these cases take neither side and will go red on whichever
+  answer changes the behavior.
+
+  The renderer seam is documented for the first time, with the trap named: a custom renderer that
+  iterates the reports and writes them all transmits sellers who must not be reported. Over-reporting
+  is a *not correct* return in its own right and a data-protection breach at the same time — and unlike
+  a missing seller, nobody downstream notices it.
+
+- Documented, from a measurement rather than an assumption, **who pays the payment provider's processing fee
+  and who absorbs a chargeback**: it follows the connected account's type, not the charge type and not
+  `on_behalf_of`. On the shipped default (`express`) both are the **platform** — so `marketplace.fee` is a
+  gross take rather than a margin, and the package does not subtract a processing fee it cannot know your
+  pricing for. The answer now sits where the choice is made — the account-type setting, `ChargeType`,
+  `ChargeRouting` and `PlatformFee` — and a live smoke test re-reads it from the API so a version bump
+  cannot flip it quietly.
+
+- `invoice.payment_succeeded` now maps to a third event, `RoutedSubscriptionInvoicePaid`, beside the payment
+  and the invoice snapshot. Its handler reaches the provider, so hanging it on `PaymentSucceeded` would mean
+  provider calls for every payment on every install — including the overwhelming majority that route nothing.
+  Carrying the subscription reference lets the handler ask the local subscription row first and stop there.
+
+  **The commission is READ from the provider, never computed from the rate.** A routed subscription is priced
+  with `application_fee_percent`, so the absolute figure exists once per cycle and only at the provider. The
+  package could derive it, and that is the wrong trade: two derivations of one fact agree until one of them
+  changes — a rate edited between cycles, a proration line, a rounding rule — and when they part, the ledger
+  holds a plausible wrong number that flows into a clawback cap and a tax judgement with nothing going red.
+
+  That is also why a failed read **throws** rather than returning quietly. The effect runs queued, so a
+  transient failure retries and a permanent one surfaces as a failed job; returning would leave no row, no
+  error and no trace — the same silence as before, bought at the price of three provider calls.
+
+  **The route was measured, not assumed** (2026-08-07, pinned API `2025-08-27.basil`, real paid invoice): the
+  delivered payload carries no link to the payment at all — no `charge`, no `latest_charge`, no
+  `payment_intent`, not even the `payments` collection the link lives in. So it is invoice (expanded) →
+  payment intent (the money and the recipient) → subscription (the terms a partial clawback needs). The SDK
+  cannot answer this: its `@param` blocks describe what may be SENT when creating an invoice, not what comes
+  back, and an earlier draft of this lane was written against a payload Stripe never sends on exactly that
+  misreading. `StripePaidInvoiceLinkageSmokeTest` keeps both halves pinned.
+
+- The changelog assembler now writes a release's comparison link along with its block, and pulls the
+  `[Unreleased]` link forward to span from the new version. The predecessor is resolved from the tags
+  that exist rather than from the previous heading in the file, so a version that was never tagged does
+  not become the base of a link that cannot resolve.
+
+- The changelog assembler now folds the `## [Unreleased]` section into the release alongside the
+  `changelog.d/` fragments, under one heading per kind, and leaves the heading standing with an empty
+  section. Until now only fragments were folded, so an entry written directly into the file — which the
+  changelog guard accepts — stayed under "not released yet" while the code shipped, and the published
+  release note was quietly short. A release whose only entries were written that way can now be assembled
+  at all; previously the tool refused because no fragments existed.
+
+- **A product nobody classified now refuses to reach checkout while a consumer-rights profile is active.**
+  The withdrawal gate needed two conditions to bite — a profile *and* a classified archetype — so an
+  operator who turned the profile on and left one product without an `archetype` key got it sold and
+  delivered with no consent on file, and nothing said so. `billing:doctor` reported the combination;
+  nothing refused it. "Nobody classified this" and "this needs no declarations" are indistinguishable to
+  the runtime, and one of them is a statutory failure.
+- `OneTimeCharge::purchase()` takes an optional declaration reference, and `ManageSubscription::purchaseAddon()`
+  passes one through. **Anyone implementing `OneTimeCharge` for their own driver must add the parameter.** A
+  driver handed `null` must send exactly the payload it sent before — Mode S is a byte-identity promise, and
+  the shipped Stripe driver keeps the same single-entry metadata bag when there is no declaration to carry.
+- `AddonPurchased` carries the declaration reference home; the grant effect prefers it over the session
+  reference when looking the consent up, and `billing_addon_purchases` keeps it on the row. That column is
+  what lets `WithdrawalConsentLedger::forPayment()` still work: a receipt knows the PAYMENT id, and the
+  declaration is keyed on a string that did not exist when the buyer made it. Without it the lookup answers
+  null — and null there reads as "the buyer declared nothing", which is wrong and indistinguishable from
+  the truth. A declaration recorded out of band against the session reference itself still resolves.
+- The archetype-to-withdrawal-right lookup moved out of the grant effect into `WithdrawalTypeResolver`, so
+  the checkout and the provision gate answer from one reader. Copying it would have been the cheaper edit
+  and the wrong one: a checkout that decided no declarations were needed and a grant that then refused to
+  provide would take money for something the buyer can never receive.
+
+  A refusal at checkout surfaces as `WithdrawalDeclarationsMissing`, not as a 403. That is deliberate — it is
+  a wiring mistake with a precise remedy, and the exception names it. The package will never render the notice
+  wording itself: that text is the operator's and their adviser's, for their product and their jurisdiction.
+
+- **A manual CI run can now name the lane it is about.** There is exactly one manual trigger for a
+  repository and it fires every workflow that accepts `manual` — measured 2026-08-07, a run wanted for the
+  live-provider lane started **eight** workflows including the full gate, while three pull-request gates
+  queued behind it. Every lane now names itself against one `LANE` variable with an empty default: a bare
+  manual run behaves exactly as it did, `--var LANE=<name>` starts that one.
+
+  **Both halves were verified on real runs before anything was built**, because the failure direction here is
+  a lane that silently never starts. A run with `LANE` unset reached the probe lane; a second run with
+  `LANE=something-else` did not — an unset variable compares as empty, measured rather than assumed.
+
+  The mutation lane keeps its own `MUTATION == "1"` condition and is exempt from the shared default: it is
+  **rationed**, not merely nameable, and a default that ran it would be the opposite of that.
+
+- **Switched on for a sale whose regime has no buyer fee now refuses**, with `BuyerFeeNotApplicable`. A
+  buyer fee is the platform's own supply to the buyer and exists only where the platform mediates between
+  two other parties; under a commission chain the platform is itself the seller, so a fee booked there
+  describes a service nobody rendered.
+
+  **Whether buyer fees are charged is the adopting developer's call, not this package's** — which is why the
+  switch is configuration and defaults to off, and why an installation that never enabled them has its
+  regime neither resolved nor consulted. Off is off, and it costs nothing.
+
+  Of the three possible behaviors for "switched on, wrong regime", quietly charging nothing is the worst:
+  the setting reads as on, the operator believes they are collecting, and the first evidence otherwise is
+  revenue that never arrived. So it says which of the two conditions failed, while it is still free to fix.
+
+- **The configuration no longer says a withdrawal window cannot be computed.** It said the package "computes
+  no withdrawal window at all, and it cannot — nothing records the moment a work was provided". That was
+  true when it was written and stopped being true when the grant register landed: `acquired_at` is written
+  immediately after the fail-closed withdrawal gate, which *is* that moment.
+
+  **A reason does not age visibly, and that is the part worth recording.** The paragraph read as a decision
+  rather than as a gap for as long as it stood, so the window was ticked off as settled instead of open — and
+  it stayed open while the work around it shipped. The replacement says why there is still no length in
+  configuration (it is profile data, not a setting) rather than why there is no window.
+
+  `null` on the new column covers four situations and none of them means "no right": no profile is active,
+  the right already extinguished on delivery, no right ever attached, or the profile does not state windows.
+  What they share is that no honest date exists — and a date is precisely what a reader downstream would
+  rely on. `withdrawal_type` and the declaration reference on the same row tell them apart.
+
+  An **unclassified** sale gets no window either. A null archetype means unclassified, never "no right
+  applies", so fourteen days computed there would be a statutory-looking date produced by a guess.
+
+### Removed
+
+- **`InvoiceNumberSequence::format()`.** It produced `2026-000042` and had exactly one caller in the
+  repository — the test that asserted it. Every real invoice number comes from
+  `DocumentNumberAllocator` as `PREFIX-YYYY-#######`, with the prefix resolved per series from config
+  and a missing one refused outright.
+
+  A dead method looks alive when a test is its only caller, and this one sat on the obvious class
+  under the obvious name while returning a shape no document in the system carries. Reaching for it
+  would not have raised anything — it would have minted a plausible-looking number outside the
+  configured series, which under § 14 UStG / GoBD is the expensive direction to be wrong in. The
+  counter now answers only in integers, and a case asserts that shape rather than a list of forbidden
+  names, so a second number format cannot grow back here under a different name.
+
+- **`SellerActivityThreshold::isExemptFromReporting()`.** Whether a seller's data falls outside the
+  reporting duty is now answered in one place only — the jurisdiction's reporting profile, where the
+  boundary is set by law rather than by preference.
+
+  Nothing in the package called this method, and the duplication was the visible half of the problem.
+  The dangerous half was the coupling: it read the **same two config keys** as the declaration
+  trigger beside it, so a platform that asked its sellers to declare earlier would have moved the
+  statutory exemption with the same switch — silently, in the over-reporting direction, from a class
+  whose own docblock warned against exactly that. Reporting data that need not be reported is an
+  incorrect report in its own right and a data-protection breach besides, so that direction is not
+  the cautious one.
+
+  The two questions still meet at the money figure and still answer differently there: the
+  declaration fires at it, the statutory exemption holds at it. Keeping them in separate classes
+  reading separate keys is what makes that a design rather than a coincidence.
+- **`billing_invoices.pdf_path`** — somewhere to record where you kept the issued PDF, and
+  `InvoiceRecord::locallyGenerated()` to say whether a document was produced here or mirrored from a
+  provider.
+
+  The package stores no PDF and does not start now: storage is your decision, with a disk, a
+  retention policy and a bill behind it. What was missing was the anchor. A re-render is not the
+  document that was issued — everything under a renderer moves over the years an invoice must stay
+  readable, and each change quietly yields a copy the recipient's version disagrees with. That is the
+  reasoning `billing_document_artifacts` already applies to the XML forms; this is the same anchor for
+  the human-readable one, which only you can keep. Nullable, no default, no backfill: absent means
+  nobody kept one, which is the honest state for every existing row.
+
+  **There is deliberately no `locally_generated` column.** `provider_id` is written by exactly two
+  writers, both webhook effects mirroring a provider's invoice; the four issuers that produce a
+  document here never set it. So the origin is not a second fact about a row — it *is*
+  `provider_id === null`, and a stored boolean would be a copy that can disagree with what it copies.
+  The equivalence is pinned from both directions, so the day a writer hydrates a local document with
+  a provider's id it arrives as a red test naming the decision rather than as silent drift.
+
+### Fixed
+
+- **`billing:cards:warn` honors `--days` when it is called programmatically.** The window was accepted only
+  when the option was a string — always true from the command line, never true of
+  `Artisan::call('billing:cards:warn', ['--days' => 60])`. Such a caller silently got the configured default
+  instead of the window they asked for: a plausible result for a different window, with no error, no log and
+  nothing to search for.
+
+  The sibling trial command already read it as `is_numeric` and its own comment named this command as the one
+  that did not. Both now read it the same way, a test holds them together, and that comment says so instead.
+
+- **A support refund on a routed sale now corrects the documents behind it.** `BillingAdmin::refund()` is
+  the package's only refund verb, and it did not call the chain corrector. Chargeback, statutory withdrawal
+  and prepaid-term cancellation all three did. So an ordinary support refund moved the money, balanced the
+  ledger, wrote its audit line — and left the creator's self-billed invoice and the buyer's receipt claiming
+  the full amount.
+
+  The creator carries that: their settlement states revenue they no longer have, and settlement numbers come
+  from a gapless series, so the state cannot be tidied afterwards — only answered by a further, correctly
+  numbered correcting document. It hid because the visible half worked, and nothing compared the two sides.
+
+  `ConsumerWithdrawal` no longer corrects the chain itself. It calls the admin refund, which now does — and
+  correcting in both places would write a second document per leg out of that same gapless series, for one
+  event. **BREAKING for a hand-constructed `ConsumerWithdrawal`:** it no longer takes a `RoutedRefundCorrector`
+  or a `CreatorTaxStatusResolver`. Resolved from the container, nothing changes.
+
+  The correction reads the creator standing frozen at the supply, not the one they hold today, so a creator
+  who has since registered for VAT does not retroactively change how an earlier sale is corrected.
+
+- **The account hub's landing page honors `web_only` — it used to keep the account-deletion card on a
+  native runtime.** `config('billing.navigation')` had two readers following different rules. The sidebar's
+  knew `web_only` and dropped such an item when `billing.runtime` is `native`; the landing page's did not
+  know the flag at all — its item object had no property to carry it.
+
+  So an operator who marked the danger zone `web_only`, checked the sidebar and watched it disappear had
+  every reason to consider the matter settled. The landing page went on rendering it as a clickable card,
+  and the danger zone has no native gate of its own, so the card led to a working account deletion — on the
+  most destructive screen the hub has.
+
+  It hid because both halves were individually right: the sidebar filtered correctly, its test was green,
+  and the documentation described exactly the behavior the operator expected. The one test that existed
+  measured the other class.
+
+  **BREAKING, and small:** `Pushery\Billing\Support\Navigation` and `Pushery\Billing\ValueObjects\NavItem`
+  are removed rather than taught the flag, because a second parser of one configuration key is the condition
+  that produced this. Anything reading the hub navigation uses `Pushery\Billing\Account\Navigation` —
+  `visible()` for groups, the new `visibleItems()` for a flat list. Both apply all three gates: route
+  registered, route resolvable without arguments, and `web_only` against the runtime.
+
+
+- **Seven append-only records could be deleted by anything, and nothing said whether that was intended.**
+  Ten models spelled out the same "written once, never changed" rule by hand. Three had a deletion arm and
+  seven had none — and a missing hook throws nothing, so "nobody decided" and "somebody decided no" read
+  identically. `ReportingExportRecord` had no arm while its sibling archive `TaxReturnExportRecord` did, with
+  the retention matrix holding both tables under one rule.
+
+  Every one of the ten now answers the question in a line of its own: `PurgingOnly` for a row retention may
+  remove on its schedule, `Never` for a row that is unlinked from an erased person rather than deleted. The
+  answer was measured rather than assumed — none of these tables sits on a purge axis, and the time pruner
+  deletes through the query builder, so no existing path changes behavior.
+
+  The mechanism moved into an `AppendOnly` trait: the three deletion arms that existed disagreed on shape
+  (`bool` against `void`, opposite condition directions, `self::` against `static::`), and `purging()` was
+  typed out twice with byte-identical bodies. The refusal MESSAGES stay with each model, because they say why
+  that particular record is frozen — a guard asserts all ten are distinct, so unifying the mechanism cannot
+  quietly unify the statements.
+
+- **The contract reference claimed a shipped distance-sale threshold that does not exist.** It listed "the
+  shipped threshold" as the fallback for a profile that does not implement `SuppliesDistanceSaleThreshold`.
+  There is none: with no profile the watched limit is zero, which means no limit is watched and every
+  cross-border consumer sale is taxed at the destination. That is the safe direction and a deliberate one,
+  but a reader told a shipped limit answers may reasonably not supply their own.
+
+- **A redelivered arranged sale no longer burns a number out of a gapless series.**
+  `issueIntermediated()` wrote directly instead of going through the repeat guard every other buyer document
+  goes through, so a repeated delivery of the same payment drew a commission number **first** and hit the
+  unique constraint **second** — leaving the number spent on a document that was never written.
+
+  That is the one failure a retry cannot heal. The payment is redelivered — a provider retry, a webhook
+  redelivery, a queued job running twice — the package throws, and the series is permanently missing a
+  number with nothing behind it to explain the gap.
+
+  The fix has two halves and the second is the one that is easy to miss: routing through the guard alone
+  would have changed nothing, because the repeat lookup was hard-wired to the buyer-receipt series and a
+  commission document does not carry it. It would have read as fixed in any test that only checked for the
+  absence of an exception, which is why the assertion here is the sequence counter and not the exception.
+
+  `reissueAsFullInvoice()` deliberately still draws a fresh number — restating a sale a buyer already has a
+  document for is the whole point of it — and now says so, so the next reader counting direct writes does
+  not file it as a third instance of the same defect.
+
+- **A one-off purchase no longer decides for the installation whether its supplies are electronic.**
+  `billing.marketplace.seller_of_record.supplies_are_electronic` settles whether the Art. 9a presumption of
+  a platform-supplied service applies. The hosted checkout and the routed payment both read it; the one-off
+  lane passed a hard-coded `true` — the file did not contain the word "electronic" at all.
+
+  So an installation that had explicitly declared it sells physical goods, on the `seller_of_record`
+  posture, could subscribe but could not buy an add-on: the sale was refused with the reason "but this is an
+  electronically-supplied service", which its own configuration denies. No log, no configuration error, and
+  the cause in a file that does not mention the setting.
+
+  The lane now reads the setting, and the refusal for a genuinely electronic supply is unchanged. A test
+  drives both lanes under the same configuration and requires the same verdict, which is the property that
+  was broken — either lane on its own was internally consistent.
+- **A settlement now names the relief it claims (BT-120).** `vat_note` had no writer anywhere in the
+  package, so a credit note raised to a small-business creator rendered the tax category's generic English
+  fallback — `Tax exempt`, a phrase that names no ground at all — where the creator's own relief had to be
+  stated. Nothing went red: BT-120 was populated, so EN 16931 validation passed, and the suite asserted the
+  wrong string as the expected one because it described what the code did.
+
+  `tax_exemption_reason` gains a value for each of the two small-business standings, and every issuing seam
+  writes it: the per-transaction settlement from the tax matrix, the collective settlement from the month's
+  treatments, and a correction from the document it corrects. The two standings are kept apart on purpose —
+  both are exempt, but a creator in another member state is not relieved by the recipient state's statute,
+  and a platform-issued document saying so would state their tax position for them.
+
+  The WORDING is derived from the frozen reason and the locale, and ships in all seven languages. That split
+  is what keeps it honest: the legal fact is frozen on the row and cannot move, only its rendering is
+  computed — which is what makes it translatable and correctable, as a frozen free-text string could never
+  be.
+
+  A collective settlement also now refuses a month whose lines are relieved under different law. The
+  previous check compared two booleans, and both standings answer `exempt` the same way, so a creator who
+  moved between them mid-month produced one document naming one relief for lines that had two.
+
+- **The e-invoice carries the statutory reverse-charge sentence the PDF has always printed.** BT-120 emitted
+  the two words `Reverse charge` while the PDF rendered the full statutory wording from `lang/`. Same
+  invoice, same package, two statements of one legal fact — and the XML is the one a tax authority reads. A
+  stored `vat_note` still wins over both, unchanged.
+- **`billing:webhooks:replay` reads a merchant delivery with the merchant mapper.** It resolved one mapper —
+  the platform one — and drove every stored delivery through it. The platform mapper has no `account.*` arm,
+  so a merchant delivery fell through to nothing and was reported as `replayed evt_… (account.updated) → 0
+  effect(s)` with exit `0`. Replay is the tool for the bad day, and somebody re-driving two hundred
+  deliveries after an outage read a summary whose count silently excluded every merchant one — leaving a
+  merchant whose capabilities were never updated, and a deauthorized merchant still carried as active.
+
+  The second half was worse because it was not inaction: a connected-account `customer.subscription.*` mapped
+  without a merchant scope resolves against the **platform** catalog, writing state for the wrong seller.
+
+  A delivery that maps to nothing is now reported as such, and the summary counts those separately. Not a
+  non-zero exit: one unhandled event type in a bulk replay would turn the whole run red, and an operator who
+  learns to ignore a red replay has lost the signal a second time.
+- **A `windowed` sale now gets a window, so it stops behaving exactly like `frozen`.** Nothing wrote
+  `update_window_ends_at` — no parameter, no config key, and `UpdatePolicyCatalog` supplied a policy but
+  never a length. Every windowed grant came out with a null window, which the resolver correctly reads as a
+  broken row and bounds at the moment of purchase. That is what `frozen` does: two of the four documented
+  values of a shipped setting were byte-identical through the only write path, so an operator selling
+  "updates for twelve months" delivered frozen content and the buyer got the state of the day they bought.
+
+  Nothing was red. The resolver is right, the rows look plausible, and the existing tests build their
+  windowed rows by hand — which is exactly how they skipped the write path that never filled the column.
+
+  The length now comes from the consumer, like the policy itself, through a new **optional** contract
+  `SuppliesUpdateWindows`. Optional on purpose: `UpdatePolicyCatalog` is published, and adding two methods
+  to it would break every consumer implementation on the next release for a capability that is purely
+  additive. A catalog that does not implement it keeps working unchanged, and the fail-closed fallback
+  stands — the difference is that the absence is now somebody's answer rather than a column nothing could
+  fill.
+- **The card surface is now driven by a real browser.** Every one of the browser suite's interactions sat on
+  the subscription, plan and danger screens; the two card actions were exercised only through `->call()` in
+  the Livewire harness, which skips the DOM binding by construction — it invokes the method directly, so no
+  `wire:click` is ever resolved.
+
+  That made the failure direction the silent one: break the binding and the whole Feature suite stays green
+  while the user clicks and nothing happens. Demonstrated rather than argued — with `wire:click="addMethod"`
+  corrupted, the new browser case fails and the Livewire suite passes 14/14.
+
+  On the recovery screen it is worse than an annoyance: that is the card replacement on the dunning path,
+  for an owner who is already past due and whose subscription ends when the cure window closes. A dead
+  button there costs a subscription outright.
+
+  The add and remove buttons were also not asserted to exist in any suite — `payment_methods.add` and
+  `payment_methods.remove` had zero occurrences across the whole test tree.
+
+- **A buyer-protection hold withholds the merchant's share, not the price the buyer paid.** The balance
+  reader subtracted a hold's gross amount from the merchant's net — two different bases against each other,
+  which takes the platform commission out a second time. Where a merchant's whole settled turnover sat under
+  one open hold, their available balance went **negative**.
+
+  The commission is now taken off when the hold is opened rather than only when it is released, which was
+  the other half of the same gap: every released hold had been paying out the buyer's full price, commission
+  included. A new case holds the quantity itself — an available balance cannot be negative, and one that is
+  always means a mixed-up basis upstream.
+
+- **The money path now prices from the digest-checked rate snapshot the documentation always said it did.**
+  `resources/tax-rates/*.json` ships with a header and a hash over its own numbers, and the published
+  troubleshooting guide states that pricing *stops* rather than falling back to whatever is in the file —
+  the protection against the one edit that leaves no trace, a digit changed inside `vendor/`, which appears
+  in no diff and would silently reprice every invoice to a country.
+
+  Nothing loaded the file. The calculator priced from a `private const array` beside it, and the promise was
+  not kept. Measured rather than argued: with the shipped snapshot's `DE` set to 1000 bps and its digest
+  correctly re-pulled, `calculate()` charged 1900 on 100.00.
+
+  The rates now come from the snapshot, loaded once for the application, and a snapshot whose digest
+  disagrees stops pricing instead of answering. The date the table was last checked comes from the file's own
+  `situation_on` rather than a constant beside the numbers — a date held apart from what it describes is the
+  half that goes quietly wrong, and a table whose stated age is wrong answers the staleness question
+  confidently and incorrectly.
+
+  There is now one copy of these regulated figures instead of two. The lockstep test that held the constant
+  and the file equal proved today's agreement and nothing about tomorrow's.
+
+- **The two cure-window sweeps are on the schedule the command reference already promised.**
+  `billing:dunning:remind` and `billing:dunning:expire` were registered as commands and listed in the
+  reference under "the service provider registers these for you" — and put on no schedule. So the
+  whole cure-window half of the dunning ladder ran in no application: a customer in arrears heard once,
+  when the payment failed, and then not again until the subscription was gone.
+
+  The reminder runs before the expiry, so a window that ends today produces the final notice rather
+  than a countdown that stops at zero. Both select merchant-scoped rows only, so a single-seller
+  installation pays two empty queries a day and nothing else changes.
+
+  The guard against exactly this defect was green throughout, because it derived the set of commands
+  it checked from PROSE — it matched the phrase "meant to run daily", and both of these worded their
+  cadence differently, so neither was ever in the set. It now also reads the published table, which is
+  machine-readable and is the promise a reader actually relies on.
+
+- **`billing:doctor` no longer reports a clean bill while its own findings stand.** The exit code was
+  recomposed at each of five exits and the "could not reach Stripe" exit was assembled from a subset of
+  them, so an aged tax-rate table failed the command while Stripe answered and passed it while Stripe
+  was down. That is the direction that hides: a green doctor during an outage reads as confirmation
+  that the tax data is fine. A finding does not stop being true because a later check could not run.
+
+- **`ComposedReceiveGate` and `ComposedEligibilityGate` accept their checks in the constructor.** The
+  documented wiring passes them there. With no constructor declared, PHP accepted the argument in
+  silence and discarded it — leaving a gate with zero checks, which is fail-closed and therefore denied
+  every merchant on the platform, with nothing thrown and nothing logged. From the outside that is
+  indistinguishable from a merchant who has not finished onboarding.
+
+  The fluent `require()` form is unchanged. Passing an array, as the old example did, now raises a
+  `TypeError` at the call site instead of failing silently later.
+
+- **A full invoice reissued over a short receipt keeps every characteristic of the sale.** The restatement
+  was assembled from a hand-written list of columns beside the one the receipt is issued from, and the two
+  had drifted: eight columns were absent, three of them EN 16931 fields both e-invoice writers read — the
+  delivery date, the service period and the exemption reason. The restatement is the document a buyer asks
+  for *because* they need a formal one, so it was the single document in the system that lost the fields
+  that make it formal.
+
+  It now derives its columns from the frozen characteristics the package already names in one place, with an
+  explicit list of what must differ and why. A column that changes on a restatement is a decision; losing one
+  because nobody typed it is not.
+
+- **`billing_merchant_charges.transfer_moved_minor`** — what the provider reported it actually moved to the
+  merchant, recorded beside what the row says they were owed. `transferShare()` has always answered with
+  that figure and the caller took the reference off the answer and dropped the rest, so the journal recorded
+  its own request. A journal built that way cannot disagree with the provider, which sounds like consistency
+  and is the opposite: the reconciliation this package promises had nothing to compare.
+
+  It also decides a ceiling. `reversibleMinor()` limits how much can be clawed back from a merchant and was
+  read off what was owed — so where a provider moved less, the package would try to reverse money that never
+  reached them, and on a lost dispute the platform is out of pocket for the difference. The ceiling now
+  follows the reported figure where there is one.
+
+  Nullable: null is "nobody reported a figure", which is the honest state for a destination charge, where
+  the share moves as part of the payment and no transfer call is ever made.
+
+- **The chargeback reversal books what came back.** `ReverseMerchantShareForChargeback` called
+  `reverseShare()` and discarded its answer, so the ledger advanced by the amount the job had asked for.
+  A guard now holds both provider answers — the outbound transfer and the reversal — against being
+  declared and read by nobody again, which is the state both were in.
+
+- **The readable half of a document now states what its XML half always did.** A hybrid e-invoice is a PDF
+  with the XML inside it, rendered by different code from the same row — and the readable half said neither
+  that a document was self-billed nor which document a correction corrects, while both XML writers emitted
+  both from the same columns. One file contradicting itself, with the conformance-checked half being the
+  correct one, which is why no validator ever complained.
+
+  The same PDF is also served on its own, without the XML wrapper. There the readable half is not one of two
+  halves — it is the whole document.
+
+  `InvoiceRecord::isSelfBilled()` is now the single derivation both halves read, and a test flips the column
+  and requires both to move. The new `invoice.corrects` string ships in all seven locales, and a new guard
+  holds every locale to the same key set — a shipped string missing in one language serves an English
+  sentence inside an otherwise translated document, which a reader cannot tell from a deliberate term.
+
+- **`billing:prune` now carries out the retention rules for the period-scoped export documents.** The
+  matrix declared a ten-year window for the produced tax-return and seller-reporting files, and
+  `--dry-run` printed both under a heading calling them "the record of what this run enforces". Nothing
+  enforced them: those tables name a PERIOD rather than a person, so no erasure axis can reach them, and
+  the command only ever ran the axes. Rows well past the window survived a real run.
+
+  A retention rule now states which mechanism carries it out — the time pruner, an erasure axis, a
+  dedicated path, or nothing because it may never have been stored — and a test fails on any rule that
+  states none. Responsibility could not be inferred from the rule's shape: `billing_place_evidence` wears
+  the same signature and belongs to an axis, so a pruner that guessed from the shape would delete it twice,
+  on two different clocks.
+
+- **`billing_refund_attempts.transfer_reversal_short_minor`** — how much less of the merchant's share came
+  back than the reversal asked for. A destination charge reverses proportionally, and a fee with any fixed
+  component owes more than the proportional share on a partial refund, so the two figures differ by real
+  money on every partial. The difference used to be computed and dropped, which made a charge that came
+  back short indistinguishable from one that came back whole and left a later top-up nothing to aim at.
+
+  Nullable on purpose: null is "nobody compared", zero is "compared, nothing missing". Additive and
+  reversible; every row written before it stays null rather than claiming a comparison nobody made.
+
+- **A support refund books the reversal that came back, not the one it asked for.** On the shipped
+  separate-transfer lane the merchant's share moves in its own call, so refunding the payment does not touch
+  it — and the rails report that honestly, with no reversal reference. The ledger booked the intended
+  reversal anyway. It therefore spent the room a later chargeback needs, and told a consumer's ledger, via
+  `MerchantTransferReversed`, to unwind a payout still sitting with the merchant.
+
+  A null reversal reference now books zero and the announcement carries `amount: 0` beside the platform fee
+  that genuinely did come back. Where the provider reports a reversal AND its amount, that amount is what is
+  booked — `RefundResult::$transferReversed` had no reader until now, so a partial reversal was recorded at
+  the requested figure rather than the one that moved.
+
+- **A collective settlement that spans two currencies is refused rather than summed.** The engine took the
+  currency from the first transaction and added every further amount as a raw count of minor units, without
+  ever comparing them — so two currencies in one month summed to a number in neither, and the document was
+  stamped with whichever arrived first. `Money` refuses currency mixing everywhere else; the accumulation
+  bypasses it for speed, so the refusal is now stated there. Settle each currency in its own document.
+
+- **`tax_exemption_reason` can no longer change on an issued invoice.** Whether a supply was exempt was
+  frozen; WHY it was exempt was not, and the two are not interchangeable — a reverse-charged supply is
+  taxed, an export outside the union is not. Both e-invoice renderers read that column as the EN 16931
+  exemption reason, so an editable one let a numbered document claim afterwards that it had been an export,
+  with every amount on it still adding up.
+
+  Every fillable column on the invoice is now on one of two lists — frozen, or deliberately mutable with a
+  stated reason — and a new column that is on neither fails a test. The previous guard listed the frozen
+  columns by hand and had the same omission as the code it was guarding.
+
+- **The creator tax-standing sweep loads the merchant it reads once, not once per row.** It read the
+  relation inside the loop over every governing record, which is one query per creator — in the one
+  caller whose row count grows with the customer base and which runs unattended.
+
+- **A webhook delivery whose provider posts a form instead of JSON is now recorded under the
+  provider's own id, not a hash of the body.** `WebhookReceiver` read the delivery key from the
+  decoded JSON only. A form-encoded ping (`id=abc`) decodes to nothing, so the key fell through to
+  `sha256:…` — a delivery that is correct and unfindable: whoever investigates a support case holds
+  the provider's resource id and has no route from it to the row, and `billing:webhooks:replay` has
+  nothing to aim at. A blank id now falls through to the hash as well, rather than keying two
+  unrelated deliveries onto the one row `'   '`.
+
+  The hash fallback is deliberately kept for a body that names nothing at all: such a delivery still
+  needs a key, and having none is worse than having an opaque one.
+
+  No driver shipped with this package posts a form, so nothing here exercises that path today. The
+  seam that needs it is the pluggable one — `WebhookVerifier` and `WebhookEventMapper` are public
+  contracts, and a consumer's driver posts whatever its provider posts. `WebhookDeliveryKeyTest`
+  drives the key directly for that reason, so the proof does not depend on which drivers happen to
+  ship.
+
+- A tip now has assertions of its own where it was previously only implied: it takes a separate position in
+  a creator's monthly settlement rather than being folded into the sale it accompanied, and both documents
+  over one tip — the fan's receipt and the creator's settlement — remain reachable from the same charge, so
+  a refund can correct both links instead of returning the fan's money while the creator keeps their share.
+
+- **A routed subscription moved real money every cycle and wrote no ledger row at all.**
+  `RoutedChargeLedger::record()` had a single caller — the one-time hosted lane — so every routed
+  subscription sale was invisible to the three things that read that table: the reversal caps, the earnings
+  counter and the small-business judgement. Each answered as though the cycle had not happened, and each
+  answer looked entirely ordinary.
+
+- Two deliveries of one non-recurring sale arriving together no longer produce two documents. The sale's
+  first document now claims its settled charge reference exclusively, held by a unique index, while a
+  full-invoice reissue, every correction and every document carrying a period claim nothing and remain
+  possible — so the constraint hardens the path without refusing the documents that must exist alongside.
+- The duplicate-receipt go-live checkpoint no longer reports two corrections of one sale as a duplicate.
+  It grouped on the receipt tier, which every correction leaves empty, so a second partial refund looked
+  like a second receipt; it now reads the columns that say what each document is.
+
+- The `[0.11.0]` comparison range ended at `v0.12.0`, showing a reader the following release's changes
+  under this release's heading.
+
+- The comparison links for 0.11.0 and 0.12.0 pointed at tags that do not exist, so every click landed on a
+  404. Both were shipped and never tagged; they now point at the wider `v0.9.0...v0.13.0` range, which
+  contains their changes without being exclusive to them, and each section says so. A named exemption in
+  the structure test records which versions have no tag and why, and a second assertion removes the
+  exemption the moment one of them stops needing it.
+
+- **A buyer fee survived the withdrawal of the sale it mediated.** An effective withdrawal destroys the
+  mediated sale, and a mediation fee kept on a sale that legally no longer happened is not margin — it is
+  the buyer's money. The amount is small; the character of it is not.
+
+- Adding a card through the hosted setup-mode checkout (`PaymentMethods::addMethodUrl()`) now sends the
+  configured currency. A setup-mode Checkout Session carries no line items, so nothing in the payload states
+  one and Stripe requires it explicitly — the call was refused with *Missing required param: currency* on
+  every real request, while the suite stayed green because a faked client accepts any payload. Found by
+  running the live-API smoke suite for the first time since it was written.
+
+- A seller-reporting record no longer states a **withheld fee that the seller was never charged**. Under a
+  commission chain the platform's margin is the difference between two supplies — never billed to the
+  merchant, never deducted from what they are owed, and deliberately backed by no commission invoice — so
+  reporting it as a separately withheld fee invented a service relationship the books do not contain. The
+  field is now filled per regime, read off the settlement document where the regime was frozen rather than
+  from configuration at reporting time, and the seller's gross inflow is untouched: the margin does not
+  vanish, it simply is not a fee.
+
+- **A single-seller installation was told, every 31 January, that an annual seller report was due.**
+  `FilingCalendar` answered that obligation on every install, unconditionally — but the annual report is
+  about what OTHER people earned through the platform, so an installation that sells only its own products
+  has no such duty. Being warned about a duty you do not have is not a harmless extra: it sends somebody
+  looking, once a year, for a filing interface they have no account for.
+- The obligation now follows `billing.marketplace.enabled`. The periodic RETURN is deliberately not gated
+  with it — that one is the platform's own and exists whether or not anybody else sells through it. The two
+  share a date, so a gate hung one line higher would have traded a wrong reminder for a missing one, and
+  the missing one is the expensive direction. Both arms are asserted.
+
+  Found while reconciling the acceptance criteria of the reporting umbrella. The criterion asked for a guard
+  that Mode S registers no command and no scheduler entry; measuring it turned up something sharper than a
+  missing guard — the *behavior* was wrong, not merely unproven. The command itself is deliberately left
+  registered: it announces the platform's own return as well, and removing it would silence that for every
+  single-seller install that files one.
+
+- **A CI step reported an unreadable OOM counter and, in the same breath, that no OOM kill had happened.**
+  Both lines came out of one run, and only one of them was a measurement. The summary used the braced form
+  `$${oom:-unreadable}`, which the CI server rewrites *before any shell runs* — so the word "unreadable"
+  was a literal baked into the script, printed on every run whatever the counter held. The branch beside
+  it read the bare `$oom`, saw the real value, and correctly said no kill had occurred.
+- Measured rather than reasoned about: a probe put both forms side by side on a variable that definitely
+  held a value, and the echoed command itself showed the substitution had already happened.
+- The step now computes its display value in the shell, and all three verdicts go to **one stream**. They
+  used to be split across stdout and stderr, which is half of why the contradiction went unnoticed:
+  whoever read one stream saw one answer.
+- A comment in the step claimed the counter "is not readable from inside this container, so that branch is
+  the normal one here". It was written from the fake output, so it described a string constant rather than
+  the container. Withdrawn rather than reworded — what that branch covers is a state nothing has observed.
+
+- **`billing.marketplace.buyer_fee.enabled` controlled nothing.** The setting shipped, and the calculator
+  behind it was complete — two models, gross-to-net with the tax as the difference, its own revenue
+  account, validated configuration — but nothing in the package ever asked it. Switching buyer fees on
+  changed no request, no charge and no row.
+
+- **A crash report that could not lead to an investigation.** When a process dies mid-run and leaves a core
+  dump in the tree, the guard correctly refuses — but the message said only name, size and timestamp. The
+  dump itself lives in a CI workspace that is destroyed when the pipeline ends, so the standing plan
+  ("inspect it the next time it happens") could never run: by the time anybody looked, the only evidence
+  left was a log that did not say what had died. It happened twice, and both times ended that way.
+- The report now carries the identifying strings the kernel writes into the dump's own header — process
+  name and command line — which is plain text, needs no debugger, and survives in the log.
+
+  **Raw, and labeled as raw.** Parsing the ELF note by offset would be more precise and the wrong call: the
+  layout is per-architecture, and a parsed field is a confident answer nobody reading a log can check. Ending
+  an investigation on one of those is a mistake this area has already made once.
+
+  Only the first 8 KiB are read — the dumps seen here are ~166 MiB and this runs inside an assertion message.
+  Proven by a needle placed past the window that must not come back, and by an unreadable header reporting
+  itself as unreadable rather than as an empty answer that reads like "nothing there".
+
+- **A mutation shard could run for hours, mutate nothing, and report success.** Its counter *detector*
+  accepted two markers and its *extractor* could read only one, so a unit whose output said
+  `Mutations for <file>` and never reached a `Mutations:` summary satisfied the detector, extracted to
+  nothing, printed nothing, and never reached the diagnosis in the other branch — where its exit code
+  would have been judged. Measured on a real run: `src/Marketplace` did exactly that in eight minutes
+  and its shard went green; across three shards the run spent 4 h 42 min and produced zero mutants, and
+  only the ninth step of nine said so.
+- The diagnosis now models **three** states rather than two. A run that mutated prints a `Mutations:`
+  summary even when the answer is nought; a directory with nothing mutable never mentions mutations at
+  all; and a run that *started* and stopped short says `Mutations for` with no summary behind it. The
+  third was being read as the second — the one reading that turns a missing measurement into a clean bill
+  of health. It is fatal now, and it names no cause, because `--covered-only` with no usable coverage and
+  an abort mid-unit produce the same shape and are different faults.
+
+- **A withdrawal declared after the buyer's window closed was booked as a statutory one.** The window is
+  frozen onto the grant and, until now, nothing read it — the same "a capability nothing reaches" defect
+  this package records against itself elsewhere, and this one was its own, one round old.
+  `RefundKind::StatutoryWithdrawal` is the statement *the buyer exercised a right*. After the window that
+  is false: the refund is the platform's decision, one it could have made differently. Same money,
+  different event, and telling them apart is the entire reason the kind exists.
+
+- **The only implementation of `MarketplaceRails` in this package was a test double.** Both halves shipped —
+  `StripeMerchantOnboarding` creates connected accounts and hosted onboarding links,
+  `DatabaseMerchantAccountDirectory` resolves a merchant to its account and back — and nothing put them
+  together and said "these are the marketplace rails", so `FakeMarketplaceRails` was the only thing that
+  answered the contract.
+- The consequence was structural. `BillingManager::marketplaceRails()` refuses any driver that is not a
+  `RoutesMoney`, and the shipped Stripe driver was not one, so on the only driver this package ships that
+  call could only ever throw. Every marketplace capability behind it was unreachable, and the go-live
+  checkpoint reported exactly that — correctly, while it was true.
+
 ## [0.13.0] - 2026-08-06
+
+**This release carries the work that was stamped `0.10.0`, `0.11.0` and `0.12.0`.** All three headings named
+versions that were never tagged — not here, not on the public mirror, not on Packagist, which agree that the
+line runs 0.9.0 → 0.13.0. Everything written under them reached users in this release, so it is listed here,
+under one heading per kind. Upgrading from `v0.9.0` — the last published version before this one — gets you
+all of it in one step.
+
+The numbering gap is left as it stands: 0.10.0, 0.11.0 and 0.12.0 do not exist, and minting them now would
+publish three versions nobody ever installed. The comparison link below is exact for the same reason. While
+the three headings stood separately, each pointed at `v0.9.0...v0.13.0` because no narrower range could be
+named — the range contained their changes without being exclusive to them, and a link ending at `v0.11.0` or
+`v0.12.0` would have named a ref that does not exist. Under one heading that range is simply this entry.
 
 ### Added
 
@@ -111,249 +1626,6 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   itself needs no reference. It is also `null` on a tip settled before the column existed, and such a tip
   stays **unresolved** rather than being resolved either way — clearing a reporting duty on no evidence and
   filing a seller on no evidence are both wrong, and the row can only honestly say that nobody recorded it.
-
-### Changed
-
-- **BREAKING — `RoutedPayment::charge()` and both `FanPayment` entry points now require the buyer.**
-  They take `Model $buyerOwner` and `bool $buyerIsDomestic`; on `FanPayment::tip()` and
-  `FanPayment::payWhatYouWant()` the buyer sits after the merchant, and the domesticity flag after the
-  existing `TaxContext`. Both are mandatory on purpose. The receipt above cannot be issued without
-  knowing who the buyer is, and made optional it would go on being skipped for every caller not yet
-  updated — silently, and for exactly the sales that already work. Passing your existing arguments
-  positionally raises a `TypeError` rather than charging, so nothing changes shape unnoticed.
-  `$buyerIsDomestic` is supplied rather than derived, the same way `SubscriptionCycleBilling` already
-  takes it: the package has no second opinion about where a buyer is.
-
-- **Changelog entries are now written as fragments, one file per change.** Add
-  `changelog.d/<your-branch>.md` with a `### Fixed` (or `### Added`, …) heading and your entry;
-  `CHANGELOG.md` is no longer edited by hand. At release, `just changelog-assemble <version>` folds
-  every fragment into one version block in Keep a Changelog's section order and deletes them.
-
-  Every entry used to land at the top of the same section of the same file, and git reads two insertions
-  at one place as a conflict even when both sides only add and neither overwrites. With *n* open pull
-  requests, each merge conflicted the other *n−1* — and the resolution is not what cost anything, since
-  it is always "keep both". Each one re-ran the full gate, around forty minutes on a serial queue, for a
-  change that moves one line. Measured on one day: 28 merges, 19 of them catch-up merges.
-
-  Appending at the bottom would not have helped; two contributions appending at the bottom collide just
-  as surely. As long as one file is the shared writing surface, concurrent contributions collide.
-
-  The trade is honest: fragments introduce a release step that did not exist, and a new way to go wrong —
-  a fragment left behind would surface one version late, as though the change had happened later. The
-  release refuses to run while any fragment is unassembled, so that failure is loud at the tag rather
-  than published.
-
-### Fixed
-
-- **A tip is now reported by what it was paid on, which is the only thing that can decide it.** The product
-  taxonomy states a tip's reportability as *delegated* — everything about a tip belongs to the sale it
-  accompanied, whether it is reportable included — and the reporting rule answered from the archetype alone.
-  Every tip therefore landed in the standardized branch, so a creator whose tips were on commissioned work
-  was never reported, however much came in. That is the direction the statute sanctions, and nothing about it
-  looked wrong from the inside: the figure was right, the line was there, and "a tip is not reportable" reads
-  as a reasonable sentence.
-
-  Two files each stated the same rule, each was internally consistent, and nothing read them together. They
-  are now held together by a test that compares the delegating set the taxonomy declares against the one the
-  activity resolves — including the cell that decides a filing, by name, so delegating some other cell cannot
-  satisfy it.
-
-  A reporting line is now the **effective** archetype, merged, rather than one line per document grouping.
-  That matters because one branch of the rule is a **threshold**: asked per line, it measures each fragment
-  on its own, so a seller over both edges — 33 sales at 205,008 against edges of 30 and 200,000 — split into
-  goods and tips-on-goods came back exempt *twice* and was never filed. Merging also fixes a second, quieter
-  loss: two groups with no archetype were held in one variable and the second replaced the first, so the
-  lines stopped adding up to the period's own total while each one still looked right.
-
-- **A receipt now records WHOSE charge reference it settles, and a redelivery is recognized per provider.**
-  A charge reference is unique only per payment provider — `billing_merchant_charges` says so with a
-  composite unique key. Documents stored the reference without the provider and three places treated it as
-  a key anyway, so on an installation with two drivers a sale whose reference collided with another
-  provider's would find *that* sale's document and issue none of its own: no receipt for the buyer, no
-  number drawn, and nothing red. A repeat and a collision are indistinguishable to a query that cannot see
-  which provider either belongs to.
-
-  `billing_invoices.provider` is now frozen beside `settled_charge_reference` by the receipt and settlement
-  issuers, carried across by a correction, and read by the redelivery lookup, the correction lookup and the
-  duplicate-receipt preflight. A caller that names no provider still matches on the reference alone — sound
-  on a single-driver installation and nowhere else, which is why it is documented rather than defaulted
-  silently. Rows written before this recorded no provider and are not given one; they group together,
-  because they genuinely share one namespace.
-
-  Latent until now, because exactly one driver ships. It would have armed itself the day a second one did.
-
-- **The webhook mapper's class docblock said `payment_intent.*` was deliberately not mapped, while the
-  file answered three of those events.** The sentence was true when written and stopped being true when
-  the routed-charge lane landed; nothing connected the two. "Not mapped" is a claim a consumer plans
-  around — they build their own listener, and then both fire. The docblock now states what is actually
-  excluded (every invoice-driven payment, which is the whole customer-facing surface) and names the
-  routed arms that are answered.
-
-- **The two test fakes claimed to be separate while sharing a contract.** `Billing::fake()` and
-  `Billing::fakeMarketplace()` both bind `MerchantOnboarding`, so whichever is called **last** owns that
-  binding for the rest of the test — a suite that calls both and asserts on the first sees an empty
-  recording, which reads as "it did not happen" rather than as a clash. Nothing throws. The overlap
-  itself is legitimate (onboarding belongs to both surfaces); what was wrong was the docblock calling
-  them "deliberately separate". It now names the shared contract, states that the last call wins, and
-  says what a test author should do about it.
-
-- **A foreign-currency booking left the DATEV rate field empty, so the amount was posted at face value.**
-  DATEV's rule is that a row whose WKZ Umsatz differs from the batch's base currency must state the rate
-  or the base amount; a row stating neither is either rejected or booked into a base-currency account at
-  face value. 500.00 PLN posted as 500.00 EUR overstates revenue roughly fourfold, and every figure
-  involved looks plausible. The row now carries the rate **frozen on the document** (field 4), taken from
-  the document layer specifically — not a rate re-derived at export time, which would let the books state
-  a number the document does not. A base-currency batch is unchanged byte for byte: DATEV wants those
-  fields empty there, so filling them would itself be the defect.
-
-- **Both e-invoice writers named three document type codes where the shared trait emits four.** The
-  omitted one was `384`, an amendment — and a cancellation (`381`) and an amendment are two different
-  documents that a tax authority tells apart by this code alone, so a reader who trusted the sentence
-  would have believed an amendment renders as a cancellation. The trait's own docblock has opened with
-  "Four codes" the whole time.
-
-- **A routed sale bought through hosted checkout was never written down.** The lane opened a Stripe
-  Checkout Session with the merchant's destination on it, the money moved and the merchant was paid —
-  and no row was ever recorded. `payment_intent.succeeded` has been mapped to a confirmation for
-  releases, but a confirmation *settles an existing row* and returns when there is none, so every
-  hosted routed sale settled into silence. What that cost is not a missing log: the reversal caps, the
-  earnings counter and the small-business threshold verdict are all computed from that table, so those
-  sales were invisible to every rule the money is supposed to obey afterwards. The lane now records
-  the sale as `pending` when the session opens, keyed on the PaymentIntent — the id the confirmation
-  arrives under, and available on the session the moment it is created, so the row exists before any
-  webhook can fire and the two halves cannot race. A single-seller installation is unaffected: no
-  merchant is resolved, so no row is written and the session stays byte-for-byte what it was.
-
-- **One-time add-ons were sold untaxed on installations that delegate tax to the provider.** Under
-  `billing.tax = provider` (or its alias `stripe`) the subscription lane asked Stripe to compute VAT and
-  the one-time add-on lane never did. The same installation-wide setting produced two opposite answers.
-
-  There was no symptom. Under a provider mode the package computes nothing on purpose — the local
-  calculator returns zero, correctly, because the provider is meant to do it — so a lane that also never
-  asks the provider produces no tax at all. Stripe opened a valid session, the money moved, the webhook
-  granted the add-on. The absence surfaces at a VAT return, or never. It is the same failure the package
-  already shipped once, when the `stripe` alias missed a literal comparison.
-
-  The lane now sets `automatic_tax`, `tax_id_collection` and `customer_update.address = 'auto'` under
-  exactly the same modes as the subscription lane, read from the mode classification rather than a
-  literal so the alias cannot be missed again. Both branches are pinned by tests, including the
-  counter-case: under a local mode nothing is sent, or the buyer would be charged tax twice.
-
-  **If you run a provider tax mode, your add-on checkouts will now collect VAT where they did not
-  before.** Whether the buyer pays more depends on the Stripe price's `tax_behavior`: an *exclusive*
-  price adds tax on top of the amount, an *inclusive* one carries it inside the amount already shown.
-  Check that setting on your add-on prices before deploying.
-
-- **A buyer receipt for a one-time sale can no longer be issued twice.** Receipts deduplicated only on the
-  billing-cycle key, so a document with no period went straight to the write — correct while the only caller
-  was the subscription cycle, and wrong for a one-time sale, which has no period and *is* redelivered when a
-  provider retries a webhook. A second delivery drew a second number out of a gapless series, and a gap
-  there cannot be healed by repeating the operation.
-
-  A periodless receipt now repeats on its charge reference, matched on the value the sale itself states.
-  With neither a period nor a reference the write still stands — there is nothing to recognize a repeat by,
-  and collapsing unrelated sales would be the worse error.
-
-- **Changelog assembly put the new release above `[Unreleased]` instead of below it.** The anchor matched
-  any `## [` heading and `## [Unreleased]` is almost always the first one, so a release assembled from
-  fragments landed on top of it — which reads as *these entries are older than the released ones*, the
-  opposite of true. It now anchors on the version digit.
-
-  Also: a fragment written the natural way puts a blank line after its own heading, and the assembled
-  heading carries one too, so a naive join produced two. That is not cosmetic — some Markdown renderers
-  read the wider gap as the end of the section and start a fresh block, dropping the entries out of the
-  heading they belong to.
-
-  Both were found by assembling against this repository's own changelog **before** the first release that
-  would have used it, and both are pinned by a test that fails when the old behavior is restored.
-
-- **Five defects an adversarial pre-release review found, all in the reporting and document paths.**
-
-  *The reporting roster and the figures asked different questions.* The roster filtered on the issue date
-  alone while the counters place a correction by the configured attribution — under the shipped default, by
-  the date of the document it credits. A seller whose only activity in a year was a correction of an older
-  settlement therefore entered the roster and received a row of **zeros**, which states that they received
-  nothing. The window rule now lives in one place, `InvoiceRecord::placedIn()`, and both queries read it.
-
-  *A seller whose model was hidden or gone dropped out silently.* `find()` cannot tell a soft-deleted record
-  from a missing one, and the run skipped both — removing a whole year of activity from a filing with
-  nothing to show for it. Global scopes are now taken off, so a closed account is still reported; a record
-  that is genuinely gone raises `SellerModelMissing` instead of being passed over.
-
-  *The provider-scoped document lookups preferred the older row.* Admitting rows that recorded no provider
-  is what carries the upgrade, and it also made a legacy row a candidate for a provider it may not belong
-  to — with only an id ordering, the older row won against the document that names the provider outright.
-  The exact match is now ordered first, and the redelivery lookup has a deterministic order at all, which
-  it lacked while deciding whether to draw a number from a gapless series.
-
-  *The duplicate-receipt check was blinded by its own key.* Grouping on the provider split two documents
-  about one sale into two groups, and a mixed population of named and unnamed rows is the permanent state
-  rather than a deployment artifact: only the routed one-time lane records a provider. The column is out of
-  the key again — this check warns rather than blocks, so a false positive costs a look, while a missed
-  second numbered document costs a gap in a series that must not have one.
-
-  *`provider` was mutable while the reference it belongs to was frozen*, so an update could re-point a
-  numbered tax document at another payment processor. It is frozen with its other half now.
-
-## [0.12.0] - 2026-08-04
-
-Upgrading from `v0.9.0` — the last published tag — this release also carries everything listed under
-`0.10.0` and `0.11.0`, both of which were stamped in this changelog and never tagged. One step gets you
-all three.
-
-### Changed
-
-- **The package no longer patches one of its own dev dependencies.** The mutation runner could not
-  read the `--coverage-php` report that php-code-coverage 14 writes, so this repository carried a
-  local patch for it. That fix is upstream as of `pest-plugin-mutate` v5.0.1, and the patch, its
-  lockfile and `cweagans/composer-patches` are gone with it — verified by running a scoped mutation
-  pass on the unpatched release rather than by reading the release note, because the failure this
-  patch also prevented is a run that reports success having tested **nothing**.
-
-  Nothing a consumer runs is affected, but the published manifest is: `require-dev`, `extra` and
-  `config.allow-plugins` each lost an entry. The release pipeline still strips development-only
-  patching keys — that guard is kept deliberately, since it has to already be in place on the day
-  a patch is added back.
-
-  Dev toolchain moved with it: Pest 5.0.3 and its Laravel/evals/type-coverage plugins, Pint 1.30.3,
-  Livewire 4.3.5. `phpstan/phpstan` and `rector/rector` stay pinned to exact versions on purpose —
-  see below.
-
-- **The two exact toolchain pins now carry their reason where it will be read.** `rector` reaches
-  into PHPStan's private `RichParser::$parser` — verified in `vendor/` against the installed 2.5.9,
-  at the source rather than from a changelog line — and writes to it. A caret cannot express that
-  coupling, because neither side owes the other anything about a private. The pins were previously
-  unexplained, which is how a pin gets "tidied up" by the next reader; they are now registered with
-  their retirement condition, and an unregistered or stale pin fails the build.
-
-### Fixed
-
-- **Realtime toasts carry their severity again — they had been arriving without it.** The account
-  hub's realtime bridge relays a broadcast toast to the browser as a `wirekit-toast` event, and it
-  sent the severity under the key `level`. The toast region reads `variant`, and reads `level`
-  nowhere.
-
-  Nothing failed. An unknown key falls through to the default, so every toast rendered as `info`
-  whatever it was — and a failed payment, which should interrupt, was announced on the polite live
-  region instead of the assertive one. Both the color and the screen-reader urgency were wrong in
-  the same direction, and neither was visible as an error.
-
-  The severity now goes out as `variant`. If you listen for `wirekit-toast` with your own handler
-  rather than the toast region, read `detail.variant` — `detail.level` is gone. The **inbound**
-  broadcast payload is unchanged (`{ message, level }`): that one is this package's own contract,
-  and the bridge is the seam that translates between the two.
-
-- **A badge intent from another kit's vocabulary now fails the build instead of rendering as
-  nothing.** The three enums that describe a status by color and text — subscription state,
-  invoice status, metering policy — emit into a fixed set of intents. A value outside it does not
-  throw; it resolves to no surface, leaving an unstyled badge whose meaning rests entirely on its
-  label. Every case is now checked against that set.
-
-## [0.11.0] - 2026-08-03
-
-Carries the work that was stamped `0.10.0` on 2026-08-01 and never tagged — `v0.9.0` was the last published version, so upgrading from it lands here in one step.
-
-### Added
 
 - **What a canceled prepaid term owes back, with the cent decided on purpose.** A year paid in January and
   canceled after four months owes eight months: 119.00 × 8/12 is 79.3333…, and the indivisible unit has to
@@ -1543,6 +2815,58 @@ Carries the work that was stamped `0.10.0` on 2026-08-01 and never tagged — `v
 
 ### Changed
 
+- **BREAKING — `RoutedPayment::charge()` and both `FanPayment` entry points now require the buyer.**
+  They take `Model $buyerOwner` and `bool $buyerIsDomestic`; on `FanPayment::tip()` and
+  `FanPayment::payWhatYouWant()` the buyer sits after the merchant, and the domesticity flag after the
+  existing `TaxContext`. Both are mandatory on purpose. The receipt above cannot be issued without
+  knowing who the buyer is, and made optional it would go on being skipped for every caller not yet
+  updated — silently, and for exactly the sales that already work. Passing your existing arguments
+  positionally raises a `TypeError` rather than charging, so nothing changes shape unnoticed.
+  `$buyerIsDomestic` is supplied rather than derived, the same way `SubscriptionCycleBilling` already
+  takes it: the package has no second opinion about where a buyer is.
+
+- **Changelog entries are now written as fragments, one file per change.** Add
+  `changelog.d/<your-branch>.md` with a `### Fixed` (or `### Added`, …) heading and your entry;
+  `CHANGELOG.md` is no longer edited by hand. At release, `just changelog-assemble <version>` folds
+  every fragment into one version block in Keep a Changelog's section order and deletes them.
+
+  Every entry used to land at the top of the same section of the same file, and git reads two insertions
+  at one place as a conflict even when both sides only add and neither overwrites. With *n* open pull
+  requests, each merge conflicted the other *n−1* — and the resolution is not what cost anything, since
+  it is always "keep both". Each one re-ran the full gate, around forty minutes on a serial queue, for a
+  change that moves one line. Measured on one day: 28 merges, 19 of them catch-up merges.
+
+  Appending at the bottom would not have helped; two contributions appending at the bottom collide just
+  as surely. As long as one file is the shared writing surface, concurrent contributions collide.
+
+  The trade is honest: fragments introduce a release step that did not exist, and a new way to go wrong —
+  a fragment left behind would surface one version late, as though the change had happened later. The
+  release refuses to run while any fragment is unassembled, so that failure is loud at the tag rather
+  than published.
+
+- **The package no longer patches one of its own dev dependencies.** The mutation runner could not
+  read the `--coverage-php` report that php-code-coverage 14 writes, so this repository carried a
+  local patch for it. That fix is upstream as of `pest-plugin-mutate` v5.0.1, and the patch, its
+  lockfile and `cweagans/composer-patches` are gone with it — verified by running a scoped mutation
+  pass on the unpatched release rather than by reading the release note, because the failure this
+  patch also prevented is a run that reports success having tested **nothing**.
+
+  Nothing a consumer runs is affected, but the published manifest is: `require-dev`, `extra` and
+  `config.allow-plugins` each lost an entry. The release pipeline still strips development-only
+  patching keys — that guard is kept deliberately, since it has to already be in place on the day
+  a patch is added back.
+
+  Dev toolchain moved with it: Pest 5.0.3 and its Laravel/evals/type-coverage plugins, Pint 1.30.3,
+  Livewire 4.3.5. `phpstan/phpstan` and `rector/rector` stay pinned to exact versions on purpose —
+  see below.
+
+- **The two exact toolchain pins now carry their reason where it will be read.** `rector` reaches
+  into PHPStan's private `RichParser::$parser` — verified in `vendor/` against the installed 2.5.9,
+  at the source rather than from a changelog line — and writes to it. A caret cannot express that
+  coupling, because neither side owes the other anything about a private. The pins were previously
+  unexplained, which is how a pin gets "tidied up" by the next reader; they are now registered with
+  their retirement condition, and an unregistered or stale pin fails the build.
+
 - **The cross-engine suites create their own databases and prove the engine they claim.** You no longer
   create `*_test` by hand: reachability is probed through a maintenance connection, so "server down" and
   "database not created yet" stop looking alike, and the second case is answered by creating it — including
@@ -2001,6 +3325,177 @@ Carries the work that was stamped `0.10.0` on 2026-08-01 and never tagged — `v
   published version loses anything.
 
 ### Fixed
+
+- **A tip is now reported by what it was paid on, which is the only thing that can decide it.** The product
+  taxonomy states a tip's reportability as *delegated* — everything about a tip belongs to the sale it
+  accompanied, whether it is reportable included — and the reporting rule answered from the archetype alone.
+  Every tip therefore landed in the standardized branch, so a creator whose tips were on commissioned work
+  was never reported, however much came in. That is the direction the statute sanctions, and nothing about it
+  looked wrong from the inside: the figure was right, the line was there, and "a tip is not reportable" reads
+  as a reasonable sentence.
+
+  Two files each stated the same rule, each was internally consistent, and nothing read them together. They
+  are now held together by a test that compares the delegating set the taxonomy declares against the one the
+  activity resolves — including the cell that decides a filing, by name, so delegating some other cell cannot
+  satisfy it.
+
+  A reporting line is now the **effective** archetype, merged, rather than one line per document grouping.
+  That matters because one branch of the rule is a **threshold**: asked per line, it measures each fragment
+  on its own, so a seller over both edges — 33 sales at 205,008 against edges of 30 and 200,000 — split into
+  goods and tips-on-goods came back exempt *twice* and was never filed. Merging also fixes a second, quieter
+  loss: two groups with no archetype were held in one variable and the second replaced the first, so the
+  lines stopped adding up to the period's own total while each one still looked right.
+
+- **A receipt now records WHOSE charge reference it settles, and a redelivery is recognized per provider.**
+  A charge reference is unique only per payment provider — `billing_merchant_charges` says so with a
+  composite unique key. Documents stored the reference without the provider and three places treated it as
+  a key anyway, so on an installation with two drivers a sale whose reference collided with another
+  provider's would find *that* sale's document and issue none of its own: no receipt for the buyer, no
+  number drawn, and nothing red. A repeat and a collision are indistinguishable to a query that cannot see
+  which provider either belongs to.
+
+  `billing_invoices.provider` is now frozen beside `settled_charge_reference` by the receipt and settlement
+  issuers, carried across by a correction, and read by the redelivery lookup, the correction lookup and the
+  duplicate-receipt preflight. A caller that names no provider still matches on the reference alone — sound
+  on a single-driver installation and nowhere else, which is why it is documented rather than defaulted
+  silently. Rows written before this recorded no provider and are not given one; they group together,
+  because they genuinely share one namespace.
+
+  Latent until now, because exactly one driver ships. It would have armed itself the day a second one did.
+
+- **The webhook mapper's class docblock said `payment_intent.*` was deliberately not mapped, while the
+  file answered three of those events.** The sentence was true when written and stopped being true when
+  the routed-charge lane landed; nothing connected the two. "Not mapped" is a claim a consumer plans
+  around — they build their own listener, and then both fire. The docblock now states what is actually
+  excluded (every invoice-driven payment, which is the whole customer-facing surface) and names the
+  routed arms that are answered.
+
+- **The two test fakes claimed to be separate while sharing a contract.** `Billing::fake()` and
+  `Billing::fakeMarketplace()` both bind `MerchantOnboarding`, so whichever is called **last** owns that
+  binding for the rest of the test — a suite that calls both and asserts on the first sees an empty
+  recording, which reads as "it did not happen" rather than as a clash. Nothing throws. The overlap
+  itself is legitimate (onboarding belongs to both surfaces); what was wrong was the docblock calling
+  them "deliberately separate". It now names the shared contract, states that the last call wins, and
+  says what a test author should do about it.
+
+- **A foreign-currency booking left the DATEV rate field empty, so the amount was posted at face value.**
+  DATEV's rule is that a row whose WKZ Umsatz differs from the batch's base currency must state the rate
+  or the base amount; a row stating neither is either rejected or booked into a base-currency account at
+  face value. 500.00 PLN posted as 500.00 EUR overstates revenue roughly fourfold, and every figure
+  involved looks plausible. The row now carries the rate **frozen on the document** (field 4), taken from
+  the document layer specifically — not a rate re-derived at export time, which would let the books state
+  a number the document does not. A base-currency batch is unchanged byte for byte: DATEV wants those
+  fields empty there, so filling them would itself be the defect.
+
+- **Both e-invoice writers named three document type codes where the shared trait emits four.** The
+  omitted one was `384`, an amendment — and a cancellation (`381`) and an amendment are two different
+  documents that a tax authority tells apart by this code alone, so a reader who trusted the sentence
+  would have believed an amendment renders as a cancellation. The trait's own docblock has opened with
+  "Four codes" the whole time.
+
+- **A routed sale bought through hosted checkout was never written down.** The lane opened a Stripe
+  Checkout Session with the merchant's destination on it, the money moved and the merchant was paid —
+  and no row was ever recorded. `payment_intent.succeeded` has been mapped to a confirmation for
+  releases, but a confirmation *settles an existing row* and returns when there is none, so every
+  hosted routed sale settled into silence. What that cost is not a missing log: the reversal caps, the
+  earnings counter and the small-business threshold verdict are all computed from that table, so those
+  sales were invisible to every rule the money is supposed to obey afterwards. The lane now records
+  the sale as `pending` when the session opens, keyed on the PaymentIntent — the id the confirmation
+  arrives under, and available on the session the moment it is created, so the row exists before any
+  webhook can fire and the two halves cannot race. A single-seller installation is unaffected: no
+  merchant is resolved, so no row is written and the session stays byte-for-byte what it was.
+
+- **One-time add-ons were sold untaxed on installations that delegate tax to the provider.** Under
+  `billing.tax = provider` (or its alias `stripe`) the subscription lane asked Stripe to compute VAT and
+  the one-time add-on lane never did. The same installation-wide setting produced two opposite answers.
+
+  There was no symptom. Under a provider mode the package computes nothing on purpose — the local
+  calculator returns zero, correctly, because the provider is meant to do it — so a lane that also never
+  asks the provider produces no tax at all. Stripe opened a valid session, the money moved, the webhook
+  granted the add-on. The absence surfaces at a VAT return, or never. It is the same failure the package
+  already shipped once, when the `stripe` alias missed a literal comparison.
+
+  The lane now sets `automatic_tax`, `tax_id_collection` and `customer_update.address = 'auto'` under
+  exactly the same modes as the subscription lane, read from the mode classification rather than a
+  literal so the alias cannot be missed again. Both branches are pinned by tests, including the
+  counter-case: under a local mode nothing is sent, or the buyer would be charged tax twice.
+
+  **If you run a provider tax mode, your add-on checkouts will now collect VAT where they did not
+  before.** Whether the buyer pays more depends on the Stripe price's `tax_behavior`: an *exclusive*
+  price adds tax on top of the amount, an *inclusive* one carries it inside the amount already shown.
+  Check that setting on your add-on prices before deploying.
+
+- **A buyer receipt for a one-time sale can no longer be issued twice.** Receipts deduplicated only on the
+  billing-cycle key, so a document with no period went straight to the write — correct while the only caller
+  was the subscription cycle, and wrong for a one-time sale, which has no period and *is* redelivered when a
+  provider retries a webhook. A second delivery drew a second number out of a gapless series, and a gap
+  there cannot be healed by repeating the operation.
+
+  A periodless receipt now repeats on its charge reference, matched on the value the sale itself states.
+  With neither a period nor a reference the write still stands — there is nothing to recognize a repeat by,
+  and collapsing unrelated sales would be the worse error.
+
+- **Changelog assembly put the new release above `[Unreleased]` instead of below it.** The anchor matched
+  any `## [` heading and `## [Unreleased]` is almost always the first one, so a release assembled from
+  fragments landed on top of it — which reads as *these entries are older than the released ones*, the
+  opposite of true. It now anchors on the version digit.
+
+  Also: a fragment written the natural way puts a blank line after its own heading, and the assembled
+  heading carries one too, so a naive join produced two. That is not cosmetic — some Markdown renderers
+  read the wider gap as the end of the section and start a fresh block, dropping the entries out of the
+  heading they belong to.
+
+  Both were found by assembling against this repository's own changelog **before** the first release that
+  would have used it, and both are pinned by a test that fails when the old behavior is restored.
+
+- **Five defects an adversarial pre-release review found, all in the reporting and document paths.**
+
+  *The reporting roster and the figures asked different questions.* The roster filtered on the issue date
+  alone while the counters place a correction by the configured attribution — under the shipped default, by
+  the date of the document it credits. A seller whose only activity in a year was a correction of an older
+  settlement therefore entered the roster and received a row of **zeros**, which states that they received
+  nothing. The window rule now lives in one place, `InvoiceRecord::placedIn()`, and both queries read it.
+
+  *A seller whose model was hidden or gone dropped out silently.* `find()` cannot tell a soft-deleted record
+  from a missing one, and the run skipped both — removing a whole year of activity from a filing with
+  nothing to show for it. Global scopes are now taken off, so a closed account is still reported; a record
+  that is genuinely gone raises `SellerModelMissing` instead of being passed over.
+
+  *The provider-scoped document lookups preferred the older row.* Admitting rows that recorded no provider
+  is what carries the upgrade, and it also made a legacy row a candidate for a provider it may not belong
+  to — with only an id ordering, the older row won against the document that names the provider outright.
+  The exact match is now ordered first, and the redelivery lookup has a deterministic order at all, which
+  it lacked while deciding whether to draw a number from a gapless series.
+
+  *The duplicate-receipt check was blinded by its own key.* Grouping on the provider split two documents
+  about one sale into two groups, and a mixed population of named and unnamed rows is the permanent state
+  rather than a deployment artifact: only the routed one-time lane records a provider. The column is out of
+  the key again — this check warns rather than blocks, so a false positive costs a look, while a missed
+  second numbered document costs a gap in a series that must not have one.
+
+  *`provider` was mutable while the reference it belongs to was frozen*, so an update could re-point a
+  numbered tax document at another payment processor. It is frozen with its other half now.
+
+- **Realtime toasts carry their severity again — they had been arriving without it.** The account
+  hub's realtime bridge relays a broadcast toast to the browser as a `wirekit-toast` event, and it
+  sent the severity under the key `level`. The toast region reads `variant`, and reads `level`
+  nowhere.
+
+  Nothing failed. An unknown key falls through to the default, so every toast rendered as `info`
+  whatever it was — and a failed payment, which should interrupt, was announced on the polite live
+  region instead of the assertive one. Both the color and the screen-reader urgency were wrong in
+  the same direction, and neither was visible as an error.
+
+  The severity now goes out as `variant`. If you listen for `wirekit-toast` with your own handler
+  rather than the toast region, read `detail.variant` — `detail.level` is gone. The **inbound**
+  broadcast payload is unchanged (`{ message, level }`): that one is this package's own contract,
+  and the bridge is the seam that translates between the two.
+
+- **A badge intent from another kit's vocabulary now fails the build instead of rendering as
+  nothing.** The three enums that describe a status by color and text — subscription state,
+  invoice status, metering policy — emit into a fixed set of intents. A value outside it does not
+  throw; it resolves to no surface, leaving an unstyled badge whose meaning rests entirely on its
+  label. Every case is now checked against that set.
 
 - **A 7% creator input booked to the 19% input-VAT account, and the docblock promised the opposite.**
   `DatevExport::creatorInputTransaction()` handled the reduced rate in three of its four branches — the fan
@@ -4180,10 +5675,9 @@ Carries the work that was stamped `0.10.0` on 2026-08-01 and never tagged — `v
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/pushery/billing-for-laravel/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/pushery/billing-for-laravel/compare/v0.9.0...v0.13.0
-[0.12.0]: https://github.com/pushery/billing-for-laravel/compare/v0.9.0...v0.12.0
-[0.11.0]: https://github.com/pushery/billing-for-laravel/compare/v0.9.0...v0.12.0
 [0.9.0]: https://github.com/pushery/billing-for-laravel/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/pushery/billing-for-laravel/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/pushery/billing-for-laravel/compare/v0.6.0...v0.7.0

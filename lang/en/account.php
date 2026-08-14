@@ -227,6 +227,9 @@ return [
     'toast' => [
         'payment_failed' => 'Your payment could not be processed. Please update your payment details.',
         'subscription_activated' => 'Your subscription is active — everything it includes is switched on.',
+        // The button on the shipped toast region. Named rather than an icon, because a toast that a screen
+        // reader announces needs a control that announces too.
+        'dismiss' => 'Dismiss',
     ],
 
 ];

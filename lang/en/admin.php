@@ -27,6 +27,15 @@ return [
         'invalid_tier' => 'That tier is not configured in billing.tiers.',
     ],
 
+    'cancel' => [
+        'heading' => 'Cancel a subscription',
+        'intro' => 'End an owner\'s subscription immediately. The change is recorded on the audit trail with your name against it.',
+        'owner_id' => 'Owner ID',
+        'submit' => 'Cancel subscription',
+        'canceled' => 'Subscription canceled.',
+        'not_found' => 'No owner found for that ID.',
+    ],
+
     'audit' => [
         'heading' => 'Recent activity',
         'type' => 'Event',

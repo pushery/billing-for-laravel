@@ -5,14 +5,11 @@ declare(strict_types=1);
 namespace Pushery\Billing\Console\Commands;
 
 use Carbon\CarbonImmutable;
-use DOMDocument;
-use DOMElement;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Http;
 use Pushery\Billing\Tax\RateConformityProbe;
 use Pushery\Billing\Tax\RateConformityReport;
-use Throwable;
+use Pushery\Billing\Tax\TedbRateSource;
 
 /**
  * Ask the source whether the rates we ship are still what it publishes.
@@ -41,8 +38,6 @@ final class ProbeRatesCommand extends Command
 
     protected $description = 'Compare the shipped VAT rates against the published source';
 
-    private const string ENDPOINT = 'https://ec.europa.eu/taxation_customs/tedb/ws/VatRetrievalService';
-
     public function handle(RateConformityProbe $probe): int
     {
         if (! (bool) Config::get('billing.tax_rate_probe.enabled', false)) {
@@ -56,106 +51,28 @@ final class ProbeRatesCommand extends Command
 
         $on = CarbonImmutable::parse((string) ($this->option('on') ?: 'today'))->startOfDay();
 
-        try {
-            $response = Http::timeout(30)
-                ->withHeaders(['Content-Type' => 'text/xml; charset=utf-8'])
-                ->send('POST', self::ENDPOINT, ['body' => $this->envelope($on)]);
+        // One reader for the source, shared with the proposing command next door. Two hand-written parsers
+        // over one response would drift silently — a parser that drifts does not throw, it returns fewer
+        // rows, and the caller then reports "no drift" over a response it failed to read.
+        //
+        // SAY WHICH, on a failure. `unreachable: true` on its own is unfalsifiable: a refused connection, a
+        // 500 from the service and a malformed request all arrive here and all read the same in the report.
+        // Measured 2026-08-03 — three nightly runs reported unreachable while the endpoint answered in 0.2 s
+        // from a laptop (405 to GET, 500 to a POST it could not parse), and two separate diagnoses of
+        // "network problem" were wrong because nothing ever said otherwise.
+        $answer = TedbRateSource::on($on);
 
-            if ($response->successful()) {
-                $report = $probe->compare($this->rowsIn($response->body()), $this->situationIn($response->body()), $on, $on);
-            } else {
-                // SAY WHICH. `unreachable: true` on its own is unfalsifiable: a refused connection,
-                // a 500 from the service and a malformed request all arrive here and all read the
-                // same in the report. Measured 2026-08-03 — three nightly runs reported unreachable
-                // while the endpoint answered in 0.2 s from a laptop (405 to GET, 500 to a POST it
-                // could not parse), and two separate diagnoses of "network problem" were wrong
-                // because this line never said otherwise.
-                $this->components->warn(sprintf(
-                    'The rate source answered HTTP %d, so nothing was compared. First 200 bytes: %s',
-                    $response->status(),
-                    str_replace(["\n", "\r"], ' ', mb_substr($response->body(), 0, 200)),
-                ));
-
-                $report = $probe->unreachable();
-            }
-        } catch (Throwable $e) {
-            // A transport failure is not a conformity failure. Reported as unreachable so the exit code
-            // stays honest about what was actually learned, which is nothing.
-            $this->components->warn('Could not reach the rate source: '.$e->getMessage());
+        if ($answer->failure !== null) {
+            $this->components->warn($answer->failure);
 
             $report = $probe->unreachable();
+        } else {
+            $report = $probe->compare($answer->rows, $answer->situationOn, $on, $on);
         }
 
         $this->report($report);
 
         return $report->exitCode();
-    }
-
-    /** The SOAP envelope TEDB expects, built by hand so the package needs no ext-soap. */
-    private function envelope(CarbonImmutable $on): string
-    {
-        $date = $on->toDateString();
-
-        return '<?xml version="1.0" encoding="UTF-8"?>'
-            .'<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" '
-            .'xmlns:urn="urn:ec.europa.eu:taxud:tedb:services:v1:IVatRetrievalService">'
-            .'<soap:Body><urn:retrieveVatRates><urn:memberStates/>'
-            ."<urn:from>{$date}</urn:from><urn:to>{$date}</urn:to>"
-            .'</urn:retrieveVatRates></soap:Body></soap:Envelope>';
-    }
-
-    /**
-     * The rate rows in a response.
-     *
-     * @return list<array{memberState: string, type: string, rateType: string, value: float}>
-     */
-    private function rowsIn(string $body): array
-    {
-        $document = new DOMDocument;
-
-        if (! @$document->loadXML($body)) {
-            return [];
-        }
-
-        $rows = [];
-
-        foreach ($document->getElementsByTagName('vatRateResults') as $node) {
-            $rows[] = [
-                'memberState' => $this->textIn($node, 'memberState'),
-                'type' => $this->textIn($node, 'type'),
-                // Asked directly: `rateTypeIn` already answers '' for a row that carries no rate element,
-                // and the reduction drops anything that is not DEFAULT. A pre-check here would only make the
-                // fallback below unreachable — a branch that cannot run is a branch nobody can trust.
-                'rateType' => $this->rateTypeIn($node),
-                'value' => (float) $this->textIn($node, 'value'),
-            ];
-        }
-
-        return $rows;
-    }
-
-    /** The date the response says it is answering for — verified against the window by the probe. */
-    private function situationIn(string $body): string
-    {
-        return preg_match('/<situationOn>([^<]+)<\/situationOn>/', $body, $m) === 1 ? $m[1] : '';
-    }
-
-    private function rateTypeIn(DOMElement $node): string
-    {
-        foreach ($node->getElementsByTagName('rate') as $rate) {
-            return $this->textIn($rate, 'type');
-        }
-
-        return '';
-    }
-
-    private function textIn(DOMElement $node, string $tag): string
-    {
-        foreach ($node->getElementsByTagName($tag) as $child) {
-            return trim($child->textContent);
-        }
-
-        return '';
     }
 
     private function report(RateConformityReport $report): void

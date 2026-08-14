@@ -99,12 +99,24 @@ final readonly class WebhookReceiver
      * back to a hash of the body, so an unidentifiable delivery is still recorded exactly once rather
      * than piling up a row per retry.
      *
+     * Read from the REQUEST, not only from the decoded body, because not every provider posts JSON. A
+     * form-encoded ping (`id=abc`) decodes to nothing, so a body-only read fell through to the hash —
+     * leaving a delivery that is correct and unfindable: whoever investigates holds the provider's
+     * resource id and has no route from it to the row, and `billing:replay` cannot be aimed either.
+     *
+     * No driver shipped in this package posts a form, so nothing here exercises that path today. It is
+     * the pluggable seam that needs it: `WebhookVerifier` and `WebhookEventMapper` are public contracts,
+     * and a consumer's driver may post whatever its provider posts.
+     *
+     * The hash fallback stays for a body that names nothing. Removing it would leave such a delivery with
+     * no key at all, which is worse than an opaque one.
+     *
      * @param  array<array-key, mixed>  $payload
      */
     private function eventId(array $payload, Request $request): string
     {
-        $id = $payload['id'] ?? null;
+        $id = $payload['id'] ?? $request->input('id');
 
-        return is_string($id) && $id !== '' ? $id : 'sha256:'.hash('sha256', $request->getContent());
+        return is_string($id) && trim($id) !== '' ? $id : 'sha256:'.hash('sha256', $request->getContent());
     }
 }

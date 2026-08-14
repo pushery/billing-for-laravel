@@ -6,6 +6,7 @@ namespace Pushery\Billing\ValueObjects;
 
 use InvalidArgumentException;
 use Pushery\Billing\Enums\SettlementDocumentType;
+use Pushery\Billing\Enums\TaxExemptionReason;
 
 /**
  * The tax decision for one creator's supply into a commission-chain sale — the whole answer, and nothing
@@ -40,6 +41,18 @@ final readonly class InboundTaxTreatment
         public bool $reverseChargeToRecipient,
         public Money $payoutAmount,
         public bool $exempt = false,
+        /**
+         * WHY the supply is relieved, where it is.
+         *
+         * `exempt` says THAT a relief applies; this says which one, and the document needs both. Without it
+         * the issuer freezes "exempt" and the renderer has nothing to name, so BT-120 falls back to a generic
+         * phrase that claims a relief without stating its ground — and the column is frozen, so nobody can
+         * heal the document afterwards.
+         *
+         * Null on a supply with no relief, and null is not a defect: a standard-rated band must carry no
+         * exemption reason at all (BR-S-*).
+         */
+        public ?TaxExemptionReason $exemptionReason = null,
     ) {
         if ($showsTax && $document !== SettlementDocumentType::SelfBilledInvoice) {
             throw new InvalidArgumentException(
@@ -52,6 +65,13 @@ final readonly class InboundTaxTreatment
             throw new InvalidArgumentException(
                 'A supply cannot both state its own tax and reverse the burden onto the recipient — those '
                 .'are two mutually exclusive answers to the same question.'
+            );
+        }
+
+        if ($exemptionReason instanceof TaxExemptionReason && $showsTax) {
+            throw new InvalidArgumentException(
+                'A supply that states its own tax cannot also name an exemption reason — the reason answers '
+                .'why no tax was stated, and a document carrying both would contradict itself.'
             );
         }
 

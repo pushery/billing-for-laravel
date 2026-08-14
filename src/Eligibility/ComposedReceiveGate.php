@@ -23,6 +23,25 @@ final class ComposedReceiveGate implements CanReceiveMoney
     /** @var list<callable(Model): bool> */
     private array $checks = [];
 
+    /**
+     * Compose the checks up front, which is what a container binding wants to write in one expression.
+     *
+     * This constructor exists because its ABSENCE was a defect rather than a gap. The published wiring
+     * example passes its checks here; with no constructor declared, PHP accepted that argument in silence,
+     * discarded it, and left a gate with zero checks — fail-closed, and therefore denying every merchant on
+     * the platform. Nothing threw and nothing was logged, so it read from the outside exactly like a
+     * merchant who had not finished onboarding.
+     *
+     * Variadic rather than an array parameter on purpose: each argument is type-checked at the call site,
+     * and the old array form now raises a TypeError there instead of failing silently later.
+     *
+     * @param  callable(Model): bool  ...$checks
+     */
+    public function __construct(callable ...$checks)
+    {
+        $this->checks = array_values($checks);
+    }
+
     /** @param  callable(Model): bool  $check */
     public function require(callable $check): self
     {

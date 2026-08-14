@@ -14,5 +14,14 @@ use Pushery\Billing\ValueObjects\ClientIntent;
  */
 interface OneTimeCharge
 {
-    public function purchase(Model $billable, string $addonKey): ClientIntent;
+    /**
+     * @param  ?string  $declarationReference  the key the package minted for the buyer's pre-purchase
+     *                                         declarations, to be carried to the provider as opaque
+     *                                         metadata and handed back on the webhook. Null on every
+     *                                         install with no consumer-rights profile, and a driver that
+     *                                         gets null must send exactly the payload it sent before this
+     *                                         parameter existed -- Mode S is a byte-identity promise, not
+     *                                         a behavioral one.
+     */
+    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null): ClientIntent;
 }

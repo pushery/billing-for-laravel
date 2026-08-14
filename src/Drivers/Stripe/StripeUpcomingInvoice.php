@@ -86,10 +86,9 @@ final readonly class StripeUpcomingInvoice implements UpcomingInvoiceContract
     private function subscriptionReference(Model $billable): ?string
     {
         $subscription = Subscription::query()
-            ->where('owner_type', $billable->getMorphClass())
-            ->where('owner_id', $billable->getKey())
+            ->forOwner($billable)
             ->forMerchant(null)
-            ->where('type', 'default')
+            ->ofDefaultType()
             ->latest('id')
             ->first();
 

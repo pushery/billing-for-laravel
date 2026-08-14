@@ -39,6 +39,12 @@ final class BillingAdminConsole extends Component
     /** The outcome of the last comp action ('granted' | 'not_found' | 'invalid_tier'), so the view can report it. */
     public ?string $compResult = null;
 
+    /** Owner id for the cancel action — client input; the action re-authorizes and resolves it. */
+    public string $cancelOwnerId = '';
+
+    /** The outcome of the last cancel action ('canceled' | 'not_found'). */
+    public ?string $cancelResult = null;
+
     public function mount(): void
     {
         $this->authorizeAdmin();
@@ -82,7 +88,7 @@ final class BillingAdminConsole extends Component
             return;
         }
 
-        $owner = $this->resolveOwner();
+        $owner = $this->resolveOwner($this->compOwnerId);
 
         if (! $owner instanceof Model) {
             $this->compResult = 'not_found';
@@ -96,6 +102,36 @@ final class BillingAdminConsole extends Component
         $this->reset('compOwnerId', 'compTier');
     }
 
+    /**
+     * End an owner's subscription immediately — the support case the console could not reach.
+     *
+     * `BillingAdmin` builds three out-of-band operations and the shipped console offered one. A support
+     * agent asked to end a subscription — an abuse case, a threatened chargeback, a customer on the phone —
+     * had no path to it in the package at all. The alternatives were both bad: the provider's own dashboard,
+     * where the local row drifts and this package's audit trail stays empty, or consumer code reinventing an
+     * authorization gate that already exists and already fronts the at-least-as-consequential comp action.
+     *
+     * Re-authorized like every other entry point, and an unknown owner is REPORTED rather than fataled —
+     * the same graceful outcome the comp action promises for the same input.
+     */
+    public function cancel(): void
+    {
+        $this->authorizeAdmin();
+
+        $owner = $this->resolveOwner($this->cancelOwnerId);
+
+        if (! $owner instanceof Model) {
+            $this->cancelResult = 'not_found';
+
+            return;
+        }
+
+        Container::getInstance()->make(BillingAdmin::class)->cancel($owner, 'admin console', Auth::user());
+
+        $this->cancelResult = 'canceled';
+        $this->reset('cancelOwnerId');
+    }
+
     /** Whether the app declares this tier in billing.tiers — existence, not resolvability (mirrors GrantTierCommand). */
     private function tierExists(string $tier): bool
     {
@@ -104,10 +140,17 @@ final class BillingAdminConsole extends Component
         return is_array($tiers) && array_key_exists($tier, $tiers);
     }
 
-    private function resolveOwner(): ?Model
+    /**
+     * Resolve one of the console's owner-id inputs to a model.
+     *
+     * Takes the id rather than reading a fixed property: two actions now resolve an owner, and a helper
+     * hard-wired to one of them would have meant a second copy of the malformed-id handling below — which is
+     * the part that keeps a crafted request from 500-ing the console.
+     */
+    private function resolveOwner(string $ownerId): ?Model
     {
         $model = Config::get('billing.customer.model');
-        $id = trim($this->compOwnerId);
+        $id = trim($ownerId);
 
         if (! is_string($model) || ! is_a($model, Model::class, true) || $id === '') {
             return null;

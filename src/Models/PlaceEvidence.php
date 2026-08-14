@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Override;
 use Pushery\Billing\Casts\UtcDateTime;
-use RuntimeException;
+use Pushery\Billing\Enums\AppendOnlyDeletion;
+use Pushery\Billing\Models\Concerns\AppendOnly;
 
 /**
  * What decided a sale's country, kept as country codes.
@@ -31,6 +32,8 @@ use RuntimeException;
  */
 final class PlaceEvidence extends Model
 {
+    use AppendOnly;
+
     protected $table = 'billing_place_evidence';
 
     /** @var list<string> */
@@ -47,22 +50,35 @@ final class PlaceEvidence extends Model
         'owner_erased_at' => UtcDateTime::class,
     ];
 
-    #[Override]
-    protected static function booted(): void
+    /**
+     * Erasure unlinks the person from a record whose CONTENT is untouched. Everything else would be
+     * re-deciding after the fact what was already decided and acted on.
+     *
+     * @return list<string>
+     */
+    protected static function appendOnlyMutableColumns(): array
     {
-        self::updating(function (self $evidence): void {
-            // Erasure unlinks the person from a record whose CONTENT is untouched. Everything else would be
-            // re-deciding a sale's country after the fact — and the country is what a return was built on.
-            $touched = array_keys($evidence->getDirty());
-            $allowed = ['owner_type', 'owner_id', 'owner_erased_at', 'updated_at'];
+        return ['owner_type', 'owner_id', 'owner_erased_at', 'updated_at'];
+    }
 
-            if (array_diff($touched, $allowed) !== []) {
-                throw new RuntimeException(
-                    'Place evidence records what decided a sale at the moment it happened and cannot be '
-                    .'changed afterwards; attempted to change '.implode(', ', array_diff($touched, $allowed))
-                    .'. A later correction works on the country originally resolved, never on a new one.'
-                );
-            }
-        });
+    /** Never, by any path: an erasure axis holds this table as RETAINED — unlinked rather than removed. */
+    protected static function appendOnlyDeletion(): AppendOnlyDeletion
+    {
+        return AppendOnlyDeletion::Never;
+    }
+
+    #[Override]
+    protected static function appendOnlyUpdateRefusal(array $columns): string
+    {
+        return 'Place evidence records what decided a sale at the moment it happened and cannot be '
+            .'changed afterwards; attempted to change '.implode(', ', $columns).'. A later correction '
+            .'works on the country originally resolved, never on a new one.';
+    }
+
+    #[Override]
+    protected static function appendOnlyDeleteRefusal(): string
+    {
+        return 'This record is retained and unlinked when its subject is erased, never deleted — the fact '
+            .'it holds stays true with nobody\'s name on it.';
     }
 }

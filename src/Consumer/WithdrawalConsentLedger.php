@@ -44,6 +44,10 @@ final readonly class WithdrawalConsentLedger
                 'consented_to_immediate_provision' => $consent->consentedToImmediateProvision,
                 'acknowledged_forfeiture' => $consent->acknowledgedForfeiture,
                 'notice_version' => $consent->noticeVersion,
+                // The wording, beside the version that names it. A receipt has to repeat what the buyer
+                // actually read, and a version identifier cannot produce that on its own.
+                'immediate_provision_notice' => $consent->immediateProvisionNotice,
+                'forfeiture_notice' => $consent->forfeitureNotice,
                 'given_at' => $consent->givenAt,
             ],
         );
@@ -92,6 +96,18 @@ final readonly class WithdrawalConsentLedger
             ->where('payment_reference', $paymentReference)
             ->first();
 
-        return $purchase instanceof AddonPurchase ? $this->for($owner, $purchase->reference) : null;
+        if (! $purchase instanceof AddonPurchase) {
+            return null;
+        }
+
+        // The MINTED key first. A declaration is recorded before the buyer leaves for the provider, so it
+        // cannot be keyed on a reference that does not exist yet -- the package mints one, and the purchase
+        // carries it home. Falling straight through to `reference` would answer null for every purchase made
+        // that way, and null on this path reads as "the buyer declared nothing": wrong, and indistinguishable
+        // from the truth.
+        //
+        // The session reference stays as the second reading, for an install that records against it out of
+        // band. That is the only other shape this ledger has ever been written in.
+        return $this->for($owner, $purchase->declaration_reference ?? $purchase->reference);
     }
 }
