@@ -66,4 +66,33 @@ trait DegradesGracefully
             return $fallback;
         }
     }
+
+    /**
+     * Like {@see orDegrade()}, but the failure costs its own section instead of the whole screen.
+     *
+     * ## Why this is a separate method and not a flag on the other one
+     *
+     * `orDegrade()` sets `$degraded`, which replaces the entire panel with a "try again" card. That is
+     * right for a panel's SUBJECT — a usage screen that cannot read usage has nothing honest to show.
+     *
+     * It is wrong for an OPTIONAL addition. A screen whose core data loaded fine should not go blank
+     * because a supplementary source is down: the reader loses everything that was working, and the
+     * card says "try again" about something that would fail again for a reason unrelated to what they
+     * came for.
+     *
+     * Everything else is deliberately identical — a 403/404 still propagates rather than softening into
+     * an outage, and the log still carries the class name only, never the message.
+     */
+    protected function orOmit(callable $resolve): mixed
+    {
+        try {
+            return $resolve();
+        } catch (HttpExceptionInterface|AuthorizationException $e) {
+            throw $e;
+        } catch (Throwable $e) {
+            Log::warning('An optional billing account-hub section was omitted.', ['exception' => $e::class]);
+
+            return null;
+        }
+    }
 }

@@ -2027,9 +2027,15 @@ return [
         // anti-injection stance would otherwise lapse.
         'tips' => [
             'enabled' => (bool) env('BILLING_MARKETPLACE_TIPS', false),
-            'commission_bps' => env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS') !== null
-                ? (int) env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS')
-                : null,
+            // ⚠️ ONE LINE ON PURPOSE — DO NOT WRAP THIS TERNARY.
+            // A `: null` sitting alone on its own line is UNREACHABLE COVERAGE, not a missing test.
+            // PHP emits no opcode for a constant-null false branch, so pcov never reports that line,
+            // while PHPUnit's static analyzer counts it as executable. The result is a line that
+            // reads 0 % forever and cannot be covered by any test that could ever be written --
+            // measured directly: `: null` is absent from pcov's line map entirely, where `: 7` and
+            // `: strlen('abc')` in the same position are both counted. Wrapped, this single line
+            // takes the whole package below its 100 % floor and no test can lift it back.
+            'commission_bps' => env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS') !== null ? (int) env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS') : null,
         ],
         'pwyw' => [
             'minimum_minor' => (int) env('BILLING_MARKETPLACE_PWYW_MINIMUM_MINOR', 0),

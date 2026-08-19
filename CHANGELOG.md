@@ -4,6 +4,227 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-08-19
+
+### Added
+
+- **`MeteredDimension` can now carry a burn rate and an exhaustion date**, and the usage panel renders
+  them as one line: *"At about 25 req per day, this lasts until 09/01/2026."*
+
+  Both are optional and **supplied by the provider, never computed here**. A rate needs history the
+  snapshot does not carry, and "per day" is a claim about a project's own counting — a mid-period
+  reset, a backfilled import, or a meter that skips weekends each give a different honest answer.
+  Computing it in the package would make one of them everybody's answer and be wrong for the rest.
+
+  `hasForecast()` requires **both** halves. A rate without a date renders as a speed with no
+  destination; a date without a rate is a deadline nobody can check. Supplying one leaves the panel
+  exactly as it was, which is also what every existing project gets: the parameters are optional, so
+  no caller changes.
+
+  A negative rate is refused at construction rather than drawn — usage does not run backwards, and a
+  negative rate would put the exhaustion date in the past.
+
+  Reported from a consumer's capability diff before adopting the hub: its own screen showed both, and
+  the hub had no field to carry either, so the capability would have disappeared on adoption with no
+  test going red.
+
+- **A usage history can now account for individual movements, not only finished periods.** A project
+  that keeps a movement-level ledger binds `SuppliesUsageMovements`, and the history screen gains a
+  paginated, chronological stream: what was spent, what was credited, and the reference each came
+  from.
+
+  It answers the question the aggregate cannot. `periods()` is one row per period — a month holding
+  five top-ups and two hundred sends collapses into a single number — and `topups()` sits beside it as
+  a separate list. Both are true, and neither says *why the balance was empty on the 14th when it was
+  topped up on the 12th*: the ordering between the two lists is what explains the outcome, and putting
+  them side by side is exactly what removes it.
+
+  **A sibling contract rather than a method on `UsageHistoryProvider`.** That interface invites
+  consumers to bind their own, so a method added there is a fatal error in code this package does not
+  own. The same reasoning already governs `RoutesMoney` and `SuppliesProductArchetypes`.
+
+  **This package's own history deliberately does not implement it.** Consumption is recorded per event,
+  but grants land in the prepaid ledger as a running balance with no row per credit — so the shipped
+  implementation could offer spending without the top-ups beside it, which is precisely the half-answer
+  the stream exists to avoid. A project that records both supplies both.
+
+  Nothing changes for an install that binds nothing: the section is absent, and the screen is what it
+  was.
+
+### Changed
+
+- **The pinned analyzer pair moved forward together: PHPStan 2.2.7 to 2.2.8, Rector 2.5.9 to 2.6.2.**
+  Both stay pinned to an exact version — the pair is raised, never loosened. Rector reaches into
+  PHPStan's private `RichParser::$parser` and writes to it, a coupling neither side owes the other and
+  that no version range can express, so the exact pin is the whole protection.
+
+  What carried the raise was not that the suite went green. A green run only measures the combination
+  resolved today, and that same observation was true before the last time this broke. It was that
+  `RichParser.php` is byte-identical between PHPStan 2.2.7 and 2.2.8: the property being written to
+  cannot have moved across that bump, whatever the release notes say. Rector 2.6.2 was read at the
+  source as well, and still performs both accesses.
+
+  The pin register records the new measurement in place of the old one. A register that points at a
+  version nobody is running is how a pin outlives its reason and then gets cleared away as obsolete.
+
+- **The pinned Stripe API version is now `2026-06-24.dahlia`, the same one Cashier sends.** It was
+  `2025-08-27.basil` — a whole API generation behind, which meant this package and the Cashier it
+  depends on were addressing the same Stripe account in two different response shapes. Both calls
+  succeed and both return an object, so nothing anywhere reported it.
+
+  The split had a cause worth naming, because the guard against it was already written and could not
+  work. Cashier builds its client with `Cashier::STRIPE_VERSION`, which is the SDK's own
+  `StripeApiVersion::CURRENT` — so its version moves with every `composer update`. Ours is a literal,
+  deliberately, and the comment above it asks that no dependency update move it. It guarded the half
+  that was never going to drift.
+
+  A new check compares the two directly and fails on the first SDK update that moves Cashier's
+  constant, which is exactly when somebody should look. Raising the pin is therefore an **alignment**
+  rather than a departure — and the direction is the one the API is going anyway: under the old pin,
+  Stripe's Accounts v2 API is not addressable at all.
+
+  **Consumers pinning their own version are unaffected** — `billing.stripe.api_version` still
+  overrides this, and that path keeps its own test.
+
+- **The `stripe/stripe-php` requirement now matches what Cashier allows: `^17.4|^18.0|^19.0|^20.0`.**
+  It was `^17.3`, which means `>=17.3.0 <18.0.0` and cut off majors 18, 19 and 20 — majors
+  `laravel/cashier` has vouched for since its v16.7.0 release on 2026-08-05. Cashier is the library
+  that actually talks to Stripe, so it decides which SDK major is compatible; being narrower than it
+  meant an application already running on SDK 19 could not install this package, for no reason either
+  library could name.
+
+  The symptom pointed away from the cause, which is why it lasted twelve days. Composer reports a
+  too-narrow requirement here as *"cashier cannot be updated"*, never as *"your constraint is stale"*,
+  and the guard meant to catch it compared the first integer in each range — reading 17 on both sides
+  of `^17.3` versus `^17.4|^18.0|^19.0|^20.0` and passing. A range's floor is the one number a
+  widening does not move.
+
+  **Consumers on SDK 17.x are unaffected in what they can install** — the requirement still allows
+  `>=17.4` — but note that this package's static analysis now runs against the highest allowed major,
+  so 18+ is the shape it is verified against.
+
+- **`config/billing.php`: the marketplace tip commission is now written on one line.** Behavior is
+  unchanged — the same ternary, the same value, the same environment variable. Only the formatting
+  moved, and it moved for a reason worth knowing if you have published this config and diff it
+  against ours.
+
+  A `: null` false branch on its own line is a line PHP never executes: the engine emits no
+  instruction for a constant-null branch, so no tool that watches execution can ever see it run,
+  while a tool that reads the source counts it as code. The two disagree permanently, and no test
+  can settle it. Measured directly — `: null` is absent where `: 7` and `: strlen('abc')` in the
+  same position are both present.
+
+  The comment above the line says this, and it is load-bearing: re-wrapping that ternary
+  reintroduces the disagreement, and nothing you can write will resolve it.
+
+### Fixed
+
+- **The build system this package is developed on no longer appears in shipped prose.** Three passages
+  named it — one in the 0.14.0 entry, two that had been shipping since 0.13.0 and reached a public release
+  page. Which machinery builds a package is nobody's business downstream: naming it dates the prose to an
+  infrastructure choice a reader cannot see, cannot verify, and may outlive. Those passages say "the CI"
+  now and lose no meaning.
+
+  The check that should have caught them had been added a day earlier for build **run identifiers**, and
+  was narrower than the class it was meant to cover: a command name, a sentence subject and a container
+  image all carry the same information without carrying a number. A guard aimed at one shape of a leak
+  class is not a guard on the class, and the shape it missed is the one that reads as an ordinary
+  technical noun — so nobody stops on it.
+
+  This note is deliberately written without quoting any of it. A changelog fragment becomes shipped prose
+  the moment it is assembled, so an entry that documented the leak by example would ship the leak.
+
+- **Two test files no longer depend on which one Pest loaded first.** `CiDefinitionsAgreeTest` exempts the
+  cost-bearing CI lanes from a rule on the strength of `LiveProviderPolicyTest` pinning them — and read
+  that set from a file-scope constant declared in that other file. It worked in a full run and failed with
+  `Undefined constant` when the file was run alone, which is the one way a developer actually runs it
+  while changing it.
+
+  Green in the gate and red on the desk is the shape that never gets fixed: whoever hits it is mid-change
+  and reasonably blames their own edit. The constant now lives in `tests/Pest.php`, which loads before any
+  test file, so the dependency stops depending on load order.
+
+  A guard holds the class rather than this one instance. It strips comments **and string contents** before
+  looking, because the first measurement counted five cross-file constants and four of them were a name
+  mentioned in a docblock or inside a description — sending somebody to move constants that nothing reads.
+
+- **The manifest no longer points a reader at a file the package does not contain.** The `anthropic-ai/sdk`
+  suggestion explained itself with *"`tests/Pest.php` wires it"* — and `tests/` is stripped from the
+  published package, so the one person that sentence addresses cannot open the file it names. It says what
+  happens now instead of where.
+
+  The guard covers `description`, `keywords` and `suggest` — the prose a registry puts on the page and
+  `composer suggest` prints. It deliberately leaves `autoload-dev`, `require-dev` and `scripts` alone:
+  those name `tests/` and `workbench/` too, but Composer ignores all three for a dependency, so they
+  mislead nobody. Whether they belong in a published manifest at all is a question about its shape, not a
+  defect to guard against.
+
+- **Every GitHub surface the release writes to now gets a body it can accept.** The pull request body was
+  capped after it broke a release; the release body was not, and the very entry that broke the pull
+  request sat at 95 % of *its* ceiling — 119 125 characters against 125 000, with 5 875 to spare. One more
+  release of that size and the same class of failure returns, one surface over.
+
+  The capping is now **one function with two call sites** rather than a rule written twice. A second copy
+  is the drift this package keeps finding, and a cap that exists on one surface and not the other is
+  exactly how the first one was missed.
+
+  The failure would also have been hard to read. Whatever went wrong, the step said *"Check PAT
+  permissions"* — sending a reader to audit a token that could not be the cause. The size is now printed
+  before the call and named in the warning, so the next failure of this kind is legible from the log.
+
+- **A capped body no longer collapses to its own footnote.** The cut retreats to the last blank line so a
+  body never ends mid-sentence; where the cut chunk holds no blank line, the retreat had nowhere to go and
+  fell back to a line count that is *zero* for a chunk containing no newline. Measured on a
+  200 000-character single line: 215 bytes of output, every word of the entry gone, and the step still
+  reporting success. The byte cut is the fallback now — the worst shape this bug can take is publishing,
+  and publishing nothing.
+
+- **Dates are written in the reader's own language now.** Every screen used to format with a fixed
+  `d.m.Y`, so six of the seven shipped locales got a German date — and for English readers that is not
+  merely unidiomatic but ambiguous: `03.09.2026` is the 3rd of September or the 9th of March depending
+  on who is looking, and both readings are reasonable. On an invoice, and on the date access expires,
+  guessing wrong is not a cosmetic problem.
+
+  One helper now decides, and the locale reaches it explicitly. That last part is the whole substance:
+  **Laravel does not carry its locale into Carbon.** `Application::setLocale()` sets the translator and
+  fires `LocaleUpdated`, and nothing in the framework listens — the event appears in exactly two files,
+  the one that fires it and the class itself. So the obvious fix, a bare `isoFormat()`, would have
+  rendered American dates for all seven languages: the same defect pointing the other way, and harder
+  to spot, because the test anyone writes first runs under `en` where it looks perfect.
+
+  The invoice spells its month out (`3 September 2026`). It is the one artifact that outlives the
+  session it was rendered in, and `03/09/2026` is character-for-character what English produces for a
+  different day — a month name needs no locale to disambiguate it. Screens keep the compact numeric
+  form, and the admin event log keeps its time.
+
+  **Consumers see this automatically**; there is nothing to configure. If your application sets a
+  locale, the package now follows it.
+
+- **Listing invoices no longer drops rows on SDK 18 and newer.** `StripeInvoices::recent()` filtered
+  each invoice through `is_string($invoice->id)` before including it. On stripe-php 17.x that guard was
+  necessary — `Stripe\Invoice::$id` was declared `null|string` there — but from 18.0 the property is
+  `string`, making the check a branch that can only ever be true and, worse, a filter that silently
+  determined which invoices a customer sees.
+
+- **Three new checks catch an upstream range change at the source instead of hours downstream.**
+  `DevToolPinsTest` now asserts that our SDK range and Cashier's overlap at all, that we cut off no
+  major Cashier allows, and — the arm the other two structurally cannot see — that Cashier's own range
+  is still the one recorded here, so a *narrowing* is caught as well as a widening. A separate check
+  asserts the installed major is at least 18, because the null guard removed above is only safe while
+  that holds and no lockfile records which version was resolved.
+
+  Each failure message says so in its first line: **this is probably not your diff.** Since a library
+  commits no lockfile, CI re-resolves on every run, so an upstream release reaches these checks before
+  it reaches anybody's changes — and without that sentence the finding reads as something the current
+  author broke.
+
+- **An optional account-hub section can no longer blank the whole screen when its source fails.**
+  `orDegrade()` replaces the entire panel with a "try again" card — correct when a panel cannot read
+  its own subject, wrong when a supplementary source is down and everything the reader came for
+  loaded fine. Optional sections now use `orOmit()`, which costs the section and nothing else. A
+  403/404 still propagates rather than softening into an outage, and the log still carries the
+  exception class only.
+
 ## [0.14.0] - 2026-08-14
 
 ### Added
@@ -475,7 +696,7 @@ the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   survive that far. Red-probed on both real shapes — the defect above, and a placeholder in a **comment**,
   which the substituter also reads.
 
-  `woodpecker-cli lint` calls all of this valid: it checks the schema, and the substituter runs afterwards on
+  A CI config linter calls all of this valid: it checks the schema, and the substituter runs afterwards on
   the server. A green lint is not a signal here, which is why the rule lives in a test rather than in a
   comment. The exemption is exercised in the test too — nothing in this repository writes `${CI_…}` today, so
   an unexercised escape hatch would be one nobody has checked.
@@ -3544,7 +3765,7 @@ named — the range contained their changes without being exclusive to them, and
   of the month asks about that month; next month is not a late answer for this one; two rules stay apart on
   one day) are still the right ones — only the mechanism beneath them changed.
 - **The CI clone plugin ran on a moving `latest`, in four lanes.** Naming the image at all is what opts a
-  Woodpecker lane OUT of the server-side pinned clone plugin, so an untagged `woodpeckerci/plugin-git` trades
+  lane OUT of the server-side pinned clone plugin, so an untagged clone-plugin image trades
   a pinned default for whatever `latest` happens to be. Nothing here watched it: the renovate container
   freeze is anchored on the docker datasource, the pin scan only knows postgres/mysql/php-pcov/playwright,
   and the version guards skip a tagless image by construction.
@@ -3971,7 +4192,7 @@ named — the range contained their changes without being exclusive to them, and
   the one red that matters. An unreachable source now passes loudly, saying that nothing was learned rather
   than implying the shipped rates are wrong.
 
-  Its log could also never say why it ended, and the cause was not the redirect it looked like. Woodpecker
+  Its log could also never say why it ended, and the cause was not the redirect it looked like. The CI
   runs a step under `set -e`, so `probe; code=$?; cat …; exit $code` aborts at the probe: the capture, the
   `cat` and the exit never run, and the log stops after the traced command. That reads as a silent death —
   and a ticket was written about a crash that had not happened, while the report step printed the probe's
@@ -5675,7 +5896,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/pushery/billing-for-laravel/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/pushery/billing-for-laravel/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/pushery/billing-for-laravel/compare/v0.9.0...v0.13.0
 [0.9.0]: https://github.com/pushery/billing-for-laravel/compare/v0.8.0...v0.9.0

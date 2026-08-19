@@ -42,6 +42,32 @@
             </section>
         @endif
 
+        {{-- The movement stream, rendered only when a project bound something that can account for one.
+             Deliberately BELOW the aggregates: periods answer "what did this cost", movements answer
+             "why", and somebody who opens this screen usually wants the first before the second. --}}
+        @if ($movements !== null && $movements->isNotEmpty())
+            <section class="space-y-3" aria-label="{{ __('billing::account.usage_history.movements_heading') }}">
+                <h2 class="text-lg font-medium">{{ __('billing::account.usage_history.movements_heading') }}</h2>
+
+                <ul class="divide-y divide-gray-200 dark:divide-gray-700">
+                    @foreach ($movements as $movement)
+                        <li class="flex items-baseline justify-between gap-4 py-2 text-sm">
+                            <span>
+                                {{ __('billing::account.usage_history.'.($movement->isCredit() ? 'movement_credited' : 'movement_spent'), [
+                                    'units' => number_format($movement->units()),
+                                    'meter' => $movement->meter,
+                                ]) }}
+                                <span class="block text-xs text-gray-500 dark:text-gray-400">{{ $movement->reference }}</span>
+                            </span>
+                            <time class="shrink-0 text-xs text-gray-500 dark:text-gray-400">{{ \Pushery\Billing\Support\LocalizedDate::short($movement->occurredOn) }}</time>
+                        </li>
+                    @endforeach
+                </ul>
+
+                {{ $movements->links() }}
+            </section>
+        @endif
+
         @if ($topups !== [])
             <section class="space-y-3" aria-label="{{ __('billing::account.usage_history.topups_heading') }}">
                 <h2 class="text-lg font-medium">{{ __('billing::account.usage_history.topups_heading') }}</h2>
@@ -52,7 +78,7 @@
                             <span class="font-medium">{{ $topup->addonKey }}</span>
                             <span class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
                                 <span>{{ $topup->amount->format() }}</span>
-                                <span class="text-xs">{{ $topup->purchasedAt->format('Y-m-d') }}</span>
+                                <span class="text-xs">{{ \Pushery\Billing\Support\LocalizedDate::short($topup->purchasedAt) }}</span>
                                 @if ($topup->reversed)
                                     <span class="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                                         {{ __('billing::account.usage_history.reversed') }}

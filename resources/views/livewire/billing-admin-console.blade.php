@@ -136,7 +136,7 @@
                                 <td class="px-4 py-3">
                                     {{ $event->subject_type ? class_basename($event->subject_type).' #'.$event->subject_id : '—' }}
                                 </td>
-                                <td class="px-4 py-3 whitespace-nowrap tabular-nums">{{ $event->created_at?->format('d.m.Y H:i') ?? '—' }}</td>
+                                <td class="px-4 py-3 whitespace-nowrap tabular-nums">{{ \Pushery\Billing\Support\LocalizedDate::shortWithTime($event->created_at) ?? '—' }}</td>
                             </tr>
                         @endforeach
                     </tbody>

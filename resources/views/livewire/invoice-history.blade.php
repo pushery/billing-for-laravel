@@ -27,7 +27,7 @@
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                     @foreach ($page->rows as $invoice)
                         <tr wire:key="invoice-{{ $invoice->id }}">
-                            <td class="px-4 py-3">{{ $invoice->date->format('d.m.Y') }}</td>
+                            <td class="px-4 py-3">{{ \Pushery\Billing\Support\LocalizedDate::short($invoice->date) }}</td>
                             <td class="px-4 py-3">{{ $invoice->number ?? '—' }}</td>
                             <td class="px-4 py-3">{{ $invoice->total->format() }}</td>
                             <td class="px-4 py-3">

@@ -43,11 +43,12 @@ final readonly class StripeInvoices implements InvoicesContract
         $rows = [];
 
         foreach ($invoices->data as $invoice) {
-            $id = $invoice->id;
-
-            if (is_string($id)) {
-                $rows[] = $this->toValue($invoice, $id);
-            }
+            // No null guard on the id, and the reason is a version boundary rather than an oversight.
+            // stripe-php declared `null|string $id` up to 17.x and narrowed it to `string` in 18.0.
+            // This package now requires ^17.4|^18.0|^19.0|^20.0 and composer resolves that to the
+            // highest allowed major, so statics run against the 18+ shape: a guard here would be dead
+            // code that PHPStan reports as such (`is_string() will always evaluate to true`).
+            $rows[] = $this->toValue($invoice, $invoice->id);
         }
 
         return new InvoicePage($rows, $invoices->has_more);

@@ -97,8 +97,23 @@ final class StripeServiceProvider extends ServiceProvider
      * The Stripe API version the package is written and TESTED against. The default a consuming app runs
      * on unless it sets billing.stripe.api_version. Moving this is a deliberate act: bump it, run the
      * live-Stripe suite against the new version, and ship — never let a dependency update move it instead.
+     *
+     * ## Why it must equal Cashier's, and why that was not true until 2026-08-18
+     *
+     * Cashier builds its own client with `Cashier::STRIPE_VERSION`, which is `StripeApiVersion::CURRENT`
+     * — the SDK's constant. So Cashier's version moves with every SDK update while this one, correctly,
+     * does not. The two drifted a whole generation apart: ours on `basil`, Cashier's on `dahlia`, both
+     * talking to the same Stripe account about the same objects, in two different response shapes.
+     *
+     * The rule above was written to prevent exactly that and could not: it guards the half that does not
+     * move on its own. `StripeWiringTest` now compares the two, so the drift fails a test instead of
+     * waiting to be noticed.
+     *
+     * Raising it to Cashier's value is therefore an ALIGNMENT, not a departure. It also happens to be the
+     * floor the Accounts v2 API requires — under `basil` that API is not addressable at all, measured
+     * against the real test API rather than read from the docs.
      */
-    public const string STRIPE_API_VERSION = '2025-08-27.basil';
+    public const string STRIPE_API_VERSION = '2026-06-24.dahlia';
 
     #[Override]
     public function register(): void

@@ -31,11 +31,11 @@
         {{-- When access ends (grace) or has ended, show the date — read from the local column, never a call. --}}
         @if ($endsAt !== null && $state->value === 'grace')
             <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                {{ __('billing::account.subscription.access_ends', ['date' => $endsAt->format('d.m.Y')]) }}
+                {{ __('billing::account.subscription.access_ends', ['date' => \Pushery\Billing\Support\LocalizedDate::short($endsAt)]) }}
             </p>
         @elseif ($endsAt !== null && $state->value === 'ended')
             <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                {{ __('billing::account.subscription.access_ended', ['date' => $endsAt->format('d.m.Y')]) }}
+                {{ __('billing::account.subscription.access_ended', ['date' => \Pushery\Billing\Support\LocalizedDate::short($endsAt)]) }}
             </p>
         @endif
 
@@ -43,7 +43,7 @@
             <p class="mt-4 text-sm text-gray-600 dark:text-gray-300">
                 {{ __('billing::account.subscription.next_invoice', [
                     'amount' => $preview->amount->format(),
-                    'date' => $preview->date->format('d.m.Y'),
+                    'date' => \Pushery\Billing\Support\LocalizedDate::short($preview->date),
                 ]) }}
             </p>
         @endif
