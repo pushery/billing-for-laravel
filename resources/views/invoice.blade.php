@@ -29,7 +29,7 @@
     <p class="muted">
         {{ __('billing::invoice.number', ['number' => $number]) }}
         @if ($issuedAt)
-            &middot; {{ __('billing::invoice.issued', ['date' => $issuedAt->format('d.m.Y')]) }}
+            &middot; {{ __('billing::invoice.issued', ['date' => \Pushery\Billing\Support\LocalizedDate::long($issuedAt)]) }}
         @endif
         @if ($correctsNumber)
             {{-- A correction that does not name what it corrects is one nobody can act on. The XML has

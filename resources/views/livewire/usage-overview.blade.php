@@ -63,6 +63,21 @@
                         <p class="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">{{ __('billing::account.usage.warning') }}</p>
                     @endif
 
+                    {{-- Burn rate and reach, and ONLY when the provider supplied both. The package does not
+                         compute them: a rate needs history this snapshot does not carry, and "per day" is a
+                         claim about a project's own counting (a mid-period reset, a backfilled import, a
+                         meter that skips weekends each give a different honest answer). `hasForecast()`
+                         decides, so a half-filled pair renders nothing rather than half an answer. --}}
+                    @if ($dimension->hasForecast())
+                        <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                            {{ __('billing::account.usage.forecast', [
+                                'rate' => number_format($dimension->ratePerDay, $dimension->ratePerDay < 10 ? 1 : 0),
+                                'unit' => $dimension->unit,
+                                'date' => \Pushery\Billing\Support\LocalizedDate::short($dimension->exhaustedAt),
+                            ]) }}
+                        </p>
+                    @endif
+
                     {{-- Policy-driven remedy: a blocking dimension can only be relieved by upgrading to a higher
                          ceiling; a degrading/soft one is topped up with more units. The CTA appears once the
                          dimension is warning or over, and never for a comfortable one. --}}

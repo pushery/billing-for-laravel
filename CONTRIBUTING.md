@@ -28,7 +28,7 @@ which runs, and each can be run on its own:
 | `composer rector:test` | Refactoring — Rector with the PHP rule set, dry-run clean (`composer rector` to apply). |
 | `composer analyze` | Static analysis — Larastan at `max` level, no errors. |
 | `composer test:type-coverage` | 100% type coverage of `src/`. |
-| `composer test:coverage` | 100% line coverage of `src/`. |
+| `composer test:coverage` | 100% line coverage of everything that ships — `src/`, `config/`, `database/` and `routes/`. |
 
 The suite uses [Pest](https://pestphp.com) and Orchestra Testbench.
 

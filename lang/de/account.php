@@ -140,6 +140,7 @@ return [
         'heading' => 'Nutzung',
         'prepaid' => 'Vorausbezahltes Guthaben: :units :unit',
         'unmetered' => 'Dein Tarif hat keine gemessenen Limits.',
+        'forecast' => 'Bei rund :rate :unit pro Tag reicht das bis :date.',
         'warning' => 'Du näherst dich deinem Limit.',
         'over' => 'Du hast dein Limit überschritten.',
         'over_soft' => 'Du bist über deinem inklusiven Kontingent; darüber hinausgehende Nutzung wird berechnet.',
@@ -157,6 +158,9 @@ return [
         'prepaid_used' => ':units vorausbezahlt',
         'topups_heading' => 'Aufladungen',
         'reversed' => 'storniert',
+        'movements_heading' => 'Alle Bewegungen',
+        'movement_spent' => ':units :meter verbraucht',
+        'movement_credited' => ':units :meter gutgeschrieben',
     ],
 
     'recovery' => [

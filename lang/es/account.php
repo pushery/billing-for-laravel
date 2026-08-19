@@ -140,6 +140,7 @@ return [
         'heading' => 'Uso',
         'prepaid' => 'Saldo prepago: :units :unit',
         'unmetered' => 'Tu plan no tiene límites de uso.',
+        'forecast' => 'A unos :rate :unit por día, te alcanza hasta el :date.',
         'warning' => 'Te estás acercando a tu límite.',
         'over' => 'Has superado tu límite.',
         'over_soft' => 'Has superado tu cuota incluida; el uso adicional se factura.',
@@ -157,6 +158,9 @@ return [
         'prepaid_used' => ':units de prepago',
         'topups_heading' => 'Recargas',
         'reversed' => 'anulado',
+        'movements_heading' => 'Todos los movimientos',
+        'movement_spent' => ':units :meter usados',
+        'movement_credited' => ':units :meter añadidos',
     ],
 
     'recovery' => [

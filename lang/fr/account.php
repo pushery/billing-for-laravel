@@ -140,6 +140,7 @@ return [
         'heading' => 'Consommation',
         'prepaid' => 'Solde prépayé : :units :unit',
         'unmetered' => 'Ton forfait n’a aucune limite de consommation.',
+        'forecast' => 'À environ :rate :unit par jour, tu tiens jusqu’au :date.',
         'warning' => 'Tu approches de ta limite.',
         'over' => 'Tu as dépassé ta limite.',
         'over_soft' => 'Tu as dépassé ton quota inclus ; la consommation au-delà est facturée.',
@@ -157,6 +158,9 @@ return [
         'prepaid_used' => ':units prépayés',
         'topups_heading' => 'Recharges',
         'reversed' => 'annulé',
+        'movements_heading' => 'Tous les mouvements',
+        'movement_spent' => ':units :meter utilisés',
+        'movement_credited' => ':units :meter ajoutés',
     ],
 
     'recovery' => [

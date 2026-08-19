@@ -140,6 +140,7 @@ return [
         'unavailable' => 'Usage is temporarily unavailable. Please try again in a moment.',
         'prepaid' => 'Prepaid balance: :units :unit',
         'unmetered' => 'Your plan has no metered limits.',
+        'forecast' => 'At about :rate :unit per day, this lasts until :date.',
         'warning' => 'You are approaching your limit.',
         'over' => 'You have exceeded your limit.',
         'over_soft' => 'You are over your included allowance; usage beyond it is billed.',
@@ -157,6 +158,9 @@ return [
         'prepaid_used' => ':units prepaid',
         'topups_heading' => 'Top-ups',
         'reversed' => 'reversed',
+        'movements_heading' => 'All movements',
+        'movement_spent' => ':units :meter used',
+        'movement_credited' => ':units :meter added',
     ],
 
     'recovery' => [

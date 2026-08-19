@@ -140,6 +140,7 @@ return [
         'heading' => 'Verbruik',
         'prepaid' => 'Vooruitbetaald tegoed: :units :unit',
         'unmetered' => 'Je plan heeft geen gemeten limieten.',
+        'forecast' => 'Bij ongeveer :rate :unit per dag red je het tot :date.',
         'warning' => 'Je nadert je limiet.',
         'over' => 'Je hebt je limiet overschreden.',
         'over_soft' => 'Je zit boven je inbegrepen tegoed; verbruik daarboven wordt in rekening gebracht.',
@@ -157,6 +158,9 @@ return [
         'prepaid_used' => ':units vooruitbetaald',
         'topups_heading' => 'Aankopen',
         'reversed' => 'teruggedraaid',
+        'movements_heading' => 'Alle bewegingen',
+        'movement_spent' => ':units :meter gebruikt',
+        'movement_credited' => ':units :meter bijgeschreven',
     ],
 
     'recovery' => [
