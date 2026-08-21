@@ -15,6 +15,7 @@ use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Enums\TaxBaseChangeReason;
 use Pushery\Billing\Exceptions\InvalidInvoiceCorrection;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\Models\RefundAttempt;
 use Pushery\Billing\Tax\FreezeExchangeRateOnDocument;
 use Pushery\Billing\ValueObjects\ChainCorrection;
 use Pushery\Billing\ValueObjects\Money;
@@ -160,6 +161,7 @@ final readonly class SettlementCorrectionIssuer
         ChainCorrection $correction,
         CarbonImmutable $correctedOn,
         ?TaxBaseChangeReason $reason = null,
+        ?RefundAttempt $attempt = null,
     ): ?InvoiceRecord {
         if (! $correction->buyerRefund->isPositive()) {
             return null;
@@ -172,6 +174,7 @@ final readonly class SettlementCorrectionIssuer
             $correction->buyerRefund->minorUnits,
             reverseCharge: false,
             reason: $reason,
+            attempt: $attempt,
         );
     }
 
@@ -187,6 +190,7 @@ final readonly class SettlementCorrectionIssuer
         ChainCorrection $correction,
         CarbonImmutable $correctedOn,
         ?TaxBaseChangeReason $reason = null,
+        ?RefundAttempt $attempt = null,
     ): ?InvoiceRecord {
         if (! $correction->correctsInboundDocument()) {
             return null;
@@ -207,6 +211,7 @@ final readonly class SettlementCorrectionIssuer
             $correction->merchantClawback->minorUnits,
             reverseCharge: $correction->reverseChargeTax->isPositive(),
             reason: $reason,
+            attempt: $attempt,
         );
     }
 
@@ -225,6 +230,7 @@ final readonly class SettlementCorrectionIssuer
         int $totalMinor,
         bool $reverseCharge,
         ?TaxBaseChangeReason $reason = null,
+        ?RefundAttempt $attempt = null,
     ): InvoiceRecord {
         $origin = $original->number;
 
@@ -257,6 +263,13 @@ final readonly class SettlementCorrectionIssuer
             // will not arrive produce the same correction — and only this tells a finished matter from one a
             // later payment reopens.
             'tax_base_change_reason' => $reason,
+            // WHICH reversal this document documents, when one was recorded. Stored rather than inferred:
+            // several confirmations can land against one charge, each capped against what was still
+            // refundable at that moment, so charge and date do not identify one of them — and the amounts
+            // do not either, because `ClawbackCalculator` floors at zero and every sum is capped against
+            // its own ceiling. Null on the paths that hold no attempt, which says no reversal row stands
+            // behind this correction, never that the reversal moved nothing.
+            'refund_attempt_id' => $attempt?->id,
             'credited_invoice_id' => $original->id,
             'credited_invoice_number' => $origin,
             // The frozen shape of the sale travels to the correction unchanged: a correction that

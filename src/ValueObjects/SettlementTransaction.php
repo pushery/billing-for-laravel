@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\ValueObjects;
 
 use Carbon\CarbonImmutable;
+use Pushery\Billing\Exceptions\SettlementTransactionChargeIncomplete;
 use Pushery\Billing\Tax\TaxPoint;
 use Pushery\Billing\Tax\TaxPointDecision;
 
@@ -38,7 +39,23 @@ final readonly class SettlementTransaction
          * Null means the ordinary case: supplied and counted in the same period.
          */
         public ?CarbonImmutable $countsIn = null,
-    ) {}
+        /**
+         * The routed charge this transaction settles, as the pair that identifies one.
+         *
+         * Optional, and absent is the ordinary case: a caller settling something that never went through the
+         * routed ledger has no charge to name, and every caller written before this one names none.
+         *
+         * Both halves or neither. A charge reference is unique only PER PROVIDER — the charge table says so
+         * with a composite unique key — so a bare reference could attach this transaction to another driver's
+         * sale, and the document would then record that it settled a charge it never mentioned.
+         */
+        public ?string $chargeProvider = null,
+        public ?string $chargeReference = null,
+    ) {
+        if (($chargeProvider === null) !== ($chargeReference === null)) {
+            throw SettlementTransactionChargeIncomplete::make();
+        }
+    }
 
     /**
      * The same transaction, taking its counted period from the tax point that decided the OTHER leg.
@@ -82,6 +99,11 @@ final readonly class SettlementTransaction
         int $supplyRateBps,
         CarbonImmutable $supplyDate,
         ?string $description = null,
+        // Carried through rather than left to the plain constructor. Without it the two opt-ins would be
+        // mutually exclusive: a consumer whose legs need a traveling tax point could never name the charge
+        // its settlement belongs to, and the one that most needs both is a term paid up front on a routed sale.
+        ?string $chargeProvider = null,
+        ?string $chargeReference = null,
     ): self {
         return new self(
             net: $net,
@@ -90,6 +112,8 @@ final readonly class SettlementTransaction
             supplyDate: $supplyDate,
             description: $description,
             countsIn: $taxPoint->on->format('Y-m') === $supplyDate->format('Y-m') ? null : $taxPoint->on,
+            chargeProvider: $chargeProvider,
+            chargeReference: $chargeReference,
         );
     }
 

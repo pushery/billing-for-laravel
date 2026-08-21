@@ -12,6 +12,7 @@ use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\TaxBaseChangeReason;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\MerchantCharge;
+use Pushery\Billing\Models\RefundAttempt;
 use Pushery\Billing\ValueObjects\ChainCorrection;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
@@ -59,6 +60,11 @@ final readonly class RoutedRefundCorrector
      *
      * The reason defaults to the ordinary case — the money went back. A chargeback passes the other one: the
      * amounts are identical, and only this says whether a later payment reopens the correction.
+     *
+     * The attempt is the reversal row these documents document, where the caller holds one. It is optional
+     * because two of the three paths that correct a chain genuinely have none: a prepaid term cancellation
+     * opens no attempt, and the chargeback effect runs in a different unit of work from the reversal. Passing
+     * null there records that honestly rather than leaving a link nobody can tell apart from an unset one.
      */
     public function correct(
         MerchantCharge $charge,
@@ -66,6 +72,7 @@ final readonly class RoutedRefundCorrector
         CreatorTaxStatus $statusAtSupply,
         CarbonImmutable $correctedOn,
         TaxBaseChangeReason $reason = TaxBaseChangeReason::Repaid,
+        ?RefundAttempt $attempt = null,
     ): array {
         if (! $refunded->isPositive()) {
             return [null, null, null];
@@ -103,10 +110,10 @@ final readonly class RoutedRefundCorrector
 
         return [
             $correction,
-            $this->issuer->issue($settlement, $correction, $correctedOn, $reason),
+            $this->issuer->issue($settlement, $correction, $correctedOn, $reason, $attempt),
             // ON ONE LINE for the same reason as SubscriptionOverview: the continuation line of a
             // multi-line ternary is counted executable by php-code-coverage 14 and never recorded hit.
-            $receipt instanceof InvoiceRecord ? $this->issuer->issueForBuyer($receipt, $correction, $correctedOn, $reason) : null,
+            $receipt instanceof InvoiceRecord ? $this->issuer->issueForBuyer($receipt, $correction, $correctedOn, $reason, $attempt) : null,
         ];
     }
 

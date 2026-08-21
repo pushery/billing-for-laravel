@@ -159,7 +159,7 @@ final readonly class BillingAdmin
 
         if ($result->successful) {
             $this->refunds->reverse($chargeReference, $amount, $reason, AuditSource::Admin, $actor);
-            $this->correctChain($chargeReference, $result->amount);
+            $this->correctChain($chargeReference, $result->amount, $attempt);
         }
 
         $this->log->record('admin.refund', $owner, [
@@ -187,8 +187,13 @@ final readonly class BillingAdmin
      * nobody whose standing at the supply can be read, and the money has already gone back, so refusing
      * would strand the buyer's refund over a bookkeeping input; and a sale the collective run has not
      * settled yet is answered by the corrector itself with nulls.
+     *
+     * The attempt is carried through because THIS path is the one that holds it. It was in scope here all
+     * along and stopped at the call, so the documents stating a reversal's consequence could not name the
+     * reversal — the one path that could answer the question was the one throwing the answer away. Null on a
+     * single-seller charge, where no attempt row was opened at all.
      */
-    private function correctChain(string $chargeReference, Money $refunded): void
+    private function correctChain(string $chargeReference, Money $refunded, ?RefundAttempt $attempt = null): void
     {
         // Its OWN lookup, and deliberately not `routedChargeFor()`. That helper gates on the driver being a
         // `RoutesMoney`, which is the right question for the REVERSAL — the routing handed to the rails is
@@ -228,6 +233,7 @@ final readonly class BillingAdmin
             // Money went back to the buyer. Not a write-off and not a dispute — both correct a different set
             // of links, and naming the reason here keeps that decision out of this class.
             TaxBaseChangeReason::Repaid,
+            $attempt,
         );
     }
 

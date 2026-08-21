@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Config;
@@ -39,6 +40,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property string $currency
  * @property SettlementState $settlement_state
  * @property ?Carbon $settled_at
+ * @property ?int $settlement_invoice_id the collective document that settled this charge, where one claimed it
  * @property int $refunded_minor
  * @property int $transfer_reversed_minor
  * @property int $fee_refunded_minor
@@ -57,6 +59,7 @@ final class MerchantCharge extends Model
     protected $fillable = [
         'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'transfer_reference', 'transfer_moved_minor', 'charge_type',
         'gross_minor', 'fee_minor', 'fee_bps', 'fee_flat_minor', 'fee_residual', 'commission_tax_bps', 'net_minor', 'currency', 'settlement_state', 'settled_at',
+        'settlement_invoice_id',
         'refunded_minor', 'transfer_reversed_minor', 'fee_refunded_minor', 'merchant_erased_at',
         'buyer_fee_gross_minor', 'buyer_fee_net_minor', 'buyer_fee_tax_minor', 'buyer_fee_place_of_supply', 'buyer_fee_refunded_minor',
     ];
@@ -104,6 +107,24 @@ final class MerchantCharge extends Model
     public function merchant(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    /**
+     * The document that settled this charge, where a COLLECTIVE run claimed it.
+     *
+     * Null on a per-transaction settlement, and that is not a gap: there the answer lives on the document,
+     * which carries `settled_charge_reference` and is found through it. This column exists because a
+     * collective document carries no reference at all — its transactions are lines — so without it nothing
+     * connected a routed charge to the month that settled it.
+     *
+     * Null therefore says no collective run has claimed this charge. It does NOT say the charge is
+     * unsettled; `settlement_state` answers that, and the two are separate facts on purpose.
+     *
+     * @return BelongsTo<InvoiceRecord, $this>
+     */
+    public function settlementDocument(): BelongsTo
+    {
+        return $this->belongsTo(InvoiceRecord::class, 'settlement_invoice_id');
     }
 
     /** What the buyer paid. */

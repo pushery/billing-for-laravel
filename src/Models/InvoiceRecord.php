@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -90,6 +91,8 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?InvoiceCorrectionKind $correction_kind
  * @property ?TaxBaseChangeReason $tax_base_change_reason
  * @property ?string $settled_charge_reference
+ * @property ?int $refund_attempt_id the reversal this correcting document documents, when one was recorded
+ * @property ?RefundAttempt $refundAttempt
  * @property ?string $charge_claim_key `provider|reference` for the document that claims a settled charge
  *                                     as the sale's FIRST one; null on a reissue, on every correction and
  *                                     on anything carrying a period, which is what lets a unique index
@@ -118,6 +121,7 @@ final class InvoiceRecord extends Model
     protected $fillable = [
         'owner_type', 'owner_id', 'provider', 'provider_id', 'number', 'pdf_path', 'total_minor', 'currency',
         'status', 'issued_at', 'due_at', 'credited_invoice_id', 'credited_invoice_number', 'reissue_of_invoice_id',
+        'refund_attempt_id',
         'buyer', 'subtotal_minor',
         'tax_minor', 'reverse_charge', 'tax_exempt', 'tax_exemption_reason', 'buyer_reference', 'vat_note', 'oss', 'destination_country', 'destination_subdivision', 'oss_rate',
         'tax_archetype', 'sold_alongside_archetype', 'place_of_supply_rule', 'tax_rate_category', 'tax_rate_bps', 'platform_reporting',
@@ -175,6 +179,10 @@ final class InvoiceRecord extends Model
         // first-document be written for a charge that already has one — undoing the constraint from
         // inside the application, which is the one direction a database cannot defend itself in.
         'charge_claim_key',
+        // Which reversal this document documents. A correction that could be re-pointed at a different
+        // attempt would restate what a past document was about, and the join exists precisely so a reader
+        // can trust that pairing — an editable link answers a different question every time it is read.
+        'refund_attempt_id',
         'commission_bps', 'commission_flat_minor', 'commission_residual',
     ];
 
@@ -266,6 +274,21 @@ final class InvoiceRecord extends Model
     public function exchangeRates(): HasMany
     {
         return $this->hasMany(InvoiceExchangeRate::class, 'invoice_id');
+    }
+
+    /**
+     * The reversal this correcting document documents, when one was recorded.
+     *
+     * Null on an ordinary document, which never documents a reversal, and null on the two correcting paths
+     * that hold no attempt — a prepaid term cancellation opens none, and the chargeback effect corrects the
+     * chain in a different unit of work from the one that reverses the merchant's share. Null therefore
+     * says "no reversal row stands behind this", never "the reversal moved nothing".
+     *
+     * @return BelongsTo<RefundAttempt, $this>
+     */
+    public function refundAttempt(): BelongsTo
+    {
+        return $this->belongsTo(RefundAttempt::class, 'refund_attempt_id');
     }
 
     #[Override]
