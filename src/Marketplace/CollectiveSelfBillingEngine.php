@@ -17,6 +17,7 @@ use Pushery\Billing\Exceptions\CollectiveSettlementSpansTaxCategories;
 use Pushery\Billing\Exceptions\SettlementTransactionOutsidePeriod;
 use Pushery\Billing\Invoicing\Party;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\ValueObjects\InboundTaxTreatment;
 use Pushery\Billing\ValueObjects\SettlementTransaction;
 
@@ -63,6 +64,8 @@ final readonly class CollectiveSelfBillingEngine
         $period = sprintf('%04d-%02d', $year, $month);
 
         $lines = [];
+        /** @var list<array{0: string, 1: string}> $settledCharges */
+        $settledCharges = [];
         $subtotalMinor = 0;
         $taxMinor = 0;
         $totalMinor = 0;
@@ -152,6 +155,13 @@ final readonly class CollectiveSelfBillingEngine
                 'service_date' => $transaction->supplyDate->format('Y-m-d'),
             ];
 
+            // Collected only for transactions that actually reached a line. A hold `continue`s above and is
+            // not settled by this document, so stamping its charge would claim a settlement that did not
+            // happen — and the 6-month trigger, not this run, is what eventually surfaces it.
+            if ($transaction->chargeProvider !== null && $transaction->chargeReference !== null) {
+                $settledCharges[] = [$transaction->chargeProvider, $transaction->chargeReference];
+            }
+
             $subtotalMinor += $lineNet->minorUnits;
             $taxMinor += $treatment->taxAmount->minorUnits;
             $totalMinor += $treatment->payoutAmount->minorUnits;
@@ -171,6 +181,11 @@ final readonly class CollectiveSelfBillingEngine
             ->first();
 
         if ($existing instanceof InvoiceRecord) {
+            // Stamped on the re-run too. The document is the same one, so this writes the same id — but a
+            // caller that named its charges only on the second run would otherwise get a document with no
+            // link, which reads exactly like a month that named none.
+            $this->stampSettledCharges($creator, $existing, $settledCharges);
+
             return $existing;
         }
 
@@ -178,7 +193,7 @@ final readonly class CollectiveSelfBillingEngine
         // month-end at day start is the Ultimo the whole document dates to.
         $ultimo = new CarbonImmutable($period.'-01')->endOfMonth()->startOfDay();
 
-        return InvoiceRecord::query()->create([
+        $document = InvoiceRecord::query()->create([
             'owner_type' => $creator->getMorphClass(),
             'owner_id' => $creator->getKey(),
             'number' => $this->numbers->allocate($series, $year),
@@ -216,6 +231,40 @@ final readonly class CollectiveSelfBillingEngine
             'buyer' => $this->platformParty(),
             'lines' => $lines,
         ]);
+
+        $this->stampSettledCharges($creator, $document, $settledCharges);
+
+        return $document;
+    }
+
+    /**
+     * Record on each named charge which document settled it.
+     *
+     * The link has to live here because it lives nowhere else. A per-transaction settlement carries
+     * `settled_charge_reference` on the DOCUMENT and every correction path finds its original through it; a
+     * collective document carries no reference at all, so without this a routed charge and the month that
+     * settled it were connected by nothing.
+     *
+     * Narrowed by the merchant AS WELL AS the provider and reference. The pair is unique per installation,
+     * not globally — two creators can be settled in the same month and two drivers can mint one reference —
+     * and a run that matched on the pair alone could mark a stranger's sale as settled by a document that
+     * never mentioned them.
+     *
+     * A reference with no row behind it updates nothing and is not an error. The money already moved; this
+     * is a bookkeeping input, and refusing here would strand a creator's whole month over one bad string.
+     *
+     * @param  list<array{0: string, 1: string}>  $charges
+     */
+    private function stampSettledCharges(Model $creator, InvoiceRecord $document, array $charges): void
+    {
+        foreach ($charges as [$provider, $reference]) {
+            MerchantCharge::query()
+                ->where('merchant_type', $creator->getMorphClass())
+                ->where('merchant_id', $creator->getKey())
+                ->where('provider', $provider)
+                ->where('charge_reference', $reference)
+                ->update(['settlement_invoice_id' => $document->id]);
+        }
     }
 
     /** @return array<string, ?string> */

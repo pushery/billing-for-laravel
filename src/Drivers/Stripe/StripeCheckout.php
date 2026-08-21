@@ -21,6 +21,7 @@ use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\ReceiveEligibilityDenied;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
+use Pushery\Billing\Models\Coupon;
 use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\Trials\TrialPolicy;
 use Pushery\Billing\Trials\Trials;
@@ -190,8 +191,15 @@ final readonly class StripeCheckout implements Checkout
 
     /**
      * The Stripe coupon a package coupon CODE maps to, or null when the code is empty, invalid/expired, or
-     * has no Stripe mapping. resolve() validates the code against the package catalog first, so only a real
-     * coupon can apply a discount; the config `billing.coupons.<code>.stripe_coupon` is the passthrough id.
+     * has no Stripe mapping.
+     *
+     * TWO sources, the row before the config. `billing_coupons.provider_coupon_id` describes the coupon it
+     * sits on; `billing.coupons.<code>.stripe_coupon` is a global map needing an entry per code. Until this
+     * read existed the column had no reader anywhere in the package: an adopter who filled it — because the
+     * model and the migration offer it — got a discount that never applied, and nothing threw or warned.
+     * That is the whole defect, and it is invisible from inside the application.
+     *
+     * A config-only installation is unchanged. No row means the config answers, exactly as before.
      */
     private function stripeCouponFor(?string $couponCode): ?string
     {
@@ -200,8 +208,20 @@ final readonly class StripeCheckout implements Checkout
         }
 
         // A code that does not resolve (unknown or expired) is ignored — a bad code never blocks checkout.
+        //
+        // This stays FIRST, ahead of both sources. The column is a MAPPING, not an authority: a row must
+        // never apply a discount the catalog rejected, or filling one column would be a way past the
+        // validity check rather than a way to reach the provider id.
         if (! $this->discounts->resolve($couponCode) instanceof Discount) {
             return null;
+        }
+
+        // Matched on the code column, so the literal-code rule below holds here too — a code is never
+        // split, and a row is reached only by the exact string the catalog just accepted.
+        $onTheRow = Coupon::query()->where('code', $couponCode)->value('provider_coupon_id');
+
+        if (is_string($onTheRow) && $onTheRow !== '') {
+            return $onTheRow;
         }
 
         // Read by the LITERAL code, never a dotted config path: a code is matched exactly and never split

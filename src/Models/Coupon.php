@@ -14,11 +14,12 @@ use Pushery\Billing\Casts\UtcDateTime;
  * provider. `value` is a percentage (for `type = percent`) or an amount in minor units (for `type = fixed`,
  * scoped by `currency`).
  *
- * `provider_coupon_id` is a column for the CONSUMING APPLICATION's own use. This package does not read it.
- * The line here used to say the Stripe driver maps a coupon to a Stripe coupon through it; the driver
- * resolves that mapping from config instead — `StripeCheckout::stripeCouponFor()` reads
- * `billing.coupons.<code>.stripe_coupon`. An adopter who filled this column expecting the checkout to honor
- * it got a discount that never applied, and nothing said so.
+ * `provider_coupon_id` is the provider's own id for this coupon, and the Stripe checkout READS it:
+ * `StripeCheckout::stripeCouponFor()` prefers it over the global `billing.coupons.<code>.stripe_coupon`
+ * map, after the code has passed the catalog check. It had no reader at all until 2026-08-19 — an adopter
+ * who filled it, because this model and the migration offer it, got a discount that never applied and
+ * nothing threw or warned. Leaving it null keeps the config answering, so a config-only installation
+ * reads exactly as it did before.
  *
  * This model is the persistence surface only (the redemption ledger and the discount math live with the
  * DiscountResolver / billing engine); it carries the columns, casts and the redemptions relation.

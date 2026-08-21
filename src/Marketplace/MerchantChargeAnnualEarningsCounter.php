@@ -337,6 +337,41 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
      * The two are both plausible figures about one sale, and being unable to reach this one through a bare
      * type-hint is the safeguard rather than an inconvenience.
      *
+     * ## THE SECOND CLOCK — read this before putting the three figures in one return
+     *
+     * This figure and the value figure are placed by DIFFERENT events, and a DAC7 return states them for the
+     * same quarter. {@see SettlementGrossInflowCounter} places a transaction by its settlement DOCUMENT
+     * (`issued_at`); this one places it by the money — the charge's settlement, and a refund by the
+     * confirmation that moved it (`billing_refund_attempts.completed_at`). For the ordinary sale the two
+     * coincide, which is why the divergence is easy to miss.
+     *
+     * They come apart when a document and its money fall on opposite sides of a boundary: a sale settled on
+     * 31 March whose settlement document is issued on 1 April is counted here in Q1 and there in Q2. The
+     * value figure and the fee figure then describe different populations, each internally consistent.
+     *
+     * This is option B of the decision that chose it, and B was admissible only WITH this paragraph: a silent
+     * second clock is exactly the class of defect this area prevents everywhere else. So a caller assembling
+     * a return either accepts the divergence knowingly or reconciles the two on the boundary — and cannot do
+     * either without being told.
+     *
+     * ## The link now exists, and it does not close this
+     *
+     * A correcting document names the reversal it documents (`billing_invoices.refund_attempt_id`), which is
+     * the join option A was described as needing. It is NOT enough, and the reason is worth stating rather
+     * than rediscovering: the divergence above is a sale with NO REFUND IN IT. Its fee is placed by the
+     * charge's own settlement and its value by the settlement document, so no link from a correction reaches
+     * it — a correction is not involved. The link closes the REFUND half of the same question, where the fee
+     * that came back can now be read off the reversal the correcting document names.
+     *
+     * Moving the sale half would mean placing this figure by the settlement document too, and that is a
+     * reporting decision with a tax consequence rather than a refactoring: it is not well defined under
+     * collective self-billing, where one month-end document carries a whole month of transactions and is not
+     * found by a charge's reference at all. It is not made here.
+     *
+     * `ReversalAttribution` does NOT resolve this. It decides where a refund sits relative to its own sale
+     * (original period or reversal period) and is applied identically to both figures on purpose. The
+     * divergence here is between the document date and the money date, which no attribution setting reaches.
+     *
      * ## Not derived from the other two, and that is the point
      *
      * Gross inflow minus payout is NOT the fee. It is right for a single unmixed sale at one rate and wrong

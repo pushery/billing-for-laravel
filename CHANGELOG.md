@@ -4,6 +4,82 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.16.0] - 2026-08-21
+
+### Added
+
+- **A correcting document now names the reversal it documents.** `billing_invoices.refund_attempt_id`
+  stores the join between a correction and the refund attempt whose money it states, so a reader
+  holding either row can reach the other. Before this the two were connected only by having been
+  written in the same call.
+
+  Stored rather than inferred, because neither obvious match is safe: several confirmations can land
+  against one charge, each capped against what was still refundable at that moment, so the charge and
+  the date do not identify one of them — and the amounts do not either, since every sum is capped
+  against its own ceiling and the clawback floors at zero.
+
+  **Null is an answer, not a gap.** Two of the three paths that correct a chain hold no attempt at
+  all: a prepaid term cancellation opens none, and the chargeback effect runs in a different unit of
+  work from the reversal. Null therefore says no reversal row stands behind this correction — never
+  that the reversal moved nothing, which is what `fee_refund_minor` on an attempt says.
+
+  **It re-clocks no reported figure.** The DAC7 fee is still placed by the money and the value by the
+  document, and this link does not by itself bring them together: the case where they part company is
+  a sale with no refund in it, which nothing binding a correction to a reversal can reach. Both
+  counters, the arm that pins the divergence and the marketplace guide now state that explicitly.
+
+  Additive and reversible; existing rows are null and no caller changes.
+- **A settlement transaction can now name the routed charge it settles, and the collective run records
+  which document settled it.** `SettlementTransaction` takes an optional `chargeProvider` +
+  `chargeReference` pair — carried through `countingWith()` too, so the two opt-ins are not mutually
+  exclusive — and `CollectiveSelfBillingEngine::settleMonth()` stamps each named charge with the document
+  that settled it (`billing_merchant_charges.settlement_invoice_id`).
+
+  **The gap this closes.** A per-transaction settlement records the answer on the document, which carries
+  `settled_charge_reference`. A collective settlement cannot: it puts a creator's whole month into one
+  Ultimo-dated document whose transactions are lines, and neither the header nor a line names a charge. So
+  after a collective run nothing connected a routed charge to the document that settled it — and a refund
+  on such a sale therefore found no settlement to correct and issued no correcting document at all, while
+  the money ledger updated correctly and every guard stayed green.
+
+  **Both halves of the pair or neither**, refused at construction with
+  `SettlementTransactionChargeIncomplete`. A charge reference is unique only per provider, so a bare
+  reference could attach a transaction to another driver's sale and the document would record that it
+  settled a charge it never mentioned. The stamp is additionally narrowed by the merchant, so one
+  creator's run can never claim another's charge.
+
+  **What it does not do yet.** A collectively settled transaction still cannot be corrected: the collective
+  header deliberately carries no frozen tax characteristics — one month has no single archetype — and a
+  correction copies exactly those. `settlementFor()` therefore still finds no collective document on
+  purpose, rather than returning one a correction would copy nulls from.
+
+  Optional and additive: no existing caller changes, every existing row stays null, and a transaction that
+  names no charge settles exactly as before.
+
+### Fixed
+
+- The DAC7 counters now state that the reported value and the reported fee are placed on different clocks.
+  Gross inflow counts a transaction by its settlement document (`issued_at`); the withheld fee counts it by
+  the money, so a sale settled on 31 March whose document is issued on 1 April puts the fee in one quarter
+  and the value in the next. Both counters are right about their own source, and a return that takes the two
+  lines from different populations without saying so is not. The offset is now documented on both counters
+  and in the marketplace guide, and a test holds it rather than hiding it.
+
+- `SettlementGrossInflowCounter` no longer claims the withheld fees are uncounted. They have been counted by
+  `MerchantChargeAnnualEarningsCounter::feesWithheldIn()` since that method shipped, and the paragraph saying
+  otherwise reached readers of the published package.
+
+- The Stripe checkout now reads `billing_coupons.provider_coupon_id`. The column has been offered by the
+  model and the migration since the coupon tables shipped, but nothing in the package ever read it — an
+  adopter who filled it got a discount that never applied, with nothing thrown and nothing logged. The
+  checkout prefers the value on the coupon row over the global `billing.coupons.<code>.stripe_coupon` map,
+  because the row describes the coupon it sits on while the map needs an entry per code.
+
+  A configuration-only installation is unaffected: with no row, or a row leaving the column null, the
+  config answers exactly as before. Only an installation that set BOTH sees a change, and there the row
+  now wins. The catalog check still runs ahead of both sources, so a coupon row can map a code to a
+  provider id but can never apply a discount for a code the catalog rejects.
+
 ## [0.15.0] - 2026-08-19
 
 ### Added
@@ -5896,7 +5972,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/pushery/billing-for-laravel/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/pushery/billing-for-laravel/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/pushery/billing-for-laravel/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/pushery/billing-for-laravel/compare/v0.9.0...v0.13.0

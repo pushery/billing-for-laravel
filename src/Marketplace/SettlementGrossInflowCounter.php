@@ -61,10 +61,17 @@ use Pushery\Billing\ValueObjects\SellerActivity;
  *
  * ## What this deliberately does NOT count
  *
- * The fees withheld. They are their own figure and they belong in the same report, but the only stored
- * amount for them today is the platform's fee on the charge row — which is computed on a base that is being
- * corrected. Counting it here would freeze the wrong number into a reporting total, so it waits rather than
- * being approximated.
+ * The fees withheld. They are their own figure and they belong in the same report, and they are now counted
+ * — by {@see MerchantChargeAnnualEarningsCounter::feesWithheldIn()}, not here. This paragraph used to say
+ * they were waiting to be counted at all, and that stopped being true when that method shipped; the file
+ * SHIPS, so a reader of the published package was being told a figure did not exist while their installation
+ * produced it.
+ *
+ * What is worth knowing instead is WHERE it is counted, because that method runs on a DIFFERENT CLOCK from
+ * this one. This counter places a transaction by its settlement document (`issued_at`); that one places it
+ * by the money. They agree on the ordinary sale and part company when a document and its money fall in
+ * different quarters. Its docblock carries the full account, and anyone assembling a DAC7 return from all
+ * three figures needs it.
  *
  * ## And it does not decide WHO is reportable — that is a different question with a different owner
  *
