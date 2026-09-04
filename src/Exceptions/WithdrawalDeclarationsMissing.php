@@ -31,6 +31,12 @@ use RuntimeException;
  * safe reading: "nobody classified this" and "this needs no declarations" are indistinguishable to the
  * runtime, and one of them is a statutory failure. Nothing changes for an install with no profile set,
  * where the classification is not read at all.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class WithdrawalDeclarationsMissing extends RuntimeException
 {

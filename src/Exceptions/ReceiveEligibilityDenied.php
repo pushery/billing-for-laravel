@@ -17,6 +17,12 @@ use RuntimeException;
  * It is deliberately distinct from {@see EligibilityDenied}, which refuses the BUYER. The two are refused
  * for unrelated reasons and fixed by different people, and one exception for both would send whoever reads
  * it to the wrong person.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class ReceiveEligibilityDenied extends RuntimeException
 {

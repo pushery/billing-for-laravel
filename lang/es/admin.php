@@ -27,6 +27,19 @@ return [
         'invalid_tier' => 'Ese plan no está configurado en billing.tiers.',
     ],
 
+    'datev' => [
+        'heading' => 'Lote contable (DATEV)',
+        'intro' => 'Descarga un periodo como lote contable DATEV EXTF: el archivo que importa un asesor fiscal alemán. Es el mismo lote que produce la exportación programada, no se guarda nada en el servidor y, si el periodo no puede contabilizarse como un único lote, la descarga se rechaza en lugar de truncarse.',
+        'from' => 'Desde',
+        'to' => 'Hasta',
+        'submit' => 'Descargar lote',
+        'invalid_period' => 'Indica una fecha de inicio y otra de fin, con el fin en la fecha de inicio o posterior.',
+        'refused' => 'El lote fue rechazado y no se descargó nada:',
+        'unbalanced' => 'Este lote no cuadra y no debe presentarse.',
+        'imbalance_figures' => 'El libro auxiliar registra :subledger en deudas con comerciantes; el lote exportado contabiliza :batch en las cuentas de deudas, una diferencia de :difference.',
+        'download_anyway' => 'Descargarlo de todos modos',
+    ],
+
     'cancel' => [
         'heading' => 'Cancelar una suscripción',
         'intro' => 'Finaliza de inmediato la suscripción de un titular. El cambio queda registrado en el historial de auditoría a tu nombre.',

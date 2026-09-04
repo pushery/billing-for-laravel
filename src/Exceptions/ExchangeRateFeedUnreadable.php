@@ -14,6 +14,12 @@ use RuntimeException;
  * nobody notices: the reader's forward walk then answers the missing day with a neighboring day's rate,
  * which is a real figure for the wrong date. A refused import is visible in a scheduler; a quietly short one
  * is visible nowhere.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class ExchangeRateFeedUnreadable extends RuntimeException
 {

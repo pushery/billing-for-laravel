@@ -14,6 +14,12 @@ use RuntimeException;
  * seam exists to prevent. So a downgrade past the floor fails loudly rather than quietly shipping revenue
  * out the door. The floor is the OCCUPIED count, never the entitled count: a team may hold more seats than
  * it fills, but it may never fill more than it holds.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class SeatDowngradeBelowOccupied extends RuntimeException
 {

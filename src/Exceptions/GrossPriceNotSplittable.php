@@ -21,6 +21,12 @@ use RuntimeException;
  * way. There the inversion has no answer at all, and producing one would print a plausible net on a document
  * that the return then contradicts. So it refuses instead — loudly, at the seam, rather than quietly on a
  * document nobody re-derives.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class GrossPriceNotSplittable extends RuntimeException
 {

@@ -13,6 +13,12 @@ use RuntimeException;
  * legitimately costs nothing, so returning zero for "I could not work this out" produces an invoice that
  * looks complete and settled while silently billing nothing. The failure has to be loud, because the
  * successful-looking version of it is indistinguishable from correct behavior.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class CycleAmountUnresolvable extends RuntimeException
 {

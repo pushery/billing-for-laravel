@@ -4,6 +4,407 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.17.0] - 2026-09-04
+
+### Added
+
+- **The installation page now states what the package needs before you install it.** It went straight from its title into `composer require`, so the only place the supported versions were written down was the README — a different surface, and not the one a reader following the documentation is on. The page now opens with PHP `^8.4` and Laravel `^13.0`, and says plainly that both are floors: any Laravel 13 release works.
+
+- **A charge now says what it paid for, on the line the customer reads.** The previous release moved the internal reference off that field and into metadata, which stopped the leak and left the description saying `Subscription` — a word, but not an answer. Somebody looking at a card statement still could not tell which service or which month, and that is the question a chargeback is opened over.
+
+The money seams carry an optional `ChargeNarrative`: the service name and the period the charge covers. Under Mollie the description now reads `Acme Pro (2026-03-01 - 2026-03-31)`; under Stripe the payment intent carries the same text in its `description`. Dates are ISO because a statement line has no room to say whether `01/03` is January or March.
+
+It is additive and inert for anyone who passes nothing: Mollie keeps its previous wording, and Stripe sends no `description` key at all rather than a word no caller chose. Each driver trims to its own field length — 255 at Mollie, 1000 at Stripe — and trims the SERVICE name rather than the period, because the period is the half that tells two otherwise identical charges apart.
+
+The recurring-cycle path supplies one from the subscriber's tier and the order's period. The tier's label, falling back to the tier key and then to a generic word, so a tier configured without a label still names something a person can act on.
+
+- **The admin console no longer hands over a booking batch that does not tie out.** The same file leaves through two doors — `billing:datev:export` and the console's download — and only the command was reading the reconciliation. The console now refuses the download, names both totals and their difference, and offers the file behind a second click.
+
+The two doors agree in substance and differ where a download differs: the command writes the file and fails, because a difference is a statement about that file and cannot be traced without it. A download lands in a folder without being read and is forwarded from there, so an unbalanced batch that arrives silently is an unbalanced batch at the accounting firm. Nothing is withheld — what the click buys is that somebody has read the figures first.
+
+The acknowledgement is per period and is forgotten the moment a date changes, so it cannot wave a second, different month through. An installation with no merchants sees nothing at all: an amber panel on every ordinary export is how an operator learns to click past the one that matters.
+
+- **Every charge now says which cycle made it.** The idempotency key already traveled with each one, but only as a request *option*: a provider uses it to collapse a retry and then does not expose it, and neither Stripe nor Mollie can find a payment by the key it was created with. A charge could therefore be tied back to its cycle by amount and timestamp and nothing else, which is guessing rather than tracing — the blind spot behind every "what was this charge for", and the reason a stranded claim cannot be resumed without a person looking at the provider.
+
+Both drivers now stamp the caller's reference into the payment's **metadata**, a machine field that can be searched. Absent rather than empty when no reference was named, so the payload an existing single-seller charge sends is unchanged.
+
+Under Mollie this also takes an internal number off the customer's screen: `description` used to carry the reference, and that is the text Mollie shows the person paying. It now reads as a word rather than an id. Naming the actual service and period there needed context the rails contract did not carry; the entry above is that context arriving, in the same unreleased range.
+
+- **A cycle whose claim was abandoned can be handed back to the biller.** The local engine writes its order before calling the provider, so the claim survives the call and a second run cannot bill the same cycle twice. A process that dies inside that window leaves the order `processing` with no payment behind it, and three things then line up: the cycle looks taken so no run reopens it, no payment was created so no webhook can arrive, and the credit the attempt spent sits against a row nobody queries. The subscriber is never billed again and the only symptom is that nothing happens.
+
+`billing:release-claim {order}` returns the credit and puts the cycle in the state an ordinary refusal leaves it in; the next scheduled run reprices it and collects it under the **same** order, so the charge carries the idempotency key the abandoned attempt used rather than a fresh one.
+
+**It is deliberately not a sweep.** A missing payment reference is the closest thing to proof that the provider was never called and it is not proof — a worker killed mid-call leaves none behind and may still have created a payment. A prompt retry collapses onto that payment through the idempotency key, but a claim must be hours old before it can be told apart from ordinary in-flight work, by which time the key has expired. Between racing a live charge and taking the money twice there is no threshold worth picking automatically, so the decision belongs to whoever can look at the provider — which is what `billing:doctor` has always told operators, and a sweep would have been contradicting a shipped diagnostic.
+
+The six-hour boundary is now a single definition shared by the diagnostic that reports these claims and the command that acts on them, so the two cannot drift into reporting and refusing different rows. Two operators working the same report cannot both release the same claim: the decision is made from the row under a lock held across the return, so the credit comes back exactly once.
+- **The DATEV export now proves that the merchant payables it wrote tie out to the sub-ledger.** `CollectiveAccountReconciler` reads the *emitted* batch rather than the numbers that produced it, so a document the export leaves out, an account resolved differently or a direction marker written the wrong way round shows up as a difference — none of which surfaces anywhere else until an accountant asks why the account does not balance. It was built and tested and nothing ever called it, which is the one state that looks exactly like a working check.
+
+The reconciliation is computed inside `DatevPeriodBatch::render()`, next to the query that selected the documents, and that placement is the substance rather than a detail: a caller doing it would have to re-query the period, and any difference between its query and the export's — a bound snapped differently, a filter only one applies — would arrive as an accounting difference that is an artifact of the reader. `billing:datev:export` writes the file either way, because a difference is a statement about that file and it cannot be traced without it, and then fails, naming both totals rather than only the difference.
+
+Installations without a marketplace are unaffected: with no payables both sides are zero, and the line is printed only where there is something to confirm.
+
+- **A document can no longer state a tax nobody was in a position to determine.** The invoice table serves two worlds and cannot tell them apart: a provider that determines tax stores a *result* and nothing about how it was reached, which is correct, while a driver whose provider determines nothing has no result to store. A `tax_minor` written under the second is a claim with no basis — and zero is not the absence of a claim, it is the claim that no tax was due.
+
+Nothing noticed, because every tax column is nullable: such a document is indistinguishable from a complete one, no column is empty, the totals add up. `TaxWithoutBasisGuard` refuses it on create, reading the condition from the driver's **capability** rather than from a list of drivers — a list would be right today and wrong at the third driver, in the silent direction.
+
+Any one determination column satisfies it: a reverse-charge supply names a place of supply and no rate, an exempt one names its reason and no band, so demanding all of them would refuse correct documents. A document that names no driver is out of scope, because the gap this closes is a difference *between* drivers.
+
+- **A held cycle is now closed by the webhook, in whichever direction the money went.** Until now the only writer of a paid order was the engine's own synchronous `recordSuccess()`, so a charge that settled later had nowhere to land — which is why holding a cycle open was not possible before. `SettleCycleOnPayment` closes it and advances the period when the payment settles; `FailCycleOnPayment` turns it into a real failure when the debit bounces, and **that** is the moment dunning belongs to rather than the moment the payment was created. Both are thin: every decision about the cycle stays in the engine that owns it, and both find nothing under a driver whose provider runs the subscription itself.
+
+- **A local billing cycle can now be priced by the application, not only by its plan.** Steps configured in `billing.order_item_preprocessors` reshape a cycle's lines before its order is written — metered consumption an application prices itself, an application's own per-cycle arithmetic, anything the flat plan price cannot express. Each step implements `OrderItemPreprocessor` and is resolved through the container, so it may declare its own dependencies.
+
+Only a driver with a local engine reaches this. A provider that meters remotely returns an amount that is already correct, which is exactly why the default is an empty chain: an install that configures nothing bills what it billed before.
+
+The cycle is now assembled as drafts and written afterwards, and the order's total is the **sum of its lines** rather than a number carried alongside them. That ordering is the point — a line added after the row exists would leave a total that disagrees with what it totals, and nothing downstream would notice.
+
+A step that throws aborts that one cycle before it is claimed, so it is retried on the next run rather than charged at a partial total. One subscriber's failing step does not stop the sweep.
+
+- **Documented three reporting seams a consumer could not find.** `UsRegimeActivationPolicy` judges whether a reading means the US regime must be switched on — acting on a configurable **share** of a limit rather than the limit, because registration takes weeks and the obligation starts at the crossing. `UsTaxFormRegistry` records what a seller declared, collected at onboarding and acted on only once the regime is on. `ReportingBaseComparability` says whether two figures may be compared at all: a margin-taxed resale reports proceeds and declares margin, and a reconciler that was not told reports a discrepancy on every such transaction — which is what turns an ordinary audit into a thorough one over a difference that was never an error.
+
+All three were carried as waiting for a caller. None was: each answers a question asked from outside the package.
+
+- **Documented where a routed payment's `ChargeRouting` comes from.** `ChargeRouting`'s constructor is public, so assembling one by hand compiles — and gets two things wrong quietly. `ChargeRoutingResolver` takes the commission on the **net**, which is what a configured rate has always meant; on the gross it would include the buyer's tax, and that figure reaches the provider as the application fee, so the difference is money the merchant is not paid. It also checks the charge type against the resolved seller posture before anything is assembled, so an incompatible pairing is refused before a charge is made rather than after, when only the transfer is left to fail.
+
+It was carried in the class register as waiting for a caller. It was not: `RoutedPayment::charge()` receives a routing and is itself only ever called from outside, because the package never decides that a buyer is paying a merchant.
+
+- **Recorded that one install runs one driver**, where somebody looking for it would read: on `BillingManager::driver()` and in the configuration reference. The seams a screen resolves are bound once at boot by the active driver, so per-owner driver resolution is not possible — and it is not a goal either. Changing providers is a migration of `billing.default`, not a mixed mode, and a marketplace does not need it: its sellers are merchants at the **same** provider, scoped by `MerchantScope`.
+
+Pinned by tests rather than left as prose, because the shape looks exactly like an oversight — and the natural response to an oversight is to fix it, which here means touching every resolution site and taking the contracts away from consumers who override them.
+
+- **A cycle that was claimed and never collected is now findable.** The local engine commits its order before calling the provider, because the claim has to survive the call — otherwise a second run bills the same cycle twice. The cost of that ordering is a window: a process dying between the claim and the charge leaves an order in `processing` with no payment behind it, the next tick skips that subscriber permanently, and no webhook will ever arrive because no payment was created.
+
+`billing:doctor` now reports those orders, and the count is folded into its verdict rather than carried beside it — a check held separately has to be remembered at every exit, and forgetting one is invisible: the command still prints the warning, it just stops counting it.
+
+- **A plan change on a local driver now credits the unused time.** The local driver kept Stripe's proration strategy, whose `applySwap()` is a deliberate no-op because Stripe books the proration itself. A local provider does not — so a subscriber who changed plans was credited nothing for the period they had already paid for, and no state anywhere looked wrong.
+
+Found by a new test that holds the superset principle directly: for every capability the provider lacks, something local must fill it. That test is what would have caught this and the missing subscription actions before either shipped.
+
+- **Documented how to mount your own payment element**, for a product that needs the card fields inline rather than on the provider's page. The package still ships no front-end JavaScript, and that stays a decision rather than a gap: the hosted path keeps an application out of PCI scope by construction, and shipping an element would mean shipping a build pipeline and taking a position on somebody's bundler. `PaymentMethods::setupIntent()` is the seam, and the guide is explicit about the three things that move to the adopter's side when they use it.
+
+- **A driver's recurring-capable methods are now enforced, not merely declared.** Both shipped drivers listed which payment methods can carry a merchant-initiated charge, and nothing read the list. A value that describes the system and changes none of its behavior is indistinguishable from one that is wrong. A mandate on a method the driver cannot recur with now goes to dunning instead of spending a provider round trip to be told what was already known.
+
+- **A failed billing cycle is now retried on the dunning ladder.** It was not retried at all. A refused charge marked the subscription past_due and stopped there: the order stayed `failed`, the claim refused to reopen a cycle that already had one, and the row still carried the due date it had already been processed on — so the sweep never selected it again. The ladder was configured, the notices were wired, the states were correct, and the one thing that turns a ladder into recovered revenue was absent.
+
+The next attempt is scheduled from when the arrears **started**, not from the last attempt: anchoring to attempts drifts the whole ladder further out with every retry. Once no rung is left, nothing further is scheduled — a card that refused three times over two weeks will not succeed on the fourth, and each attempt costs a fee and counts against the merchant.
+
+A **paid** cycle is still never reopened, so a retry cannot double-charge.
+
+- **A scheduled billing sweep can now be monitored from outside.** `ScheduleHeartbeat` is told when `billing:run` starts and how it ended. The shipped implementation does nothing, and that is the honest default — a package cannot know where an install watches its jobs, and a built-in pinger aimed at no service reports healthy because it was never reached.
+
+The failure this guards is not a command that crashes; that is loud and the log has it. It is a command that stops **running** — a scheduler never installed on a new host, an overlap lock left behind by a killed process, a container that no longer starts the cron. Billing keeps appearing to work because everything except the sweep still does, nobody is charged, and the first report comes from the bank statement.
+
+- **Cancel, resume and plan swap now work for a driver whose engine is local.** They previously fell through to `NullSubscriptionActions`, whose methods are empty: canceling did nothing, swapping did nothing, and neither said so. A screen reporting success over an untouched row is the worst of the three possible failures, because nothing anywhere goes red.
+
+An upgrade lands immediately and books the proration credit for the unused remainder. A downgrade is scheduled for the period end, because the customer has already paid for the period they are in — switching them down at once takes away access they bought. `billing.subscriptions.downgrade_timing` flips that for an install that would rather refund than wait.
+
+A swap is gated on eligibility because it moves money; cancel, resume and cancelNow are not, and that is deliberate — account deletion must always be able to cancel, and a gate there would trap a customer in a subscription they are trying to leave.
+
+- **A refund against a locally raised invoice now produces a credit note.** A provider that issues its own documents announces the correction too, and the package stored it; a local engine raised the invoice itself, so nobody announced anything — and the books were left overstating turnover, with the charge recorded and the money going back absent.
+
+The amounts are **positive**. A correcting document's type inverts the accounting direction, not a minus sign, which is what EN 16931 requires and what the provider path already did — two paths disagreeing about the sign would disagree about one customer's books.
+
+The credited total is **capped at the invoice it corrects**. A cumulative figure larger than the original is a provider bug, an out-of-band adjustment, or an invoice reissued smaller; credit notes summing beyond their invoice is the one shape an auditor reads as fabricated.
+
+It selects itself on the presence of an order rather than on a driver name, so a provider-issued invoice is left alone. A redelivery draws no new number: an issued document is immutable, and a gapless series is exactly what a number is for.
+
+- **A local engine now raises the invoice for the cycle it collected.** Stripe issues the document and the package copies it; a local driver had no such source, so the invoices screen stayed empty while the money moved perfectly well. `billing_invoices` gains `order_id` — unique, which is the idempotency: an invoice number is gapless and immutable, so a duplicate is not a mess to tidy up but a second numbered document asserting a charge that happened once.
+
+The lines are **frozen into the record**, not referenced. An invoice states what was sold when it was sold, and referencing the order's rows would let one later price correction rewrite every historical document at once, silently.
+
+It states **no tax** rather than zero tax. A driver whose provider does not determine tax has no basis for either number, and zero is not the absence of a claim — it is the claim that none was due.
+
+`LocalInvoices` serves the screen from those rows, so listing and downloading make no provider call at all. Ownership is a filter on the query rather than a check after fetching: the wrong row is unreachable rather than rejected.
+
+- **A redeemed coupon now reaches the cycle it discounts, as a line of its own.** The local engine never applied one: `DiscountResolver` was reached only from Stripe's checkout, so a subscriber with a redeemed coupon was billed the full price every cycle. The discount is a negative line naming the coupon rather than a quietly smaller charge, because a discount nobody can see is one neither the customer nor the accounts can check.
+
+Order of operations, and it is a decision: **discount, then tax, then credit.** The discount comes first because it changes what was sold — taxing the undiscounted price collects tax on money nobody paid. Credit comes last because it is not a price but payment already belonging to the customer, and spending it before the discount would take it for an amount never owed.
+
+`billing_coupon_redemptions` gains `applied_count` and `last_applied_period`, which is what makes `duration` mean anything: until something counted, `repeating` and `forever` were the same thing, and a coupon sold as three months ran for the life of the subscription. The count is recorded against the period it discounted rather than incremented blindly — pricing happens before the order is claimed and a claim can lose, so counting attempts would burn a customer's remaining months on a run that billed nothing.
+
+- **A local cycle is now billed from the subscription's own lines.** Every part of this existed and nothing connected them: `SubscriptionItem` carries the line and names the resolver for it, `CycleAmountResolver` was bound to price it, and `MeteredCycleAmountResolver` rates a metered line against the package's usage counters — while the local engine read the **tier price** and looked at none of it. A subscription with three lines billed as though it had one, and the number it produced was plausible.
+
+A subscription with no lines still bills the tier price, unchanged. Adding lines is what opts in.
+
+A line that cannot be priced — a fixed line with no amount, a metered line naming no resolver, a meter missing from the catalog — stops that cycle instead of billing what is left. Each of those is a line written wrong rather than a cycle that is free, and a shortened charge would be claimed and never revisited.
+
+- **A production install running Mollie without a webhook signing secret is now told so.** Mollie's next generation signs every request, so an account on it with no secret configured accepts unsigned pings — a real gap. Its legacy generation signs nothing, so an account on THAT has nothing to configure and refusing to boot would lock it out on update day.
+
+Which generation an account runs is a dashboard setting, invisible from inside the application, so the guard warns rather than refuses: loud enough to be found by whoever reads production logs, quiet enough not to break an install that is already correct. Silence was the one option wrong in both directions.
+
+- **Mollie is now a selectable billing driver.** `billing.default = 'mollie'` resolves a driver whose rails are Mollie's and whose engine is the package's own — the first LOCAL-ENGINE driver, which is the whole difference. Stripe is told when to charge and charges itself; Mollie takes payments when asked and runs no billing cycle at all, so the package runs one.
+
+That inverts what a missing piece costs. Under Stripe, a gap means the provider handles it. Under Mollie a gap means nobody does: a subscriber is simply never billed, and nothing fails to say so.
+
+Registration is unconditional and the rebinds are not. A driver that exists by name can be asked for by name — an install running two providers, or mid-migration, must not be told `mollie` does not exist — while the webhook, payment-method and CSP contracts are only replaced when Mollie is the active driver.
+
+A production install that selects Mollie without an API key now refuses to boot. The failure that replaces is the silent one: without a key nothing goes wrong at boot, it goes wrong at the first charge, inside a scheduled run, hours later, against a real subscriber. A webhook signing secret is deliberately NOT required — Mollie's legacy generation carries no signature, so demanding one would refuse to boot every install not yet on the next generation.
+
+New setting: `billing.mollie.webhook_url` (`BILLING_MOLLIE_WEBHOOK_URL`), the absolute URL Mollie returns customers to and posts pings at. It is configuration rather than a generated route URL because a package cannot know the public host, and the scheduled run creates payments from the CLI where there is no request to take one from.
+
+- **Payment methods can be listed, re-defaulted and removed under Mollie**, against the local mandate rows the webhook now fills. Ownership is enforced here rather than by the provider — Stripe refuses another customer's method id on the package's behalf and Mollie cannot, so every mutating call re-reads the row scoped to the billable. The method id travels from a browser; it is not a secret, and taking it on trust would let any signed-in customer point their billing at, or delete, somebody else's mandate.
+
+Two removal rules, because removal is the operation that quietly breaks a paying customer. Removing the default promotes another usable mandate, or the account keeps methods with no default and the engine finds nothing to charge. Removing the last one is refused while a subscription is still being charged: it would not end the subscription, it would just make the next cycle fail.
+
+- **A Mollie webhook naming something other than a payment is no longer silently dropped.** The legacy ping posts a bare id through one field, and not every id it posts is a payment — a refund (`rfd_`), a subscription (`sub_`), a chargeback (`chb_`) and a mandate (`mdt_`) all arrive the same way. Each was fetched as a payment, failed, and produced silence indistinguishable from a forged ping, so an install receiving them saw nothing and had nothing to search for. The prefix now answers that without the round trip, and the drop is logged with the kind.
+
+- **Mollie refunds are mapped, and an unmapped payment status now says so.** A refund is read off the payment it was taken from — Mollie's webhook never names one — and carries the provider's CUMULATIVE refunded total rather than this delivery's delta, because that is what the reversal ledger needs to make a redelivery and a second partial refund both land correctly. Sending the payment's own amount instead would reverse the whole purchase for a partial refund.
+
+Separately, a status this package does not act on is now logged — but only one nobody chose. `open`, `pending` and `authorized` stay silent deliberately (a SEPA debit sits on `open` for days, and treating that as a failure would dun money that is on its way). A status in neither list means Mollie added one and this package produces the same nothing as a settling debit for it, which is how a provider change stays invisible until somebody notices money missing.
+
+- **Mollie mandates are now established from the webhook, not from the return redirect.** Mollie has no SetupIntent: recurring capability comes from a `sequenceType: first` payment the customer completes on checkout, and the mandate exists only once that payment is paid.
+
+The obvious place to store it is the return redirect — and that is the one place it must not be, because the redirect happens in a browser. A customer who pays and closes the tab, loses signal, or completes the payment in a banking app that never returns has a valid mandate the package would never hear about, and is then dunned at the first renewal for a payment method they successfully added. The webhook fires regardless of the browser, so the new `MandateEstablished` event is emitted there and `StoreMandate` persists it.
+
+`MandateEstablished` is the counterpart `MandateRevoked` never had, which is why this gap existed at all: the package could watch charging capability disappear and never watch it arrive. Storing is idempotent on `(provider, mandate reference)` — the provider redelivers and the effect is queued — and a later mandate never takes over the default, because adding a payment method is not choosing to switch to it.
+
+Three cases deliberately record nothing: a `recurring` payment (it carries the same mandate on every renewal, so recording it writes a row per cycle), a first payment that is not paid (the mandate was never granted), and a paid first payment whose mandate id is not filled yet (Mollie creates it asynchronously for some methods, and the redelivery brings it round).
+
+- **Mollie's next-generation webhook is handled, alongside the legacy ping and the subscription "simple" mode.** The next-generation payload carries two ids — `id` is the event (`evt_…`), `entityId` is the resource — and the receiver read `id`, so it fetched the event id as if it were a payment and then said nothing, once per delivery, at the cost of an API round trip each time. All three forms now resolve one id and run one path.
+
+- **A webhook delivery is now recorded under the provider's own id even when the ping is form-encoded.** The receiver read the id from the decoded JSON body only, so a form post (`id=tr_abc`) fell through to a hash of the request body.
+
+The delivery was correct and unfindable: somebody investigating holds the provider's resource id and had no route from it to the row, and `billing:replay` could not be aimed at one either. The hash was also bound to the body rather than the resource, so a provider adding a field would have produced a second delivery row for the same payment.
+
+The hash fallback stays, for a body that names nothing — removing it would leave such a delivery with no key at all, which is worse than an opaque one. Stripe is unaffected: its JSON body carries the id where the receiver already looked.
+
+- **Mollie webhook signatures are verified where the account signs them.** `billing.mollie.webhook_secret` (`BILLING_MOLLIE_WEBHOOK_SECRET`) accepts a secret or a **list** of them, and the verifier checks the `X-Mollie-Signature` HMAC through the SDK's own validator.
+
+This corrects something the package previously said out loud and got wrong. Mollie runs two generations of webhook: the legacy one is unsigned, and the next generation signs every request. The shipped verifier's own documentation explained, convincingly, that there was nothing to check — which is the worst kind of wrong, because it talks a reader out of a security measure that exists.
+
+Fetching the resource back remains a real defense: an attacker cannot invent a status Mollie will confirm. It is the weaker one, though, and that is now stated rather than implied — it lets anybody who can reach the endpoint drive unbounded processing and API calls against the account by posting real ids, where a signature throws that away before anything happens.
+
+The legacy fallback is deliberate and not optional: with no secret configured the previous behavior stands, so an install still on legacy webhooks does not start refusing every ping the day it updates. With a secret configured, an **unsigned** ping is refused — the operator has said their account signs.
+
+A list is accepted because rotation is a period where both secrets are live. Without that an operator chooses between rotating and losing webhooks, which is not a choice but a reason not to rotate.
+
+- **The Mollie webhook** — `MollieWebhookVerifier` and `MollieWebhookEventMapper`.
+
+Stripe posts a signed event body: the payload is the news and the signature proves who sent it. Mollie posts one field — a resource id — and signs nothing. That difference decides the whole design: the ping is a notification, never information, and **the authentication is the fetch**. What happened is read back from Mollie with the install's own key, so a forged ping produces exactly what a genuine one would, and an id somebody made up produces nothing at all.
+
+Trusting the posted body would let anybody who can reach the endpoint mark a subscriber delinquent with one request. A case pins that directly: a ping claiming failure against a payment Mollie reports as paid emits success.
+
+Silence is a normal answer, twice over. Mollie pings on every transition, including ones with no neutral meaning — a bank debit still settling is not news, and emitting a failure for it would start a dunning ladder against money on its way. And an id that does not resolve changes nothing, which is what a forged ping and a redelivered test payment both deserve.
+
+The verifier's own check is narrower than its name suggests and says so: it refuses a ping that names no resource, which is housekeeping rather than security. Calling it security is how a reader ends up believing the endpoint is authenticated.
+
+- **A seam for mandates the customer establishes** — `EstablishesMandateByRedirect` and `MandateHandshake`, implemented by the Mollie rails.
+
+`PaymentRails::createMandate()` returns a non-nullable reference, which is a promise: after that call, a mandate exists. Some providers keep it. Others cannot — the mandate is born when the customer completes a first payment on the provider's checkout, and may never be born at all. The precondition is now written on the contract rather than left inside the type, because a driver that cannot meet it has three answers and two of them are defects.
+
+A **sibling** contract rather than a method on `PaymentRails`: that interface has implementations outside this package, so appending a method is a fatal error in code the package does not own.
+
+`MandateHandshake` is deliberately not a `MandateReference`. There is no mandate yet — there is a payment in progress and somewhere to send somebody — and calling it a reference would let a caller store it as one and charge against it.
+
+- **The Mollie payment rails** — `MolliePaymentRails`, the lower billing layer for this provider.
+
+Three of the five contract methods are ordinary; two **refuse**, and that is the honest answer for Mollie rather than a gap. `createMandate()` returns a non-nullable mandate reference, which promises one exists after the call — at Mollie a mandate is born only when the customer *completes* a first payment on the checkout, and may never be born at all. `tokenize()` has no equivalent there either: details are captured on the provider's own page, so there is no raw data for a server to exchange. Returning something plausible from either would be stored, charged against, refused, and read as the subscriber failing to pay.
+
+The status mapping keeps **three** outcomes rather than two. A SEPA direct debit sits open for days before it settles; reading that as a decline would start a dunning ladder against money on its way and cancel a subscription somebody paid for. Only a paid payment is success, an expired or refused one is a decline, and everything else is "not yet".
+
+A mandate that is not reusable is refused **before** the provider is reached. Mollie would refuse it too, at the cost of a round trip on every due cycle of a subscriber whose mandate was revoked — and each refusal reads as a payment failure in the log rather than as the settled fact it is.
+
+- **What the Mollie driver promises** — `MollieCapabilities`, plus a `billing.mollie.methods` setting for the payment methods an account offers.
+
+Every native flag is false, and that is the design rather than a gap: Mollie has no customer portal, no provider-side tax, no metered pricing, no proration and no customer balance, so the package fills each with its own engine. A capability is a promise the package keeps, not a description of what a provider could do — claiming one the driver does not wire sends a screen looking for a feature that is not there.
+
+The recurring-capable set is **derived from the SDK's own mandate vocabulary** rather than typed out. A written list would be a factual claim about somebody else's product with nothing holding it true, and it would rot silently the day Mollie adds a method — in the direction that refuses a legitimate mandate.
+
+`methods` is configurable because Mollie enables them per account, so a fixed list would be wrong for most installs in both directions at once. Left unset it falls back to the mandate methods rather than to an empty list, which would read as "this account can take no payments".
+
+- **The Mollie client factory and its configuration** — `billing.mollie.api_key` (`BILLING_MOLLIE_API_KEY`), read only when the Mollie driver is selected, and a factory that refuses loudly when the client cannot be built.
+
+The refusal is the point. An install that selects the driver without a key does not break on deploy; it breaks at the first charge, inside a scheduled run nobody is watching, against a real subscriber, with a stack trace from a third-party HTTP library. Three different problems share the exception and each says which one it is: no key, a key Mollie will not accept, or the suggested package not installed. A blank value counts as missing — a set-but-empty variable is what a half-finished deployment leaves behind and reads as configured to anybody looking at the file.
+
+The SDK validates the key's shape itself and throws its own exception; that is caught and restated so the message names our setting rather than sending whoever reads it into the wrong package.
+
+- **The amount mapping for the Mollie driver** — `MollieAmount`, between the package's minor units and Mollie's `{"currency":"EUR","value":"19.00"}`.
+
+It lives in the driver rather than on `Money`, which is where the ticket asked for it. A `toMollie()` on the value object every driver shares would name one provider in the neutral core — the leak `ArchTest` refuses for imports, one layer down — and it would invite a sibling for each further driver until the core knew them all by name. The conversion itself is already neutral: `Money::toDecimal()` and `fromDecimal()` both work from the currency's minor-unit exponent.
+
+Nothing rounds in either direction. An amount carrying more precision than its currency allows is refused rather than truncated: a provider sending `19.005` for a two-decimal currency is saying something we do not understand, and choosing between `19.00` and `19.01` on their behalf is a guess about somebody's money.
+
+`mollie/mollie-api-php` is a **suggestion**, installed as a dev dependency for the tests. An install that never selects the Mollie driver carries no HTTP client it will not call — the same reasoning that keeps `horstoeko/zugferd` optional.
+
+- **The billing cycle for a driver whose provider does not run one** — `LocalBillingEngine`. Stripe is told when to charge and charges itself, so its engine's `tick()` is a deliberate no-op; this one selects due subscriptions, assembles an order, spends any credit the owner holds, collects the remainder against a stored mandate, and moves the cycle on.
+
+Three properties are what most of the class is about, because they are what a self-directed billing loop gets wrong:
+
+A cycle is **claimed exactly once**, by the unique `(subscription_id, period_start)` on the orders table rather than by a check — a check has a window, a constraint does not. An overlapping scheduler, a retried job or a hand-run command is an ordinary event, and each would otherwise be a second debit.
+
+The charge happens **outside the transaction**. A provider call held inside an open one keeps a row lock for as long as the provider takes to answer, which on the day it matters is a timeout. The visible cost is an order that reads `processing` while the provider decides, which is what is actually happening.
+
+One subscriber's failure **does not take the run down**. A loop that stops at the first exception bills whoever sorts first and silently skips everyone after them, with the failure in the logs rather than in anybody's inbox.
+
+A cycle that fails is **not advanced** — the retry belongs inside the period it failed in — and a past-due subscriber whose retry lands is returned to active with the dunning level reset. Credit is spent before the card, and a cycle fully covered by credit takes no charge at all: providers refuse a zero charge, and a refusal there would put a prepaid subscriber into dunning.
+
+It is deliberately not an abstract base class, though the milestone asked for one. Everything provider-shaped already crosses the `PaymentRails` seam, so a second driver constructs it with its own rails rather than extending it — inheritance with no abstract member is a base class in name only.
+
+- **A local store for the mandates a driver may charge off-session** — `billing_payment_mandates` and the `PaymentMandate` model, with `defaultFor()` and `makeDefault()`.
+
+A provider-driven driver reads its stored methods back over the API. A driver whose engine is local cannot do that on the hot path: the scheduled run collects due cycles unattended, and a call that hangs there stalls every subscription behind it. So the mandate the engine charges is a row read.
+
+Only a mandate whose status is `valid` is ever charged, and a revoked one is never returned as a fallback — handing one back would send the engine into a charge it cannot win and leave the subscriber in dunning over a method they had already withdrawn.
+
+Uniqueness is per provider rather than global: two providers' id spaces are unrelated, so the same reference under both is a coincidence, not a duplicate. The single-default rule is enforced in the model and not by a partial unique index — MySQL has none, and a constraint holding on one of two supported engines makes an invariant true where it is tested and merely likely where it is not. Both rules are proven on real PostgreSQL and MySQL servers.
+
+- **A subscription can now carry, and advance, its own billing cycle** — `scheduled_processing_at` plus `Subscription::advanceCycle()` and the `dueForProcessing` scope. A provider-driven driver is told when the next charge falls; a driver whose engine is local has nobody to ask, and this is what lets `billing:run` drive a cycle at all.
+
+`scheduled_processing_at` is its own column rather than a reading of `current_period_end`. They agree on the happy path and have to be free to disagree: a failed charge is retried inside the period it belongs to, and a dunning ladder that pushed the next attempt out would otherwise move the period with it — silently re-dating the service the customer is paying for, on the row every invoice and usage bucket reads.
+
+`BillingInterval::advance()` does the month arithmetic **without overflow**, which is the part that has to be right rather than approximate: adding a month to 31 January with overflow lands on 3 March, and the subscriber's anchor day is then gone for good, with every later cycle inheriting the drift.
+
+Nothing changes for a Stripe install: the column stays null there, and a null schedule reads as "not scheduled" rather than "overdue" — the other reading would have charged every subscription in the table on the first run after the migration.
+
+- **A credit balance can now be taken apart into the movements that produced it.** `billing_credit_ledger_entries` records every change to an owner's balance — signed amount, currency, a `CreditReason`, and optionally what caused it — and each entry is written in the **same transaction** as the balance it moves.
+
+The balance table alone answered only *what* somebody has. The *why* lived in the audit log: a different table, written by a separate call after the balance transaction had already committed. Two things followed from that, and neither was theoretical. An interruption between the two writes left a balance nobody could account for. And `billing:prune` ages audit rows out on a configurable clock while a balance is a holding and is never pruned — so on an install that shortens the audit window, the explanation expires while the thing it explains stays.
+
+Entries are append-only: no update, no model-level delete. They are owner-scoped and go with the owner on erasure, alongside the balance they explain.
+
+- **`DriverCapabilities::$supportsProviderTrialNotice`** — whether the provider tells the customer their trial is about to end. True for Stripe, whose mapper turns `customer.subscription.trial_will_end` into a `TrialEnding` event; false for a local-engine driver, which is what lets the trial-warning command tell the two apart instead of guessing from the presence of a subscription. Appended last, like every capability before it, because the value object is constructed positionally by driver code outside this package.
+
+- **A local-engine trial is collected when it ends.** `dueForProcessing` selected `active`, `grace` and `past_due` — `trialing` was not on the list, which was harmless while nothing in this package created a local trialing subscription. Both of the new ones are scheduled at their trial END, and both were invisible to the run that collects: no charge, no state change, no log line, and a customer keeping the paid tier indefinitely for nothing. What keeps a RUNNING trial untouched is the date, not the state.
+
+A collected trial becomes `active`, so the account hub stops calling a subscriber a trialist. And a trial that ends with **no payment method** goes `incomplete_expired` rather than into dunning: the customer was told no card was needed, no payment was ever attempted with their consent, and mailing them "your payment failed" is a support case about money that never existed. (Which state exactly, and why it is not `incomplete`, is the entry further down — both describe this one unreleased change, so they say the same thing.)
+
+- **A customer who once ended a subscription can subscribe again.** A subscription is unique on (owner, type, merchant), and an ended row still occupies that slot — so the write collided, on the webhook, *after* the customer had completed a real payment and their mandate had been stored. They would have paid, held no subscription, and left nothing behind but a dead-lettered job. The row is now reused rather than duplicated, and every field of the previous life is cleared with it.
+
+- **Subscribe stopped being an unlimited free-trial renewal button.** On a generic-trial install a lapsed trial was re-granted on every press: another fourteen days, as often as you liked, and every call reporting success while the customer never paid. A generic trial is now granted only to somebody who has not had one; everybody else is sent to pay.
+
+- **A tier key is checked against the catalog's key set, not resolved as a config path.** `pro.price_display` reached a node that happens to be an array, so it passed the guard and produced a subscription against a tier that does not exist — active in every report, never billable. The key arrives from a browser, which is what makes it an injection rather than a typo.
+
+- **A subscription can now be started under a provider that runs no billing cycle of its own.** `StartsSubscriptions::subscribe()` takes a tier KEY — never an amount — resolves it against the configured catalog, refuses an unknown or untouchable one and refuses a second subscription for an owner who already has a live one. Three outcomes, and none of them is the other two: a generic trial is granted on the spot, a subscription trial that needs no payment method creates the row immediately in `trialing`, and everything else sends the customer to the provider to establish a mandate.
+
+**Nothing is written until the mandate arrives.** The redirect leaves a `billing_subscription_intents` row and nothing else, so a customer who closes the tab leaves no half subscription, no state to sweep, and nothing in the subscriptions table describing something that did not happen. `StartSubscriptionOnMandate` turns the intent into the subscription when the webhook reports the mandate — over the webhook rather than the return redirect, because the browser may never come back and the webhook fires either way.
+
+The intent is keyed on the **payment**, not the customer, and that is the safety property rather than a detail: establishing a mandate is also what happens when somebody merely adds a second payment method, and matched on the customer that would hand them a subscription they never asked for on a day they were doing something else. `MandateEstablished` carries a new trailing `paymentReference` for it.
+
+New settings: `billing.subscribe_return_url` (where the customer comes back to, falling back to `billing.checkout.success_url`) and `billing.mandate_verification_minor` (what the first payment charges, in minor units of the plan's currency — the smallest unit by default, because its purpose is to create a mandate and the first cycle is billed by the engine on its own schedule).
+
+- **A first-time subscriber gets a provider customer.** Nothing could create one: the reference was only ever read off an existing mandate, so it answered null for exactly the person a subscribe flow is for. `EnsuresProviderCustomer` creates it, passes the billable's name and email so the provider's dashboard and its dispute tooling have something to work with, and persists the reference on the same column the webhook directory reads. A reference the active provider did not issue is **refused** rather than replaced — replacing it would detach the owner from everything the other provider still holds.
+
+### Changed
+
+- **`stripe/stripe-php` 21 is not adopted yet, and this is the reason rather than an omission.** Cashier 16.8.0 vouches for it, and the SDK itself is not what holds it back: its only breaking change retypes a class this package never reads, and against 21.3.1 the static analysis and the Stripe suite come back clean. What moves with the SDK major is the Stripe API GENERATION Cashier sends, from `2026-06-24.dahlia` to `2026-08-26.dahlia`. An API version decides the shape of every response, so adopting it is a change that only a run against the real API can vouch for, and that run has not happened. The declared range therefore still ends at `^20.0`.
+
+This supersedes the note under 0.13.0 that v21 "cannot be installed here at all" — that was true of Cashier 16.6 and stopped being true on 2026-09-01. It can be installed; it has not been proven.
+
+- **`CreditLedger::credit()` and `::debit()` now require a `CreditReason`.** A default would have let an unexplained movement back in while looking deliberate, which is the state the entries exist to remove. Both also accept an optional `CreditSource` naming what caused the movement.
+
+`CreditSource` is its own type rather than a second model parameter, and that is a guard rather than taste: the ledger's containment test treats any call taking two models as the shape of value moving between parties, because that shape is the risk whatever the author meant by it. Passing a cause as a model would have made a cause indistinguishable from a second owner — to the check and to a reader alike.
+
+If you call the ledger directly, pass the reason that fits; the enum carries only cases something in the package actually writes.
+
+- **The invoice number freeze is now pinned by its own test.** `InvoiceRecord` has refused to change `number` after a record exists all along — it is the first entry in the frozen-field list — but no test named the field. `FrozenTaxCharacteristicsTest` exercises the same guard over the tax characteristics and uses `number` only as fixture data, so dropping it from the freeze would have left the suite green on the one field carrying statutory weight.
+
+`InvoiceNumberImmutabilityTest` closes that, and it pins the strict reading deliberately: a write to `number` is refused even where the column is still null. Numbering is therefore an act of creation rather than a later finalization, which is how every issuer in the package already works.
+
+### Removed
+
+- **`SellerActivityThreshold::isExemptFromReporting()` is gone, and the de-minimis boundary of the reporting duty now has exactly one home.** It is decided by the jurisdiction's reporting profile, from `billing.reporting.goods_de_minimis.*`, and nothing else answers that question.
+
+The method had no caller. That alone would have made it dead code; what made it worth removing was what it read. Both of that class's methods took their figures from the SAME two config keys — so the platform's own "ask this seller to declare their standing" preference and the statutory exemption shared one pair of knobs, in a class whose docblock warned that harmonizing the two would move the legal boundary to match a preference, in the over-reporting direction. Reporting data that need not be reported is an incorrect report in its own right and a data protection breach at the same time, so that is not the cautious direction to drift in.
+
+Nothing about the shipped behavior changes: the live classifier never read those keys. What changes is that it can no longer start to. `SellerActivityThreshold` keeps `requiresStatusDeclaration()`, which has a real caller and is still yours to tune.
+
+- **`InvoiceNumberSequence::format()` is gone.** It turned a counter value into `2026-000042`, and nothing in the package ever called it — its only caller anywhere was the test asserting it. Every invoice number the package issues comes from `DocumentNumberAllocator::allocate()` as `PREFIX-YYYY-#######`, where the prefix is resolved per document series from `billing.marketplace.numbering.series.*` and a missing one is refused rather than filled with a blank.
+
+The two shapes disagreed on every part — no prefix, no year, a narrower running part — which is what made a dead method worth removing rather than leaving alone. It sat on the obvious class under the obvious name, so reaching for it raised nothing and returned a plausible-looking number outside the configured series. Under § 14 UStG / GoBD that is the expensive direction: an issued number is itself a numbered event, so correcting one costs another.
+
+If you called it, call `DocumentNumberAllocator::allocate()` instead — it is where the number your documents already carry has always come from. `InvoiceNumberSequence::next()` is unchanged and remains the counter under every one of them.
+
+### Fixed
+
+- **A Mollie refund no longer prints an internal reference on the customer's statement.** The two charge calls were corrected when the cycle reference moved into metadata; `refund()` kept it in `description`, and Mollie shows a refund's description to the customer exactly as it shows a payment's. So the one moment a customer is getting money back was also the one that looked disorganized.
+
+The guard over it drives **every** money call the rails expose rather than naming the one that was wrong, because this was the second instance of a single defect and a case naming `refund` would prove nothing about the next call somebody adds.
+
+- **The checkout return no longer asks a foreign provider about the customer.** `SubscriptionSync` is bound only by the Stripe provider, and both driver providers register unconditionally — so on a local-engine install the return route asked **Stripe** about a customer whose reference the other provider wrote. An outbound call to the wrong provider on the page a customer lands on straight after paying, and the catch that keeps them from seeing an error then reported it: one entry in the install's error tracker per completed sale, indistinguishable from a real failure. An error stream that fires on every sale gets muted, and the real one goes with it.
+
+Decided on the engine rather than a driver name: a local engine holds the cycle itself, so there is no provider-side subscription to read back. The webhook is the durable path anyway — the reconcile is a courtesy for a customer who beats it home.
+
+- **A charge that has not settled yet is no longer booked as a refusal.** `ChargeResult` states the distinction in its own comment — *"`requiresAction` and `pending` are NOT failures"* — and offers `failed()` for the question. The local engine read `successful` instead, so anything not already settled became a decline.
+
+That is the main European path, not an edge case. A SEPA direct debit is Mollie's principal recurring method and sits at `open` for **days**. Every such cycle was booked as a failure: the credit handed back, the subscription moved to `past_due`, and the subscriber mailed *"your payment failed"* while their money was on its way. The dunning ladder — whose rungs are days — then charged them again, by which time no provider's idempotency window is still open, so it was a **second real charge**.
+
+The cycle is held instead: the order keeps the provider's reference and stays `processing`, the credit stays spent because the payment it paid for is still live, and nothing is dunned because nothing has been refused.
+
+- **The Mollie driver now sends the idempotency key it was given, so a retried charge no longer bills the customer twice.** `PaymentRails` says what the key is for in as many words — *"pass the invoice/charge id so a re-run collapses onto the first charge rather than billing the customer again"* — and all three money-moving calls passed it as the payment's **description** instead. A description is a label; it collapses nothing.
+
+The exposure was the ordinary path rather than an exotic race: an off-session charge that times out is recorded as a refusal, the dunning ladder retries it with the same order id, and the customer paid twice for one cycle. Refunds carried the same omission, where a repeat sends money out twice.
+
+Stripe's rails have always passed a real key, so two drivers made different promises behind one contract — and the contract is what a consumer reads before deciding a retry is safe.
+
+The key is disarmed after every call, whatever happened. The SDK clears it in a *response* middleware, so it clears it only when a response comes back — and a request that throws is precisely the case an idempotency key exists for. The client is a singleton, so a key left armed would go out with whatever called next, and a key that leaks to the next request is worse than no key at all.
+
+- **Credit is spent under the balance's own lock, and given back when the charge is refused.** It was decided before the provider was asked and debited afterwards, with an outbound HTTP call sitting in the gap — the balance read without a lock at one end and the decided figure applied without a re-check at the other. Two cycles for the same owner (two local drivers, or one `billing:cycle` run overlapping itself) both read the same balance while the other was inside its charge, and both spent it. The balance went **negative**, and negative is a one-way street: every later cycle reads a non-positive figure and skips the offset, so nothing collects it back. Two ledger entries, each reading like a correct offset.
+
+The read, the cap and the debit are now one movement (`CreditLedger::spendUpTo()`), and the charge is derived from what actually moved. Spending before the charge is safe because a refusal now returns it, under the new `CreditReason::ChargeOffsetReturned` — the order's credit line and header are put back with it, so a failed order describes the attempt rather than a discount nobody granted.
+
+- **A retried cycle is repriced, so the order states what is charged.** A dunning retry reopened the failed order and left its header and lines exactly as the first attempt wrote them, while the cycle itself is reassembled and re-totalled on every run. A price that moved during the dunning window — a late usage flush landing in the still-open period, a coupon whose `expires_at` passed, seats changed while the customer was past due — was therefore charged at the new figure and invoiced at the old one. The invoice is raised from the order, so that is a numbered, immutable tax document for a sum nobody was charged, and a booking batch off by the difference on every such retry.
+
+- **Two refunds arriving at once can no longer credit past their invoice.** A credit note states the delta against what the invoice has already been credited, and that is a read-modify-write over an aggregate which the webhook backbone does not serialize: two genuinely different refunds against one payment are two events with two ids, so they get two claims and run in parallel. Neither saw the other's uncommitted note, both read nothing credited yet, and both stated their own cumulative figure — 7.50 then 20.00 against a 20.00 invoice is 27.50 of issued, numbered, immutable notes for 20.00 of refunded money, which is the one shape an auditor reads as fabricated. The invoice row is now held while the delta is decided.
+
+- **A yearly or weekly tier is billed on its own interval.** The local engine advanced every cycle by one month, whatever the tier said — so an annual subscriber fell due again thirty days later and was charged the **annual** price off their stored mandate, twelve times a year, with a numbered invoice for each. A weekly tier collected a quarter of what it should. `interval` is a documented tier property the plan catalog already read; the engine simply never asked.
+
+- **Credit is spent after the charge succeeds, not before it is attempted.** A partly credited cycle debited the balance and then asked the provider for the remainder. On a refusal — the ordinary case that starts dunning — nothing gave the credit back, and the retry reassembled the cycle from scratch, found a balance of zero and collected the full amount. The customer lost their credit **and** paid in full, behind a ledger entry that read like a deliberate offset.
+
+- **An order's total now matches its own lines.** The total was written when the cycle was claimed and the credit line added afterwards, so a partly credited cycle stated one figure over lines adding to another — and the invoice raised from it copies the **header**. A numbered tax document told the customer the full amount was paid when less was taken, and the booking batch overstated turnover and output tax by the difference.
+
+- **A cycle that is fully discounted AND has credit behind it no longer strands the subscription.** Two ways of owing nothing arriving together made the credit step try to spend nothing, and `CreditLedger::debit()` refuses a non-positive amount so that a caller cannot smuggle a credit through it. The exception left a `processing` order on the cycle, and the claim will not reopen one — so that subscriber was never billed again, visible only as a repeating log line.
+
+(`Money` itself is not what refused: it validates the currency code and nothing about sign, which is what lets a credit line carry a negative total. An earlier version of this entry said otherwise.)
+
+- **Partial refunds credit what they ADD.** The refund event carries the provider's cumulative total, and a credit note for that figure is the second note stating the whole refund again: 7.50 then 20.00 against a 20.00 invoice is 27.50 of issued, numbered, immutable notes for 20.00 of refunded money. Both reach the booking batch, so turnover and output tax came down by more than was ever given back.
+
+- **The reconciliation no longer reports the destination-charge lane as entirely adrift.** A destination charge moves the merchant's share as part of the payment and makes no transfer call, so no moved figure is ever reported — while the provider still creates a transfer whose reference the row carries. Read as zero, every such row (and every row settled before that column existed) reported a drift of the full transfer value. It falls back to what was owed, exactly as the clawback ceiling already did.
+
+- **The DATEV booking batch is downloadable from the admin console**, for whoever holds the `billing.admin.ability` Gate, re-authorized on the action itself rather than trusting that the render happened. Nothing is written to the server — the file is streamed straight to the browser, so the complete revenue history for a period never becomes a second copy that has to be protected, retained and erased from. A refusal from the writer downloads nothing at all and names which boundary was crossed.
+
+It runs the **same** assembly as the scheduled command, extracted into `DatevPeriodBatch`. Both silent omissions this export has carried — provider fees, then voucher movements, each missing from every real monthly batch — were the assembly drifting away from what the writer accepts, while the tests that prove those bookings pass their own rows in. A second implementation would have been the third occurrence.
+
+- **The merchant journal can now be checked against the provider that actually paid the merchants.** `billing:merchants:reconcile` reads each recorded transfer back from the provider and reports every row where the two disagree, raising `ProviderJournalDrift` for a listener to act on. The reconciliation the package had compared it against itself, which run serially passes forever.
+
+Compared per transfer, never against the connected account's balance: that balance also moves on every payout, on the merchant's own activity elsewhere, and on a provider fee, so a balance comparison alarms on healthy accounts until somebody switches it off.
+
+It reads and never writes. The provider is authoritative for what MOVED and this package for what was OWED, so a drift is repaired by correcting the local row — never by transferring again to match the journal, which would move real money to settle a bookkeeping disagreement.
+
+`--driver` must name the **active** driver. It selects which rows to sweep, while the reader is bound process-wide to whichever driver the install runs — so sweeping another provider's rows through it would ask the active provider about references it never issued and report every one as missing. That is the command's most serious finding, manufactured, once per row.
+
+- **Onboarding a merchant twice can no longer produce two connected accounts.** Account creation now carries an idempotency key derived from the merchant, so a call that fails *after* Stripe committed the account — a timeout, a database error, or an application whose error handler turns Stripe's new Accounts-v2 notice into an exception — returns the same account when it is retried instead of making a second one. The duplicate check on the local row only ever saw merchants whose row had been written; this closes the window before it.
+
+- **A raw `git archive` of this repository no longer carries the private owner's name.** `tests/`, `.github/` and `tools/` had no `export-ignore` rule, so eight files rode along in every archive — five test files, both workflows and a tool script. Nothing public was ever affected: the published package is built from an allowlist and never contained any of them. What was exposed is the archive of the private development repository, which no allowlist stands behind.
+
+- **Canceling a subscription no longer needs `laravel/framework`.** `LocalSubscriptionActions` reached for the `now()` global, which only exists once the full framework is installed — so on the sixteen focused `illuminate/*` components this package actually declares, canceling and scheduling a swap would have died with an undefined function. It resolves the moment through Carbon directly, like the rest of the package does.
+
+- **A bare-id webhook no longer swallows every change after the first.** A provider that pings with a resource id and no event body sends the same id again each time that resource moves, so keying the delivery on the id alone recognized every later ping as a redelivery and dropped it. A payment that opened and then succeeded recorded one delivery, ran one effect, and booked no money — silently, with a ledger row that looked exactly like a correct one.
+
+A mapper now states its own redelivery semantics through the new `DerivesDeliveryKey` contract, and the Mollie mapper keys on the resource id **and** its status. It is a sibling interface rather than a method on `WebhookEventMapper`, because that contract is public and consumers implement it — extending it would be a fatal error in every consumer driver that exists today. A mapper that returns null keeps the receiver's own key, so an unrecognized ping is still recorded exactly once rather than once per retry.
+
+- **A subscription trial is granted once per owner** — and the record of it survives the next subscription reusing the row. The mandate effect wrote `trial_ends_at` plainly, so the second, trial-less subscribe erased the very column the guard reads: one free trial per two cycles, resettable forever at one verification payment a time, with every round looking like a new customer. The sibling writer of that column already preserved it; the two now agree.
+
+- **A subscription trial is granted once per owner.** The trial branch read only configuration — `subscriptionTrialEnabled()` and `endsAt()` know nothing about history — so every press of Subscribe handed out another free period. Getting back to the button takes one click: `cancelNow()` writes `ended`, a lapsed card-less trial writes `incomplete_expired`, and both are deliberately let through so a customer who once left can return. Take the trial, cancel, take it again, forever, never paying. The generic trial states this rule in its own branch; it was missing on the shape that creates a subscription.
+
+- **A card-less trial that lapses is `incomplete_expired`, not `incomplete` — the difference is the way back.** Both stop the sweep by clearing the schedule, and nothing in the package re-arms a cleared one: adding a card produces a mandate with no matching intent, which the mandate effect ignores by design. But `incomplete` is a state the subscribe path PROTECTS, so that customer had no access, was never charged, and was refused by name when they pressed Subscribe. Every card-less trial that did not convert in time became a row only a database edit could rescue.
+
+- **A settling payment intent can no longer overwrite a live subscription.** The eligibility check runs when the customer presses Subscribe; the write runs when the payment settles, which for a bank transfer is days later. Intents carry no expiry and are unique only on the payment reference, so an owner can hold several — subscribe to one tier, abandon it, buy another, and the abandoned payment arrives afterwards with a valid claim. It replaced the tier, restarted the period and wiped the dunning state, decided by webhook delivery order, with no failure and no log line. The slot is now reused only for a row a new subscription may replace, and that list lives on the model so both sides read one answer.
+
+- **Subscribe works on a stock install.** The subscribe flow re-derived its return URL from configuration and refused when nothing was set — which is the shipped state, since `checkout.success_url` is a bare `env()` and the configuration file documents that leaving it unset falls back to the account hub's own route. It now asks `CheckoutUrls`, the one reader every other checkout uses. The refusal remains for the install where it is honest: nothing configured and no account hub either.
+
+- **The plan screen no longer advertises a trial the customer will not get.** The "includes an X-day free trial" hint came from configuration alone, which was the truth for as long as configuration alone decided. Once the subscription trial became once per owner, a returning customer was shown the promise, pressed Subscribe, and reached a paid checkout — the screen offering what the starter refuses, at the one step the whole flow exists for. Both sides read one answer now (`Subscription::ownerHasHadATrial()`), so the promise and the grant cannot drift apart.
+
+- **A paying subscriber is not mailed about their own generic trial.** The owner's `trial_ends_at` is written when a trial is granted and cleared by nothing — not by subscribing — so anybody who converts during their generic trial keeps a future date on their row. The exclusion that used to skip them asked only whether their provider announces trial ends, which is false for a local engine, so a customer in good standing with a mandate on file was told to add a payment method. It now skips a LIVE subscription whatever the provider, and asks the capability only to avoid a second reminder.
+
+- **A local-engine trial is announced before it converts.** `billing:trials:warn` scanned only the owner's own trial column, and skipped anyone holding a subscription because "a provider exists that could send the trial-will-end event". True while Stripe was the only driver that carried one. A local engine announces nothing — nothing at the provider knows a trial is running — so those customers were warned by nobody and the first they heard of their free period ending was the debit. The command now also scans subscription trials, and both exclusions ask the driver's declared capability rather than assuming a provider exists.
+
+- **`billing_reporting_filings.corrects_filing_id` is indexed on PostgreSQL.** `foreignId()->constrained()` reads as though it covered both sides of the key; it does not. InnoDB creates an index for a foreign key by itself, so MySQL always had one — PostgreSQL indexes the *referenced* side and leaves the referencing column bare. Every `restrictOnDelete()` check and every walk up the correction chain was a sequential scan of the whole filings table, getting slower in exact proportion to how many periods had been filed.
+
+It never failed, which is why it lasted: a plan property throws nothing and turns nothing red. Shipped as a new migration rather than an edit to the v0.14.0 one, so existing databases get it too, and guarded against the index InnoDB already made.
+
+- **`supportsConnectDestinationCharges` now answers truthfully instead of always `false`.** The Stripe driver never passed the flag, so it defaulted to `false` on every install — a fully wired marketplace included. Nothing caught it, because nothing in the shipped tree read it: the marketplace guard decides on `instanceof RoutesMoney`, and the only places setting the flag to `true` were test doubles, where it decorates a decision that never looks at it. A field with no producer and no reader is indistinguishable from one that works.
+
+It is answered from the **rails the driver was built with**, not from what Stripe is able to do. Stripe supports destination charges everywhere; a driver constructed without Connect rails refuses at the point of use, and a capability is a promise the *package* keeps — reporting `true` there would send a screen to a lane that answers with an exception.
+
 ## [0.16.0] - 2026-08-21
 
 ### Added
@@ -5972,7 +6373,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/pushery/billing-for-laravel/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/pushery/billing-for-laravel/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/pushery/billing-for-laravel/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/pushery/billing-for-laravel/compare/v0.13.0...v0.14.0

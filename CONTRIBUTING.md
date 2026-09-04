@@ -32,6 +32,48 @@ which runs, and each can be run on its own:
 
 The suite uses [Pest](https://pestphp.com) and Orchestra Testbench.
 
+## Testing against real databases
+
+`composer test` runs on in-memory SQLite, which is fast and is not the whole story. Two
+further suites re-run the database-touching cases against **real servers** — the engines
+this package is meant to run on:
+
+| Suite | Engine | Environment |
+|---|---|---|
+| `tests/Postgres/` | PostgreSQL | `PG_TEST_HOST`, `PG_TEST_PORT` (default 5432), `PG_TEST_USER`, `PG_TEST_PASSWORD` |
+| `tests/MySql/` | MySQL 8.4+ | `MYSQL_TEST_HOST`, `MYSQL_TEST_PORT` (default **3308**), `MYSQL_TEST_USER`, `MYSQL_TEST_PASSWORD` |
+
+The MySQL port default is deliberately **not** 3306. On a development machine 3306 is
+usually whatever MySQL was installed first, which is often below this package's 8.4
+floor; 3308 is where Herd puts its 8.4. CI sets `MYSQL_TEST_PORT=3306` because its
+service genuinely is 8.4. Point it at a legacy server and the run fails on the engine
+check rather than skipping — which is correct, and confusing if you expected 3306 to
+be the default.
+
+Run just those with `composer test:database`; `composer test` includes them too.
+
+**A suite SKIPS when its server is unreachable, so a bare checkout stays green — which
+means a green run is not by itself evidence that either engine was tested.** Set
+`REQUIRE_DB_TESTS=1` to turn an unreachable server into a hard failure. CI does; do it
+locally too, or "all tests pass" can quietly mean "SQLite passed".
+
+You do not create the target database. The harness probes the server through a
+maintenance connection and creates it on demand, including a per-worker copy under
+`pest --parallel`, so the connecting role needs `CREATEDB` (PostgreSQL) or `CREATE`
+(MySQL) and nothing more.
+
+A reachable server of the wrong **engine** fails rather than skips. MariaDB is not a
+substitute for MySQL here and is deliberately rejected: version 11.4 clears an 8.4 floor
+numerically, so a version-only check would report a green MySQL lane for a server that is
+not MySQL. The same applies to PostgreSQL wire-compatible engines.
+
+**A database-touching test belongs in every suite it is relevant to** — keep it in
+`tests/Feature` for the fast loop *and* mirror it into `tests/Postgres` and `tests/MySql`,
+so engine-specific behavior (JSON vs JSONB, `RETURNING`, strict mode, collation, identifier
+casing, index types, whether a foreign key gets an index) is caught here rather than in a
+user's application. A guard in the suite enforces the mirroring, and a deliberate exception
+carries its reason.
+
 The full local gate — including the real-browser end-to-end suite and mutation
 testing — is `just all`. It runs on **your machine**, not GitHub Actions (a private
 package should not burn Actions minutes on every push). A pre-push hook, wired once

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Translation\Translator;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\QueryException;
@@ -14,10 +16,14 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View as ViewFacade;
 use Illuminate\View\View as ConcreteView;
 use Livewire\Component;
+use Pushery\Billing\Exceptions\InvalidDatevBatch;
+use Pushery\Billing\Invoicing\DatevPeriodBatch;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Reporting\BillingMetricsReporter;
 use Pushery\Billing\Support\BillingAdmin;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\HttpException;
+use Throwable;
 
 /**
  * The optional, publishable admin console: billing metrics, the recent audit log, and a comp-a-tier action.
@@ -44,6 +50,28 @@ final class BillingAdminConsole extends Component
 
     /** The outcome of the last cancel action ('canceled' | 'not_found'). */
     public ?string $cancelResult = null;
+
+    /** Period bounds for the booking-batch export — client input, re-read and re-validated by the action. */
+    public string $datevFrom = '';
+
+    public string $datevTo = '';
+
+    /** The outcome of the last export attempt ('invalid_period' | 'refused' | 'unbalanced'), and its detail where there is one. */
+    public ?string $datevResult = null;
+
+    public string $datevRefusal = '';
+
+    /** The two totals and their difference, in the operator's own terms, when a batch does not tie out. */
+    public string $datevImbalance = '';
+
+    /**
+     * Whether the operator has been shown an imbalance for THIS period and asked for the file anyway.
+     *
+     * Held per period rather than per session, and cleared whenever a bound moves: an acknowledgement
+     * carried across a change of dates would hand somebody a different unbalanced month in silence, which
+     * is precisely the outcome the first refusal existed to prevent.
+     */
+    public bool $datevImbalanceAcknowledged = false;
 
     public function mount(): void
     {
@@ -163,6 +191,150 @@ final class BillingAdminConsole extends Component
             // other lookup error reports not-found instead of fataling — the console never 500s on a crafted
             // or mistyped owner id, matching the graceful outcome the design promises for an unknown owner.
             return null;
+        }
+    }
+
+    /**
+     * Hand the accountant a period's booking batch, from the browser instead of a shell.
+     *
+     * ## It runs the SAME assembly as the command, and that is the whole design
+     *
+     * The batch is put together by `DatevPeriodBatch`, which the scheduled command also calls. A second
+     * assembly here would drift, and the drift is the invisible kind: this export has twice shipped a
+     * batch that was structurally valid, imported cleanly, and was short an entire category of bookings
+     * nobody enumerates. The refusals in the writer are reached for the same reason — a screen that caught
+     * them and reported success would emit exactly the file they exist to prevent.
+     *
+     * ## A refusal produces a MESSAGE and no file
+     *
+     * That asymmetry matters more than it looks. The writer refuses rather than emits precisely because the
+     * import will not argue: a truncated reference lands as a booking pointing at nothing, and a batch
+     * spanning two posting periods puts half of itself in the wrong month. Neither surfaces as an error
+     * anywhere — they surface as a reconciliation that does not close, months later. A partial download
+     * would be the worst outcome available, so nothing is streamed unless the whole batch was rendered.
+     *
+     * ## Nothing is written to disk
+     *
+     * Streamed straight to the browser. That is not only convenience: a booking batch is the operator's
+     * complete revenue history for the period in one file, and a copy left in storage is a second place it
+     * has to be protected, retained and erased from. There is no such copy, so there is no such question.
+     */
+    public function exportDatev(): ?StreamedResponse
+    {
+        // Re-authorized like every other entry point: a crafted request to this action must be refused even
+        // if a render was somehow reached, and the whole revenue history is what is on the other side.
+        $this->authorizeAdmin();
+
+        $this->datevResult = null;
+        $this->datevRefusal = '';
+        $this->datevImbalance = '';
+
+        try {
+            $from = CarbonImmutable::parse($this->datevFrom)->startOfDay();
+            $to = CarbonImmutable::parse($this->datevTo)->endOfDay();
+        } catch (Throwable) {
+            $this->datevResult = 'invalid_period';
+
+            return null;
+        }
+
+        if ($to->lessThan($from)) {
+            $this->datevResult = 'invalid_period';
+
+            return null;
+        }
+
+        // Resolved here rather than declared as a parameter: the component framework fills an action's
+        // parameters from the CLIENT, not from the container, so a type-hinted dependency arrives as null
+        // and the action fails before it authorizes anything.
+        $batch = Container::getInstance()->make(DatevPeriodBatch::class);
+
+        try {
+            $rendered = $batch->render($from, $to);
+        } catch (InvalidDatevBatch $refused) {
+            // The writer's own words, not a generic failure. It refuses over a specific document reference
+            // or a specific period boundary, and an operator who is told which one can fix it; one who is
+            // told "export failed" reruns it and gets the same nothing.
+            $this->datevResult = 'refused';
+            $this->datevRefusal = $refused->getMessage();
+
+            return null;
+        }
+
+        // The batch does not tie out, and nobody has said "give it to me anyway" for THIS period.
+        //
+        // The command writes the file and fails; this refuses the download and says why, and the two agree
+        // in substance: the file is one click away, not withheld. The difference is what a download IS. It
+        // lands in a folder without being read and gets forwarded from there, so an unbalanced batch that
+        // arrives silently is an unbalanced batch at the accounting firm. A message beside a file the
+        // operator already has is a message nobody needs to read.
+        //
+        // Refusing also sidesteps a mechanism this screen should not depend on: whether component state set
+        // before a raw streamed response ever reaches the client is not something the code can answer, and
+        // a warning that may or may not be rendered is worse than none.
+        if (! $rendered['reconciliation']->isBalanced() && ! $this->datevImbalanceAcknowledged) {
+            $reconciliation = $rendered['reconciliation'];
+
+            // Both totals, never only the difference: "off by 12.50" does not say which side is short, and
+            // the two point at opposite defects.
+            $this->datevResult = 'unbalanced';
+            // The Translator through the container, not the `__()` helper. That helper lives in Foundation,
+            // which this package deliberately does not require — `LeanDependencyContractTest` fails on it,
+            // and it is right to: a consumer who installs the split components would get a fatal here.
+            $this->datevImbalance = Container::getInstance()->make(Translator::class)->get('billing::admin.datev.imbalance_figures', [
+                'subledger' => $reconciliation->subLedgerTotal->toDecimal().' '.$reconciliation->subLedgerTotal->currency,
+                'batch' => $reconciliation->collectiveAccountBalance->toDecimal().' '.$reconciliation->collectiveAccountBalance->currency,
+                'difference' => $reconciliation->difference()->toDecimal().' '.$reconciliation->difference()->currency,
+            ]);
+
+            return null;
+        }
+
+        $content = $rendered['content'];
+        $name = 'datev-'.$from->toDateString().'-'.$to->toDateString().'.csv';
+
+        return new StreamedResponse(static function () use ($content): void {
+            echo $content;
+        }, 200, [
+            'Content-Type' => 'text/csv; charset=windows-1252',
+            'Content-Disposition' => 'attachment; filename="'.$name.'"',
+        ]);
+    }
+
+    /**
+     * "I have seen the difference; give me the file."
+     *
+     * A separate action rather than a flag on the form, because it must not be settable before the figures
+     * have been shown: a checkbox next to the button would let somebody arm it once and never see another
+     * imbalance.
+     */
+    public function exportDatevAnyway(): ?StreamedResponse
+    {
+        $this->authorizeAdmin();
+
+        $this->datevImbalanceAcknowledged = true;
+
+        return $this->exportDatev();
+    }
+
+    /** A changed bound is a different period, and an acknowledgement never carries across one. */
+    public function updatedDatevFrom(): void
+    {
+        $this->forgetTheImbalance();
+    }
+
+    public function updatedDatevTo(): void
+    {
+        $this->forgetTheImbalance();
+    }
+
+    private function forgetTheImbalance(): void
+    {
+        $this->datevImbalanceAcknowledged = false;
+        $this->datevImbalance = '';
+
+        if ($this->datevResult === 'unbalanced') {
+            $this->datevResult = null;
         }
     }
 

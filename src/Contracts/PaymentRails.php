@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Contracts;
 
+use Pushery\Billing\ValueObjects\ChargeNarrative;
 use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\MandateReference;
@@ -39,9 +40,22 @@ interface PaymentRails
      * what lets one set of contracts serve a single seller and a marketplace without either paying for
      * the other.
      */
-    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): ChargeResult;
+    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null): ChargeResult;
 
-    /** Store a reusable mandate/token for a customer so it can be charged later. */
+    /**
+     * Store a reusable mandate/token for a customer so it can be charged later.
+     *
+     * THE RETURN TYPE IS A PROMISE, and not every provider can keep it: it says a mandate exists once this
+     * returns. That holds where a stored method is attached by a server call. It does not hold where the
+     * mandate is established by the CUSTOMER completing a redirect — there the mandate is born when they
+     * finish a first payment, and depending on what they do it may never be born.
+     *
+     * The precondition is written here rather than left inside the type, because a driver that cannot meet
+     * it has three answers and two of them are defects. Inventing a reference gets it stored, charged
+     * against next cycle, refused, and read as the subscriber failing to pay. Blocking until a webhook
+     * arrives holds a request open for as long as the customer takes to decide. The third is to refuse and
+     * implement {@see EstablishesMandateByRedirect} instead, which is what such a driver should do.
+     */
     public function createMandate(string $customerReference, string $token): MandateReference;
 
     /** Tokenise raw payment data captured by the front-end element. */
@@ -52,7 +66,7 @@ interface PaymentRails
      * a queued/redelivered merchant-initiated charge retry-safe — pass the invoice/charge id so a
      * re-run collapses onto the first charge rather than billing the customer again.
      */
-    public function offSessionCharge(Money $amount, MandateReference $mandate, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): ChargeResult;
+    public function offSessionCharge(Money $amount, MandateReference $mandate, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null): ChargeResult;
 
     /**
      * Refund a previous charge, in full or in part. The idempotency key prevents a double refund on retry.

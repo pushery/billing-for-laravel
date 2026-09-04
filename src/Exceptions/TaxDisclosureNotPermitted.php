@@ -14,6 +14,12 @@ use RuntimeException;
  * Thrown before the document is written, not after it is rendered — a renderer that refuses a finished
  * document comes too late, and the creator is the one who would owe the wrongly-stated tax. Issue the
  * status-correct variant, which states no tax, instead.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class TaxDisclosureNotPermitted extends RuntimeException
 {

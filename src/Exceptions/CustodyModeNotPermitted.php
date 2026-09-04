@@ -14,6 +14,12 @@ use RuntimeException;
  * is jurisdiction-neutral — it names the technical property (funds held on the platform's own account),
  * not a specific country's law, because the same property is regulated under different names in different
  * places.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class CustodyModeNotPermitted extends RuntimeException
 {

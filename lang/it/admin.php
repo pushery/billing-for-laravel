@@ -27,6 +27,19 @@ return [
         'invalid_tier' => 'Questo piano non è configurato in billing.tiers.',
     ],
 
+    'datev' => [
+        'heading' => 'Lotto contabile (DATEV)',
+        'intro' => 'Scarica un periodo come lotto contabile DATEV EXTF — il file che importa un consulente fiscale tedesco. È lo stesso lotto prodotto dall\'esportazione pianificata, sul server non viene salvato nulla e, se il periodo non può essere contabilizzato come un unico lotto, il download viene rifiutato anziché troncato.',
+        'from' => 'Dal',
+        'to' => 'Al',
+        'submit' => 'Scarica il lotto',
+        'invalid_period' => 'Indica una data di inizio e una di fine, con la fine non anteriore all\'inizio.',
+        'refused' => 'Il lotto è stato rifiutato e non è stato scaricato nulla:',
+        'unbalanced' => 'Questo lotto non quadra e non deve essere trasmesso.',
+        'imbalance_figures' => 'Il partitario riporta :subledger di debiti verso i commercianti; il lotto esportato registra :batch sui conti di debito, con una differenza di :difference.',
+        'download_anyway' => 'Scaricalo comunque',
+    ],
+
     'cancel' => [
         'heading' => 'Annulla un abbonamento',
         'intro' => 'Termina immediatamente l\'abbonamento di un titolare. La modifica viene registrata nel registro di controllo a tuo nome.',

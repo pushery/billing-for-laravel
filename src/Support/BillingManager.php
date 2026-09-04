@@ -12,6 +12,7 @@ use Pushery\Billing\Drivers\NullDriver;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\UnsupportedDriver;
 use Pushery\Billing\ValueObjects\DriverCapabilities;
+use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
  * Resolves the active payment driver by name and honors the master switch: when billing.enabled is
@@ -37,7 +38,32 @@ final class BillingManager
         return (bool) $this->config->get('billing.enabled', true);
     }
 
-    /** The active driver — the NullDriver when billing is disabled, otherwise the named/default driver. */
+    /**
+     * The active driver — the NullDriver when billing is disabled, otherwise the named/default driver.
+     *
+     * ## It takes a NAME, and deliberately not an owner
+     *
+     * There is no per-owner driver resolution in this package, and that is a decision rather than a gap.
+     * One install runs one provider; changing providers is a migration of `billing.default`, not a mixed
+     * mode. Two things follow from it, and both are load-bearing:
+     *
+     * A marketplace does NOT need per-owner drivers. Its sellers are merchants at the SAME provider,
+     * scoped by {@see MerchantScope} — a creator's subscription is
+     * charged through the platform's driver against the creator's own connected account, not through a
+     * different provider.
+     *
+     * And the seams that a screen resolves — `WebhookVerifier`, `WebhookEventMapper`, `PaymentMethods`,
+     * `PaymentCsp`, `Invoices`, `SubscriptionActions`, `ProrationStrategy` — are bound ONCE at boot, by
+     * the active driver's service provider. A screen resolving one of those gets the active driver's
+     * implementation whatever row it is rendering. Making that owner-dependent would mean routing every
+     * resolution through this manager, and the contracts would stop being container bindings — which is
+     * exactly what a consumer overrides today to swap one behavior without forking a driver.
+     *
+     * So a caller passing a name that is not the default gets that driver's RAILS, ENGINE and
+     * CAPABILITIES — the three things this manager owns — and the boot-bound seams stay as they are.
+     * Anything else would be half a mechanism, and half a mechanism here means a subscriber silently
+     * charged through the wrong provider.
+     */
     public function driver(?string $name = null): BillingDriver
     {
         if (! $this->enabled()) {

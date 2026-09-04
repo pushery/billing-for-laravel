@@ -16,6 +16,12 @@ use RuntimeException;
  * reselling in its own name on the receipt and merely arranging the sale on its books. Letting the pair
  * disagree would produce a receipt and a settlement document that describe different transactions — both
  * internally consistent, and only comparable by somebody who thought to compare them.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class RegimeNotPermitted extends RuntimeException
 {

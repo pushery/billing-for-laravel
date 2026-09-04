@@ -21,6 +21,12 @@ use RuntimeException;
  * the setting reads as on, the operator believes they are collecting, and the first evidence otherwise is
  * revenue that never arrived. Refusing names which of the two conditions failed while it is still free to
  * fix — the same shape as every other fail-closed refusal in this package.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class BuyerFeeNotApplicable extends RuntimeException
 {

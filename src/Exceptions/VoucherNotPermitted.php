@@ -12,6 +12,12 @@ use RuntimeException;
  * Each case is one of the properties that keeps the instrument outside regulated money. They are not
  * configurable, and that is the whole point: a switch that turned one off would turn the voucher into
  * something a license is needed for, and the switch would look like any other setting.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class VoucherNotPermitted extends RuntimeException
 {

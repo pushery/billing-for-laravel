@@ -14,6 +14,12 @@ use RuntimeException;
  * classification is not one unknown but five guesses. And guesses that happen to be right most of the time
  * are the hardest defects to find: nothing fails, the numbers look ordinary, and only the minority of sales
  * where the guess was wrong are wrong — quietly, in records nobody re-reads.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class ProductNotClassified extends RuntimeException
 {

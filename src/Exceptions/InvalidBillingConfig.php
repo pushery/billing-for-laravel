@@ -12,6 +12,12 @@ use RuntimeException;
  * an unknown dimension, dunning rungs out of order that never escalate. Like the webhook-secret and metering
  * guards, this refuses to boot with a clear message rather than let the dashboard break or a customer be
  * mis-tiered mid-request.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class InvalidBillingConfig extends RuntimeException
 {

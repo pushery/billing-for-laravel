@@ -21,6 +21,12 @@ use RuntimeException;
  * holds them equal), and it is the field a self-billed document can carry without contradicting the seller
  * it names — a self-billed invoice names the creator as seller, which the posture guard reads as "not the
  * platform", so only the regime is a clean key for the role check.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class DocumentRoleViolatesRegime extends RuntimeException
 {

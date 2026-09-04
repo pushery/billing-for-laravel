@@ -6,6 +6,7 @@ namespace Pushery\Billing\Drivers;
 
 use Pushery\Billing\Contracts\PaymentRails;
 use Pushery\Billing\Exceptions\BillingDisabled;
+use Pushery\Billing\ValueObjects\ChargeNarrative;
 use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\MandateReference;
@@ -20,7 +21,7 @@ use Pushery\Billing\ValueObjects\TokenizedMethod;
  */
 final class NullPaymentRails implements PaymentRails
 {
-    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): ChargeResult
+    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null): ChargeResult
     {
         throw BillingDisabled::cannot('charge');
     }
@@ -35,7 +36,7 @@ final class NullPaymentRails implements PaymentRails
         throw BillingDisabled::cannot('tokenize a payment method');
     }
 
-    public function offSessionCharge(Money $amount, MandateReference $mandate, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): ChargeResult
+    public function offSessionCharge(Money $amount, MandateReference $mandate, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null): ChargeResult
     {
         throw BillingDisabled::cannot('charge off-session');
     }

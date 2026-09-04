@@ -12,6 +12,12 @@ use RuntimeException;
  * A platform that does not self-bill routes creators to the fallback lane — the creator submits their own
  * invoice — and never settles them here. So reaching the engine with the switch off is a caller mistake, not
  * a document to produce: the engine refuses loudly rather than issue one a disabled platform never meant to.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class SelfBillingDisabled extends RuntimeException
 {

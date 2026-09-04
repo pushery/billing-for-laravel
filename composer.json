@@ -57,10 +57,12 @@
     },
     "require-dev": {
         "horstoeko/zugferd": "^1.0",
-        "larastan/larastan": "^3.0",
+        "larastan/larastan": "3.10.0",
         "laravel/pao": "^1.1",
         "laravel/pint": "^1.0",
         "livewire/livewire": "^4.3",
+        "mollie/mollie-api-php": "^3.13",
+        "nikic/php-parser": "^5.8",
         "orchestra/testbench": "^11.0",
         "pestphp/pest": "^5.0",
         "pestphp/pest-plugin-browser": "^5.0",
@@ -69,12 +71,13 @@
         "pestphp/pest-plugin-type-coverage": "^5.0",
         "phpstan/phpstan": "2.2.8",
         "rector/rector": "2.6.2",
-        "spaze/phpstan-disallowed-calls": "^4.12"
+        "spaze/phpstan-disallowed-calls": "4.14.0"
     },
     "suggest": {
         "livewire/livewire": "Required only for the optional account-hub UI — the nine Livewire screens. The billing core (models, webhooks, invoicing, tax, contracts) needs none of it.",
         "horstoeko/zugferd": "Required only to embed the EN 16931 CII XML into a ZUGFeRD/Factur-X hybrid PDF/A-3 via Invoicing\\ZugferdPdfInvoice. The CII and XRechnung XML writers need none of it.",
-        "anthropic-ai/sdk": "Required only to score evals with a real judge, which is wired only when ANTHROPIC_API_KEY is set. Deliberately not a dev dependency: without it every eval still runs, the judge-backed expectations are skipped, and no install pays for a client it never calls."
+        "anthropic-ai/sdk": "Required only to score evals with a real judge, which is wired only when ANTHROPIC_API_KEY is set. Deliberately not a dev dependency: without it every eval still runs, the judge-backed expectations are skipped, and no install pays for a client it never calls.",
+        "mollie/mollie-api-php": "Required only for the Mollie driver — the local billing engine and every other driver need none of it. Deliberately not a hard dependency: an install that never selects billing.default=mollie would otherwise carry an HTTP client it never calls, the same reasoning that keeps horstoeko/zugferd optional."
     },
     "autoload": {
         "psr-4": {

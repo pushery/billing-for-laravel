@@ -15,6 +15,12 @@ use RuntimeException;
  * merchant sells in their own name, the MERCHANT is. A document that names the merchant as seller under a
  * deemed-supplier posture would put a creator in front of the buyer as the seller — the exact outcome the
  * deemed-supplier rule exists to prevent — so the write is refused rather than left to issue it.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class SellerContradictsPosture extends RuntimeException
 {

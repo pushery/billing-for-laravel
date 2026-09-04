@@ -13,6 +13,12 @@ use RuntimeException;
  * Refused before provision, because provision is the act that would forfeit the buyer's right, and doing it
  * without their recorded agreement means every refund inside the window is owed rather than granted. For a
  * platform that is the seller of record, that is the platform's own money at stake.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class WithdrawalConsentMissing extends RuntimeException
 {

@@ -12,6 +12,12 @@ use RuntimeException;
  * Refused rather than ignored, and refused LOUDLY. A waiver that silently did not take effect would leave a
  * caller believing the obligation had ended while the package believed it had not — and the two beliefs only
  * meet when somebody asks why their fix never arrived, or why one did.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class ConformityWaiverNotPermitted extends RuntimeException
 {

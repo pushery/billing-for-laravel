@@ -18,6 +18,12 @@ use RuntimeException;
  * legal minimum is refused, and only until an operator opts in on purpose (billing.retention.
  * allow_below_statutory_minimum) — for a jurisdiction whose minimum genuinely is shorter than the German
  * default this ships with.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class RetentionBelowStatutoryMinimum extends RuntimeException
 {

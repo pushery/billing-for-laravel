@@ -6,14 +6,19 @@ namespace Pushery\Billing\Console\Commands;
 
 use DateTimeInterface;
 use Illuminate\Console\Command;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\TrialNotifier;
+use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
+use Pushery\Billing\Support\BillingManager;
+use Throwable;
 
 /**
  * Warns owners whose GENERIC trial is about to end.
@@ -121,24 +126,149 @@ final class WarnEndingTrialsCommand extends Command
                     }
                 });
 
+        $warned += $this->warnSubscriptionTrials($notifier, $log, $now, $days, $dryRun);
+
         $this->components->info(($dryRun ? 'Would warn ' : 'Warned ')."{$warned} owner(s) about an ending trial.");
 
         return self::SUCCESS;
     }
 
     /**
-     * Whether the provider path already covers this owner.
+     * The SUBSCRIPTION trials, which the scan above cannot see.
      *
-     * ANY subscription, of any type and any status — not just a default one in trial. The question here is
-     * whether a provider exists that could send the trial-will-end event, and one subscription is enough for
-     * that. Narrowing it would send a second reminder to somebody the webhook already reminded.
+     * That one reads the OWNER's `trial_ends_at` — the generic trial, a date on a model with no
+     * subscription behind it. A subscription trial keeps its date on the subscription row instead, and
+     * until a local-engine driver existed nobody had to look there: the only driver that created one was
+     * Stripe, and Stripe announces its own trial ends.
+     *
+     * A local engine announces nothing, because nothing at the provider knows a trial is running. The
+     * package holds the date and its own sweep collects the first charge — so without this the customer's
+     * first notice of the end of their free period is the debit.
+     */
+    private function warnSubscriptionTrials(
+        TrialNotifier $notifier,
+        BillingEventLog $log,
+        Carbon $now,
+        int $days,
+        bool $dryRun,
+    ): int {
+        $warned = 0;
+
+        Subscription::query()
+            ->where('status', SubscriptionState::Trialing->value)
+            ->whereNotNull('trial_ends_at')
+            ->whereBetween('trial_ends_at', [$now, $now->copy()->addDays($days)])
+            ->chunkById(100, function (Collection $subscriptions) use ($notifier, $log, $dryRun, &$warned): void {
+                /** @var Collection<int, Subscription> $subscriptions */
+                foreach ($subscriptions as $subscription) {
+                    if ($this->providerAnnouncesTrialEnd($subscription->provider)) {
+                        continue;
+                    }
+
+                    $endsAt = $subscription->trial_ends_at;
+                    $owner = $this->ownerOf($subscription);
+
+                    if (! $endsAt instanceof DateTimeInterface || ! $owner instanceof Model) {
+                        continue;
+                    }
+
+                    $endsAt = Carbon::instance($endsAt);
+
+                    if ($this->alreadyWarned($owner, $endsAt)) {
+                        continue;
+                    }
+
+                    $warned++;
+
+                    if ($dryRun) {
+                        continue;
+                    }
+
+                    $notifier->trialEnding($owner, $endsAt);
+
+                    // The SAME event type and the same date format the generic path records, so the two
+                    // dedupe against each other and the provider's own notice does too — it writes this
+                    // record as well. A second type would make three paths that each believe they are the
+                    // only one.
+                    $log->record('trial.ending_notice_sent', $owner, [
+                        'trial' => 'subscription',
+                        'trial_ends_at' => $endsAt->format('Y-m-d'),
+                    ]);
+                }
+            });
+
+        return $warned;
+    }
+
+    /**
+     * Whether this subscription's provider tells the customer their trial is ending.
+     *
+     * Asked of the DRIVER's declared capability rather than of its name, because the answer is a property
+     * of what that driver actually wires: Stripe's mapper produces the event and its provider registers the
+     * notice on it. A driver that cannot be resolved — a subscription left behind by a provider the install
+     * no longer configures — is treated as announcing NOTHING, which is the safe direction: a duplicate
+     * reminder costs an email, and a missing one costs an unannounced charge.
+     */
+    private function providerAnnouncesTrialEnd(string $provider): bool
+    {
+        // No null guard, because `billing_subscriptions.provider` is NOT NULL and the model types it
+        // `string`. One would be a branch no run can enter, which reads as a guard and protects nothing.
+        try {
+            return Container::getInstance()->make(BillingManager::class)
+                ->driver($provider)
+                ->capabilities()
+                ->supportsProviderTrialNotice;
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    /** The consumer's model behind a subscription, through the morph map. */
+    private function ownerOf(Subscription $subscription): ?Model
+    {
+        $class = Relation::getMorphedModel($subscription->owner_type) ?? $subscription->owner_type;
+
+        if (! class_exists($class) || ! is_a($class, Model::class, true)) {
+            return null;
+        }
+
+        return $class::query()->find($subscription->owner_id);
+    }
+
+    /**
+     * Whether this owner's GENERIC trial reminder would be wrong or redundant.
+     *
+     * TWO independent reasons, and collapsing them into one is a mistake this method has now made in both
+     * directions.
+     *
+     * It began as "any subscription at all", reasoned as "a provider exists that could send the
+     * trial-will-end event". That reasoning stopped being true when a local-engine driver arrived: nothing
+     * at such a provider knows a trial is running, so it announces nothing.
+     *
+     * Replacing it with the capability question ALONE was worse, because it threw away the other reason.
+     * An owner's `trial_ends_at` is written by `Trials::grant()` and cleared by nothing — not by
+     * subscribing — so somebody who converts DURING their generic trial keeps a future date on their own
+     * row. Asking only about the provider, they stopped being skipped and were mailed "add a payment
+     * method before it ends" while already paying, with a mandate on file.
+     *
+     * So: a LIVE subscription skips them because they converted, whatever the provider; and a subscription
+     * under a provider that announces skips them because the webhook is about to say it. A TERMINAL row
+     * under a silent provider skips neither — that owner really is on a generic trial that nobody else
+     * will mention.
      */
     private function hasSubscription(Model $owner): bool
     {
         return Subscription::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
-            ->exists();
+            ->get()
+            ->contains(fn (Subscription $subscription): bool =>
+                // They already converted. The generic trial ending is not something they have to act on,
+                // and the notice tells them to add a payment method they demonstrably have.
+                ! $subscription->isReplaceableByANewSubscription()
+                // Or a provider will tell them, and two reminders for one trial end is how a reminder
+                // stops being read.
+                || $this->providerAnnouncesTrialEnd($subscription->provider));
     }
 
     /** Whether this owner has already been told about THIS trial end. */

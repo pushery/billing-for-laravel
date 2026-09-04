@@ -60,6 +60,59 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Mollie
+    |--------------------------------------------------------------------------
+    |
+    | Only read when `default` is `mollie`. The key is required there and the
+    | driver refuses to build a client without one — an install that selects the
+    | driver and forgets the key does not fail at boot, it fails at the first
+    | charge, inside a scheduled run, against a real subscriber.
+    |
+    | A blank value counts as missing on purpose: a set-but-empty variable is
+    | what a half-finished deployment leaves behind, and it reads as configured
+    | to anybody looking at the file.
+    |
+    */
+
+    'mollie' => [
+        'api_key' => env('BILLING_MOLLIE_API_KEY'),
+
+        // Where Mollie sends the customer back and posts its status pings. It must be ABSOLUTE and
+        // reachable from the internet, which is why it is configuration rather than a generated route URL:
+        // a package cannot know the public host, and a URL generated from a CLI run — which is exactly
+        // where the scheduled billing run creates payments — has no request to take the host from.
+        //
+        // Left null it falls back to the app URL joined with `billing.webhook_path`. That is right for a
+        // single-host install and wrong for anything behind a tunnel in development, where the value has to
+        // be the tunnel's, or the webhook is posted to a host Mollie cannot reach.
+        'webhook_url' => env('BILLING_MOLLIE_WEBHOOK_URL'),
+
+        // The payment methods this Mollie account offers at checkout. Configurable because Mollie enables
+        // methods PER ACCOUNT — a fixed list would be wrong for most installs in both directions at once,
+        // offering something the account cannot take and hiding something it can.
+        //
+        // Left null, the driver falls back to the methods a mandate can exist for. Not an empty list:
+        // empty reads as "this account can take no payments", and every screen that asks would render
+        // nothing at all.
+        'methods' => null,
+
+        // The signing secret for Mollie's next-generation webhooks, which carry an HMAC-SHA256 in
+        // `X-Mollie-Signature`. Accepts a LIST as well as a single string: rotation is a period where both
+        // secrets are live, and without that an operator has to choose between rotating and losing
+        // webhooks — which is not a choice, it is a reason not to rotate.
+        //
+        // Left null, the driver takes the legacy path: the ping is unsigned and the authentication is the
+        // fetch the mapper does, since an attacker cannot invent a status Mollie will confirm. That
+        // fallback is not optional — every install still on legacy webhooks would otherwise start refusing
+        // every ping on the day it updated.
+        //
+        // Set it, and an UNSIGNED ping is refused: you have said your account signs, so an unsigned
+        // request is either a misconfiguration or somebody knocking.
+        'webhook_secret' => env('BILLING_MOLLIE_WEBHOOK_SECRET'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Webhook path
     |--------------------------------------------------------------------------
     |
@@ -113,6 +166,32 @@ return [
     | customer; it falls back to success_url, then the subscription screen.
     |
     */
+
+    /*
+    |--------------------------------------------------------------------------
+    | Starting a subscription with a local-engine driver
+    |--------------------------------------------------------------------------
+    |
+    | A provider with no synchronous setup call establishes the mandate through a
+    | first payment the customer completes on the provider's own page.
+    |
+    | subscribe_return_url is where they come back to. It falls back to
+    | checkout.success_url, and an install that set neither is refused rather than
+    | redirected to nowhere: the customer would complete a real payment and land on
+    | an error page holding a mandate nothing told them about.
+    |
+    | mandate_verification_minor is what that first payment charges, in minor units
+    | of the plan's currency. It appears on the customer's statement, which is why
+    | it is configurable — and it is the SMALLEST unit by default rather than the
+    | plan price, because its purpose is to create a mandate. The first cycle is
+    | billed by the engine on its own schedule, and collecting it here as well
+    | would charge the customer twice for one period.
+    |
+    */
+
+    'subscribe_return_url' => env('BILLING_SUBSCRIBE_RETURN_URL'),
+
+    'mandate_verification_minor' => env('BILLING_MANDATE_VERIFICATION_MINOR', 1),
 
     'checkout' => [
         'success_url' => env('BILLING_CHECKOUT_SUCCESS_URL'),
@@ -229,6 +308,33 @@ return [
     'subscriptions' => [
         'downgrade_timing' => env('BILLING_DOWNGRADE_TIMING', 'period_end'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Order-item preprocessors
+    |--------------------------------------------------------------------------
+    |
+    | Steps that may reshape a billing cycle's lines before its order is written,
+    | run in the order listed here. Each implements OrderItemPreprocessor and is
+    | resolved through the container, so a step may declare its own dependencies.
+    |
+    | This is empty by default and that is the correct default: the local engine
+    | bills the flat plan price, and what a cycle costs BEYOND that — metered
+    | consumption, an application's own arithmetic — is a question only the
+    | consuming application can answer. A driver that prices remotely (Stripe,
+    | through meters) never reaches this at all.
+    |
+    | The order matters. A step that prices usage and a step that applies a
+    | percentage discount give different answers depending on which runs first,
+    | and this list is the only honest place for that decision.
+    |
+    | A step that throws aborts the cycle before it is claimed. That is
+    | deliberate: a half-priced order would be charged against a total nothing
+    | reproduces, and the claim would stop the next run from ever revisiting it.
+    |
+    */
+
+    'order_item_preprocessors' => [],
 
     /*
     | Tiers the webhook never flips (admin-comped, e.g. an unlimited grant). The
@@ -1216,6 +1322,9 @@ return [
     */
 
     'invoices' => [
+        // The prefix on a locally issued invoice number: PREFIX-YYYY-0000001. Only a local engine mints
+        // these — a provider-driven driver copies the number its provider already issued.
+        'number_prefix' => env('BILLING_INVOICE_NUMBER_PREFIX', 'INV'),
         'pdf_disk' => env('BILLING_INVOICE_PDF_DISK'),
     ],
 
@@ -1828,14 +1937,19 @@ return [
 
         // When a seller is active enough to be asked to declare their standing.
         //
-        // Two thresholds live off these numbers and they are NOT the same rule. The declaration is asked
-        // for as soon as EITHER measure is reached — a platform setting, meant to be early, since asking a
-        // question sooner than strictly necessary costs nothing. The reporting exemption holds only while
-        // BOTH stay under, and its money comparison is inclusive: at exactly the figure it still holds.
+        // These numbers drive ONE rule: when to ask a seller to declare their standing. It fires as soon as
+        // EITHER measure is reached — a platform setting, meant to be early, since asking a question sooner
+        // than strictly necessary costs nothing. Move them freely; they are yours.
         //
-        // At that figure the two disagree on purpose. Do not "harmonize" them: the exemption's boundary is
-        // set by law, and moving it to match a preference over-reports — and reporting data that need not
-        // be reported is itself an incorrect report, plus a privacy problem.
+        // They do NOT set the reporting duty's de-minimis exemption, and the similarity is a trap worth
+        // naming here because the two read almost identically. That boundary is set by law, holds only
+        // while BOTH measures stay under, is inclusive at its money figure, and lives under
+        // `billing.reporting.goods_de_minimis.*` — a separate family, deliberately.
+        //
+        // They used to be coupled: a second copy of the exemption read THESE keys, so moving the
+        // declaration trigger moved the statutory boundary with it, in the over-reporting direction.
+        // Reporting data that need not be reported is itself an incorrect report and a data protection
+        // breach at the same time, so that direction is not the cautious one. The copy is gone.
         //
         // The test is activity, never intent. Somebody who sells regularly is trading whether or not they
         // make anything on it.
@@ -2027,7 +2141,7 @@ return [
         // anti-injection stance would otherwise lapse.
         'tips' => [
             'enabled' => (bool) env('BILLING_MARKETPLACE_TIPS', false),
-            // ⚠️ ONE LINE ON PURPOSE — DO NOT WRAP THIS TERNARY.
+            // ONE LINE ON PURPOSE -- DO NOT WRAP THIS TERNARY.
             // A `: null` sitting alone on its own line is UNREACHABLE COVERAGE, not a missing test.
             // PHP emits no opcode for a constant-null false branch, so pcov never reports that line,
             // while PHPUnit's static analyzer counts it as executable. The result is a line that

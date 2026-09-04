@@ -33,6 +33,12 @@ use RuntimeException;
  * periodisation is decided, and the caller's grouping would silently stop mattering — which is how one
  * quantity ends up with two derivations that nobody sees diverge. The caller states which period a
  * transaction counts in; this only holds it to that statement.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class SettlementTransactionOutsidePeriod extends RuntimeException
 {

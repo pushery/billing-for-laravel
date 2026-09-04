@@ -19,6 +19,8 @@ use Pushery\Billing\Casts\UtcDateTime;
  * @property int $owner_id
  * @property int $coupon_id
  * @property ?int $subscription_id
+ * @property int $applied_count
+ * @property ?string $last_applied_period
  * @property ?Carbon $redeemed_at
  */
 final class CouponRedemption extends Model
@@ -26,12 +28,23 @@ final class CouponRedemption extends Model
     protected $table = 'billing_coupon_redemptions';
 
     /** @var list<string> */
-    protected $fillable = ['owner_type', 'owner_id', 'coupon_id', 'subscription_id', 'redeemed_at'];
+    protected $fillable = ['owner_type', 'owner_id', 'coupon_id', 'subscription_id', 'applied_count', 'last_applied_period', 'redeemed_at'];
+
+    /**
+     * The same default the schema carries, so a freshly created model reads like one read back.
+     *
+     * Without it a redemption created without the column holds null while the row holds 0 — a
+     * disagreement that lasts only until somebody re-reads, which is exactly why it hides.
+     *
+     * @var array<string, int>
+     */
+    protected $attributes = ['applied_count' => 0];
 
     /** @var array<string,string> */
     protected $casts = [
         'coupon_id' => 'integer',
         'subscription_id' => 'integer',
+        'applied_count' => 'integer',
         'redeemed_at' => UtcDateTime::class,
     ];
 

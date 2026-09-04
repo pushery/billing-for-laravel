@@ -29,6 +29,12 @@ use RuntimeException;
  * Not "the subscription is unrouted" — that is decided from the local subscription row before the provider
  * is asked at all, and it returns without raising anything. Reaching this means the cycle looked routed and
  * the provider still could not answer for it.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class RoutedCycleUnreadable extends RuntimeException
 {

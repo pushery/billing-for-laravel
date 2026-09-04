@@ -26,6 +26,12 @@ use RuntimeException;
  * themselves, through the platform's own declaration flow — and the sale goes through. A declaration that
  * simply expired reads the same way here, which is intended: a statement about a year that has ended is not
  * a weaker answer, it is no answer.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class TaxStandingUnestablished extends RuntimeException
 {

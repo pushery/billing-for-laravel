@@ -10,6 +10,7 @@ use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\TierResolver;
 use Pushery\Billing\Enums\AuditSource;
+use Pushery\Billing\Enums\CreditReason;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\CreditLedger;
 use Pushery\Billing\Support\PeriodResolver;
@@ -81,7 +82,7 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
             return;
         }
 
-        $this->ledger->credit($billable, $unused);
+        $this->ledger->credit($billable, $unused, CreditReason::ProrationCredit);
 
         // The balance alone says WHAT the customer has, never WHY. Without this line a support agent
         // looking at a credit has no way to tell a proration from a refund or a goodwill gesture.
