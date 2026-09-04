@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace Pushery\Billing\Drivers\Stripe;
 
 use Pushery\Billing\Contracts\MovesMerchantShare;
+use Pushery\Billing\Contracts\ReportsMovedShares;
 use Pushery\Billing\Contracts\ReversesMerchantShare;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\MovedShare;
 use Pushery\Billing\ValueObjects\TransferResult;
 use Pushery\Billing\ValueObjects\TransferReversal;
+use Stripe\Exception\InvalidRequestException;
+use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
 
 /**
@@ -37,7 +41,7 @@ use Stripe\StripeClient;
  * key and a second transfer. The caller holds stable local state (a row id) and is the only party that can
  * key this safely.
  */
-final readonly class StripeMerchantTransfers implements MovesMerchantShare, ReversesMerchantShare
+final readonly class StripeMerchantTransfers implements MovesMerchantShare, ReportsMovedShares, ReversesMerchantShare
 {
     public function __construct(private StripeClient $stripe) {}
 
@@ -64,6 +68,44 @@ final readonly class StripeMerchantTransfers implements MovesMerchantShare, Reve
         return new TransferResult(
             (string) $transfer->id,
             new Money((int) $transfer->amount, strtoupper((string) $transfer->currency)),
+        );
+    }
+
+    public function movedShare(string $transferReference): ?MovedShare
+    {
+        try {
+            $transfer = $this->stripe->transfers->retrieve($transferReference);
+        } catch (RateLimitException $e) {
+            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
+            throw $e;
+        } catch (InvalidRequestException $missing) {
+            // A reference the provider does not know. Returned as null rather than thrown, because the
+            // caller is a reconciliation sweep: one unknown reference is the finding it exists to surface,
+            // and an exception here would abandon every merchant after it.
+            //
+            // NARROWED TO 404, and the clause above is why that is not the same statement twice. The
+            // dedicated rate-limit clause takes the 429 out of this branch entirely; the status check then
+            // covers every OTHER non-404 the parent type carries. Both matter: without the first a busy
+            // provider is reported as a transfer that does not exist — the most serious alarm this class
+            // can raise, manufactured — and without the second any other refusal reads the same way.
+            // Reporting over an unreadable provider is the one answer a reconciliation must never give.
+            if ($missing->getHttpStatus() !== 404) {
+                throw $missing;
+            }
+
+            return null;
+        }
+
+        $currency = strtoupper((string) $transfer->currency);
+
+        // `amount_reversed` is the provider's CUMULATIVE figure for this transfer. Summing the reversal
+        // objects instead would be the same number until a redelivered webhook or a partial second reversal
+        // makes it not, and it would then read as more clawed back than actually was.
+        return new MovedShare(
+            (string) $transfer->id,
+            new Money((int) $transfer->amount, $currency),
+            new Money((int) ($transfer->amount_reversed ?? 0), $currency),
         );
     }
 

@@ -36,6 +36,7 @@ use Pushery\Billing\Invoicing\Guards\ChargeClaimKeyDeriver;
 use Pushery\Billing\Invoicing\Guards\ImmutableIssuedInvoiceGuard;
 use Pushery\Billing\Invoicing\Guards\RegimePostureGuard;
 use Pushery\Billing\Invoicing\Guards\SellerMatchesPostureGuard;
+use Pushery\Billing\Invoicing\Guards\TaxWithoutBasisGuard;
 use Pushery\Billing\Marketplace\DocumentRoleGuard;
 use Pushery\Billing\ValueObjects\CountingPeriod;
 use Pushery\Billing\ValueObjects\Invoice;
@@ -50,6 +51,7 @@ use Pushery\Billing\ValueObjects\Money;
  * @property int $owner_id
  * @property ?string $provider
  * @property ?string $provider_id
+ * @property ?int $order_id
  * @property ?string $number
  * @property ?string $pdf_path
  * @property ?int $credited_invoice_id
@@ -119,7 +121,7 @@ final class InvoiceRecord extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'owner_type', 'owner_id', 'provider', 'provider_id', 'number', 'pdf_path', 'total_minor', 'currency',
+        'owner_type', 'owner_id', 'provider', 'provider_id', 'order_id', 'number', 'pdf_path', 'total_minor', 'currency',
         'status', 'issued_at', 'due_at', 'credited_invoice_id', 'credited_invoice_number', 'reissue_of_invoice_id',
         'refund_attempt_id',
         'buyer', 'subtotal_minor',
@@ -179,6 +181,12 @@ final class InvoiceRecord extends Model
         // first-document be written for a charge that already has one — undoing the constraint from
         // inside the application, which is the one direction a database cannot defend itself in.
         'charge_claim_key',
+        // WHICH cycle raised this document. Same class as the claim key, and it holds the same unique
+        // index: a locally raised invoice carries the order it was raised from, and that pairing is what
+        // makes a redelivered cycle return the document it already wrote instead of drawing a second
+        // number. An editable link would hand that slot back — and, worse, re-point a numbered tax
+        // document at a different sale while every amount on it still added up.
+        'order_id',
         // Which reversal this document documents. A correction that could be re-pointed at a different
         // attempt would restate what a past document was about, and the join exists precisely so a reader
         // can trust that pairing — an editable link answers a different question every time it is read.
@@ -349,6 +357,11 @@ final class InvoiceRecord extends Model
             if ($regime instanceof SupplyRegime && $series instanceof DocumentSeries) {
                 new DocumentRoleGuard()->assertPermitted($regime, $series);
             }
+
+            // And that a tax figure has something behind it. Checked on CREATE rather than in the issuers,
+            // because there are seven of them and the next one is written by somebody who has not read this
+            // paragraph — the table is the one place every document must pass through.
+            new TaxWithoutBasisGuard()->assertHasBasis($invoice);
         });
 
         // And what an issued document may no longer change.

@@ -74,6 +74,22 @@ final readonly class StripeDriver implements BillingDriver, RoutesMoney
             supportsProviderCredit: true,
             availablePaymentMethods: ['card', 'sepa_debit', 'link'],
             recurringCapableMethods: ['card', 'sepa_debit', 'link'],
+            // Answered from the RAILS, not from what Stripe is able to do. Stripe supports destination
+            // charges everywhere; this driver can only make them on an install that built the Connect
+            // rails, and the rule this package states twice over is that a capability is a promise the
+            // PACKAGE keeps. An install without them refuses at the point of use, so a flag reading true
+            // would send a screen to a lane that answers with an exception.
+            //
+            // It was omitted entirely before, which defaulted it to false on EVERY install — including a
+            // fully wired marketplace. Nothing went red, because nothing in the shipped tree read it: the
+            // guard decides on `instanceof RoutesMoney`, and the flag was set to true only inside test
+            // fixtures, where it decorates a decision that never looks at it. A field with no producer and
+            // no reader is indistinguishable from one that works.
+            supportsConnectDestinationCharges: $this->marketplace instanceof MarketplaceRails,
+            // `customer.subscription.trial_will_end` reaches StripeWebhookEventMapper, which turns it into
+            // a TrialEnding event, and this driver registers SendTrialEndingNotice on it. The promise is
+            // kept end to end, which is what lets the trial-warning command leave these customers alone.
+            supportsProviderTrialNotice: true,
         );
     }
 }

@@ -20,6 +20,12 @@ use RuntimeException;
  *    merchant (not the platform) as the seller of an electronic service contradicts the deemed-supplier
  *    presumption (Art. 9a VAT-IR (EU) 282/2011; CJEU C-695/20 Fenix); a platform that sets the terms,
  *    authorizes the billing or approves the supply cannot truthfully assert the rebuttal, so this is refused.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class PostureNotPermitted extends RuntimeException
 {

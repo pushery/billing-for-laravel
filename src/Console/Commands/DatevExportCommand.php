@@ -7,11 +7,9 @@ namespace Pushery\Billing\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Carbon;
-use Pushery\Billing\Invoicing\DatevExport;
-use Pushery\Billing\Models\InvoiceRecord;
-use Pushery\Billing\Models\ProviderFee;
-use Pushery\Billing\Models\VoucherMovementRecord;
-use Pushery\Billing\ValueObjects\VoucherMovement;
+use Pushery\Billing\Invoicing\DatevPeriodBatch;
+use Pushery\Billing\ValueObjects\AccountReconciliation;
+use Pushery\Billing\ValueObjects\Money;
 use Throwable;
 
 /**
@@ -34,7 +32,7 @@ final class DatevExportCommand extends Command
 
     protected $description = 'Export a period of invoices as a DATEV EXTF booking batch';
 
-    public function handle(DatevExport $export, Filesystem $files): int
+    public function handle(DatevPeriodBatch $periods, Filesystem $files): int
     {
         try {
             $from = $this->bound('from', Carbon::now()->subMonthNoOverflow()->startOfMonth());
@@ -51,48 +49,12 @@ final class DatevExportCommand extends Command
             return self::FAILURE;
         }
 
-        $invoices = InvoiceRecord::query()
-            ->whereBetween('issued_at', [$from, $to])
-            // A restatement — the full invoice a buyer asked for after their receipt — is the same sale
-            // stated again. Booking it would double the revenue and the tax in the books.
-            ->whereNull('reissue_of_invoice_id')
-            ->orderBy('issued_at')
-            ->orderBy('id')
-            ->get();
+        // Assembled by DatevPeriodBatch, not here. Both silent omissions this command carried — provider
+        // fees and voucher movements missing from every real monthly batch — were the assembly drifting
+        // away from what export() accepts, and a second caller re-deriving it would do it a third time.
+        $batch = $periods->render($from, $to);
+        $content = $batch['content'];
 
-        // What the provider charged in the same period, and it was missing entirely. `DatevExport::export()`
-        // has taken these as its fifth parameter for as long as the PSP-fee accounts have existed, and this
-        // command — the only production caller of export() in the package — passed three arguments. So the
-        // accounts were configured, the booking was written, and every real monthly batch contained zero
-        // provider fees. Nothing was red, because the test that proves the booking passes the fees itself.
-        //
-        // A dispute fee is what makes the omission expensive rather than untidy: the provider is established
-        // abroad, so the fee is an inbound supply carrying reverse-charge VAT the platform self-assesses AND
-        // deducts. A month that books none declares neither side of it.
-        $providerFees = ProviderFee::query()
-            ->whereBetween('occurred_at', [$from, $to])
-            ->orderBy('occurred_at')
-            ->orderBy('id')
-            ->get();
-
-        // The voucher movements, which for the whole life of this command were not passed — and could not
-        // be. All three bookings were built and both chart configurations named the liability account, but
-        // `Issued` had no producer at all, and `Redeemed`/`Expired` were value objects the ledger returned
-        // and nothing stored. An operator selling vouchers exported none of it: the liability never
-        // appeared, and the turnover at redemption arrived with no counter-entry.
-        $voucherMovements = VoucherMovementRecord::query()
-            ->whereBetween('occurred_on', [$from, $to])
-            ->orderBy('occurred_on')
-            ->orderBy('id')
-            ->get();
-
-        $content = $export->export(
-            $invoices,
-            $from,
-            $to,
-            providerFees: $providerFees,
-            voucherMovements: $voucherMovements->map(static fn (VoucherMovementRecord $record): VoucherMovement => $record->toMovement()),
-        );
         $path = $this->option('path');
 
         // EVERY count, always, including the zeroes. A line that reports only some of what was loaded reads
@@ -100,20 +62,65 @@ final class DatevExportCommand extends Command
         // a month whose vouchers were never loaded at all. For the whole life of this command it was the
         // second, for both fees and vouchers, and that is precisely why the number goes in the line rather
         // than being left to be rediscovered.
-        $counted = "{$invoices->count()} invoice(s), {$providerFees->count()} provider fee(s) and "
-            ."{$voucherMovements->count()} voucher movement(s) for {$from->toDateString()}–{$to->toDateString()}";
+        $counted = "{$batch['invoices']} invoice(s), {$batch['providerFees']} provider fee(s) and "
+            ."{$batch['voucherMovements']} voucher movement(s) for {$from->toDateString()}–{$to->toDateString()}";
 
         if (is_string($path) && $path !== '') {
             $files->put($path, $content);
             $this->components->info("Wrote {$counted} to {$path}.");
 
-            return self::SUCCESS;
+            return $this->reportTie($batch['reconciliation']);
         }
 
         $this->output->write($content);
         $this->components->info("Exported {$counted}.");
 
-        return self::SUCCESS;
+        return $this->reportTie($batch['reconciliation']);
+    }
+
+    /**
+     * State whether the merchant payables in the emitted file tie out to the sub-ledger.
+     *
+     * ## The file is written either way, and the command still fails
+     *
+     * Withholding the batch would take away the only thing that can be used to find out WHY it does not
+     * tie — the difference is a statement about that file, and an operator cannot investigate a file they
+     * were not given. But a close that does not tie out is not a close: the two sides are one obligation
+     * counted twice, there is no reading under which they legitimately differ, and a command that reports
+     * success is what a scheduler and an operator both act on.
+     *
+     * ## Silent for an installation that has no merchants
+     *
+     * With no payables the sub-ledger is empty and the batch books nothing to the collective account, so
+     * both sides are zero and this is a line nobody sees. The confirmation is printed only where there is
+     * something to confirm — a figure of 0.00 on every export is how an operator learns to skip the line
+     * that matters.
+     */
+    private function reportTie(AccountReconciliation $reconciliation): int
+    {
+        if ($reconciliation->isBalanced()) {
+            if (! $reconciliation->subLedgerTotal->isZero()) {
+                $this->components->info('Merchant payables tie out at '.$this->amount($reconciliation->subLedgerTotal).'.');
+            }
+
+            return self::SUCCESS;
+        }
+
+        $this->components->error('The batch does not tie out and must not be filed.');
+
+        // Both figures on their own lines, never only the difference. "Off by 12.50" does not say which side
+        // is short, and the two point at opposite defects: a sub-ledger above the batch means the export left
+        // a payable out, below it means the batch booked one the books do not carry.
+        //
+        // Written with line(), not through a console component: a component wraps a long message at the
+        // terminal width, and a figure an operator is meant to read — or a test is meant to assert — must not
+        // depend on where that wrap happens to fall.
+        $this->line('  Sub-ledger holds '.$this->amount($reconciliation->subLedgerTotal).' in merchant payables.');
+        $this->line('  Exported batch books '.$this->amount($reconciliation->collectiveAccountBalance).' to the payables accounts.');
+        $this->line('  Difference: '.$this->amount($reconciliation->difference()).'.');
+        $this->line('  The file was written so the difference can be traced. Do not file it until it reconciles.');
+
+        return self::FAILURE;
     }
 
     /** Resolve a period bound from its option, falling back to the given default; start/end-of-day snap the range. */
@@ -128,5 +135,11 @@ final class DatevExportCommand extends Command
         $parsed = Carbon::parse($value);
 
         return $option === 'from' ? $parsed->startOfDay() : $parsed->endOfDay();
+    }
+
+    /** An amount as an operator reads it off a statement: the decimal figure and the currency it is in. */
+    private function amount(Money $money): string
+    {
+        return $money->toDecimal().' '.$money->currency;
     }
 }

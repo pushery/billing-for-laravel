@@ -74,6 +74,17 @@ final class ManageSubscription extends AccountScreen
 
         $trialPolicy = Container::getInstance()->make(TrialPolicy::class);
 
+        // Resolved into a variable rather than written as a ternary inside the array below, and the reason
+        // is measurable rather than stylistic: pcov attributes the arms of a multi-line ternary to a single
+        // line, so one of them counts as never executed however the branch goes. Under a 100% floor that
+        // reads as a missing test, and the case it asks for already exists. `TernaryInAnArrayIsNotCoverableTest`
+        // keeps the shape out.
+        $trialDays = null;
+
+        if ($trialPolicy->subscriptionTrialEnabled() && ! Subscription::ownerHasHadATrial($this->owner())) {
+            $trialDays = $trialPolicy->days();
+        }
+
         return $this->view('billing::livewire.manage-subscription', [
             'currentLabel' => $tiers->label($key),
             // When an external merchant of record owns billing (config billing.link_out), the hub links OUT to
@@ -86,7 +97,12 @@ final class ManageSubscription extends AccountScreen
             // The "includes an X-day free trial" hint is about the SUBSCRIPTION trial the owner gets on
             // subscribing, so it follows subscriptionTrialEnabled — a generic (pre-subscription) trial does
             // not belong on a plan row.
-            'trialDays' => $trialPolicy->subscriptionTrialEnabled() ? $trialPolicy->days() : null,
+            //
+            // AND WHETHER THIS OWNER WOULD ACTUALLY GET ONE, which the config alone cannot say since the
+            // trial became once-per-owner. A returning customer was shown "includes a 14-day free trial",
+            // pressed Subscribe, and reached a paid checkout: the screen promising what the starter
+            // refuses. Both read one answer now, so the promise and the grant cannot disagree.
+            'trialDays' => $trialDays,
             // The trial-status note (remaining days + card hint) shown while the owner is on a trial.
             'trial' => Container::getInstance()->make(TrialCallouts::class)->for($this->owner(), $this->currentState(), $this->subscription()?->trial_ends_at),
             // Whether the typed coupon code is recognized, so the visitor sees it applied before checkout.

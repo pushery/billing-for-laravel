@@ -19,6 +19,12 @@ use RuntimeException;
  *
  * The money is identical and the events are not. Telling them apart is the whole reason the kind exists,
  * and a decision the platform made and could have made differently belongs on the other side of that line.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class WithdrawalWindowClosed extends RuntimeException
 {

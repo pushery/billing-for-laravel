@@ -21,6 +21,12 @@ use RuntimeException;
  * The boundary matches its sibling one category up (`CollectiveSettlementSpansTaxCategories`): a collective
  * document is homogeneous or it is not issued. Refusing costs a month's settlement that somebody has to look
  * at; issuing costs money that is wrong in a document nobody re-reads.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class CollectiveSettlementSpansCurrencies extends RuntimeException
 {

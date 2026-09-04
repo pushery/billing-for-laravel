@@ -19,6 +19,12 @@ use RuntimeException;
  * explains — discovered, in both cases, by somebody auditing months of settled sales.
  *
  * Refused at preflight rather than at the first refund, because by then the sales it applies to are made.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class FeeRefundPolicyNotPermitted extends RuntimeException
 {

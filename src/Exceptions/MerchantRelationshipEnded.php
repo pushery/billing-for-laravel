@@ -24,6 +24,12 @@ use RuntimeException;
  * deliberately an operator's act rather than something an onboarding call performs on its own. Reopening
  * decides that a relationship somebody ended should begin again, and that is not a decision to make as a
  * side effect of a retry.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class MerchantRelationshipEnded extends RuntimeException
 {

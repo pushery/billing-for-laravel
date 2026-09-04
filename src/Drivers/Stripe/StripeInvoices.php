@@ -44,10 +44,14 @@ final readonly class StripeInvoices implements InvoicesContract
 
         foreach ($invoices->data as $invoice) {
             // No null guard on the id, and the reason is a version boundary rather than an oversight.
-            // stripe-php declared `null|string $id` up to 17.x and narrowed it to `string` in 18.0.
-            // This package now requires ^17.4|^18.0|^19.0|^20.0 and composer resolves that to the
-            // highest allowed major, so statics run against the 18+ shape: a guard here would be dead
-            // code that PHPStan reports as such (`is_string() will always evaluate to true`).
+            // stripe-php declared `null|string $id` up to 17.x and narrowed it to `string` in 18.0, so
+            // against the major this package is analyzed on a guard here is dead code and PHPStan says
+            // so (`is_string() will always evaluate to true`).
+            //
+            // Deliberately no range written out. A constraint transcribed into shipped source is a copy
+            // that goes stale the next time upstream moves, and nothing reads it — the requirement lives
+            // in composer.json, and `DevToolPinsTest` asserts the INSTALLED major is at least 18, which
+            // is the property this line actually depends on.
             $rows[] = $this->toValue($invoice, $invoice->id);
         }
 

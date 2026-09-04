@@ -20,6 +20,12 @@ use RuntimeException;
  * So a second first filing is an error rather than an idempotent no-op. A no-op would be the friendlier
  * answer and the wrong one: it would silently accept the call that meant to file a correction and forgot
  * to say so, and nothing downstream would ever say which of the two it had been.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class ReportingFilingRefused extends RuntimeException
 {

@@ -19,6 +19,8 @@ use Pushery\Billing\Contracts\HostedPortal;
 use Pushery\Billing\Contracts\Invoices;
 use Pushery\Billing\Invoicing\InvoiceDocumentRenderer;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\Support\BillingManager;
+use Pushery\Billing\Support\LocalBillingEngine;
 use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\Support\SubscriptionReconciler;
 use Pushery\Billing\ValueObjects\InvoiceDownload;
@@ -71,10 +73,24 @@ final class BillingController
 
         $owner = Container::getInstance()->make(BillingEntityResolver::class)->ownerFor($actor);
 
-        try {
-            Container::getInstance()->make(SubscriptionReconciler::class)->syncFromProvider($owner);
-        } catch (Throwable $e) {
-            Container::getInstance()->make(ExceptionHandler::class)->report($e);
+        // ASKED FIRST, because there is nothing to reconcile against under a driver whose cycle this package
+        // runs itself. `SubscriptionSync` is bound only by the Stripe provider, and both driver providers
+        // register unconditionally — so on a Mollie install this used to ask STRIPE about a customer whose
+        // reference Mollie wrote. An outbound call to the wrong provider on the page a customer lands on
+        // straight after paying, and the catch below then reported the resulting error: one entry in the
+        // install's error tracker per completed sale, looking exactly like a real failure. An error stream
+        // that fires on every sale gets muted, and after that the real one is gone too.
+        //
+        // Decided on the ENGINE rather than a driver name: a local engine holds the cycle here, so there is
+        // no provider-side subscription to read back. The webhook is the durable path anyway — this
+        // reconcile is a courtesy for a customer who beats it home, and where there is nothing to pull
+        // there is no courtesy to do.
+        if (! Container::getInstance()->make(BillingManager::class)->driver()->engine() instanceof LocalBillingEngine) {
+            try {
+                Container::getInstance()->make(SubscriptionReconciler::class)->syncFromProvider($owner);
+            } catch (Throwable $e) {
+                Container::getInstance()->make(ExceptionHandler::class)->report($e);
+            }
         }
 
         // Flag the subscription screen as "activating": if the webhook has not landed yet the reconcile above

@@ -41,6 +41,14 @@ final class OwnerScopedTables
         'billing_usage_reservations',
         'billing_usage_events',
         'billing_credit_balances',
+        // The movements behind that balance. They go with it rather than outliving it: an explanation of a
+        // balance that no longer exists preserves personal data with nothing left to justify it, and the
+        // money any of them touched lives on the retained invoice or add-on purchase, not here.
+        'billing_credit_ledger_entries',
+        // Stored mandates. A mandate is an instruction to take money from somebody who no longer exists,
+        // so keeping one past an erasure is not a record — it is a live authorization with no holder. The
+        // money any of them collected lives on the retained invoice.
+        'billing_payment_mandates',
         // Prepaid units are an entitlement, not a financial record: the money that bought them lives on the
         // (retained) add-on purchase and its invoice. Once the person is gone there is nobody left to spend
         // them, so the balance goes with them.
@@ -49,6 +57,11 @@ final class OwnerScopedTables
         // discounted lives on the retained invoice). It goes with the person; the coupon definition itself is
         // owner-less and stays.
         'billing_coupon_redemptions',
+        // A subscription intent is a request somebody made that has not become anything yet — no money, no
+        // document, nothing anybody is entitled to keep. It goes with the person, and it goes even when it
+        // was never claimed: an unclaimed one names an owner who asked to buy something, which is the kind
+        // of fact an erasure is for.
+        'billing_subscription_intents',
         // A local order is the operational billing unit a due cycle is assembled into; the RETAINED financial
         // record is the invoice produced from it, not the order itself. So an order is purged with the owner,
         // the same way the subscription it billed is.

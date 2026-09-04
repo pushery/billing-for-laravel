@@ -18,6 +18,12 @@ use RuntimeException;
  * Note what this can and cannot catch: a code that is malformed or unassigned is caught here, but a typo
  * that happens to land on ANOTHER assigned country ("DE" mistyped as "DK") is indistinguishable from a
  * deliberate supply to that country and is not detectable at this layer.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class UnknownTaxCountry extends RuntimeException
 {

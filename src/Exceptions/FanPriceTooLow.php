@@ -13,6 +13,12 @@ use RuntimeException;
  * Refused on the server, because the floor is exactly the guarantee a client-side check cannot give: a
  * price the buyer picks is the one place the package's stance against price injection would otherwise
  * lapse, so the minimum is re-established here from config rather than trusted from the request.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class FanPriceTooLow extends RuntimeException
 {

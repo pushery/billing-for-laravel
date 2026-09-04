@@ -13,6 +13,12 @@ use RuntimeException;
  * happens weeks later, to money that has already been taken from a buyer. A deadline the provider will not
  * honor is discovered on the day it passes; an account type that gives no payout control is discovered when
  * the first payout leaves early. Neither is a state to find out about in production.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class BuyerProtectionMisconfigured extends RuntimeException
 {

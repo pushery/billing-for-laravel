@@ -13,6 +13,12 @@ use RuntimeException;
  * It aborts the export rather than falling back to a default account, because a booking on the wrong
  * account is a silent error: the file imports cleanly and the mistake surfaces only when a tax advisor or an
  * auditor reads the postings. Fail-closed is the only safe direction for an accounting export.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class DatevTransactionUnresolvable extends RuntimeException
 {

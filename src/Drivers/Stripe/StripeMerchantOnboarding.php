@@ -33,6 +33,30 @@ use Stripe\StripeObject;
  * account occasionally comes back with a capability already true, and trusting that would let money route
  * to a merchant before the verification that the flags are supposed to represent has actually happened.
  * They are raised only by the provider's own account event.
+ *
+ * ## This driver stays on the v1 Connect endpoints, and that is a decision rather than an oversight
+ *
+ * Stripe returns a `stripe-notice` header on every account creation recommending its newer Accounts API,
+ * and from SDK 20.3 the client raises that header as an `E_USER_WARNING`. It is a recommendation: the v1
+ * endpoints are supported and carry no sunset date.
+ *
+ * Three reasons the recommendation is not followed here, in order of weight.
+ *
+ * The newer API is not a different spelling of the same call. Its account object nests capabilities under
+ * a configuration, its onboarding links live on their own endpoint, and its account events are a separate
+ * family — so adopting it means rebuilding onboarding, the capability gate and the Connect webhook mapping
+ * at once. That is one change to the money path, not three small ones.
+ *
+ * Access to it is granted per platform account. A package that moved unilaterally would turn a log line
+ * into a hard failure for every consumer whose account is not enabled for it.
+ *
+ * And a rebuilt onboarding path can only be proven against the provider's real test API. A faked suite
+ * cannot see a response header — which is exactly how this notice was found — so shipping the rebuild on
+ * a green fake would be asserting the one thing the fake cannot answer.
+ *
+ * The notice is deliberately NOT filtered out. Suppressing another company's deprecation signal inside a
+ * library decides the consumer's log policy for them and removes the advance warning the header exists to
+ * give. What the package does instead is make the failure it can cause harmless: see `creationKey()`.
  */
 final readonly class StripeMerchantOnboarding implements MerchantOnboarding, ReportsMerchantCapabilities, ReportsOnboardingRequirements
 {
@@ -75,7 +99,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
                 'billing_merchant_type' => $merchant->getMorphClass(),
                 'billing_merchant_id' => is_scalar($key) ? (string) $key : '',
             ],
-        ]);
+        ], ['idempotency_key' => $this->creationKey($merchant)]);
 
         $row = MerchantAccount::query()->create([
             'merchant_type' => $merchant->getMorphClass(),
@@ -88,6 +112,46 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
         ]);
 
         return $row->toReference();
+    }
+
+    /**
+     * The key that keeps a retry from producing a SECOND connected account.
+     *
+     * ## The window this closes
+     *
+     * Between the provider committing an account and this driver writing the row, three ordinary things can
+     * intervene: a network timeout after the account already exists, a database failure on the write, and —
+     * the one that made this visible — an application whose error handler turns warnings into exceptions.
+     * The provider's SDK emits a `stripe-notice` response header through `trigger_error()`, so on such an
+     * install the very first `createAccount()` throws AFTER the account was created.
+     *
+     * All three end the same way: an account at the provider that no local row names. The natural response
+     * is to try again — and without a key that creates another one. Nothing looks wrong at any point.
+     * Onboarding completes, and the payouts arrive split across two accounts, one of which the platform's
+     * own records do not name. It is the same failure the duplicate check above exists for, arriving from
+     * the other side.
+     *
+     * ## Why a derived key rather than a random one
+     *
+     * A random key protects nothing here: the retry is a NEW call, in a new process, with a new key. The
+     * key has to be a function of the merchant, so that the second attempt asks the same question and the
+     * provider answers with the account it already made.
+     *
+     * Hashed rather than spelled out because the two inputs are unbounded — a fully-qualified class name
+     * and whatever a consumer uses for a primary key — while the header is not. Hashing costs the ability
+     * to read the merchant out of the key, and buys a length that cannot depend on a consumer's naming.
+     *
+     * The provider replays a key for a limited window, so this is a retry guard, not a permanent lock. Past
+     * that window the row from the first attempt is what stops a duplicate, which is the check above.
+     */
+    private function creationKey(Model $merchant): string
+    {
+        $key = $merchant->getKey();
+
+        return 'billing-merchant-account:'.hash(
+            'sha256',
+            $merchant->getMorphClass().'|'.(is_scalar($key) ? (string) $key : '')
+        );
     }
 
     public function onboardingLink(Model $merchant, string $refreshUrl, string $returnUrl): ClientIntent

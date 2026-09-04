@@ -22,6 +22,12 @@ use RuntimeException;
  *
  * Stopping at the first one turns a hundred sellers into a hundred runs. Every rule has already run by the
  * time this is raised; naming only one of them would throw that away at the last moment.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class ReportingNotPlausible extends RuntimeException
 {

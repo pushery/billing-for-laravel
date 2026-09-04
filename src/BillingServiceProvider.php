@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing;
 
+use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -45,10 +46,12 @@ use Pushery\Billing\Console\Commands\MerchantReopenCommand;
 use Pushery\Billing\Console\Commands\MerchantStatusCommand;
 use Pushery\Billing\Console\Commands\ProbeRatesCommand;
 use Pushery\Billing\Console\Commands\PruneBillingCommand;
+use Pushery\Billing\Console\Commands\ReconcileMerchantJournalCommand;
 use Pushery\Billing\Console\Commands\ReconcileTaxStatusCommand;
 use Pushery\Billing\Console\Commands\ReconcileUsageCommand;
 use Pushery\Billing\Console\Commands\RecordMarketAccessCommand;
 use Pushery\Billing\Console\Commands\RefreshMerchantCapabilitiesCommand;
+use Pushery\Billing\Console\Commands\ReleaseAbandonedClaimCommand;
 use Pushery\Billing\Console\Commands\RemindDelinquentSubscriptionsCommand;
 use Pushery\Billing\Console\Commands\ReplayWebhooksCommand;
 use Pushery\Billing\Console\Commands\ReportingFileCommand;
@@ -119,6 +122,7 @@ use Pushery\Billing\Contracts\PublishesExchangeRates;
 use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\RendersReportingRecord;
 use Pushery\Billing\Contracts\ReportingProfile;
+use Pushery\Billing\Contracts\ScheduleHeartbeat;
 use Pushery\Billing\Contracts\SeatBilling;
 use Pushery\Billing\Contracts\SellerOfRecordResolver;
 use Pushery\Billing\Contracts\SellerPartyResolver;
@@ -143,6 +147,7 @@ use Pushery\Billing\Contracts\UsageProvider;
 use Pushery\Billing\Contracts\UsageReporter;
 use Pushery\Billing\Contracts\VatIdValidator;
 use Pushery\Billing\Discounts\ConfigDiscountResolver;
+use Pushery\Billing\Drivers\Mollie\MollieServiceProvider;
 use Pushery\Billing\Drivers\NullCreditSync;
 use Pushery\Billing\Drivers\NullCustomerRegistry;
 use Pushery\Billing\Drivers\NullInvoices;
@@ -226,6 +231,7 @@ use Pushery\Billing\Support\GoLivePreflightGuard;
 use Pushery\Billing\Support\LocalSubscriptionStateReader;
 use Pushery\Billing\Support\MarketplaceSupportGuard;
 use Pushery\Billing\Support\MeteringSupportGuard;
+use Pushery\Billing\Support\NullScheduleHeartbeat;
 use Pushery\Billing\Support\RetentionFloorGuard;
 use Pushery\Billing\Support\RetentionMatrix;
 use Pushery\Billing\Support\TaxSupportGuard;
@@ -287,6 +293,7 @@ final class BillingServiceProvider extends ServiceProvider
         );
 
         $this->app->singleton(WebhookEffectRegistry::class);
+        $this->app->bind(ScheduleHeartbeat::class, NullScheduleHeartbeat::class);
 
         $this->app->bind(DiscountResolver::class, ConfigDiscountResolver::class);
 
@@ -762,6 +769,11 @@ final class BillingServiceProvider extends ServiceProvider
         // future local-engine drivers ship their own providers alongside it.
         $this->app->register(StripeServiceProvider::class);
 
+        // The first LOCAL-ENGINE driver, registered alongside rather than instead: `extend()` costs nothing
+        // and must not depend on configuration, or an install resolving `driver('mollie')` explicitly would
+        // be told it does not exist. Its rebinds are conditional on it being the active driver.
+        $this->app->register(MollieServiceProvider::class);
+
         // No-op façade for a billing-disabled clone. The driver above binds the invoice / subscription
         // contracts to its Stripe impls unconditionally, so with the master switch off we rebind them to safe
         // no-ops: reads answer empty/null, mutations do nothing, and nothing reaches for Stripe keys the clone
@@ -899,6 +911,7 @@ final class BillingServiceProvider extends ServiceProvider
                 ExportOwnerCommand::class,
                 PruneBillingCommand::class,
                 DoctorCommand::class,
+                ReleaseAbandonedClaimCommand::class,
                 AnnounceLapsedAttestationsCommand::class,
                 ExpireDelinquentSubscriptionsCommand::class,
                 RemindDelinquentSubscriptionsCommand::class,
@@ -911,6 +924,7 @@ final class BillingServiceProvider extends ServiceProvider
                 ProbeRatesCommand::class,
                 CheckTaxRatesCommand::class,
                 CheckMetersCommand::class,
+                ReconcileMerchantJournalCommand::class,
                 ReconcileUsageCommand::class,
                 DatevExportCommand::class,
                 CancelSubscriptionCommand::class,
@@ -937,10 +951,27 @@ final class BillingServiceProvider extends ServiceProvider
         // the live singleton, so a value set after boot is still the value read when the scheduler resolves.
         $scheduleConfig = $this->app->make(Repository::class);
 
-        $this->callAfterResolving(Schedule::class, static function (Schedule $schedule) use ($scheduleConfig): void {
+        $heartbeat = $this->app;
+
+        /**
+         * Attach the heartbeat to a scheduled entry.
+         *
+         * Resolved lazily inside the callbacks rather than captured, so an install that binds its own
+         * implementation after this provider booted still gets it — and so the default costs nothing.
+         *
+         * The `before` signal is the one that matters. A command that fails is loud; a command that stops
+         * RUNNING is not, and only something outside the process noticing an expected ping did not arrive
+         * can catch it.
+         */
+        $withHeartbeat = (static fn (Event $event, string $command): Event => $event
+            ->before(static fn () => $heartbeat->make(ScheduleHeartbeat::class)->starting($command))
+            ->onSuccess(static fn () => $heartbeat->make(ScheduleHeartbeat::class)->finished($command, true))
+            ->onFailure(static fn () => $heartbeat->make(ScheduleHeartbeat::class)->finished($command, false)));
+
+        $this->callAfterResolving(Schedule::class, static function (Schedule $schedule) use ($scheduleConfig, $withHeartbeat): void {
             // withoutOverlapping like the others: a local-engine cycle advance that runs long must not have
             // a second copy start on top of it and double-advance the same due subscriptions.
-            $schedule->command('billing:run')->hourly()->withoutOverlapping();
+            $withHeartbeat($schedule->command('billing:run')->hourly()->withoutOverlapping(), 'billing:run');
             $schedule->command('billing:usage:flush')->everyMinute()->withoutOverlapping();
             // A daily proactive nudge before a card expires — the biggest preventable cause of churn.
             $schedule->command('billing:cards:warn')->dailyAt('09:00')->withoutOverlapping();

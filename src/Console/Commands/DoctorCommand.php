@@ -22,9 +22,11 @@ use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Contracts\SuppliesTaxRates;
 use Pushery\Billing\Contracts\TaxDisclosurePolicy;
 use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
+use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Marketplace\GermanTaxDisclosurePolicy;
 use Pushery\Billing\Models\ExchangeRateRecord;
+use Pushery\Billing\Models\Order;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
 use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
@@ -75,6 +77,28 @@ final class DoctorCommand extends Command
     private const string SHIPPED_PROFILE = 'de';
 
     /**
+     * How long a claimed-but-uncollected order may sit before it is reported.
+     *
+     * Generous on purpose: a cycle claimed minutes ago is probably still being charged, and a diagnostic
+     * that shouts at ordinary in-flight work teaches an operator to ignore it.
+     *
+     * Read from the model rather than declared here, because `billing:release-claim` acts on exactly the
+     * claims this line reports. Two numbers that must agree and are written down twice are two numbers
+     * that will disagree — and the failure would be quiet in both directions: a release acting on cycles
+     * nobody was told about, or a report standing with nothing able to act on it.
+     */
+    private const int STRANDED_ORDER_HOURS = Order::ABANDONED_CLAIM_HOURS;
+
+    /**
+     * How long a charge may be in flight before it is worth an operator's attention.
+     *
+     * Days rather than hours, because that is what a bank debit legitimately takes — SEPA settles over
+     * days, and reporting one at six hours would make this line fire on every healthy subscriber. Long
+     * enough that anything still here has stopped being ordinary.
+     */
+    private const int HELD_ORDER_DAYS = 10;
+
+    /**
      * The contracts a jurisdiction answers, mapped to the implementation that ships as the default.
      *
      * Listed rather than discovered because the point is the DEFAULT, and a default is a decision somebody
@@ -115,6 +139,11 @@ final class DoctorCommand extends Command
         $this->reportProfileInheritance();
 
         $failing = $this->reportWorksTheProfileDoesNotCover($config, $addons, $works) || $failing;
+
+        // Folded into $failing rather than carried alongside it: verdict() exists precisely because a
+        // check held separately has to be remembered at every exit, and forgetting one is invisible —
+        // the command still prints the warning, it just stops counting it.
+        $failing = $this->reportStrandedOrders() || $failing;
 
         $pinned = $this->pinnedVersion($config);
 
@@ -338,6 +367,105 @@ final class DoctorCommand extends Command
         }
 
         return $inherited;
+    }
+
+    /**
+     * Report cycles that were CLAIMED and never collected.
+     *
+     * The local engine claims a due cycle by committing its order before it calls the provider — the claim
+     * has to survive the call, or a second run bills the same cycle twice. The cost of that ordering is a
+     * window: a process that dies between the claim and the charge leaves an order in `processing` with no
+     * payment behind it.
+     *
+     * Nothing recovers from that on its own, and each reason alone would be survivable. The claim makes the
+     * cycle look taken, so the next tick skips the subscriber. No payment was created, so the provider will
+     * never send a webhook to reconcile against. And until this check existed, `processing` was written in
+     * one place and read in none — the whole of `src` mentioned it exactly once, on the line that sets it.
+     *
+     * Together they mean a subscriber is silently never billed, and the only trace is a row nobody queries.
+     * That is the most expensive failure a LOCAL-engine driver has: under Stripe a gap means the provider
+     * handles it; here it means nobody does.
+     *
+     * This reports rather than repairs, and that is deliberate. Retaking the claim is not obviously safe —
+     * the process may have died AFTER the provider was called and before the reference was written, and a
+     * retry would then charge a second time. That decision is open; being able to SEE the state is not a
+     * decision, and it is what was missing.
+     *
+     * ## Two shapes, and the `payment_reference` is what tells them apart
+     *
+     * The filter below is `whereNull('payment_reference')`, and it is narrow ON PURPOSE: a processing order
+     * that HAS one is a charge in flight, which is now an ordinary state rather than a fault. A bank debit
+     * is accepted at once and settles days later, so the cycle is held open until the provider says which
+     * way it went.
+     *
+     * But a held cycle whose webhook never arrives is stuck just as badly, and it would fall outside this
+     * query entirely. So it gets its own check with its own advice — the two situations are not the same
+     * problem and must not be reported as one: for a claim with no payment nobody has been charged, while
+     * for a held one somebody's money may already be moving, and telling an operator to "retry" is right
+     * for the first and dangerous for the second.
+     *
+     * @return bool whether any stranded order was found
+     */
+    private function reportStrandedOrders(): bool
+    {
+        // The model's own scope, which `billing:release-claim` refuses to act outside of. Inlining the three
+        // conditions here again is how the diagnostic and the action drift apart while both look right.
+        $stranded = Order::query()->abandonedClaims()->count();
+
+        if ($stranded === 0) {
+            return $this->reportHeldOrders();
+        }
+
+        $this->components->error(
+            "{$stranded} billing order(s) have been claimed for more than ".self::STRANDED_ORDER_HOURS
+            .' hours without a payment. The cycle they claimed will not be retried, and no webhook will '
+            .'arrive for them because no payment was ever created — those subscribers are not being '
+            .'billed. Inspect them before deciding: a retry is only safe where the provider was never '
+            .'called.'
+        );
+
+        $this->reportHeldOrders();
+
+        return true;
+    }
+
+    /**
+     * Report cycles whose charge was accepted and has not been heard about since.
+     *
+     * The sibling of the check above, and deliberately a separate one. A held order carries a payment
+     * reference, so it falls outside that query — and it is not the same problem. There, no payment exists
+     * and nobody has been charged; here, somebody's money may already be moving. Telling an operator to
+     * "retry" is right for the first and dangerous for the second, so the two never share a message.
+     *
+     * A charge in flight is ordinary and is not reported. What is reported is one that has been in flight
+     * far longer than any real settlement takes: a lost webhook delivery, a signature that failed
+     * verification, an effect job that exhausted its retries, or a provider status the mapper does not
+     * translate. The cycle then sits open with the credit spent and the period never advanced, which is
+     * exactly the silence this command exists to break.
+     *
+     * @return bool whether any held order was found
+     */
+    private function reportHeldOrders(): bool
+    {
+        $held = Order::query()
+            ->where('status', OrderStatus::Processing)
+            ->whereNotNull('payment_reference')
+            ->where('updated_at', '<', Carbon::now()->subDays(self::HELD_ORDER_DAYS))
+            ->count();
+
+        if ($held === 0) {
+            return false;
+        }
+
+        $this->components->error(
+            "{$held} billing order(s) have been waiting on a payment for more than ".self::HELD_ORDER_DAYS
+            .' days. A charge that long in flight has almost certainly been settled or refused at the '
+            .'provider without this application hearing about it — a lost delivery, a failed signature, or '
+            .'an effect job that ran out of retries. Do NOT simply charge again: look the payment up at the '
+            .'provider first, because the money may already have moved.'
+        );
+
+        return true;
     }
 
     /**

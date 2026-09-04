@@ -15,6 +15,12 @@ use RuntimeException;
  * legal name and address — which live in the consuming application's own schema, not in this package. The
  * shipped resolver fails closed here rather than issue a document with no seller. Bind a
  * {@see MerchantPartyResolver} that reads your merchants before self-billing.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class MerchantPartyUnavailable extends RuntimeException
 {

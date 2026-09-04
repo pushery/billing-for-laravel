@@ -10,6 +10,7 @@ use Pushery\Billing\Catalogs\ConfigAddonCatalog;
 use Pushery\Billing\Contracts\CreditSync;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Enums\AuditSource;
+use Pushery\Billing\Enums\CreditReason;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Support\AddonPurchases;
 use Pushery\Billing\Support\BillingEventLog;
@@ -65,7 +66,7 @@ final readonly class CreditAddonPurchase
                 return;
             }
 
-            $this->ledger->credit($owner, $event->amount);
+            $this->ledger->credit($owner, $event->amount, CreditReason::AddonTopup);
 
             $this->log->record('addon.credited', $owner, [
                 'addon' => $event->addonKey,

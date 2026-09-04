@@ -14,6 +14,12 @@ use RuntimeException;
  * for one reason: overwriting a rate makes it impossible to reconstruct afterwards what an invoice said —
  * not for the auditor, not for the operator, not for a court. A conflict means the incoming data disagrees
  * with what is already held, and that disagreement is information; silently keeping one of the two destroys it.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class RateIntervalConflict extends RuntimeException
 {

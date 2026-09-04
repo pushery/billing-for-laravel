@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Pushery\Billing\Contracts\CustomerDirectory;
+use Pushery\Billing\Contracts\DerivesDeliveryKey;
 use Pushery\Billing\Contracts\IdentifiesCustomer;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Contracts\WebhookVerifier;
@@ -58,7 +59,7 @@ final readonly class WebhookReceiver
 
         $delivery = $this->deliveries->record(
             $this->manager->driver()->name(),
-            $this->eventId($payload, $request),
+            $this->deliveryKey($payload, $request),
             is_string($type) ? $type : 'unknown',
             $payload,
         );
@@ -95,18 +96,52 @@ final readonly class WebhookReceiver
     }
 
     /**
-     * The provider's event id — the identity a redelivery is recognized by. A payload carrying none falls
-     * back to a hash of the body, so an unidentifiable delivery is still recorded exactly once rather
-     * than piling up a row per retry.
+     * The key this delivery is recorded and deduped under.
      *
-     * Read from the REQUEST, not only from the decoded body, because not every provider posts JSON. A
-     * form-encoded ping (`id=abc`) decodes to nothing, so a body-only read fell through to the hash —
-     * leaving a delivery that is correct and unfindable: whoever investigates holds the provider's
+     * Read from the REQUEST rather than only from the decoded body, because not every provider posts
+     * JSON. A form-encoded ping (`id=tr_abc`) decodes to nothing, so a body-only read fell through to the
+     * hash — leaving a delivery that is correct and unfindable: somebody investigating holds the provider's
      * resource id and has no route from it to the row, and `billing:replay` cannot be aimed either.
      *
-     * No driver shipped in this package posts a form, so nothing here exercises that path today. It is
-     * the pluggable seam that needs it: `WebhookVerifier` and `WebhookEventMapper` are public contracts,
-     * and a consumer's driver may post whatever its provider posts.
+     * The hash fallback stays for a body that names nothing. Removing it would leave such a delivery with
+     * no key at all, which is worse than an opaque one.
+     *
+     * @param  array<array-key, mixed>  $payload
+     */
+    /**
+     * The key this delivery is deduped under, asking the mapper first.
+     *
+     * A mapper that implements {@see DerivesDeliveryKey} knows its provider's redelivery semantics better
+     * than this receiver can: a provider that pings with a bare resource id sends the SAME id every time
+     * that resource changes, so the default key would recognize every change after the first as a
+     * duplicate and drop it. That failure is silent and it loses money rather than double-booking it.
+     *
+     * The mapper returning null is not an error — it is the answer for a request it would not map — so
+     * the default key stands and the delivery is still recorded exactly once.
+     *
+     * @param  array<array-key, mixed>  $payload
+     */
+    private function deliveryKey(array $payload, Request $request): string
+    {
+        if ($this->mapper instanceof DerivesDeliveryKey) {
+            $key = $this->mapper->deliveryKey($request);
+
+            if (is_string($key) && trim($key) !== '') {
+                return trim($key);
+            }
+        }
+
+        return $this->eventId($payload, $request);
+    }
+
+    /**
+     * The receiver's own key: the provider's event id, or a hash of a body that names nothing.
+     *
+     * Read from the REQUEST rather than only from the decoded body, because not every provider posts
+     * JSON. A form-encoded ping (`id=tr_abc`) decodes to nothing, so a body-only read fell through to the
+     * hash — leaving a delivery that is correct and unfindable: somebody investigating holds the
+     * provider's resource id and has no route from it to the row, and `billing:replay` cannot be aimed
+     * either.
      *
      * The hash fallback stays for a body that names nothing. Removing it would leave such a delivery with
      * no key at all, which is worse than an opaque one.

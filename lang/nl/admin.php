@@ -27,6 +27,19 @@ return [
         'invalid_tier' => 'Dat tarief is niet geconfigureerd in billing.tiers.',
     ],
 
+    'datev' => [
+        'heading' => 'Boekingsbatch (DATEV)',
+        'intro' => 'Download een periode als DATEV EXTF-boekingsbatch — het bestand dat een Duitse belastingadviseur importeert. Het is dezelfde batch als bij de geplande export, er wordt niets op de server opgeslagen, en kan de periode niet als één batch worden geboekt, dan wordt de download geweigerd in plaats van afgekapt.',
+        'from' => 'Van',
+        'to' => 'Tot',
+        'submit' => 'Batch downloaden',
+        'invalid_period' => 'Geef een begin- en einddatum op; het einde mag niet vóór het begin liggen.',
+        'refused' => 'De batch is geweigerd en er is niets gedownload:',
+        'unbalanced' => 'Deze batch sluit niet aan en mag niet worden ingediend.',
+        'imbalance_figures' => 'Het subgrootboek bevat :subledger aan schulden aan handelaren; de geëxporteerde batch boekt :batch op de schuldrekeningen, een verschil van :difference.',
+        'download_anyway' => 'Toch downloaden',
+    ],
+
     'cancel' => [
         'heading' => 'Een abonnement opzeggen',
         'intro' => 'Beëindigt het abonnement van een eigenaar direct. De wijziging wordt met je naam in het auditlogboek vastgelegd.',

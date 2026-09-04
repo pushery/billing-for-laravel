@@ -7,6 +7,7 @@ namespace Pushery\Billing\Marketplace;
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\DatevAccountResolver;
 use Pushery\Billing\Enums\DatevTransaction;
+use Pushery\Billing\Exceptions\DatevTransactionUnresolvable;
 use Pushery\Billing\Models\MerchantCreditorAccount;
 
 /**
@@ -67,7 +68,16 @@ final readonly class MerchantLiabilityAccounts
     public function all(): array
     {
         if (! $this->individual()) {
-            return [$this->accounts->resolve(DatevTransaction::CreatorLiabilities)->number];
+            try {
+                return [$this->accounts->resolve(DatevTransaction::CreatorLiabilities)->number];
+            } catch (DatevTransactionUnresolvable) {
+                // An installation that books no creator liabilities has no payables accounts, and "none" is
+                // the honest answer rather than a failure. The resolver refuses because BOOKING to a default
+                // account is a silent accounting error — but nothing is being booked here. This reads the
+                // accounts back to check a file against them, and refusing would take the single-seller
+                // export down over a marketplace setting it has no reason to carry.
+                return [];
+            }
         }
 
         /** @var list<string> $numbers */

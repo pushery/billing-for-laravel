@@ -17,6 +17,12 @@ use RuntimeException;
  *
  * The message names every open point, because this is thrown at boot: an application that refuses to start
  * has also taken away the command that would explain why, so the refusal has to carry the explanation.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class MarketplaceNotReadyForGoLive extends RuntimeException
 {

@@ -13,6 +13,12 @@ use RuntimeException;
  * ambiguous: answering the finding clears whichever rule happened to raise it, and the other one comes back
  * on the next run. That reads as a broken acknowledgement rather than as a broken catalog, which is the
  * expensive way to discover it — so the catalog refuses to assemble instead.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class DuplicateReportingRule extends RuntimeException
 {

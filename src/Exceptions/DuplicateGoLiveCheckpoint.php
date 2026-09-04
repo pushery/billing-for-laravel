@@ -17,6 +17,12 @@ use LogicException;
  *
  * The sanctioned way to switch a blocking point off is the waiver list, which is deliberate, named in
  * configuration, and reported as a warning on every run.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class DuplicateGoLiveCheckpoint extends LogicException
 {

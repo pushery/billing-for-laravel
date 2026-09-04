@@ -27,6 +27,19 @@ return [
         'invalid_tier' => 'That tier is not configured in billing.tiers.',
     ],
 
+    'datev' => [
+        'heading' => 'Booking batch (DATEV)',
+        'intro' => 'Download a period as a DATEV EXTF booking batch — the file a German tax advisor imports. It is the same batch the scheduled export produces, nothing is stored on the server, and the download is refused rather than truncated if the period cannot be booked as one batch.',
+        'from' => 'From',
+        'to' => 'To',
+        'submit' => 'Download batch',
+        'invalid_period' => 'Give a start and an end date, with the end on or after the start.',
+        'refused' => 'The batch was refused and nothing was downloaded:',
+        'unbalanced' => 'This batch does not tie out and must not be filed.',
+        'imbalance_figures' => 'The sub-ledger holds :subledger in merchant payables; the exported batch books :batch to the payables accounts, a difference of :difference.',
+        'download_anyway' => 'Download it anyway',
+    ],
+
     'cancel' => [
         'heading' => 'Cancel a subscription',
         'intro' => 'End an owner\'s subscription immediately. The change is recorded on the audit trail with your name against it.',

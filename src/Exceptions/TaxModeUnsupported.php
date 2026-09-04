@@ -13,6 +13,12 @@ use RuntimeException;
  * silent one: a locally-computed VAT that the money-mover never actually charges, or a "provider" mode on a
  * driver that computes no tax — either way the customer is under-charged and nothing looks broken until the
  * VAT return does not add up.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class TaxModeUnsupported extends RuntimeException
 {

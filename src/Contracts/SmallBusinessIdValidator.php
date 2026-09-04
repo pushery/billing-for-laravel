@@ -23,6 +23,26 @@ use Pushery\Billing\Enums\VatIdValidation;
 interface SmallBusinessIdValidator
 {
     /**
+     * A NOTE FOR WHOEVER WRITES THE REAL IMPLEMENTATION: do not reject on format.
+     *
+     * The obvious starting point is the ordinary tax-id validator, which refuses a malformed id locally
+     * before spending a network call on it. Copied here, that pattern produces a merchant who is never
+     * paid out, cannot sell, and has nothing anywhere saying why — the refusal looks exactly like a
+     * correctly working fail-closed gate.
+     *
+     * It is not a hypothetical risk, because the two numbers do not have the same shape. The exemption
+     * number is the member state's OWN identifier for that business with a suffix appended, and each
+     * member state decides what its own identifier looks like. There is no pattern to match: a regex
+     * derived from the other register is a guess about twenty-seven national formats at once, and every
+     * one it guesses wrong is a permanent, invisible hold.
+     *
+     * So let the register decide. A number it does not recognize comes back as a verdict from the party
+     * entitled to give one — which is the whole point of asking. Anything a local check would legitimately
+     * catch (an empty value, an implausible length) is cheap to answer as `Unavailable` rather than
+     * `Invalid`, because "we did not ask" is the honest description of not having asked.
+     */
+
+    /**
      * Whether the register confirms this small-business registration.
      *
      * `Unavailable` is not a soft `Invalid`. It says the question was never answered — and the caller must

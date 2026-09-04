@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Catalogs\ConfigAddonCatalog;
 use Pushery\Billing\Contracts\CreditSync;
 use Pushery\Billing\Enums\AuditSource;
+use Pushery\Billing\Enums\CreditReason;
 use Pushery\Billing\ValueObjects\AddonReversal;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\UnitGrant;
@@ -74,7 +75,7 @@ final readonly class AddonRefunds
                 return $reversal;
             }
 
-            $this->ledger->debit($reversal->owner, $reversal->amount);
+            $this->ledger->debit($reversal->owner, $reversal->amount, CreditReason::AddonReversal);
 
             $this->log->record('addon.reversed', $reversal->owner, [
                 'payment_reference' => $paymentReference,

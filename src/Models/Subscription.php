@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Pushery\Billing\Models;
 
 use Carbon\CarbonInterface;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
+use Pushery\Billing\Enums\BillingInterval;
+use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
 
@@ -37,6 +40,7 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * @property ?int $synced_event_at
  * @property ?Carbon $current_period_start
  * @property ?Carbon $current_period_end
+ * @property ?Carbon $scheduled_processing_at
  * @property string $merchant_uid
  * @property ?string $merchant_type
  * @property int|string|null $merchant_id
@@ -50,7 +54,7 @@ final class Subscription extends Model
         'owner_type', 'owner_id', 'type', 'provider', 'provider_id', 'status', 'tier_key',
         'scheduled_tier_key', 'scheduled_swap_at',
         'trial_ends_at', 'ends_at', 'delinquent_since', 'dunning_level', 'payment_reminded_on', 'synced_event_at',
-        'current_period_start', 'current_period_end',
+        'current_period_start', 'current_period_end', 'scheduled_processing_at',
         'merchant_uid', 'merchant_type', 'merchant_id',
     ];
 
@@ -88,6 +92,7 @@ final class Subscription extends Model
         'synced_event_at' => 'integer',
         'current_period_start' => UtcDateTime::class,
         'current_period_end' => UtcDateTime::class,
+        'scheduled_processing_at' => UtcDateTime::class,
         'scheduled_swap_at' => UtcDateTime::class,
     ];
 
@@ -270,6 +275,122 @@ final class Subscription extends Model
     public function scopeMerchantScoped(Builder $query): void
     {
         $query->where('merchant_uid', '!=', MerchantScope::platform()->uid());
+    }
+
+    /**
+     * The rows a local engine should act on now: scheduled at or before the moment, in a state that may be
+     * charged.
+     *
+     * The state filter is the only thing between a canceled customer and a fresh debit, because a local
+     * engine charges on its own initiative rather than being told to by a provider. So the list is stated
+     * as what IS charged rather than as what is not — a new state added tomorrow is then excluded until
+     * somebody decides otherwise, which is the safe direction for a query that moves money.
+     *
+     * Three states are in, and one of them is worth saying out loud. `Grace` is a subscription the customer
+     * has canceled but paid through: a cycle falling due inside it is the renewal they have not declined,
+     * and skipping it would give away the period they bought. `PastDue` is in because that is where a
+     * retry lives — the dunning ladder moves the schedule, and excluding the state would mean the ladder
+     * could never fire a second attempt.
+     *
+     * A NULL schedule is "not scheduled", never "overdue". The other reading would charge every row in the
+     * table on the first run after the column was added.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeDueForProcessing(Builder $query, ?DateTimeInterface $now = null): void
+    {
+        $moment = $now instanceof DateTimeInterface ? Carbon::instance($now) : Carbon::now();
+
+        $query->whereNotNull('scheduled_processing_at')
+            ->where('scheduled_processing_at', '<=', $moment->utc())
+            ->whereIn('status', [
+                SubscriptionState::Active->value,
+                SubscriptionState::Grace->value,
+                SubscriptionState::PastDue->value,
+                // TRIALING BELONGS HERE, and it was missing for as long as nothing in this package created
+                // a local trialing subscription. Under a provider that drives its own cycle the trial ends
+                // at the provider and arrives as an event, so the sweep never had to see one.
+                //
+                // A local-engine trial is scheduled at its own END, so it is due exactly once: at the
+                // moment the free period stops. Without it on this list the row was invisible to the run
+                // that collects — no charge, no state change, no log line, and a customer keeping their
+                // access indefinitely for nothing. The date is what keeps a RUNNING trial untouched, and
+                // it is the same mechanism that keeps every other state from being collected early.
+                SubscriptionState::Trialing->value,
+            ]);
+    }
+
+    /**
+     * Whether this owner has ever been granted a subscription trial.
+     *
+     * One reader for a fact that three places need and that must not be answered differently by any of
+     * them: the starter decides whether to grant one, the plan screen decides whether to ADVERTISE one,
+     * and the mandate effect must not erase the evidence when it reuses the row. A screen that promised
+     * what the starter refuses is the same defect as a starter that granted what the screen did not offer
+     * — only the customer notices it later, after pressing a button that said "includes a free trial".
+     *
+     * The evidence is `trial_ends_at` on the owner's single row for this type and scope. It outlives the
+     * trial itself: the status moves on, the period is advanced, a returning customer reuses the row, and
+     * the column keeps saying that a trial was granted once. A separate counter would be a second version
+     * of one fact, and it would drift the first time anything else wrote the row.
+     *
+     * Deliberately NOT the owner's own `trial_ends_at`, which the GENERIC trial owns and `onGenericTrial()`
+     * reads as "a tier is unlocked without a subscription".
+     */
+    public static function ownerHasHadATrial(Model $owner): bool
+    {
+        return self::query()
+            ->forOwner($owner)
+            ->ofDefaultType()
+            ->forMerchant(null)
+            ->whereNotNull('trial_ends_at')
+            ->exists();
+    }
+
+    /**
+     * Whether a NEW subscription may take this row's place.
+     *
+     * One question, one answer, read from two sides that must never disagree: `LocalSubscriptionStarter`
+     * asks it before sending a customer to the provider, and `StartSubscriptionOnMandate` asks it again
+     * when the payment finally settles — which can be days later, so the answer really can have changed in
+     * between. Two copies of the list would let the starter permit what the effect then refuses, or worse,
+     * let the effect overwrite something the starter would have protected.
+     *
+     * `ended` and `incomplete_expired` are the two terminal states. Refusing on them would leave a customer
+     * who once canceled, or whose first payment lapsed, permanently unable to come back — the direction a
+     * guard must never create. Everything else is a subscription somebody is living with right now,
+     * including `past_due`, whose arrears belong to it.
+     */
+    public function isReplaceableByANewSubscription(): bool
+    {
+        return in_array(
+            $this->status,
+            [SubscriptionState::Ended->value, SubscriptionState::IncompleteExpired->value],
+            true,
+        );
+    }
+
+    /**
+     * Move the cycle on by one interval, computed locally.
+     *
+     * Everything a provider-driven driver is told, a local one works out: the period the customer is
+     * paying for next, and when to try to collect it. The month-end anchor is the part that has to be got
+     * right rather than approximated — see {@see BillingInterval::advance()}.
+     *
+     * The new period starts where the old one ended, so cycles abut exactly and no moment of usage falls
+     * between two of them. The next run is scheduled at the new period's end, which is the plain case; a
+     * dunning retry moves the schedule alone and deliberately leaves the period where it is.
+     */
+    public function advanceCycle(BillingInterval $interval): void
+    {
+        $start = $this->current_period_end ?? Carbon::now()->utc();
+        $end = $interval->advance($start);
+
+        $this->update([
+            'current_period_start' => $start,
+            'current_period_end' => $end,
+            'scheduled_processing_at' => $end,
+        ]);
     }
 
     /** Build the driver-neutral snapshot the SubscriptionPresenter collapses into one state. */

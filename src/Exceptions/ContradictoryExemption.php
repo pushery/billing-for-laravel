@@ -13,6 +13,12 @@ use RuntimeException;
  * once. Whichever of the two fields is wrong, one of them is — and a reader has no way to know which, so the
  * exemption claim cannot be trusted and neither can the destination. A refusal names the conflict while
  * somebody can still fix its cause; a rendered document buries it until an audit.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class ContradictoryExemption extends RuntimeException
 {

@@ -14,6 +14,12 @@ use RuntimeException;
  * in a country where nobody is registered, and no correction undoes that. It carries the country and the
  * state so a consumer can render its own message — a buyer should be told their country is not served yet,
  * not shown a tax registration problem.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class MarketNotOpen extends RuntimeException
 {

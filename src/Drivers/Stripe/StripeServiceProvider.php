@@ -26,6 +26,7 @@ use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\ReadsRoutedInvoiceCommission;
+use Pushery\Billing\Contracts\ReportsMovedShares;
 use Pushery\Billing\Contracts\SeatBilling;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\SubscriptionSync;
@@ -41,6 +42,7 @@ use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\Events\InvoiceCorrected;
 use Pushery\Billing\Events\InvoiceFinalized;
 use Pushery\Billing\Events\InvoiceUpcoming;
+use Pushery\Billing\Events\MandateEstablished;
 use Pushery\Billing\Events\MandateRevoked;
 use Pushery\Billing\Events\MerchantAccountDeauthorized;
 use Pushery\Billing\Events\MerchantAccountUpdated;
@@ -61,6 +63,7 @@ use Pushery\Billing\Webhooks\Effects\CorrectChainOnChargeback;
 use Pushery\Billing\Webhooks\Effects\CreditAddonPurchase;
 use Pushery\Billing\Webhooks\Effects\FlushUpcomingUsage;
 use Pushery\Billing\Webhooks\Effects\GrantPurchasedContent;
+use Pushery\Billing\Webhooks\Effects\IssueLocalCreditNote;
 use Pushery\Billing\Webhooks\Effects\MarkMerchantDeauthorized;
 use Pushery\Billing\Webhooks\Effects\PersistInvoice;
 use Pushery\Billing\Webhooks\Effects\PersistInvoiceCorrection;
@@ -81,6 +84,7 @@ use Pushery\Billing\Webhooks\Effects\SendSubscriptionActivatedNotice;
 use Pushery\Billing\Webhooks\Effects\SendSubscriptionCanceledNotice;
 use Pushery\Billing\Webhooks\Effects\SendTrialEndingNotice;
 use Pushery\Billing\Webhooks\Effects\SettleRoutedChargeOnConfirmation;
+use Pushery\Billing\Webhooks\Effects\StoreMandate;
 use Pushery\Billing\Webhooks\Effects\SyncPlanFromSubscription;
 use Pushery\Billing\Webhooks\WebhookEffectRegistry;
 use Stripe\StripeClient;
@@ -146,6 +150,10 @@ final class StripeServiceProvider extends ServiceProvider
         // The second half of a separate-transfer sale. Bound here rather than in the neutral provider,
         // because moving a share is a provider operation and the neutral layer must not know how.
         $this->app->bind(MovesMerchantShare::class, StripeMerchantTransfers::class);
+        // Reading a transfer back is bound separately from moving one, because they are different
+        // privileges and a driver may honestly have one without the other — a provider that routes the
+        // share as part of the payment makes no transfer and has nothing to audit.
+        $this->app->bind(ReportsMovedShares::class, StripeMerchantTransfers::class);
         $this->app->bind(MerchantPriceProvisioner::class, StripeMerchantPriceProvisioner::class);
         $this->app->bind(MarketplaceWebhookVerifier::class, StripeMarketplaceWebhookVerifier::class);
         $this->app->bind(MarketplaceWebhookEventMapper::class, StripeMarketplaceWebhookEventMapper::class);
@@ -234,6 +242,11 @@ final class StripeServiceProvider extends ServiceProvider
         // Access beside the money, and switchable independently of it: a refund that leaves the work in place
         // is a real policy, and a build that welded the two together would make it impossible to express.
         $registry->on(AddonRefunded::class, RevokeAccessOnRefund::class);
+        // Neutral despite living here with the other defaults: it acts only where the refunded payment
+        // leads to an invoice this package RAISED, which a Stripe invoice never is — Stripe announces its
+        // own correction and PersistInvoiceCorrection stores that. A local engine has nobody to announce
+        // it, so without this a refunded cycle leaves the books overstating turnover.
+        $registry->on(AddonRefunded::class, IssueLocalCreditNote::class);
         $registry->on(PaymentFailed::class, SendDunningNotice::class);
         // A payment the bank held for 3-D Secure: nudge the customer to confirm, or the subscription sits
         // incomplete while they think they subscribed.
@@ -249,6 +262,10 @@ final class StripeServiceProvider extends ServiceProvider
         $registry->on(InvoiceFinalized::class, PersistInvoice::class);
         $registry->on(InvoiceCorrected::class, PersistInvoiceCorrection::class);
         $registry->on(MandateRevoked::class, RevokeMandate::class);
+        // Its counterpart, and the reason the pair matters: without this the package could watch charging
+        // capability disappear and never watch it arrive, so a mandate would only ever be written by
+        // whichever code path happened to be looking at the time.
+        $registry->on(MandateEstablished::class, StoreMandate::class);
         $registry->on(InvoiceUpcoming::class, FlushUpcomingUsage::class);
         $registry->on(TrialEnding::class, SendTrialEndingNotice::class);
 

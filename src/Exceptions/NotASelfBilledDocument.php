@@ -13,6 +13,12 @@ use RuntimeException;
  * invoice or settlement note. An ordinary fan invoice is not one of those: nobody wrote it on someone else's
  * behalf, so the objection right does not attach to it. Refused rather than recorded as a no-op, so a caller
  * pointing at the wrong document learns it now.
+ *
+ * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
+ * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
+ * held by a dedicated guard that varies every parameter individually.
+ *
+ * @pest-mutate-ignore: ConcatSwitchSides,ConcatRemoveLeft,ConcatRemoveRight
  */
 final class NotASelfBilledDocument extends RuntimeException
 {

@@ -72,6 +72,56 @@
         </form>
     </section>
 
+    {{-- Booking batch (DATEV) ---------------------------------------------------------------------------- --}}
+    <section aria-labelledby="datev-heading" class="space-y-4">
+        <h2 id="datev-heading" class="text-base font-semibold">{{ __('billing::admin.datev.heading') }}</h2>
+        <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('billing::admin.datev.intro') }}</p>
+
+        {{-- Only the failure directions are announced. A success is the browser's own download, which the
+             user sees without being told — and a live region that claimed success would be the one thing
+             this screen must never do while emitting no file. --}}
+        <div role="alert" aria-live="assertive">
+            @if ($datevResult === 'invalid_period')
+                <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+                    {{ __('billing::admin.datev.invalid_period') }}
+                </div>
+            @elseif ($datevResult === 'refused')
+                <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
+                    <p class="font-medium">{{ __('billing::admin.datev.refused') }}</p>
+                    <p class="mt-1">{{ $datevRefusal }}</p>
+                </div>
+            @elseif ($datevResult === 'unbalanced')
+                <div class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                    <p class="font-medium">{{ __('billing::admin.datev.unbalanced') }}</p>
+                    <p class="mt-1">{{ $datevImbalance }}</p>
+                    {{-- The file is one click away, not withheld: it is the only thing the difference can be
+                         traced in. What the click buys is that nobody forwards it without having read this. --}}
+                    <button type="button" wire:click="exportDatevAnyway"
+                        class="mt-2 rounded-lg border border-amber-300 px-3 py-1.5 text-sm font-medium hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/40">
+                        {{ __('billing::admin.datev.download_anyway') }}
+                    </button>
+                </div>
+            @endif
+        </div>
+
+        <form wire:submit="exportDatev" class="flex flex-wrap items-end gap-3">
+            <div class="space-y-1">
+                <label for="datev-from" class="block text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('billing::admin.datev.from') }}</label>
+                <input id="datev-from" type="date" wire:model="datevFrom" required
+                    class="rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900">
+            </div>
+            <div class="space-y-1">
+                <label for="datev-to" class="block text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('billing::admin.datev.to') }}</label>
+                <input id="datev-to" type="date" wire:model="datevTo" required
+                    class="rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900">
+            </div>
+            <button type="submit"
+                class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100">
+                {{ __('billing::admin.datev.submit') }}
+            </button>
+        </form>
+    </section>
+
     {{-- Cancel a subscription --------------------------------------------------------------------------- --}}
     <section aria-labelledby="cancel-heading" class="space-y-4">
         <h2 id="cancel-heading" class="text-base font-semibold">{{ __('billing::admin.cancel.heading') }}</h2>

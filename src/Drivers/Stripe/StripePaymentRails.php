@@ -11,6 +11,7 @@ use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\FeeRefundPolicy;
 use Pushery\Billing\Exceptions\FeeRefundPolicyNotPermitted;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
+use Pushery\Billing\ValueObjects\ChargeNarrative;
 use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\MandateReference;
@@ -39,13 +40,21 @@ use Stripe\TransferReversal;
  */
 final readonly class StripePaymentRails implements PaymentRails
 {
+    /**
+     * A PaymentIntent's `description` carries 1000 characters — four times Mollie's field.
+     *
+     * The two limits stay separate rather than collapsing onto the smaller one: a shared limit would trim
+     * every Stripe description to Mollie's length for no reason other than that Mollie also exists.
+     */
+    private const int DESCRIPTION_LIMIT = 1000;
+
     public function __construct(
         private StripeClient $stripe,
         private Repository $config,
         private SupplyRegimeResolver $regimes,
     ) {}
 
-    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): ChargeResult
+    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null): ChargeResult
     {
         $params = $this->routed([
             'amount' => $amount->minorUnits,
@@ -61,7 +70,7 @@ final readonly class StripePaymentRails implements PaymentRails
             // The payload IS a valid PaymentIntent request; its exact fields are asserted one by one in
             // StripeMarketplaceRoutingTest, including the assertion that an unrouted charge emits none of them.
             // @phpstan-ignore argument.type
-            fn (): PaymentIntent => $this->stripe->paymentIntents->create($params, $this->options($idempotencyKey)),
+            fn (): PaymentIntent => $this->stripe->paymentIntents->create($this->traced($params, $idempotencyKey, $narrative), $this->options($idempotencyKey)),
             $amount,
             $routing,
         );
@@ -102,7 +111,7 @@ final readonly class StripePaymentRails implements PaymentRails
      * customer from the attached method, and `off_session: true` flags the absent-cardholder intent so
      * the correct SCA exemption is requested.
      */
-    public function offSessionCharge(Money $amount, MandateReference $mandate, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): ChargeResult
+    public function offSessionCharge(Money $amount, MandateReference $mandate, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null): ChargeResult
     {
         $customer = $mandate->customerReference;
         $options = $this->options($idempotencyKey);
@@ -136,7 +145,7 @@ final readonly class StripePaymentRails implements PaymentRails
             // The payload IS a valid PaymentIntent request; its exact fields are asserted one by one in
             // StripeMarketplaceRoutingTest, including the assertion that an unrouted charge emits none of them.
             // @phpstan-ignore argument.type
-            fn (): PaymentIntent => $this->stripe->paymentIntents->create($params, $options),
+            fn (): PaymentIntent => $this->stripe->paymentIntents->create($this->traced($params, $idempotencyKey, $narrative), $options),
             $amount,
             $routing,
         );
@@ -397,6 +406,47 @@ final readonly class StripePaymentRails implements PaymentRails
                 failureReason: $intent->status,
             ),
         };
+    }
+
+    /**
+     * Stamp the caller's reference onto the payment itself, so it can be found again afterwards.
+     *
+     * The idempotency key already travels with every charge — but only as a request OPTION, which Stripe
+     * uses to collapse a retry and then does not expose: there is no API that finds a payment by the key it
+     * was created with. So a charge this package made could not be traced back to the cycle that made it by
+     * anything other than amount and timestamp, which is guessing.
+     *
+     * That cost is not hypothetical. It is why a cycle whose claim was abandoned cannot be resumed
+     * automatically: nothing — not this process, and not a person in the dashboard — can answer whether the
+     * attempt that died mid-call left a payment behind. It is also the blind spot in every support question
+     * that starts "what was this charge for".
+     *
+     * Metadata rather than the description: the description is shown to the customer, and an internal
+     * reference is not something to put in front of them.
+     *
+     * The description is the OTHER half of the same field pair, and it is set here for the same reason
+     * the reference is not: this is the one place both are decided, so the rule that the customer reads
+     * one and never the other is visible in a single method instead of inferred from two.
+     *
+     * Stripe's `description` is left ABSENT rather than set to a neutral word when no narrative is given.
+     * Mollie requires the field and so has a fallback; Stripe does not, and writing `Subscription` onto
+     * an intent that carries no such claim would put a word on the customer's receipt that no caller
+     * chose. Absent renders as the amount alone, which is what these charges have always shown.
+     *
+     * @param  array<array-key, mixed>  $params
+     * @return array<array-key, mixed>
+     */
+    private function traced(array $params, ?string $idempotencyKey, ?ChargeNarrative $narrative = null): array
+    {
+        if ($idempotencyKey !== null) {
+            $params = [...$params, 'metadata' => ['billing_reference' => $idempotencyKey]];
+        }
+
+        if ($narrative instanceof ChargeNarrative) {
+            return [...$params, 'description' => $narrative->statement(self::DESCRIPTION_LIMIT)];
+        }
+
+        return $params;
     }
 
     /**

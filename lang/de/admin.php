@@ -27,6 +27,19 @@ return [
         'invalid_tier' => 'Dieser Tarif ist nicht in billing.tiers konfiguriert.',
     ],
 
+    'datev' => [
+        'heading' => 'Buchungsstapel (DATEV)',
+        'intro' => 'Lädt einen Zeitraum als DATEV-EXTF-Buchungsstapel herunter — die Datei, die der Steuerberater importiert. Es ist derselbe Stapel wie beim geplanten Export, auf dem Server wird nichts gespeichert, und lässt sich der Zeitraum nicht als ein Stapel buchen, wird der Download verweigert statt gekürzt.',
+        'from' => 'Von',
+        'to' => 'Bis',
+        'submit' => 'Stapel herunterladen',
+        'invalid_period' => 'Gib ein Start- und ein Enddatum an; das Ende darf nicht vor dem Start liegen.',
+        'refused' => 'Der Stapel wurde verweigert, es wurde nichts heruntergeladen:',
+        'unbalanced' => 'Dieser Stapel stimmt nicht ab und darf nicht eingereicht werden.',
+        'imbalance_figures' => 'Das Nebenbuch weist :subledger an Verbindlichkeiten gegenüber Händlern aus; der exportierte Stapel bucht :batch auf die Verbindlichkeitskonten, eine Differenz von :difference.',
+        'download_anyway' => 'Trotzdem herunterladen',
+    ],
+
     'cancel' => [
         'heading' => 'Abo kündigen',
         'intro' => 'Beendet das Abo eines Owners sofort. Die Änderung wird mit deinem Namen im Audit-Log festgehalten.',

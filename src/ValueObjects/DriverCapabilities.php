@@ -27,6 +27,17 @@ final readonly class DriverCapabilities
         // driver code outside this package, so inserting a parameter anywhere else silently shifts
         // every argument after it — a capability flag would start reading a payment-method list.
         public bool $supportsConnectDestinationCharges = false,
+        // Appended LAST for the same reason as the line above, and it answers a question the package now
+        // has to ask: does this provider tell the customer their trial is about to end?
+        //
+        // Stripe does — `customer.subscription.trial_will_end` reaches the mapper, which produces a
+        // TrialEnding event, and the notice effect is registered on it. A local-engine driver announces
+        // nothing, because nothing at the provider knows a trial is running: the package holds that date
+        // itself and its own sweep collects the first charge.
+        //
+        // A capability is a promise the PACKAGE keeps, so this is true where a mapper genuinely produces
+        // the event, never where the provider merely could.
+        public bool $supportsProviderTrialNotice = false,
     ) {}
 
     public function offersMethod(string $method): bool
