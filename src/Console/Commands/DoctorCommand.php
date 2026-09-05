@@ -138,6 +138,8 @@ final class DoctorCommand extends Command
 
         $this->reportProfileInheritance();
 
+        $this->reportCredentialEnvironment($config);
+
         $failing = $this->reportWorksTheProfileDoesNotCover($config, $addons, $works) || $failing;
 
         // Folded into $failing rather than carried alongside it: verdict() exists precisely because a
@@ -200,6 +202,74 @@ final class DoctorCommand extends Command
         $this->components->info("All {$checked} webhook endpoint(s) render payloads in the pinned version.");
 
         return $this->verdict($failing);
+    }
+
+    /**
+     * A provider key from the wrong world.
+     *
+     * The expensive direction is a TEST key in production, and it is expensive because everything works:
+     * checkouts complete, webhooks arrive, invoices are issued, screens look right. No money moves. Nothing
+     * throws, so the first report comes from the bank reconciliation, days later.
+     *
+     * The other direction is cheaper and still worth saying: a live key outside production charges real
+     * cards from a staging environment.
+     *
+     * WARNED, NOT FAILED, and that is a decision rather than timidity. A test key in a production-like
+     * environment is legitimate more often than not -- an acceptance system, a demo tenant, a sandbox
+     * deployment that is `production` to Laravel and a playground to everyone else. A check that refuses
+     * those gets switched off, and then it protects nothing on the day it would have mattered. The same
+     * reasoning keeps it out of the boot path: this is a question for whoever is looking, not a reason to
+     * stop an application from starting.
+     *
+     * Only the ACTIVE driver's key is read. Judging a key the install does not use would report a finding
+     * nobody can act on -- and a package configured for Mollie routinely carries a stale Stripe key.
+     */
+    private function reportCredentialEnvironment(Repository $config): void
+    {
+        $driver = $config->get('billing.default', 'stripe');
+
+        [$key, $setting] = $driver === 'mollie'
+            ? [$config->get('billing.mollie.api_key'), 'billing.mollie.api_key']
+            : [$config->get('cashier.secret'), 'cashier.secret'];
+
+        if (! is_string($key) || trim($key) === '') {
+            // Absence is a different finding with a different fix, and the credential guard already refuses
+            // to boot on it. Saying it twice here would only make this check look like it caught something.
+            return;
+        }
+
+        $isTest = str_starts_with($key, 'test_') || str_contains($key, '_test_');
+        $isLive = str_starts_with($key, 'live_') || str_contains($key, '_live_');
+
+        if ($isTest === $isLive) {
+            // Neither shape, or somehow both: an access token, an unusual prefix, a provider that does not
+            // encode the world in the key. Silence is right -- guessing from a shape we do not recognize is
+            // how a check starts reporting on installs it knows nothing about.
+            return;
+        }
+
+        $production = $config->get('app.env') === 'production';
+
+        if ($production && $isTest) {
+            $this->components->warn(
+                "{$setting} is a TEST key and this environment is production. Checkouts will complete and no "
+                .'money will be taken. If that is deliberate -- an acceptance or demo deployment -- nothing '
+                .'is wrong here.',
+            );
+
+            return;
+        }
+
+        if (! $production && $isLive) {
+            $this->components->warn(
+                "{$setting} is a LIVE key and this environment is not production. Real cards will be charged "
+                .'from here.',
+            );
+
+            return;
+        }
+
+        $this->components->info("{$setting} matches this environment.");
     }
 
     /**

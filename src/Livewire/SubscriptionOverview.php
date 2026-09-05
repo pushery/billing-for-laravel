@@ -32,6 +32,14 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final class SubscriptionOverview extends AccountScreen
 {
+    /**
+     * True once a cancellation has been armed and is waiting for its second click.
+     *
+     * Public because the view renders from it, and reset on every path that leaves the flow so a screen
+     * left half-way does not stay armed for the next visit.
+     */
+    public bool $confirmingCancel = false;
+
     use DegradesGracefully;
     use PollsWhileActivating;
 
@@ -104,8 +112,42 @@ final class SubscriptionOverview extends AccountScreen
         return $balance->isPositive() ? $balance : null;
     }
 
+    /**
+     * Whether the first click arms the cancellation instead of carrying it out.
+     *
+     * Read from configuration rather than decided here, because the right answer differs per install: the
+     * package's own is one click, and a consumer whose acceptance asks for a confirmation step should not
+     * have to fork the view to get one.
+     *
+     * PRIVATE on purpose. A public method on a Livewire component is a callable ACTION, and this is a
+     * question rather than an act -- the view renders from $confirmingCancel and never calls it. Public, it
+     * would have to be classified as money-initiating or not, which is a question it has no business
+     * answering.
+     */
+    private function cancelRequiresConfirmation(): bool
+    {
+        return (bool) Container::getInstance()->make(Repository::class)->get('account.cancel_requires_confirmation', false);
+    }
+
+    /** Step back out of an armed cancellation. */
+    public function abortCancel(): void
+    {
+        $this->confirmingCancel = false;
+    }
+
     public function cancel(): void
     {
+        // The confirmation step, when the install asked for one. It arms rather than cancels, and the guard
+        // sits HERE rather than in the view: a Livewire action is callable from the client whatever the
+        // markup shows, so a check that lived only in Blade would be advice rather than behavior.
+        if ($this->cancelRequiresConfirmation() && ! $this->confirmingCancel) {
+            $this->confirmingCancel = true;
+
+            return;
+        }
+
+        $this->confirmingCancel = false;
+
         $survey = $this->cancellationSurvey();
 
         // Record the churn reason locally only when one was actually given, then cancel. The survey is also

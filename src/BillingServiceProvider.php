@@ -969,6 +969,30 @@ final class BillingServiceProvider extends ServiceProvider
             ->onFailure(static fn () => $heartbeat->make(ScheduleHeartbeat::class)->finished($command, false)));
 
         $this->callAfterResolving(Schedule::class, static function (Schedule $schedule) use ($scheduleConfig, $withHeartbeat): void {
+            // A SWITCHED-OFF BILLING SCHEDULES NOTHING, and this is the whole guard for all sixteen entries.
+            //
+            // Measured in a consuming application running the package fully dormant -- BILLING_ENABLED=false,
+            // migrations ignored, not one `billing_*` table in the database. `schedule:list` still showed
+            // fifteen `billing:*` entries and ten of them threw on every execution, against tables that by
+            // construction did not exist. `billing:usage:flush` is on `everyMinute`, so that alone is about
+            // 1,440 failed runs a day per environment.
+            //
+            // The cost is not the noise. Those runs land in the operator's schedule monitor, and a monitor
+            // that is permanently red stops being read -- so the damage is to the channel that has to carry
+            // the NEXT real cron failure.
+            //
+            // Gated at REGISTRATION rather than inside each command, and the difference is deliberate.
+            // Teaching every command to consult the switch would stop the exception and leave a scheduler
+            // that still starts a process every minute in order to do nothing. It would also have to be
+            // remembered by the next command anybody adds; this cannot be forgotten, because there is one
+            // place and everything below it is inside.
+            //
+            // Read here rather than at boot on purpose: `$scheduleConfig` is the live repository, so an
+            // install that sets the switch after this provider booted still gets the answer it configured.
+            if (! (bool) $scheduleConfig->get('billing.enabled', true)) {
+                return;
+            }
+
             // withoutOverlapping like the others: a local-engine cycle advance that runs long must not have
             // a second copy start on top of it and double-advance the same due subscriptions.
             $withHeartbeat($schedule->command('billing:run')->hourly()->withoutOverlapping(), 'billing:run');
@@ -1056,6 +1080,20 @@ final class BillingServiceProvider extends ServiceProvider
         // The app-shell banner — a plain Blade component the host drops into its layout.
         Blade::component('billing::banner', Banner::class);
 
+        // `account.*` IS THIS PACKAGE'S OWN CONFIG, not a global namespace it reaches into, and the
+        // asymmetry with `billing.admin.*` twenty lines down is worth spelling out because it has already
+        // produced a bug report from somebody reading carefully.
+        //
+        // The package ships `config/account.php`, merges it under the `account` key in register(), and
+        // publishes it with the rest under `--tag=billing-config`. So a consumer changes this by publishing
+        // that file and editing it -- not by writing `billing.account.middleware`, which is a key nothing
+        // reads. Read in boot(), after the app's config is loaded, so a published file does take effect.
+        //
+        // Why the account hub gets a top-level file while the admin console lives under `billing.admin`:
+        // the hub is a mountable SCREEN SET with its own prefix, middleware, view overrides and CSP, and it
+        // is the one part of this package a host app re-skins. Splitting it out keeps that surface editable
+        // without handing someone the 3,000-line billing config. Whether that trade is still worth the
+        // confusion is a consumer-facing naming decision, so it is not changed here.
         $config = $this->app->make(Repository::class);
         $prefix = $config->get('account.prefix', 'account/billing');
         $middleware = $config->get('account.middleware', ['web', 'auth']);

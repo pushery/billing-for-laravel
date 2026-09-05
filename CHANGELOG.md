@@ -4,6 +4,50 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.18.0] - 2026-09-05
+
+### Added
+
+- **A marketplace no longer queries the database while it boots.** The go-live checklist runs at boot so the marketplace switch cannot be flipped past an open blocking point. One of its nine checkpoints reads stored rows to look for duplicate buyer receipts, and it ran on every boot — an unbounded aggregation over all documents, in a path that otherwise only reads configuration.
+
+  Worse than the cost: that checkpoint declares itself non-blocking, and it could still take the whole application down. An exception out of a checkpoint does not care what `isBlocking()` returned, so an install that flipped the switch before running the migrations found the query throwing against a table that did not exist yet — `route:list` included. The first visible effect of adopting the package was a dead application, and the two adoption steps were silently order-dependent.
+
+  Checkpoints that read stored state are now excluded from the boot path and run from `billing:marketplace:preflight` instead, which is where a deploy already looks. What that costs is stated rather than discovered: a marketplace carrying a duplicate receipt now boots. It always did — the checkpoint never refused anything — so what changes is when the report is produced, not whether.
+
+- **Canceling can now take two clicks, if your own acceptance asks for it.** `account.cancel_requires_confirmation` arms the cancellation on the first click and carries it out on the second, with a way back in between. Previously the only way to get a confirmation step was to fork the view.
+
+  Off by default, and the default does not move. Canceling here is reversible, and for the person doing the canceling less friction is the better behavior — a subscription that is hard to leave is a dark pattern rather than a safeguard. An install that leaves this alone sees exactly what it saw before.
+
+  The step lives in the action rather than in the markup. A Livewire action is callable from the client whatever the view renders, so a check that existed only in Blade would be advice rather than behavior. It renders inline instead of as a modal, so it needs no JavaScript and no dialog component, and an application that re-skins the hub keeps its own chrome.
+
+- **`billing:doctor` now says when a provider key belongs to the other world.** A test key in production is the expensive one, and it is expensive because everything works: checkouts complete, webhooks arrive, invoices are issued, and no money moves. Nothing throws, so the first report tends to come from the bank reconciliation days later. The reverse — a live key outside production, charging real cards from staging — is reported too.
+
+  It warns rather than fails, and it is not in the boot path. A test key in a production-like environment is legitimate often enough (an acceptance system, a demo tenant) that a check refusing them gets switched off, and a switched-off check protects nothing on the day it would have mattered. Only the active driver's key is read, so a leftover Stripe key on a Mollie install says nothing.
+
+- **Mollie is now told which package is calling.** The client sends `PusheryBilling/<version>` alongside the version strings the SDK already announces for itself and for PHP. It changes nothing about how requests are answered; it makes this integration distinguishable from any other PHP client if it ever shows up in Mollie's own numbers or in a support thread.
+
+  The version is derived from the installed package rather than written down, so it cannot drift away from the release that carries it.
+
+- **The test fake can now be asked which coupon and which declaration reference actually reached the seam.** `assertSubscribeStartedWithCoupon()` and `assertPurchasedWithDeclaration()` read values the fake was already recording but had no way to hand back — the only way to assert them before was to hand-roll a checkout double to reach a field `Billing::fake()` already held.
+
+  They are separate methods rather than optional parameters on the existing assertions, because `null` has to mean something definite: it asserts that no coupon, or no reference, was passed. An optional parameter defaulting to `null` cannot tell that apart from "do not check", and the first is the case worth proving.
+
+  It matters where a discount is shown before the buyer commits. The package does not fail a checkout on an unknown coupon code, on purpose — the provider decides what a code is worth, and refusing here would turn a typo into a lost sale. An application that validates the code itself and shows the result needs to prove the code it validated is the one that arrived, and a failing assertion now names the values it did see rather than only reporting that something did not happen.
+
+### Fixed
+
+- **A switched-off billing no longer schedules anything.** With `billing.enabled` false the package registered sixteen scheduled commands anyway, and the ones that reach the database threw on every execution — against tables that a dormant install has never migrated. `billing:usage:flush` runs every minute, so a single disabled environment produced roughly 1,440 failed runs a day.
+
+  The damage was not the noise. Those runs land in whatever schedule monitor the application uses, and a monitor that is permanently red stops being read — so what was really lost is the channel that has to carry the next real cron failure.
+
+  The schedule is now gated where it is registered rather than inside each command. A command that starts every minute in order to discover it has nothing to do is still a process started every minute, and `schedule:list` on a disabled install now answers honestly: nothing.
+
+- **A rotating Mollie webhook secret can now be configured the way the configuration is actually written.** `BILLING_MOLLIE_WEBHOOK_SECRET` accepts a comma-separated list — `old_secret,new_secret` — and a ping signed with either is accepted, which is what makes rotating one without dropping webhooks possible. Spacing and empty entries are ignored, so a trailing comma costs nothing, and a single secret behaves exactly as before.
+
+  The verifier could already hold several secrets, but only as an array, and this setting reads one string out of the environment: the array was reachable only by hand-editing the published config file. So the rotation the setting promised could not be reached through the channel it is configured by.
+
+  The obvious attempt made it worse rather than merely not better. Mollie's own package documents a comma-separated list, so an operator following that pattern wrote both secrets on the line and got one secret whose name contained a comma — matching no signature Mollie produces, refusing every webhook, starting the moment of the rotation it was meant to enable.
+
 ## [0.17.0] - 2026-09-04
 
 ### Added
@@ -6373,7 +6417,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/pushery/billing-for-laravel/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/pushery/billing-for-laravel/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/pushery/billing-for-laravel/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/pushery/billing-for-laravel/compare/v0.14.0...v0.15.0
