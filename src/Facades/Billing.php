@@ -13,6 +13,7 @@ use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\MerchantOnboarding;
 use Pushery\Billing\Contracts\OneTimeCharge;
+use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Testing\BillingFake;
 use Pushery\Billing\Testing\FakeMarketplaceRails;
@@ -42,6 +43,10 @@ final class Billing extends Facade
         $fake = new BillingFake;
 
         Container::getInstance()->instance(Checkout::class, $fake);
+        // Both subscribe seams, because a screen may go through either. Faking only the hosted-checkout one
+        // left a consumer's Subscribe button resolving the real driver-neutral starter -- which under a
+        // local driver writes an intent row and calls the mandate rails, in a test that asked for a fake.
+        Container::getInstance()->instance(StartsSubscriptions::class, $fake);
         Container::getInstance()->instance(SubscriptionActions::class, $fake);
         Container::getInstance()->instance(OneTimeCharge::class, $fake);
         // The receiving side too: a marketplace consumer's test would otherwise hit the real onboarding

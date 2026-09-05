@@ -14,8 +14,11 @@ use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\TierCatalog;
+use Pushery\Billing\Discounts\CouponRedeemer;
 use Pushery\Billing\Enums\SubscriptionState;
+use Pushery\Billing\Exceptions\CouponUnavailable;
 use Pushery\Billing\Exceptions\SubscriptionNotPermitted;
+use Pushery\Billing\Models\Coupon;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Models\SubscriptionIntent;
 use Pushery\Billing\Trials\TrialMode;
@@ -72,9 +75,10 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         private EstablishesMandateByRedirect $mandates,
         private Repository $config,
         private CheckoutUrls $urls,
+        private CouponRedeemer $coupons,
     ) {}
 
-    public function subscribe(Model $billable, string $tierKey): SubscriptionStart
+    public function start(Model $billable, string $tierKey, ?string $couponCode = null): SubscriptionStart
     {
         // The key has to be a KEY of the tier map, not a path INTO it. The catalog resolves
         // `billing.tiers.{$key}` through dot notation, so `pro.price_display` reaches a node that is an
@@ -95,6 +99,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         // into a WHERE, so an exotic one dies inside the query builder several steps earlier, with a
         // message about SQL rather than about the billable. Hoisted, it is both reachable and useful.
         $ownerKey = $this->ownerKey($billable);
+        $couponCode = $this->normalizeCode($couponCode);
 
         if (! array_key_exists($tierKey, $this->tiers->all())) {
             throw SubscriptionNotPermitted::unknownTier($tierKey);
@@ -150,13 +155,18 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
             : null;
 
         if ($trialEndsAt instanceof DateTimeImmutable && ! $this->policy->requiresPaymentMethod($tierKey)) {
-            $this->writeSubscription(
+            $subscription = $this->writeSubscription(
                 $billable,
                 $ownerKey,
                 $tierKey,
                 CarbonImmutable::createFromInterface($trialEndsAt),
                 $now,
             );
+
+            // This shape has its subscription NOW, so the coupon is spent now. The redirect shape cannot do
+            // the same -- see `redeemFor()` for why spending one before the mandate lands would cost the
+            // customer their single use on a checkout they may abandon.
+            $this->redeemFor($billable, $couponCode, $subscription->id);
 
             return new SubscriptionStart(SubscriptionState::Trialing);
         }
@@ -189,6 +199,8 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
             'owner_id' => $ownerKey,
             'provider' => $this->provider,
             'tier_key' => $tierKey,
+            // Carried, not redeemed. The mandate webhook spends it once the subscription is real.
+            'coupon_code' => $couponCode,
             'payment_reference' => $handshake->paymentReference,
             'trial_ends_at' => $intentTrialEndsAt,
         ]);
@@ -198,6 +210,92 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
             $handshake->checkoutUrl,
             $handshake->paymentReference,
         );
+    }
+
+    /**
+     * Whether a subscription started here would actually apply this code.
+     *
+     * The package's OWN coupon table is the only catalog this driver can act on, because this driver is the
+     * one that writes the invoice: the discount arrives as a line the cycle adds, and the cycle reads a
+     * redemption. The config-defined coupon map that the hosted checkout resolves against is a different
+     * set with a different consumer -- the provider applies those, and here there is no provider to apply
+     * anything.
+     *
+     * Saying so is the whole point. A screen that asked the config resolver under this driver would tell a
+     * customer their code took, and then the cycle would find no redemption and bill them in full.
+     */
+    public function honorsCoupon(string $code): bool
+    {
+        return $this->honorableCoupon($this->normalizeCode($code)) instanceof Coupon;
+    }
+
+    /** Trimmed, and an empty field is the same as no field. */
+    private function normalizeCode(?string $code): ?string
+    {
+        $code = trim((string) $code);
+
+        return $code === '' ? null : $code;
+    }
+
+    /**
+     * The coupon this code names, if it names one that is still worth carrying.
+     *
+     * Active and unexpired only -- the same two conditions the cycle re-checks when it applies the
+     * discount. Checking them here as well is not duplication for its own sake: it is what lets the screen
+     * answer honestly before the customer commits, and the cycle's check is what keeps the answer true
+     * months later, which is a different question.
+     *
+     * The exhaustion cap is deliberately NOT checked here. It is a race by nature -- the last redemption
+     * can go between this question and the answer -- so the only place it can be enforced truthfully is
+     * inside the redeemer's locked transaction, and reporting it here would be a guess dressed as a fact.
+     */
+    private function honorableCoupon(?string $code): ?Coupon
+    {
+        if ($code === null) {
+            return null;
+        }
+
+        $coupon = Coupon::query()->where('code', $code)->first();
+
+        if (! $coupon instanceof Coupon || ! $coupon->active) {
+            return null;
+        }
+
+        return $coupon->expires_at !== null && CarbonImmutable::instance($coupon->expires_at)->isPast()
+            ? null
+            : $coupon;
+    }
+
+    /**
+     * Spend the coupon for this owner, if there is one to spend.
+     *
+     * ## A coupon never blocks a subscription
+     *
+     * `CouponUnavailable` is swallowed on purpose, and the direction matches the hosted checkout's own
+     * contract: a code that cannot be spent leaves the customer subscribed at full price, not unsubscribed.
+     * The cases it covers are all ones where refusing would be worse than proceeding -- the coupon was
+     * exhausted between the screen and here, it expired in the meantime, or this owner already redeemed it.
+     *
+     * ## Why this is not called before the redirect
+     *
+     * Redeeming is spending. The (coupon, owner) unique index means an owner gets exactly one redemption
+     * per coupon, ever, and `max_redemptions` is decremented globally. Spending either on a checkout the
+     * customer may abandon would take something real for something that did not happen -- and this table's
+     * whole promise is that an abandoned intent costs nobody anything.
+     */
+    private function redeemFor(Model $owner, ?string $code, ?int $subscriptionId): void
+    {
+        $coupon = $this->honorableCoupon($code);
+
+        if (! $coupon instanceof Coupon) {
+            return;
+        }
+
+        try {
+            $this->coupons->redeem($coupon, $owner, $subscriptionId);
+        } catch (CouponUnavailable) {
+            // Subscribed at full price beats not subscribed. Nothing here is worth failing a sale over.
+        }
     }
 
     /**
@@ -287,13 +385,13 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         string $tierKey,
         CarbonImmutable $trialEndsAt,
         CarbonImmutable $now,
-    ): void {
+    ): Subscription {
         // updateOrCreate on the UNIQUE KEY, for the same reason the webhook path does it: a subscription is
         // unique on (owner, type, merchant_uid), and an ENDED row still holds that slot. This method is
         // reached only after `alreadySubscribed()` deliberately let such an owner through, so a plain
         // insert would meet the constraint every time somebody came back — and arrive at them as a raw
         // database error on the subscribe button rather than one of the refusals this flow states.
-        Subscription::query()->updateOrCreate(
+        return Subscription::query()->updateOrCreate(
             [
                 'owner_type' => $billable->getMorphClass(),
                 'owner_id' => $ownerKey,

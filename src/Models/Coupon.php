@@ -15,7 +15,7 @@ use Pushery\Billing\Casts\UtcDateTime;
  * scoped by `currency`).
  *
  * `provider_coupon_id` is the provider's own id for this coupon, and the Stripe checkout READS it:
- * `StripeCheckout::stripeCouponFor()` prefers it over the global `billing.coupons.<code>.stripe_coupon`
+ * `StripeCheckout::providerCouponFor()` prefers it over the global `billing.coupons.<code>.stripe_coupon`
  * map, after the code has passed the catalog check. It had no reader at all until 2026-08-19 — an adopter
  * who filled it, because this model and the migration offer it, got a discount that never applied and
  * nothing threw or warned. Leaving it null keeps the config answering, so a config-only installation

@@ -133,7 +133,7 @@ final readonly class StripeCheckout implements Checkout
         // checkout discount — Stripe owns the money math and the native max_redemptions/redeem_by. Stripe
         // forbids a session that carries BOTH an explicit discount and allow_promotion_codes, so an
         // applied coupon wins over the promotion-code field.
-        $stripeCoupon = $this->stripeCouponFor($couponCode);
+        $stripeCoupon = $this->providerCouponFor($couponCode);
 
         if ($stripeCoupon !== null) {
             $payload['discounts'] = [['coupon' => $stripeCoupon]];
@@ -201,7 +201,14 @@ final readonly class StripeCheckout implements Checkout
      *
      * A config-only installation is unchanged. No row means the config answers, exactly as before.
      */
-    private function stripeCouponFor(?string $couponCode): ?string
+    /**
+     * The provider coupon this code maps to, or null when it maps to none.
+     *
+     * Public, and the visibility is the point rather than a convenience: this is also the honest answer to
+     * "will this code do anything", which the subscription starter has to give a screen BEFORE the customer
+     * commits. Read-only and side-effect free -- it resolves and looks up, it never redeems.
+     */
+    public function providerCouponFor(?string $couponCode): ?string
     {
         if ($couponCode === null || $couponCode === '') {
             return null;

@@ -10,12 +10,15 @@ use Pushery\Billing\Contracts\CanReceiveMoney;
 use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\MerchantOnboarding;
 use Pushery\Billing\Contracts\OneTimeCharge;
+use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubscriptionActions;
+use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Facades\Billing;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\MerchantScope;
+use Pushery\Billing\ValueObjects\SubscriptionStart;
 
 /**
  * A recording fake for the three money-mutating seams — {@see Checkout}, {@see SubscriptionActions} and
@@ -26,7 +29,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * The subscribe/purchase seams return a harmless fake ClientIntent (a redirect that goes nowhere), so a
  * screen under test still gets a URL to redirect to without a real hosted checkout.
  */
-final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding, OneTimeCharge, SubscriptionActions
+final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding, OneTimeCharge, StartsSubscriptions, SubscriptionActions
 {
     /** @var list<array{owner: Model, tier: string, coupon: ?string}> */
     private array $subscribes = [];
@@ -53,11 +56,46 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      */
     private bool $merchantsMayReceive = false;
 
+    /**
+     * What `honorsCoupon()` answers. Fail-closed for the same reason the receive gate above is: a fake that
+     * said yes by default would let a consumer's test show "your code was applied" over an install where no
+     * coupon is configured at all, and the screen would be green about something production refuses.
+     */
+    private bool $couponsAreHonored = false;
+
     public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null): ClientIntent
     {
         $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode];
 
         return $this->intent();
+    }
+
+    /**
+     * The same record as `subscribe()`, because it is the same act seen through the other contract.
+     *
+     * Recording into one list is deliberate: a consumer asserting "the customer was sent to subscribe to
+     * pro" should not have to know whether the screen they are testing went through the hosted-checkout
+     * seam or the driver-neutral one. Which of the two it was is an implementation detail of the driver
+     * they configured, and the assertion surface should not move when they change it.
+     */
+    public function start(Model $billable, string $tierKey, ?string $couponCode = null): SubscriptionStart
+    {
+        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode];
+
+        return new SubscriptionStart(SubscriptionState::Activating, 'https://checkout.test/session');
+    }
+
+    public function honorsCoupon(string $code): bool
+    {
+        return $this->couponsAreHonored && trim($code) !== '';
+    }
+
+    /** Answer the coupon question with a yes for the rest of the test -- the code names a live coupon. */
+    public function honorCoupons(): self
+    {
+        $this->couponsAreHonored = true;
+
+        return $this;
     }
 
     public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null): ClientIntent
