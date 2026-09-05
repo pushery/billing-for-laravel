@@ -530,11 +530,88 @@ final readonly class LocalBillingEngine implements BillingEngine
             $drafts = $this->preprocessors->handle($drafts, $subscription);
         }
 
+        if ($this->periodWasCoveredByATrial($subscription)) {
+            $drafts = $this->planWaived($drafts);
+        }
+
         // After the chain, so a discount applies to everything the cycle actually carries — a metered
         // line a step added included. Before the credit offset, which happens against the total: credit
         // is payment already belonging to the customer, and spending it on an amount the discount was
         // about to remove would take money for something never owed.
+        //
+        // The waiver sits between the two on purpose. After the chain, because the free trial is a
+        // promise the plan screen prints and a step that knows nothing about trials must not be able to
+        // reprice it back. Before the discount, because a coupon whose gross has been waived to zero is
+        // then refused by the applier's own positive-gross guard — so a customer does not spend one of
+        // their discounted cycles on a cycle nobody charged them for.
         return $this->discounted($subscription, $drafts);
+    }
+
+    /**
+     * Whether the days this cycle is about to close were inside the customer's free trial.
+     *
+     * The engine bills in ARREARS — an order names the period it closes, and the payment at checkout is a
+     * verification amount rather than the plan price — so the cycle that closes a trial named the trial's
+     * own days and charged the full plan for them. Measured over two ticks of a fourteen-day trial: 1900
+     * for `[2026-08-18 .. 2026-09-01]`, then 1900 again for the month after. The trial did not merely fail
+     * to be free; it pulled the first payment forward by its own length, so taking the offer cost MORE
+     * than declining it, against a screen shipping "Includes a :days-day free trial." in seven languages.
+     *
+     * Read off the PERIOD, never off the presence of a trial date. `trial_ends_at` outlives the trial
+     * deliberately — `StartSubscriptionOnMandate` preserves it as the evidence that this owner has already
+     * had their one — so a waiver keyed on the column would make every cycle of every returning customer
+     * free, forever.
+     */
+    private function periodWasCoveredByATrial(Subscription $subscription): bool
+    {
+        $trialEnd = $subscription->trial_ends_at;
+        $periodEnd = $subscription->current_period_end;
+
+        return $trialEnd !== null
+            && $periodEnd !== null
+            && $periodEnd->lessThanOrEqualTo($trialEnd);
+    }
+
+    /**
+     * The same lines with the recurring plan priced at zero.
+     *
+     * Zeroed rather than removed, and scoped to the one type the enum already defines as "a recurring plan
+     * charge for the cycle". Removing it would leave a free period with no lines at all — a numbered
+     * document that says nothing about what the days were free OF — and would silently drop the plan for a
+     * consumer whose `CycleItemPricer` expresses it as several lines instead of one.
+     *
+     * Metered consumption and add-ons are not the plan and stay billable: a free trial is an offer about
+     * the recurring charge, and usage an application priced for those days is something that happened.
+     *
+     * @param  list<OrderItemDraft>  $drafts
+     * @return list<OrderItemDraft>
+     */
+    private function planWaived(array $drafts): array
+    {
+        $waived = [];
+
+        // A loop with an `if` rather than the obvious `array_map` with a ternary, and the reason is the
+        // coverage floor rather than taste: the else-branch of a ternary spread over several lines is
+        // never marked as executed, so a file holding one cannot reach 100% however many cases are
+        // written for it.
+        foreach ($drafts as $draft) {
+            if ($draft->type !== OrderItemType::Subscription) {
+                $waived[] = $draft;
+
+                continue;
+            }
+
+            $waived[] = new OrderItemDraft(
+                $draft->description,
+                0,
+                $draft->quantity,
+                $draft->currency,
+                $draft->type,
+                $draft->metadata,
+            );
+        }
+
+        return $waived;
     }
 
     /**

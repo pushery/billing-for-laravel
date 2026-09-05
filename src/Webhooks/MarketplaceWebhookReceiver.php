@@ -7,12 +7,16 @@ namespace Pushery\Billing\Webhooks;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use Pushery\Billing\Contracts\IdentifiesCustomer;
 use Pushery\Billing\Contracts\MarketplaceWebhookEventMapper;
 use Pushery\Billing\Contracts\MarketplaceWebhookVerifier;
 use Pushery\Billing\Contracts\MerchantScopedCustomerDirectory;
+use Pushery\Billing\Events\WebhookDeliveryRefused;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\WebhookEventLedger;
+use Throwable;
 
 /**
  * The HTTP entry point for provider events about a MERCHANT.
@@ -44,6 +48,8 @@ final readonly class MarketplaceWebhookReceiver
         }
 
         if (! $this->verifier->verify($request)) {
+            $this->announceRefusal($request);
+
             return new Response('', Response::HTTP_BAD_REQUEST);
         }
 
@@ -100,5 +106,49 @@ final readonly class MarketplaceWebhookReceiver
         $id = $payload['id'] ?? null;
 
         return is_string($id) && $id !== '' ? $id : 'sha256:'.hash('sha256', $request->getContent());
+    }
+
+    /**
+     * Say, once, that a delivery was refused — and never let saying it change the answer.
+     *
+     * Guarded, and the guard is the whole point on this path: a listener that throws would turn a
+     * deliberate 400 into a 500, and a 5xx tells the sender "try again" about a request that can never
+     * become valid. So a broken listener costs a log line and nothing else.
+     *
+     * Logged AS WELL as dispatched. The event is what a consumer wires an audit trail to; the log line is
+     * what an install that wired nothing still gets, and shipping a security signal that is invisible
+     * without setup would be the same complaint one level down. The cost is named rather than hidden: a
+     * scanner hammering the endpoint writes a line per attempt, which is why it is a warning and not an
+     * error.
+     *
+     * NOT recorded in the delivery ledger, deliberately. That table holds provider payloads for replay and
+     * carries personal data; filling it from unauthenticated traffic would let anybody who can reach the
+     * URL write rows into it.
+     *
+     * And no network address, here or on the event. This package hands an address to exactly one seam and
+     * reads one nowhere else -- a promise `PlaceEvidencePrivacyTest` enforces over the whole shipped tree,
+     * and one this announcement broke on its first attempt. A consumer who wants the address reads it from
+     * the request in their own listener, where the decision to keep it is theirs to make.
+     */
+    private function announceRefusal(Request $request): void
+    {
+        try {
+            Event::dispatch(new WebhookDeliveryRefused(
+                $this->manager->driver()->name(),
+                'marketplace',
+                $request->path(),
+                $request->userAgent(),
+            ));
+        } catch (Throwable $listener) {
+            Log::warning('billing: a listener threw while a refused webhook delivery was announced', [
+                'reason' => $listener->getMessage(),
+            ]);
+        }
+
+        Log::warning('billing: a webhook delivery was refused by its verifier', [
+            'provider' => $this->manager->driver()->name(),
+            'surface' => 'marketplace',
+            'path' => $request->path(),
+        ]);
     }
 }
