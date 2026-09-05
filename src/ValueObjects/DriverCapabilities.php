@@ -8,6 +8,23 @@ namespace Pushery\Billing\ValueObjects;
  * What a payment driver can do natively, so the package/UI can query capabilities and fill the gaps
  * with its own local engine. This is how a local-engine driver slots in without reducing Stripe: Stripe
  * reports rich native capabilities; the others report fewer, and the package supplies the rest.
+ *
+ * ## Every flag here describes REMOTE payment, and that boundary is stated rather than left to be found
+ *
+ * A buyer who is not present: a hosted checkout, a stored mandate, a webhook. Card-present payment is
+ * outside it -- there is no flag that says a driver can take money at a counter, and there is deliberately
+ * no flag that says it cannot either, because the question is not one this object can carry.
+ *
+ * In-person payment is a payment PATH, not a capability: terminal pairing, reader state, offline
+ * behavior, a receipt, and a place of supply that is not the one distance selling uses -- which reaches
+ * `src/Tax/`, where a wrong answer is a filed return rather than a missing feature. Hanging a tenth
+ * boolean here would let a consumer ask the question and get an answer this package could not keep.
+ *
+ * The sentence exists because the absence reads exactly like an oversight. Measured 2026-09-04: both
+ * providers' SDKs carry terminal APIs, and a case-insensitive search for "terminal" over this tree returns
+ * 22 hits that look like support and are, every one of them, something else -- a state machine or the
+ * shell. Somebody will make that measurement again; this paragraph is what stops it costing them the
+ * afternoon it cost once.
  */
 final readonly class DriverCapabilities
 {
