@@ -7,6 +7,7 @@ namespace Pushery\Billing\Preflight;
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\GoLiveChecklist;
 use Pushery\Billing\Contracts\GoLiveCheckpoint;
+use Pushery\Billing\Contracts\ReadsStoredState;
 use Pushery\Billing\Enums\CheckpointStatus;
 use Pushery\Billing\Enums\GoLiveStep;
 use Pushery\Billing\ValueObjects\PreflightLine;
@@ -32,9 +33,23 @@ final readonly class MarketplacePreflight
         private Repository $config,
     ) {}
 
-    public function run(): PreflightReport
+    /**
+     * @param  bool  $includeStoredState  Whether checkpoints that read the database take part. False at boot,
+     *                                    where {@see GoLiveCheckpoint} promises the checklist touches no
+     *                                    database; true from the console, where the whole list is affordable.
+     */
+    public function run(bool $includeStoredState = true): PreflightReport
     {
         $checkpoints = $this->checklist->all();
+
+        if (! $includeStoredState) {
+            // Excluded rather than evaluated-and-ignored: the point is not to spend the query. See
+            // ReadsStoredState for what this costs and why the alternative costs more.
+            $checkpoints = array_values(array_filter(
+                $checkpoints,
+                static fn (GoLiveCheckpoint $checkpoint): bool => ! $checkpoint instanceof ReadsStoredState,
+            ));
+        }
         $waived = $this->waivedKeys();
         $integrity = $this->waiverIntegrityLine($checkpoints, $waived);
 

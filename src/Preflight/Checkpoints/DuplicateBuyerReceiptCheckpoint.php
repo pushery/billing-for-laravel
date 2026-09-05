@@ -6,6 +6,7 @@ namespace Pushery\Billing\Preflight\Checkpoints;
 
 use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\GoLiveCheckpoint;
+use Pushery\Billing\Contracts\ReadsStoredState;
 use Pushery\Billing\Enums\GoLiveStep;
 use Pushery\Billing\ValueObjects\CheckpointOutcome;
 
@@ -66,7 +67,7 @@ use Pushery\Billing\ValueObjects\CheckpointOutcome;
  * A row with no provider recorded groups with the other rows that have none, which is right: they were all
  * written by an installation that recorded no provider, so they genuinely share one namespace.
  */
-final readonly class DuplicateBuyerReceiptCheckpoint implements GoLiveCheckpoint
+final readonly class DuplicateBuyerReceiptCheckpoint implements GoLiveCheckpoint, ReadsStoredState
 {
     /** How many offending references to name before the message stops listing them. */
     private const int SAMPLE = 5;

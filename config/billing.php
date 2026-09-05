@@ -101,6 +101,11 @@ return [
         // secrets are live, and without that an operator has to choose between rotating and losing
         // webhooks — which is not a choice, it is a reason not to rotate.
         //
+        // Write the list COMMA-SEPARATED, which is what this line can carry and what Mollie's own package
+        // documents: BILLING_MOLLIE_WEBHOOK_SECRET=old_secret,new_secret. Spacing and empty entries are
+        // ignored, so a trailing comma costs nothing. Both are accepted for as long as both are set;
+        // delete the old one when the dashboard no longer signs with it.
+        //
         // Left null, the driver takes the legacy path: the ping is unsigned and the authentication is the
         // fetch the mapper does, since an attacker cannot invent a status Mollie will confirm. That
         // fallback is not optional — every install still on legacy webhooks would otherwise start refusing

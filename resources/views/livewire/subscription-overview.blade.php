@@ -98,10 +98,33 @@
                         <p role="alert" class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                     @enderror
 
-                    <button type="button" wire:click="cancel" wire:loading.attr="disabled"
-                        class="self-start rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900">
-                        {{ __('billing::account.subscription.cancel') }}
-                    </button>
+                    @if ($confirmingCancel)
+                        {{-- The armed state. Rendered inline rather than as a modal so it needs no JavaScript
+                             and no dialog component: an install that re-skins this hub keeps its own chrome,
+                             and the step still works with scripting off. --}}
+                        <div role="group" aria-labelledby="billing-cancel-confirm" class="self-start rounded-lg border border-gray-300 p-4 dark:border-gray-700">
+                            <p id="billing-cancel-confirm" class="text-sm text-gray-900 dark:text-gray-100">
+                                {{ __('billing::account.subscription.cancel_confirm_question') }}
+                            </p>
+
+                            <div class="mt-3 flex gap-2">
+                                <button type="button" wire:click="cancel" wire:loading.attr="disabled"
+                                    class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                                    {{ __('billing::account.subscription.cancel_confirm') }}
+                                </button>
+
+                                <button type="button" wire:click="abortCancel" wire:loading.attr="disabled"
+                                    class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800">
+                                    {{ __('billing::account.subscription.cancel_abort') }}
+                                </button>
+                            </div>
+                        </div>
+                    @else
+                        <button type="button" wire:click="cancel" wire:loading.attr="disabled"
+                            class="self-start rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                            {{ __('billing::account.subscription.cancel') }}
+                        </button>
+                    @endif
                 </div>
             @elseif ($state === \Pushery\Billing\Enums\SubscriptionState::Grace)
                 <button type="button" wire:click="resume" wire:loading.attr="disabled"

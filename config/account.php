@@ -31,6 +31,25 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Confirm before canceling
+    |--------------------------------------------------------------------------
+    |
+    | Off by default, and that default is a decision rather than an oversight.
+    | Canceling here is reversible -- resume() exists -- and for the person doing
+    | the canceling, less friction is the better behavior; a subscription that is
+    | hard to leave is a dark pattern, not a safeguard.
+    |
+    | Turn it on when your own acceptance asks for a confirmation step. The first
+    | click then arms the cancellation and a second one carries it out, with a way
+    | back in between. Nothing else about the flow changes, and an install that
+    | leaves this alone sees exactly what it saw before.
+    |
+    */
+
+    'cancel_requires_confirmation' => (bool) env('BILLING_CANCEL_CONFIRM', false),
+
+    /*
+    |--------------------------------------------------------------------------
     | Layout
     |--------------------------------------------------------------------------
     |

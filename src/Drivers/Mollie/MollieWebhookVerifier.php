@@ -97,8 +97,18 @@ final readonly class MollieWebhookVerifier implements WebhookVerifier
     {
         $configured = Config::get('billing.mollie.webhook_secret');
 
+        // A COMMA-SEPARATED string is the only rotation an env file can express, and env is the channel
+        // this config actually reads (`config/billing.php` calls `env()` for one string). So the array
+        // branch below was reachable only by hand-editing the published config, and the rotation this
+        // docblock promises was, through the normal channel, not reachable at all.
+        //
+        // Worse than absent: the obvious attempt broke everything. Mollie's own package documents a
+        // comma-separated list, so an operator who knows that writes `old,new` here -- and before this
+        // split that became ONE secret literally named "old,new", matching no signature Mollie ever
+        // produces. Every webhook was then refused, starting at the moment of rotation, under time
+        // pressure. Splitting hands both halves to the same normalization the array branch already had.
         if (is_string($configured)) {
-            return trim($configured) === '' ? [] : [trim($configured)];
+            $configured = explode(',', $configured);
         }
 
         if (! is_array($configured)) {

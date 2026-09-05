@@ -37,7 +37,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     /** @var list<array{owner: Model, action: string, survey?: ?CancellationSurvey, merchant: ?MerchantScope}> */
     private array $lifecycle = [];
 
-    /** @var list<array{owner: Model, addon: string}> */
+    /** @var list<array{owner: Model, addon: string, declaration: ?string}> */
     private array $purchases = [];
 
     /** @var list<array{merchant: Model, refresh: string, return: string}> */
@@ -105,6 +105,50 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         PHPUnit::assertTrue($found, "Expected a checkout for tier [{$tierKey}] to have started, but it did not.");
     }
 
+    /**
+     * The same checkout, with the coupon the caller actually passed.
+     *
+     * A SEPARATE method rather than an optional third parameter on assertSubscribeStarted(), and that is the
+     * whole design: an optional `?string $coupon = null` cannot tell "assert no coupon was passed" from "do
+     * not check the coupon", because both spell it `null`. The first is exactly what a consumer validating a
+     * code before checkout needs to prove -- that an invalid code did NOT reach the seam.
+     *
+     * It matters because the package deliberately ignores a bad code downstream rather than failing the
+     * checkout. That is right here and wrong on a consumer's own order form, where showing a discount the
+     * buyer never receives is a legal problem rather than a cosmetic one. The value was already recorded;
+     * only the way to read it was missing.
+     */
+    public function assertSubscribeStartedWithCoupon(Model $owner, string $tierKey, ?string $couponCode): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->subscribes as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['tier'] !== $tierKey) {
+                continue;
+            }
+
+            if ($call['coupon'] === $couponCode) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['coupon'] ?? 'none';
+        }
+
+        // The recorded values go in the message. A bare "it did not happen" on a value assertion sends the
+        // reader back to add a dump, and the fake is holding the answer already.
+        PHPUnit::assertTrue($found, sprintf(
+            'Expected a checkout for tier [%s] with coupon [%s], but %s.',
+            $tierKey,
+            $couponCode ?? 'none',
+            $seen === []
+                ? 'no checkout for that owner and tier was started at all'
+                : 'the coupons seen were ['.implode(', ', $seen).']',
+        ));
+    }
+
     public function assertNothingSubscribed(): void
     {
         PHPUnit::assertSame([], $this->subscribes, 'Expected no checkout to have started, but at least one did.');
@@ -149,6 +193,43 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         }
 
         PHPUnit::assertTrue($found, "Expected add-on [{$addonKey}] to have been purchased, but it was not.");
+    }
+
+    /**
+     * The same purchase, with the declaration reference the caller actually passed.
+     *
+     * The twin of assertSubscribeStartedWithCoupon(), for the same reason and with the same null semantics:
+     * `null` asserts that NO reference was passed. purchase() already explains why it records the value --
+     * "a fake that swallowed it would make the round trip untestable from outside" -- and this is the half
+     * that makes good on it.
+     */
+    public function assertPurchasedWithDeclaration(Model $owner, string $addonKey, ?string $declarationReference): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->purchases as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['addon'] !== $addonKey) {
+                continue;
+            }
+
+            if ($call['declaration'] === $declarationReference) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['declaration'] ?? 'none';
+        }
+
+        PHPUnit::assertTrue($found, sprintf(
+            'Expected add-on [%s] to have been purchased with declaration [%s], but %s.',
+            $addonKey,
+            $declarationReference ?? 'none',
+            $seen === []
+                ? 'no purchase of that add-on by that owner was recorded at all'
+                : 'the declarations seen were ['.implode(', ', $seen).']',
+        ));
     }
 
     public function assertNothingCharged(): void
