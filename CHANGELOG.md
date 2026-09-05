@@ -4,6 +4,26 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.1] - 2026-09-05
+
+### Changed
+
+- **`DriverCapabilities` now states that every flag on it describes remote payment.** A buyer who is not present: a hosted checkout, a stored mandate, a webhook. Card-present payment is outside it, and the docblock says so in both directions — there is no flag claiming a driver can take money at a counter, and deliberately none claiming it cannot, because in-person payment is a payment path rather than a boolean and a flag would let you ask a question this package could not answer honestly.
+
+  No behavior changes. The sentence exists because the absence read like an oversight: both providers' SDKs carry terminal APIs, so somebody comparing them against this package reaches for a flag, finds none, and cannot tell a deliberate boundary from a gap.
+
+### Fixed
+
+- **The README and three documentation pages described one driver as the package.** They were written when one shipped. The README said "the Stripe driver ships today. The contracts are the seam a second provider slots into" — while `src/Drivers/Mollie/` is twelve files that ship with every release, its provider registers unconditionally, and the published configuration reference documents four of its keys in detail. It was the only public page still describing a one-driver package, contradicting our own reference.
+
+  It now says what each driver IS, because that is what a reader chooses on: one runs the subscription cycle on its own side behind a hosted checkout, the other establishes a mandate through a first payment and this package runs the cycle. Your application code does not change between them; `billing.default` does.
+
+  The account hub page had `/plan` as "Subscribe (hosted checkout)" and `/checkout/return` as "reconciles the subscription after a hosted checkout". Under a driver this package bills itself the first is a mandate redirect and the second deliberately reconciles nothing. Its coupon field was documented nowhere on the page that owns it, and the optional two-click cancel was not written down at all.
+
+  The webhooks page said an add-on's credit "is mirrored onto the Stripe customer balance" — that mirroring is one driver's, and the shipped default keeps the credit in this package's own ledger. It also said the package refuses to boot without a webhook signing secret, which is true for a provider that signs every delivery and deliberately false for one that still offers unsigned ones, where refusing would lock out every install that has not migrated. The page said the opposite of the configuration reference, which documents that switch in detail.
+
+  And the invoicing page said "every invoice Stripe finalizes is persisted". Where this package runs the cycle it issues the document itself, from the order it just priced. The stored row is the same shape either way, so an install that changes driver keeps one archive rather than two.
+
 ## [0.19.0] - 2026-09-05
 
 ### Added
@@ -6453,7 +6473,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.19.1...HEAD
+[0.19.1]: https://github.com/pushery/billing-for-laravel/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/pushery/billing-for-laravel/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/pushery/billing-for-laravel/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/pushery/billing-for-laravel/compare/v0.16.0...v0.17.0

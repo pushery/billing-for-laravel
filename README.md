@@ -19,9 +19,9 @@
 ![Databases](https://img.shields.io/badge/tested%20on-PostgreSQL%20%2B%20MySQL-336791.svg)
 ![Mutation](https://img.shields.io/badge/mutation-%E2%89%A585%25-blueviolet.svg)
 
-Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Stripe-first, on provider-neutral contracts.
+Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Two drivers, one set of contracts.
 
-Everything crosses a small set of contracts, so your app talks to _billing_ — not to Stripe. The Stripe driver ships today. The contracts are the seam a second provider slots into.
+Everything crosses a small set of contracts, so your app talks to _billing_ — not to a provider. **Stripe** runs the subscription cycle on its own side, behind a hosted checkout. **Mollie** establishes a mandate through a first payment and this package runs the cycle itself, which is the path any provider without a native subscription API takes. Your application code does not change between them; `billing.default` does.
 
 ## Highlights
 
@@ -50,7 +50,9 @@ php artisan billing:install
 php artisan migrate
 ```
 
-The service provider is registered through package discovery. The Stripe driver builds on [Cashier](https://laravel.com/docs/billing), so set your Stripe keys (`STRIPE_KEY`, `STRIPE_SECRET`, `STRIPE_WEBHOOK_SECRET`) as usual.
+The service provider is registered through package discovery. The Stripe driver is the default and builds on [Cashier](https://laravel.com/docs/billing), so set your Stripe keys (`STRIPE_KEY`, `STRIPE_SECRET`, `STRIPE_WEBHOOK_SECRET`) as usual.
+
+For Mollie, set `BILLING_DRIVER=mollie` and `BILLING_MOLLIE_API_KEY`, and install its SDK — `composer require mollie/mollie-api-php`. It is a suggestion rather than a requirement on purpose: an install that never selects that driver would otherwise carry an HTTP client it never calls.
 
 > **Billable model isn't `App\Models\User`?** Set `BILLING_CUSTOMER_MODEL` **before** you run `billing:install`, or it adds the billing columns to `users`. See the [installation guide](https://docs.pushery.com/billing-for-laravel/single-seller/installation) for the full detail.
 
