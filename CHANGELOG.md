@@ -4,6 +4,26 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.20.0] - 2026-09-05
+
+### Added
+
+- **`ArrearsClock` — the suspension ladder now reads "since when is this owner behind" through a seam.** The ladder is the richest part of dunning (several rungs instead of one deadline, a different rung per surface) and all of it was already free of the database — except the one class that combines the rungs with the policy, which read `billing_subscriptions` directly. An application that keeps its own view of who owes what could therefore reach every piece of the ladder and not the ladder itself. It now binds `ArrearsClock` and gets the ladder unchanged; `ArrayArrearsClock` is an in-memory implementation for exercising the rungs without a billing database. With nothing bound the package's own reading applies, so an install on the shipped schema is unaffected.
+
+- **`WebhookDeliveryRefused` — a refused webhook delivery is now visible.** Both receivers answered a failed signature check with a bare `400` and wrote nothing anywhere: no event, no log line, no delivery row, so the refusal existed only as a status handed back to whoever sent it. A consumer searching their own logs after an incident found nothing, because nothing had ever been written. The event carries the request's facts — provider, surface, path, user agent — and never the body, which by definition did not verify, nor which part of the signature failed, which would be a probing oracle, nor the caller's network address, because this package hands an address to exactly one seam and reads one nowhere else. If you want the address in your own audit trail, take it from the request inside your listener. The dispatch is guarded so a throwing listener cannot turn the deliberate `400` into a `5xx` that tells the sender to retry, and the package writes a warning to the log as well, so an install that wires no listener still sees the attempt.
+
+### Changed
+
+- **`LadderSuspension` takes its clock as a third constructor argument.** Resolved from the container, so code that resolves `SuspensionLadder` (or the class itself) needs no change; only a hand-rolled `new LadderSuspension(...)` does.
+
+- **The `stripe/stripe-php` ceiling is now named in the documentation.** The package caps the SDK below major 21, and Cashier no longer does — so on a current install this package is what holds it back, and nothing said so anywhere a consumer would look. The cap itself is unchanged: moving a payment SDK across a major without exercising it against the live API would be a claim nobody has checked.
+
+### Fixed
+
+- **A free trial's own days are no longer billed at the plan price.** Under a driver whose cycle this package runs itself, an order names the period it closes — so the cycle that ended a trial named the trial's own days and charged the full plan for them. Because the payment at checkout is a verification amount rather than the plan price, that pulled the first real charge *forward* by the length of the trial: taking the offer cost more than declining it, while the plan screen advertised the days as free. The recurring plan line for a period a trial covered is now priced at zero, so the invoice states which days were free instead of charging for them. Metered usage and add-ons are unaffected — a trial is an offer about the recurring charge, not about consumption.
+
+  One consequence if you listen for payments: the cycle still closes, so it still dispatches `PaymentSucceeded` — with an amount of zero and no provider reference. A listener that mails a receipt on that event will mail a zero receipt at every trial end unless it reads the amount. The event is not suppressed on purpose: a cycle a customer's credit balance covers in full behaves the same way, so a listener that handles one already handles the other.
+
 ## [0.19.1] - 2026-09-05
 
 ### Changed
@@ -6473,7 +6493,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.19.1...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/pushery/billing-for-laravel/compare/v0.19.1...v0.20.0
 [0.19.1]: https://github.com/pushery/billing-for-laravel/compare/v0.19.0...v0.19.1
 [0.19.0]: https://github.com/pushery/billing-for-laravel/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/pushery/billing-for-laravel/compare/v0.17.0...v0.18.0

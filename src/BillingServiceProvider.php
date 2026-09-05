@@ -74,6 +74,7 @@ use Pushery\Billing\ContentOwnership\NoUpdatePolicyPreferences;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\AddonContentMap;
 use Pushery\Billing\Contracts\AnnualEarningsCounter;
+use Pushery\Billing\Contracts\ArrearsClock;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\BundleContents;
 use Pushery\Billing\Contracts\CanReceiveMoney;
@@ -157,6 +158,7 @@ use Pushery\Billing\Drivers\NullSubscriptionActions;
 use Pushery\Billing\Drivers\NullUpcomingInvoice;
 use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
 use Pushery\Billing\Dunning\LadderSuspension;
+use Pushery\Billing\Dunning\LocalArrearsClock;
 use Pushery\Billing\Dunning\LocalDunningGuard;
 use Pushery\Billing\Dunning\NullLateFees;
 use Pushery\Billing\Eligibility\AlwaysEligible;
@@ -696,7 +698,10 @@ final class BillingServiceProvider extends ServiceProvider
         // that does not bill by seat. The Stripe driver replaces this with a real seam.
         $this->app->bind(SeatBilling::class, NullSeatBilling::class);
 
-        // The suspension ladder locks delinquent owners out of configured surfaces (423).
+        // The suspension ladder locks delinquent owners out of configured surfaces (423), reading since when
+        // the owner is behind through a seam rather than off this package's own table — so a consumer whose
+        // arrears live elsewhere binds their own clock and gets the ladder itself unchanged.
+        $this->app->bind(ArrearsClock::class, LocalArrearsClock::class);
         $this->app->bind(SuspensionLadder::class, LadderSuspension::class);
 
         // The read-only dunning gate: a consumer resolves it to gate a feature on an owner's dunning state
