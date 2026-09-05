@@ -43,4 +43,21 @@ enum SellerOfRecordPosture: string
     {
         return $this === self::SellerOfRecord;
     }
+
+    /**
+     * Whether a merchant-defined tier's price is minted on the PLATFORM account rather than the merchant's.
+     *
+     * It follows from who the buyer transacts with, which is what this enum already names, so it belongs here
+     * rather than in a second setting somebody could set inconsistently. Under `PlatformDeemedSupplier` the
+     * platform is the seller and charges on its own account, so a price living on the merchant's account is
+     * one the checkout cannot use. Under the other two the merchant is the seller in their own name, and the
+     * price belongs with them.
+     *
+     * The consequence for the price KEY is not cosmetic: on the platform account every merchant's tiers share
+     * one namespace, so the key has to carry the merchant. On separate accounts it does not.
+     */
+    public function mintsPriceOnPlatformAccount(): bool
+    {
+        return $this === self::PlatformDeemedSupplier;
+    }
 }

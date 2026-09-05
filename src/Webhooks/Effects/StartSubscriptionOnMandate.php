@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace Pushery\Billing\Webhooks\Effects;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Pushery\Billing\Discounts\CouponRedeemer;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Events\MandateEstablished;
+use Pushery\Billing\Exceptions\CouponUnavailable;
+use Pushery\Billing\Models\Coupon;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Models\SubscriptionIntent;
 use Pushery\Billing\Support\TierInterval;
@@ -40,7 +45,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  */
 final readonly class StartSubscriptionOnMandate
 {
-    public function __construct(private TierInterval $intervals) {}
+    public function __construct(private TierInterval $intervals, private CouponRedeemer $coupons) {}
 
     public function __invoke(MandateEstablished $event): void
     {
@@ -140,7 +145,7 @@ final readonly class StartSubscriptionOnMandate
         //
         // Reusing the row rather than inserting a second one is also the right answer on its own terms: the
         // id survives, and so does everything joined to it.
-        Subscription::query()->updateOrCreate(
+        $subscription = Subscription::query()->updateOrCreate(
             [
                 'owner_type' => $intent->owner_type,
                 'owner_id' => $intent->owner_id,
@@ -176,5 +181,85 @@ final readonly class StartSubscriptionOnMandate
                 'scheduled_swap_at' => null,
             ],
         );
+
+        $this->redeemCarriedCoupon($intent, $subscription);
+    }
+
+    /**
+     * Spend the coupon the customer typed before the redirect, now that there is a subscription to spend it
+     * on.
+     *
+     * ## This is the moment, and the two obvious alternatives are both worse
+     *
+     * Redeeming at the redirect would take the owner's single allowed redemption -- and one of the coupon's
+     * global slots -- for a checkout they may never finish, with no way to give either back. Redeeming
+     * later, on the first cycle, would mean the discount depends on a sweep having run, and a coupon that
+     * silently applies a month after the customer used it is one they will have written in about already.
+     *
+     * ## Re-checked here rather than trusted from the intent
+     *
+     * Minutes pass between the redirect and this webhook -- with a bank transfer, days. The coupon may have
+     * been deactivated, expired, or spent down to its cap in between, and the redeemer is the only place
+     * those can be answered without a race. So the code is carried and the ENTITLEMENT is re-derived.
+     *
+     * ## And it never fails the delivery
+     *
+     * The customer has paid by the time this runs. A throw would roll the whole transaction back -- claim
+     * included -- and the job would return here on every retry until the queue gave up, leaving somebody
+     * who paid with no subscription. A missed discount is a support conversation; that is not.
+     */
+    private function redeemCarriedCoupon(SubscriptionIntent $intent, Subscription $subscription): void
+    {
+        $code = $intent->coupon_code;
+
+        if ($code === null || $code === '') {
+            return;
+        }
+
+        $coupon = Coupon::query()->where('code', $code)->first();
+        $owner = $this->ownerOf($intent);
+
+        if (! $coupon instanceof Coupon || ! $owner instanceof Model) {
+            return;
+        }
+
+        try {
+            $this->coupons->redeem($coupon, $owner, $subscription->id);
+        } catch (CouponUnavailable $unavailable) {
+            Log::info('billing: a carried coupon could not be redeemed when its mandate settled', [
+                'intent' => $intent->getKey(),
+                'coupon' => $code,
+                'subscription' => $subscription->getKey(),
+                'reason' => $unavailable->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * The owner this intent was raised for, resolved back to the consumer's own model.
+     *
+     * Through the morph map, which is the same shape `LocalBillingEngine::ownerFor()` uses -- and it has to
+     * be, because the redemption written here is looked up by `CycleCouponApplier` with the owner THAT
+     * loads. A redemption keyed on anything else is one the cycle never finds, and the customer is billed
+     * in full while a redemption row sits in the table saying otherwise.
+     *
+     * Null when the owner cannot be resolved -- deleted between the redirect and the settlement, or a morph
+     * alias the application has since dropped. An ordinary race rather than a defect, and the subscription
+     * is already written by the time it is asked.
+     */
+    private function ownerOf(SubscriptionIntent $intent): ?Model
+    {
+        // No `is_string()` guard, unlike the engine's twin: the intent's column is typed, so the coalesce
+        // cannot produce anything else here, and a check the type system already makes is a branch no run
+        // can enter -- which under a 100% floor reads as a missing test rather than as an impossible case.
+        $class = Relation::getMorphedModel($intent->owner_type) ?? $intent->owner_type;
+
+        if (! is_subclass_of($class, Model::class)) {
+            return null;
+        }
+
+        $owner = $class::query()->find($intent->owner_id);
+
+        return $owner instanceof Model ? $owner : null;
     }
 }

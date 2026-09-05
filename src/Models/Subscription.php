@@ -22,6 +22,7 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * subscription is also "active" — the presenter resolves the overlap by precedence). Column-
  * authoritative: dates drive trial/grace, never a live provider call.
  *
+ * @property int $id
  * @property string $owner_type
  * @property int $owner_id
  * @property string $type

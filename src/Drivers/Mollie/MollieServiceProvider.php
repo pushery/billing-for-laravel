@@ -24,6 +24,7 @@ use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Contracts\WebhookVerifier;
+use Pushery\Billing\Discounts\CouponRedeemer;
 use Pushery\Billing\Discounts\CycleCouponApplier;
 use Pushery\Billing\Drivers\Stripe\StripeCustomerDirectory;
 use Pushery\Billing\Dunning\ConfigDunningLadder;
@@ -141,6 +142,7 @@ final class MollieServiceProvider extends ServiceProvider
             $this->app->make(EstablishesMandateByRedirect::class),
             $this->app->make(Repository::class),
             $this->app->make(CheckoutUrls::class),
+            $this->app->make(CouponRedeemer::class),
         ));
 
         // The webhook that finishes what the redirect started. Registered here rather than with the shipped

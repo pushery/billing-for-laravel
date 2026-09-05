@@ -32,6 +32,24 @@ final class BillingManager
         $this->factories[$name] = $factory;
     }
 
+    /**
+     * Every driver name that has been registered, sorted.
+     *
+     * Read-only, and it exists so a guard can ask "what drivers does this install actually have" without
+     * a hand-written list. The recurring defect in this package is a seam that only one driver binds; a
+     * test that enumerated the drivers itself could not catch the next one, because the list would be
+     * updated by the same person who forgot the binding.
+     *
+     * @return list<string>
+     */
+    public function names(): array
+    {
+        $names = array_keys($this->factories);
+        sort($names);
+
+        return $names;
+    }
+
     /** Whether billing is enabled (the master switch). */
     public function enabled(): bool
     {

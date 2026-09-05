@@ -26,6 +26,7 @@ use Pushery\Billing\Casts\UtcDateTime;
  * @property int $owner_id
  * @property string $provider
  * @property string $tier_key
+ * @property ?string $coupon_code
  * @property string $payment_reference
  * @property ?Carbon $trial_ends_at
  * @property ?Carbon $claimed_at
@@ -38,7 +39,8 @@ final class SubscriptionIntent extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'owner_type', 'owner_id', 'provider', 'tier_key', 'payment_reference', 'trial_ends_at', 'claimed_at',
+        'owner_type', 'owner_id', 'provider', 'tier_key', 'coupon_code', 'payment_reference', 'trial_ends_at',
+        'claimed_at',
     ];
 
     /** @var array<string,string> */

@@ -11,11 +11,10 @@ use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Locked;
 use Pushery\Billing\Catalogs\ConfigAddonCatalog;
 use Pushery\Billing\Consumer\PurchaseDeclarations;
-use Pushery\Billing\Contracts\Checkout;
-use Pushery\Billing\Contracts\DiscountResolver;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProrationStrategy;
+use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Enums\SwapTiming;
@@ -57,7 +56,7 @@ final class ManageSubscription extends AccountScreen
 
     /**
      * A coupon code the visitor types to apply at checkout. Deliberately NOT locked — it is client input,
-     * resolved by the DiscountResolver (never trusted as an amount) and applied only by the driver.
+     * carried as a CODE (never trusted as an amount) and honored only by the driver that was configured.
      */
     public string $couponCode = '';
 
@@ -182,8 +181,12 @@ final class ManageSubscription extends AccountScreen
         $coupon = trim($this->couponCode);
         $coupon = $coupon !== '' ? $coupon : null;
 
-        $intent = Container::getInstance()->make(Checkout::class)->subscribe($this->owner(), $tierKey, $coupon);
-        $url = SafeExternalUrl::orNull($intent->payload['checkout_url'] ?? null);
+        // `StartsSubscriptions`, not `Checkout`. Only the hosted-checkout driver binds `Checkout`, so this
+        // line used to resolve an unbound interface under every other driver and the button ended in a
+        // `BindingResolutionException` -- the package's own screen could not reach the package's own
+        // subscribe flow. This contract is what every driver answers, each in its own shape.
+        $start = Container::getInstance()->make(StartsSubscriptions::class)->start($this->owner(), $tierKey, $coupon);
+        $url = SafeExternalUrl::orNull($start->checkoutUrl);
 
         if ($url !== null) {
             // The subscription itself is not real yet — it becomes real on the checkout return, where the
@@ -240,9 +243,14 @@ final class ManageSubscription extends AccountScreen
 
     /**
      * Whether the typed coupon code is recognized: null when the field is empty, 'applied' when the
-     * DiscountResolver resolves it (a real, unexpired coupon), 'invalid' otherwise — so the visitor sees
-     * the code take before they are sent to the hosted checkout. The actual discount is applied by the
-     * driver; a code with no provider mapping resolves here but simply discounts nothing at the provider.
+     * configured driver would actually apply it, 'invalid' otherwise — so the visitor sees the code take
+     * before they commit to anything.
+     *
+     * ASKED OF THE DRIVER, not of the catalog, and the difference is money. This used to ask the
+     * `DiscountResolver` — the config-defined coupon map — and its own docblock admitted the hole: "a code
+     * with no provider mapping resolves here but simply discounts nothing at the provider." A driver that
+     * bills locally widened the same hole, because it reads a different catalog entirely. Either way the
+     * visitor was told their code took and was then charged in full, with nothing anywhere saying so.
      */
     private function couponStatus(): ?string
     {
@@ -252,7 +260,7 @@ final class ManageSubscription extends AccountScreen
             return null;
         }
 
-        return Container::getInstance()->make(DiscountResolver::class)->resolve($code) !== null ? 'applied' : 'invalid';
+        return Container::getInstance()->make(StartsSubscriptions::class)->honorsCoupon($code) ? 'applied' : 'invalid';
     }
 
     /**

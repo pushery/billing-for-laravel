@@ -4,6 +4,42 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.19.0] - 2026-09-05
+
+### Added
+
+- **A marketplace whose platform is the seller can now mint its tier prices where the checkout can use them.** `StripePlatformPriceProvisioner` creates a merchant-defined tier's price on the platform account, alongside the existing one that creates it on the merchant's connected account. Which of the two applies is not a new setting: it follows from `billing.marketplace.seller_of_record.default_posture`, because who the buyer transacts with is the same question.
+
+  It closes a combination the package could not produce. Under `platform_deemed_supplier` the checkout session runs on the platform account, so a price minted on a connected account is one that session cannot use — and for an electronic supply that posture is not a preference, since Art. 9a of the VAT Implementing Regulation makes it irrebuttable for a platform that sets the terms. A content marketplace therefore needs per-merchant tiers with platform prices, and had no way to get them.
+
+  The price key carries the merchant, which the connected-account version does not need. On separate accounts a tier, an amount and an interval cannot collide; on one shared account they can, and the result would not be an error — it would be two merchants sharing a price, so one repricing its tier moves the other's.
+
+  Nothing changes for a single-seller install, which never reaches this seam. A marketplace that had bound the connected-account provisioner explicitly keeps it; one that relied on the default now gets the provisioner its own posture implies.
+
+### Changed (breaking — pre-1.0)
+
+- **`StartsSubscriptions::subscribe()` is now `start()`, it takes a coupon code, and the contract answers whether it would honor one.** `honorsCoupon()` is new. If you implemented this contract yourself, both changes reach you; it shipped one version ago and the package bound the only implementation there was.
+
+  The rename is not tidying. One test double has to stand in for every money seam at once, and `Checkout::subscribe()` returns a different shape — a class cannot carry both under one name, so a consumer whose screen went through this contract would have found the seam missing from `BillingFake` with no way to add it. `BillingFake` implements the contract now and `Billing::fake()` binds it, so a test that faked billing keeps faking all of it.
+
+- **The coupon status in the account hub answers a different question, and some codes will now read as invalid.** It asked the configured coupon catalog, which is not who applies the discount. A code with no provider mapping was therefore reported as applied and the customer was then charged in full, with nothing anywhere saying so.
+
+  It now asks the configured driver. Under a hosted checkout that means the code must carry a `stripe_coupon` mapping, because the provider is what applies it; under a driver this package bills itself it means a row in the coupon table, because the discount is a line the cycle writes. A code the driver cannot act on is called invalid. If an install sees a code it believed was live reported that way, that is the state it was already in, said out loud for the first time.
+
+### Fixed
+
+- **The Subscribe button now works under a driver this package bills itself.** The account hub resolved `Checkout`, which is bound meaningfully by the hosted-checkout driver alone, so the button reached the hosted implementation whatever driver was configured and the request ended in the provider SDK — "No API key provided", on an install that has no reason to hold such a key. The package's own screen could not reach the package's own subscribe flow, and the whole local subscribe path shipped with no caller.
+
+  The screen asks `StartsSubscriptions` now, and every driver answers it in its own shape: a redirect to a hosted checkout under one, an intent held across a mandate redirect under the other. Nothing about the hosted checkout itself changed, and a consumer calling `Checkout` directly keeps working.
+
+- **A coupon typed before a mandate redirect is no longer lost.** Under a driver this package bills itself there is no checkout to apply a discount at — it is a line the cycle writes, months of them for a repeating coupon — so the code has to survive a browser round trip and a webhook. It now rides on the intent and is redeemed when the mandate settles, with the entitlement re-derived at that moment rather than trusted, because days can pass on a bank transfer.
+
+  It is carried rather than spent, and that is the load-bearing half. A coupon allows one redemption per owner, so redeeming at the redirect would take it away permanently for a checkout the customer may abandon. A coupon that has run out, expired, or was already used in the meantime leaves the customer subscribed at full price rather than not subscribed — a coupon never fails a sale.
+
+- **The checkout return no longer asks a foreign provider about the customer.** Both driver providers register unconditionally, so a seam only one of them binds is inherited by the other — silently, and correctly typed. On an install this package bills itself, the return page asked the hosted provider about a customer whose reference the local driver wrote: one outbound call and one reported exception per completed sale, on the page a customer lands on straight after paying. An error stream that fires on every sale gets muted, and the real one goes with it.
+
+  The reconcile is now skipped where there is nothing to reconcile against, decided on the billing engine rather than on a driver name. The webhook is the durable path either way; the reconcile is a courtesy for a customer who beats it home.
+
 ## [0.18.0] - 2026-09-05
 
 ### Added
@@ -6417,7 +6453,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/pushery/billing-for-laravel/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/pushery/billing-for-laravel/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/pushery/billing-for-laravel/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/pushery/billing-for-laravel/compare/v0.15.0...v0.16.0

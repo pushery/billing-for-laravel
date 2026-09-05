@@ -28,6 +28,7 @@ use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\ReadsRoutedInvoiceCommission;
 use Pushery\Billing\Contracts\ReportsMovedShares;
 use Pushery\Billing\Contracts\SeatBilling;
+use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\SubscriptionSync;
 use Pushery\Billing\Contracts\SupplyRegimeResolver;
@@ -36,6 +37,7 @@ use Pushery\Billing\Contracts\UsageReporter;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Contracts\WebhookVerifier;
 use Pushery\Billing\Drivers\NullCustomerRegistry;
+use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\ChargebackReceived;
@@ -140,6 +142,10 @@ final class StripeServiceProvider extends ServiceProvider
         $this->app->bind(SubscriptionActions::class, StripeSubscriptionActions::class);
         $this->app->bind(OneTimeCharge::class, StripeOneTimeCharge::class);
         $this->app->bind(Checkout::class, StripeCheckout::class);
+        // The screen's own question -- start a subscription -- answered in this driver's shape. Bound
+        // beside `Checkout` rather than instead of it: the hosted checkout is still what performs the act,
+        // and a consumer calling it directly keeps working.
+        $this->app->bind(StartsSubscriptions::class, StripeSubscriptionStarter::class);
         $this->app->bind(SubscriptionSync::class, StripeSubscriptionSync::class);
 
         // The receiving side. Bound whenever the Stripe driver is active, not only with the marketplace
@@ -154,7 +160,32 @@ final class StripeServiceProvider extends ServiceProvider
         // privileges and a driver may honestly have one without the other — a provider that routes the
         // share as part of the payment makes no transfer and has nothing to audit.
         $this->app->bind(ReportsMovedShares::class, StripeMerchantTransfers::class);
-        $this->app->bind(MerchantPriceProvisioner::class, StripeMerchantPriceProvisioner::class);
+        // WHICH provisioner is not a setting of its own: it follows from who the buyer transacts with.
+        // Under `platform_deemed_supplier` the checkout session runs on the platform account, so a price
+        // minted on the merchant's connected account is one that session cannot use; under the other two
+        // postures the merchant is the seller and the price belongs with them. Two postures, two
+        // provisioners, ONE decision -- a second switch could be set to contradict the first, and the
+        // contradiction would surface as a checkout that cannot find its price.
+        //
+        // Read as a closure so the posture is resolved when the provisioner is, not when this provider
+        // booted: an application that sets the posture after boot still gets the one it configured.
+        $this->app->bind(MerchantPriceProvisioner::class, static function (Application $app): MerchantPriceProvisioner {
+            $configured = $app->make(Repository::class)->get(
+                'billing.marketplace.seller_of_record.default_posture',
+                SellerOfRecordPosture::PlatformDeemedSupplier->value,
+            );
+
+            $posture = is_string($configured)
+                ? SellerOfRecordPosture::tryFrom($configured)
+                : null;
+
+            // An unreadable posture falls to the deemed-supplier reading rather than to the merchant one.
+            // That is the fail-safe direction here: it mints on the platform, which the platform can always
+            // sell, instead of on an account that may not exist yet.
+            return $posture?->mintsPriceOnPlatformAccount() ?? true
+                ? $app->make(StripePlatformPriceProvisioner::class)
+                : $app->make(StripeMerchantPriceProvisioner::class);
+        });
         $this->app->bind(MarketplaceWebhookVerifier::class, StripeMarketplaceWebhookVerifier::class);
         $this->app->bind(MarketplaceWebhookEventMapper::class, StripeMarketplaceWebhookEventMapper::class);
         // Stripe books proration on its own side, but the account hub still previews the cost of a
