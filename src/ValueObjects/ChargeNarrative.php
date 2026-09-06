@@ -75,7 +75,7 @@ final readonly class ChargeNarrative
      *
      * The SERVICE name, never the period. The period is short and fixed-width, so trimming it saves almost
      * nothing; and it is the half that distinguishes this charge from the eleven others that look exactly
-     * like it. A truncated name is still recognisable — `Acme Professional Pl…` — while a truncated period
+     * like it. A truncated name is still recognizable — `Acme Professional Pl…` — while a truncated period
      * is a date that reads as complete and is wrong.
      *
      * A service name so long that the period alone would not fit is not trimmed cleverly: the whole line is

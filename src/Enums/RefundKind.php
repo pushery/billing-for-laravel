@@ -27,7 +27,7 @@ namespace Pushery\Billing\Enums;
  * a question, and there is no question about them.
  *
  * A caller that means something else says so. That is the direction the mistake should point: a withdrawal
- * mislabelled as goodwill understates a buyer's right in one row, where a goodwill refund mislabelled as a
+ * mislabeled as goodwill understates a buyer's right in one row, where a goodwill refund mislabeled as a
  * withdrawal would claim a right nobody exercised.
  */
 enum RefundKind: string
