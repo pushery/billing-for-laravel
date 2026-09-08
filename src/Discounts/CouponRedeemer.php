@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Exceptions\CouponUnavailable;
 use Pushery\Billing\Models\Coupon;
 use Pushery\Billing\Models\CouponRedemption;
+use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
  * Redeems a package-owned {@see Coupon} for an owner, enforcing every limit atomically. It is the guard
@@ -26,13 +27,21 @@ use Pushery\Billing\Models\CouponRedemption;
 final readonly class CouponRedeemer
 {
     /**
-     * @throws CouponUnavailable when the coupon is inactive, expired, exhausted, or already redeemed here
+     * @param  ?MerchantScope  $merchant  the scope of the SALE; null is the platform, the single-seller case
+     *
+     * @throws CouponUnavailable when the coupon is inactive, expired, exhausted, already redeemed here, or
+     *                           was issued by a different seller
      */
-    public function redeem(Coupon $coupon, Model $owner, ?int $subscriptionId = null): CouponRedemption
-    {
-        return $coupon->getConnection()->transaction(function () use ($coupon, $owner, $subscriptionId): CouponRedemption {
+    public function redeem(
+        Coupon $coupon,
+        Model $owner,
+        ?int $subscriptionId = null,
+        ?MerchantScope $merchant = null,
+    ): CouponRedemption {
+        return $coupon->getConnection()->transaction(function () use ($coupon, $owner, $subscriptionId, $merchant): CouponRedemption {
             $locked = Coupon::query()->whereKey($coupon->getKey())->lockForUpdate()->first() ?? $coupon;
 
+            $this->assertIssuedBy($locked, $merchant);
             $this->assertRedeemable($locked);
 
             try {
@@ -52,6 +61,22 @@ final readonly class CouponRedeemer
 
             return $redemption;
         });
+    }
+
+    /**
+     * The coupon's issuer has to be the seller of this sale.
+     *
+     * Checked inside the locked transaction with the rest, so it reads the row as it stands rather than the
+     * copy the caller handed in — a caller could otherwise present a stale model whose issuer had since
+     * changed.
+     */
+    private function assertIssuedBy(Coupon $coupon, ?MerchantScope $merchant): void
+    {
+        $sale = ($merchant ?? MerchantScope::platform())->uid();
+
+        if ($coupon->merchant_uid !== $sale) {
+            throw CouponUnavailable::notIssuedBy($coupon->code, $sale);
+        }
     }
 
     private function assertRedeemable(Coupon $coupon): void

@@ -46,7 +46,11 @@ final readonly class MollieClientFactory
             throw MollieNotConfigured::missingApiKey();
         }
 
-        $client = new MollieApiClient;
+        // Through Laravel's HTTP client, not around it. Without an adapter the SDK picks its own
+        // transport — Guzzle if the class is there, raw cURL otherwise — and both are invisible to the
+        // application: `Http::preventStrayRequests()` does not catch the call, global middleware does not
+        // see it, and the timeouts come from the SDK's defaults rather than from the host's configuration.
+        $client = new MollieApiClient(new LaravelHttpMollieAdapter);
 
         // The SDK validates the key's shape itself and throws its own exception. Caught and translated:
         // its message arrives with a stack trace from inside a third-party library and names none of our

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * When a settlement document was made available, when its recipient was told, and when they fetched it.
@@ -35,7 +36,7 @@ return new class extends Migration
         Schema::create('billing_document_deliveries', function (Blueprint $table): void {
             $table->id();
             $table->string('document_number')->index();
-            $table->nullableMorphs('merchant');
+            BillingSchema::nullableMorphs($table, 'merchant');
             $table->string('event');
             $table->string('channel')->nullable();
             $table->string('recipient')->nullable();

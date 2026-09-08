@@ -133,7 +133,7 @@ final readonly class StripeCheckout implements Checkout
         // checkout discount — Stripe owns the money math and the native max_redemptions/redeem_by. Stripe
         // forbids a session that carries BOTH an explicit discount and allow_promotion_codes, so an
         // applied coupon wins over the promotion-code field.
-        $stripeCoupon = $this->providerCouponFor($couponCode);
+        $stripeCoupon = $this->providerCouponFor($couponCode, $this->scopeOf($merchant));
 
         if ($stripeCoupon !== null) {
             $payload['discounts'] = [['coupon' => $stripeCoupon]];
@@ -201,6 +201,12 @@ final readonly class StripeCheckout implements Checkout
      *
      * A config-only installation is unchanged. No row means the config answers, exactly as before.
      */
+    /** The scope of a sale to this merchant — the platform when there is none. */
+    private function scopeOf(?Model $merchant): MerchantScope
+    {
+        return $merchant instanceof Model ? MerchantScope::forMerchant($merchant) : MerchantScope::platform();
+    }
+
     /**
      * The provider coupon this code maps to, or null when it maps to none.
      *
@@ -208,7 +214,7 @@ final readonly class StripeCheckout implements Checkout
      * "will this code do anything", which the subscription starter has to give a screen BEFORE the customer
      * commits. Read-only and side-effect free -- it resolves and looks up, it never redeems.
      */
-    public function providerCouponFor(?string $couponCode): ?string
+    public function providerCouponFor(?string $couponCode, ?MerchantScope $merchant = null): ?string
     {
         if ($couponCode === null || $couponCode === '') {
             return null;
@@ -225,7 +231,11 @@ final readonly class StripeCheckout implements Checkout
 
         // Matched on the code column, so the literal-code rule below holds here too — a code is never
         // split, and a row is reached only by the exact string the catalog just accepted.
-        $onTheRow = Coupon::query()->where('code', $couponCode)->value('provider_coupon_id');
+        //
+        // Scoped to the SELLER of this sale. Without the scope this finds any issuer's row of that name, so
+        // one seller's provider coupon would be applied to another seller's checkout — and on this lane the
+        // discount is money Stripe takes off the invoice.
+        $onTheRow = Coupon::query()->issuedBy($merchant)->where('code', $couponCode)->value('provider_coupon_id');
 
         if (is_string($onTheRow) && $onTheRow !== '') {
             return $onTheRow;

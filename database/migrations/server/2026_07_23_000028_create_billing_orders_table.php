@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The package's own order: the local billing unit a driver without a provider-side order model
@@ -19,7 +20,7 @@ return new class extends Migration
     {
         Schema::create('billing_orders', function (Blueprint $table): void {
             $table->id();
-            $table->morphs('owner');
+            BillingSchema::morphs($table, 'owner');
             $table->string('provider');
             // The subscription this cycle belongs to, when it is a recurring order. Nullable because a
             // one-off order (a standalone add-on purchase) has no subscription.

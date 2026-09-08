@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Events;
 
+use Pushery\Billing\Contracts\ArrearsRoster;
 use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\ValueObjects\ArrearsEntry;
 
 /**
  * A subscription in arrears is inside its cure window, and today's reminder is due.
@@ -17,9 +19,16 @@ use Pushery\Billing\Models\Subscription;
  *
  * ## What a listener MUST put in the message
  *
- * Which subscription, and which merchant it belongs to. A customer holding five subscriptions cannot act on
+ * Which relationship, and which merchant it is with. A customer holding five subscriptions cannot act on
  * "your payment is outstanding" — they do not know which one, and the message creates the support contact it
- * was meant to prevent. The subscription is carried whole so a listener can name the merchant from it.
+ * was meant to prevent. `$entry` carries the owner, the merchant and the date the arrears began.
+ *
+ * ## `$subscription` is nullable, and when it is null
+ *
+ * When the application has bound its own {@see ArrearsRoster}, because then
+ * there IS no row in this package's table — that is the reason the roster seam exists. On the shipped
+ * roster it is always present, so a listener written before the seam keeps working untouched; one written
+ * against a custom roster reads `$entry` instead.
  *
  * And the message is not a warning that access is at risk: access is ALREADY withdrawn for this merchant.
  * Arrears withdraw the relationship's surfaces immediately, and the window that follows is a chance to cure,
@@ -32,7 +41,8 @@ use Pushery\Billing\Models\Subscription;
 final readonly class PaymentReminderDue implements BillingDomainEvent
 {
     public function __construct(
-        public Subscription $subscription,
+        public ArrearsEntry $entry,
         public int $daysLeft,
+        public ?Subscription $subscription = null,
     ) {}
 }

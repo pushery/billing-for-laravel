@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * A payment that was routed: what the buyer paid, what the platform kept, what the merchant received.
@@ -31,7 +32,7 @@ return new class extends Migration
     {
         Schema::create('billing_merchant_charges', function (Blueprint $table): void {
             $table->id();
-            $table->morphs('merchant');
+            BillingSchema::morphs($table, 'merchant');
             $table->string('provider');
 
             // The provider's own identity for the payment and for the transfer that carried the merchant's

@@ -12,8 +12,10 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\RetentionExecutor;
 use Pushery\Billing\Enums\WebhookEventState;
+use Pushery\Billing\Exceptions\RetentionHoldUnavailable;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Support\OwnerScopedTables;
+use Pushery\Billing\Support\RetentionHoldGate;
 use Pushery\Billing\Support\RetentionMatrix;
 use Pushery\Billing\Support\SubjectScopedRecords;
 
@@ -48,8 +50,15 @@ final class PruneBillingCommand extends Command
 
     protected $description = 'Age out stored webhook payloads and financial records past their retention';
 
-    public function handle(Repository $config, SubjectScopedRecords $records, RetentionMatrix $matrix): int
-    {
+    /** Set when the host's hold seam could not answer; that path pruned nothing and the run reports it. */
+    private bool $holdUnanswered = false;
+
+    public function handle(
+        Repository $config,
+        SubjectScopedRecords $records,
+        RetentionMatrix $matrix,
+        RetentionHoldGate $holds,
+    ): int {
         $dryRun = $this->option('dry-run') === true;
 
         $payloadCutoff = Carbon::now()->subDays($this->days($config, 'webhook_payload_days', 90));
@@ -61,7 +70,15 @@ final class PruneBillingCommand extends Command
 
         // A delivery whose effects are still owed keeps its payload however old it is: dropping it would
         // throw away the only copy of work the package knows it has not finished.
-        $payloadCount = $dryRun ? $payloads->count() : $payloads->update(['payload' => null]);
+        //
+        // And one the host holds keeps it too. Nulling a payload is a destruction like any other here — the
+        // row survives, but the thing a preservation order was about does not.
+        $payloadCount = $this->guarded(
+            OwnerScopedTables::SCRUBBED,
+            $payloads,
+            $holds,
+            static fn (Builder $q): int => $dryRun ? $q->count() : $q->update(['payload' => null]),
+        );
 
         // §147 Abs. 4 AO: the retention clock starts at the END of the year the document was issued, so a
         // record is kept for the floor counted from that year end — NOT from the raw issue instant. Anchoring
@@ -85,12 +102,17 @@ final class PruneBillingCommand extends Command
         $issueColumns = $matrix->issueColumns();
 
         foreach (OwnerScopedTables::axes() as $axis) {
-            $financialCount += $records->pruneExpired(
-                $axis,
-                $financialCutoff->toDateTimeString(),
-                $issueColumns,
-                $dryRun,
-            );
+            try {
+                $financialCount += $records->pruneExpired(
+                    $axis,
+                    $financialCutoff->toDateTimeString(),
+                    $issueColumns,
+                    $dryRun,
+                    $holds,
+                );
+            } catch (RetentionHoldUnavailable $e) {
+                $this->reportUnansweredHold($e);
+            }
         }
 
         // The audit ledger. GDPR storage limitation (Art. 5(1)(e)) says personal data is not kept longer
@@ -102,13 +124,18 @@ final class PruneBillingCommand extends Command
         $auditCutoff = Carbon::now()->subDays($this->days($config, 'audit_days', 3650));
         $expiredAudit = BillingEvent::query()->where('created_at', '<=', $auditCutoff);
 
-        $auditCount = $dryRun
-            ? $expiredAudit->count()
-            : BillingEvent::purging(static function () use ($expiredAudit): int {
-                $deleted = $expiredAudit->delete();
+        $auditCount = $this->guarded(
+            'billing_events',
+            $expiredAudit->toBase(),
+            $holds,
+            static function (Builder $q) use ($dryRun): int {
+                if ($dryRun) {
+                    return $q->count();
+                }
 
-                return is_int($deleted) ? $deleted : 0;
-            });
+                return BillingEvent::purging(static fn (): int => $q->delete());
+            },
+        );
 
         // The rules nobody was carrying out. A period-scoped document — a produced tax return, a produced
         // seller-reporting file — names a PERIOD rather than a person, so no erasure axis can reach it: there
@@ -133,7 +160,12 @@ final class PruneBillingCommand extends Command
             $expired = DB::table($rule->object)
                 ->where('created_at', '<=', Carbon::now()->subDays($rule->days));
 
-            $timePrunedCount += $dryRun ? $expired->count() : $expired->delete();
+            $timePrunedCount += $this->guarded(
+                $rule->object,
+                $expired,
+                $holds,
+                static fn (Builder $q): int => $dryRun ? $q->count() : $q->delete(),
+            );
         }
 
         $verb = $dryRun ? 'Would prune' : 'Pruned';
@@ -160,7 +192,43 @@ final class PruneBillingCommand extends Command
             return self::FAILURE;
         }
 
-        return self::SUCCESS;
+        // A retention duty that could not be carried out is a failed run, not a quiet one. The scheduler is
+        // the only thing watching, and it watches the exit status.
+        return $this->holdUnanswered ? self::FAILURE : self::SUCCESS;
+    }
+
+    /**
+     * Run one deletion, minus whatever the host holds.
+     *
+     * Every destroying path goes through here so they cannot answer the hold question differently — and so
+     * a fifth path added later is one that visibly did not ask. When the seam cannot answer, this deletes
+     * NOTHING from that table and marks the run failed: falling back to "nothing is held" would destroy
+     * exactly the records the seam exists to protect, at the moment it had lost the ability to object.
+     *
+     * @param  callable(Builder): int  $act
+     */
+    private function guarded(string $recordType, Builder $query, RetentionHoldGate $holds, callable $act): int
+    {
+        try {
+            $held = $holds->heldIn($recordType, $query);
+        } catch (RetentionHoldUnavailable $e) {
+            $this->reportUnansweredHold($e);
+
+            return 0;
+        }
+
+        if ($held !== []) {
+            $query->whereNotIn('id', $held);
+        }
+
+        return $act($query);
+    }
+
+    private function reportUnansweredHold(RetentionHoldUnavailable $e): void
+    {
+        $this->holdUnanswered = true;
+
+        $this->components->error($e->getMessage());
     }
 
     /** The rule set, as the record of what this run enforces. */

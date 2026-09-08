@@ -216,7 +216,9 @@ final readonly class StartSubscriptionOnMandate
             return;
         }
 
-        $coupon = Coupon::query()->where('code', $code)->first();
+        // Scoped to the issuer, matching the merchant this effect writes its subscription row for — which
+        // is the platform on this lane (see the merchant_uid it upserts with).
+        $coupon = Coupon::query()->issuedBy(MerchantScope::platform())->where('code', $code)->first();
         $owner = $this->ownerOf($intent);
 
         if (! $coupon instanceof Coupon || ! $owner instanceof Model) {

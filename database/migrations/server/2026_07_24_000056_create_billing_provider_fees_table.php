@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * What the payment provider charged the platform, as its own record.
@@ -30,7 +31,7 @@ return new class extends Migration
             $table->id();
             $table->string('provider');
             $table->string('reference');
-            $table->nullableMorphs('merchant');
+            BillingSchema::nullableMorphs($table, 'merchant');
             $table->char('currency', 3);
             $table->unsignedBigInteger('amount_minor');
             $table->string('cause')->nullable();

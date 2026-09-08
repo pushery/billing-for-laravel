@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * A creator's OWN invoice, submitted through the fallback lane — the path a creator takes when the platform
@@ -28,8 +29,8 @@ return new class extends Migration
             // The creator who submitted it. Nullable because this is a RETAINED record: on the creator's
             // erasure the document is kept but UNLINKED — the owner morph is nulled and owner_erased_at
             // stamped — exactly like an invoice, so a valid financial document survives with no person on it.
-            $table->string('owner_type')->nullable();
-            $table->unsignedBigInteger('owner_id')->nullable();
+            BillingSchema::hostType($table, 'owner_type')->nullable();
+            BillingSchema::hostKey($table, 'owner_id')->nullable();
 
             // What the invoice says: the issuer's own number, its net and tax, its currency. The amounts are
             // whatever the ingest parsed (or an operator keyed in a manual-review case); the reconciliation

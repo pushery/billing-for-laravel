@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Pushery\Billing\Dunning;
 
 use Carbon\CarbonImmutable;
-use Carbon\CarbonInterface;
+use DateTimeInterface;
 use Illuminate\Contracts\Events\Dispatcher;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Contracts\ArrearsRoster;
 use Pushery\Billing\Events\PaymentReminderDue;
 use Pushery\Billing\Models\Subscription;
 
@@ -34,17 +34,15 @@ use Pushery\Billing\Models\Subscription;
  * is the platform-wide-lockout defect one level down, and harder to see — the customer does get a message,
  * and only the second one is missing.
  *
- * ## Merchant rows only, and that is not the same as reading the marketplace flag
+ * ## Where the rows come from
  *
- * The cure window is a marketplace mechanism: it exists because a customer holds several subscriptions to
- * several merchants and loses only the ones in arrears. A single-seller install keeps the dunning ladder,
- * where nothing expires after a week — so a reminder counting down "5 days left" there would name a deadline
- * that never arrives, which is worse than silence.
+ * From an {@see ArrearsRoster}, not from a query here. The ladder's other half — the suspension — already
+ * reads its clock through a seam, and an application holding its own view of a subscription could therefore
+ * adopt the lockout and not the reminder. That is the half that helps the person: without it the window
+ * runs out, access is gone, and nobody heard anything.
  *
- * The sweep therefore selects rows that came through the marketplace, not installs that have the flag on.
- * The narrower test is the right one: it stays byte-identical in a single-seller install whatever the flag
- * does, and it keeps an install that switches the flag on from retroactively pulling its own platform
- * subscriptions into a rule they were never sold under.
+ * {@see LocalArrearsRoster} is the shipped one and carries the query this class used to run inline,
+ * including the reason it selects merchant-scoped rows rather than reading the marketplace flag.
  *
  * ## The order of the two writes is deliberate
  *
@@ -57,6 +55,7 @@ final readonly class PaymentReminderSweep
     public function __construct(
         private CureWindow $window,
         private Dispatcher $events,
+        private ArrearsRoster $roster,
     ) {}
 
     /**
@@ -75,28 +74,16 @@ final readonly class PaymentReminderSweep
         // leave a silent gap between them.
         $cutoff = $this->window->cutoff($now);
 
-        $due = Subscription::query()
-            ->merchantScoped()
-            ->whereNotNull('delinquent_since')
-            ->where('delinquent_since', '>', $cutoff)
-            ->where(function (Builder $query) use ($today): void {
-                $query->whereNull('payment_reminded_on')
-                    ->orWhereDate('payment_reminded_on', '<', $today);
-            })
-            ->orderBy('id')
-            ->get();
-
         $sent = 0;
 
-        foreach ($due as $subscription) {
-            // The query already filtered on a non-null clock, so the coalesce is a type narrowing rather
-            // than a fallback — and written as one statement rather than a guard, because a branch that
-            // cannot be reached is a branch no test can cover honestly.
-            $since = $subscription->delinquent_since ?? $now;
+        foreach ($this->roster->inArrearsSince($cutoff, $today) as $entry) {
+            $this->events->dispatch(new PaymentReminderDue(
+                $entry,
+                $this->daysLeft($entry->since, $now, $window),
+                $entry->subscription instanceof Subscription ? $entry->subscription : null,
+            ));
 
-            $this->events->dispatch(new PaymentReminderDue($subscription, $this->daysLeft($since, $now, $window)));
-
-            $subscription->forceFill(['payment_reminded_on' => $today])->save();
+            $this->roster->markReminded($entry, $today);
 
             $sent++;
         }
@@ -104,8 +91,14 @@ final readonly class PaymentReminderSweep
         return $sent;
     }
 
-    /** How many whole days of the cure window remain, never below zero. */
-    private function daysLeft(CarbonInterface $since, CarbonImmutable $now, int $window): int
+    /**
+     * How many whole days of the cure window remain, never below zero.
+     *
+     * Takes the interface the seam speaks in rather than Carbon's own: an application's roster hands over
+     * whatever date type its storage produces, and narrowing here would push a conversion onto every
+     * implementor for no gain — `Carbon::instance()` below accepts any of them.
+     */
+    private function daysLeft(DateTimeInterface $since, CarbonImmutable $now, int $window): int
     {
         $elapsed = (int) Carbon::instance($since)->startOfDay()->diffInDays(Carbon::instance($now)->startOfDay());
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * What an erasure request needs in order to be honest.
@@ -27,7 +28,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('billing_webhook_events', function (Blueprint $table): void {
-            $table->nullableMorphs('owner');
+            BillingSchema::nullableMorphs($table, 'owner');
         });
 
         foreach (['billing_invoices', 'billing_addon_purchases'] as $retained) {
@@ -37,8 +38,11 @@ return new class extends Migration
                 // The owner link has to become optional, or the row cannot outlive the owner — and these
                 // rows MUST outlive them: the law requires the invoice to be kept, and to keep carrying the
                 // buyer's name and address while it is.
-                $table->string('owner_type')->nullable()->change();
-                $table->unsignedBigInteger('owner_id')->nullable()->change();
+                BillingSchema::hostType($table, 'owner_type')->nullable()->change();
+                // Through the helper, not spelled out: `unsignedBigInteger` here would cast the column
+                // back to bigint on an installation whose host keys are UUIDs — a migration that quietly
+                // undoes the setting, on the two tables that must outlive an erasure.
+                BillingSchema::hostKey($table, 'owner_id')->nullable()->change();
             });
         }
     }

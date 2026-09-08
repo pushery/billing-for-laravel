@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * A sale whose payout waits for the buyer, and the clock it waits on.
@@ -28,7 +29,7 @@ return new class extends Migration
         Schema::create('billing_buyer_protection_holds', function (Blueprint $table): void {
             $table->id();
             $table->string('charge_reference')->unique();
-            $table->nullableMorphs('merchant', 'billing_protection_holds_merchant_index');
+            BillingSchema::nullableMorphs($table, 'merchant', 'billing_protection_holds_merchant_index');
             $table->string('currency', 3);
             $table->integer('charge_minor');
             $table->integer('platform_fee_minor')->default(0);

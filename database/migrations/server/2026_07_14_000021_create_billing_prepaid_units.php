@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Prepaid usage units — an add-on that grants UNITS of a meter ("+1000 emails") rather than money.
@@ -34,7 +35,7 @@ return new class extends Migration
     {
         Schema::create('billing_prepaid_units', function (Blueprint $table): void {
             $table->id();
-            $table->morphs('owner');
+            BillingSchema::morphs($table, 'owner');
             $table->string('meter_key');
             // Signed: a clawback can only ever take back what is left, but a signed column means a bug
             // surfaces as a negative balance instead of a silent MySQL strict-mode failure.

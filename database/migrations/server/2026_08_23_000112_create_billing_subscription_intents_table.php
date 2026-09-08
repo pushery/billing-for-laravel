@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * What somebody asked for, held across a redirect they may never come back from.
@@ -44,8 +45,8 @@ return new class extends Migration
     {
         Schema::create('billing_subscription_intents', function (Blueprint $table): void {
             $table->id();
-            $table->string('owner_type');
-            $table->unsignedBigInteger('owner_id');
+            BillingSchema::hostType($table, 'owner_type');
+            BillingSchema::hostKey($table, 'owner_id');
             $table->string('provider', 40);
             $table->string('tier_key');
             // Unique: the provider issues one payment per attempt, so two intents on one payment is not a

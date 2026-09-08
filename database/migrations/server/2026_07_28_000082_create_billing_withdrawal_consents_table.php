@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The two declarations a buyer makes before a digital work is provided, kept.
@@ -46,7 +47,7 @@ return new class extends Migration
             // it is the proof the buyer's right of withdrawal was extinguished lawfully, and destroying it
             // would hand every past sale back to the fourteen-day rule rather than relieve the buyer of
             // anything. So the person is unlinked and the fact stays, exactly as the invoice does.
-            $table->nullableMorphs('owner', 'billing_withdrawal_consents_owner_index');
+            BillingSchema::nullableMorphs($table, 'owner', 'billing_withdrawal_consents_owner_index');
             // The purchase this belongs to, in the same shape the grant path already keys on: the checkout
             // reference, not a payment id, because that is what a redelivered webhook repeats.
             $table->string('reference');

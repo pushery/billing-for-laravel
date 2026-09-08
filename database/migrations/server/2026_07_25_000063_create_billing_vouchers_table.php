@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * A voucher: money paid now against a promise redeemable later, on this platform only.
@@ -26,7 +27,7 @@ return new class extends Migration
             $table->string('code')->unique();
             // The OWNER axis, not the merchant one: a voucher belongs to whoever bought it. Nullable so an
             // erasure can unlink it rather than delete the record of money that was taken.
-            $table->nullableMorphs('owner', 'billing_vouchers_owner_index');
+            BillingSchema::nullableMorphs($table, 'owner', 'billing_vouchers_owner_index');
             $table->string('currency', 3);
             $table->integer('face_value_minor');
             // What is left. It only ever goes DOWN — there is deliberately no path that raises it.

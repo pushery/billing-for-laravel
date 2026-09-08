@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The mandates a local-engine driver may charge later, mirrored locally.
@@ -29,7 +30,7 @@ return new class extends Migration
     {
         Schema::create('billing_payment_mandates', function (Blueprint $table): void {
             $table->id();
-            $table->morphs('owner');
+            BillingSchema::morphs($table, 'owner');
             $table->string('provider');
             $table->string('mandate_reference');
             // How the mandate pays — a direct debit, a card, a wallet. The provider's own vocabulary,

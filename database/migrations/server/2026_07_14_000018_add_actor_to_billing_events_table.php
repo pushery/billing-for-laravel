@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Gives the audit ledger an ACTOR and a SOURCE. Until now a row said what happened and to whom, but not
@@ -21,7 +22,7 @@ return new class extends Migration
     {
         Schema::table('billing_events', function (Blueprint $table): void {
             $table->string('source')->default('system')->after('type')->index();
-            $table->nullableMorphs('actor');
+            BillingSchema::nullableMorphs($table, 'actor');
         });
     }
 

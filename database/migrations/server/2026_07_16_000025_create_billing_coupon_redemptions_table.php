@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The redemption ledger: WHO redeemed WHICH coupon, and against which subscription. It is the source of truth
@@ -20,7 +21,7 @@ return new class extends Migration
     {
         Schema::create('billing_coupon_redemptions', function (Blueprint $table): void {
             $table->id();
-            $table->morphs('owner');
+            BillingSchema::morphs($table, 'owner');
             $table->foreignId('coupon_id')->constrained('billing_coupons')->cascadeOnDelete();
             $table->unsignedBigInteger('subscription_id')->nullable()->index();
             $table->timestamp('redeemed_at');
