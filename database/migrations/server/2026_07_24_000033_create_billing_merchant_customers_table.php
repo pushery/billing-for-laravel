@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Which buyer a customer reference means INSIDE a given merchant account.
@@ -26,7 +27,7 @@ return new class extends Migration
     {
         Schema::create('billing_merchant_customers', function (Blueprint $table): void {
             $table->id();
-            $table->morphs('owner');
+            BillingSchema::morphs($table, 'owner');
             $table->string('provider');
             $table->string('account_reference');
             $table->string('customer_reference');

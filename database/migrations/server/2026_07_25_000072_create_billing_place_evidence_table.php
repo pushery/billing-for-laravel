@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Which country a sale was taxed in, and what said so at the time.
@@ -23,7 +24,7 @@ return new class extends Migration
     {
         Schema::create('billing_place_evidence', function (Blueprint $table): void {
             $table->id();
-            $table->nullableMorphs('owner', 'billing_place_evidence_owner_index');
+            BillingSchema::nullableMorphs($table, 'owner', 'billing_place_evidence_owner_index');
             $table->string('reference', 128);
             $table->string('declared_country', 2)->nullable();
             $table->string('payment_country', 2)->nullable();

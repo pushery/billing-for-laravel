@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The package's own local subscription-state model. It always exists: the Stripe driver mirrors the
@@ -18,7 +19,7 @@ return new class extends Migration
     {
         Schema::create('billing_subscriptions', function (Blueprint $table): void {
             $table->id();
-            $table->morphs('owner');
+            BillingSchema::morphs($table, 'owner');
             $table->string('type')->default('default');
             $table->string('provider');
             $table->string('provider_id')->nullable();

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The metered-usage counters, one row per owner per METER per period. Tracks used and reserved units
@@ -19,7 +20,7 @@ return new class extends Migration
     {
         Schema::create('billing_usage_counters', function (Blueprint $table): void {
             $table->id();
-            $table->morphs('owner');
+            BillingSchema::morphs($table, 'owner');
             $table->string('meter_key');
             $table->string('period');
             $table->unsignedBigInteger('used')->default(0);

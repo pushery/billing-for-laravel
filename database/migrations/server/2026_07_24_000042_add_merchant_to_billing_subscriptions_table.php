@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Keys a subscription-state row by merchant as well as by owner, so a single billable can hold many
@@ -29,7 +30,7 @@ return new class extends Migration
     {
         Schema::table('billing_subscriptions', function (Blueprint $table): void {
             $table->string('merchant_uid')->default('platform');
-            $table->nullableMorphs('merchant');
+            BillingSchema::nullableMorphs($table, 'merchant');
 
             // The merchant-scoped counterpart of the owner status index, so "this merchant's active
             // subscriptions" is one indexed read rather than a scan — the shape a marketplace access-state

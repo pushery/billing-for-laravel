@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 use Pushery\Billing\Support\OwnerScopedTables;
 
 /**
@@ -20,7 +21,7 @@ return new class extends Migration
     {
         Schema::create('billing_cancellation_surveys', function (Blueprint $table): void {
             $table->id();
-            $table->morphs('owner');
+            BillingSchema::morphs($table, 'owner');
             $table->string('reason');
             $table->text('detail')->nullable();
             $table->timestamps();

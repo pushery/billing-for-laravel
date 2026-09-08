@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Who has been warned that the tax-standing deadline is coming, and when.
@@ -40,8 +41,8 @@ return new class extends Migration
     {
         Schema::create('billing_tax_hold_warnings', function (Blueprint $table): void {
             $table->id();
-            $table->string('merchant_type');
-            $table->unsignedBigInteger('merchant_id');
+            BillingSchema::hostType($table, 'merchant_type');
+            BillingSchema::hostKey($table, 'merchant_id');
             // The deadline the merchant was warned ABOUT, not just when. An operator who moves the date
             // forward has changed what the warning said, and the old one no longer describes the new
             // deadline — so the pair is what identifies a warning, and a moved date warns again.

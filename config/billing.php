@@ -284,6 +284,36 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Host key type
+    |--------------------------------------------------------------------------
+    |
+    | What YOUR models are keyed by: "int", "uuid" or "ulid". Every column in this
+    | package that references one of your models -- the billable on a subscription,
+    | the merchant on a charge, the actor on an audit row -- is declared with this
+    | type when its table is created.
+    |
+    | Get it wrong and the rows cannot be written at all. A UUID handed to a bigint
+    | column is not slow, it is rejected by the database:
+    |
+    |     SQLSTATE[22P02]: invalid input syntax for type bigint: "01a0742a-..."
+    |
+    | One setting rather than one per table, because it is one answer: an application
+    | keys its own models consistently, and a per-table choice would only produce
+    | installations where half the schema cannot join to the other half. References
+    | to this package's OWN models stay integers and are not affected.
+    |
+    | This is read when a table is CREATED. Changing it afterwards does not alter
+    | tables that already exist -- that is a data migration, and `billing:doctor`
+    | reports the mismatch rather than leaving you to find it at the next insert.
+    |
+    */
+
+    'schema' => [
+        'host_key_type' => env('BILLING_HOST_KEY_TYPE', 'int'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Zero tier & tier column
     |--------------------------------------------------------------------------
     |

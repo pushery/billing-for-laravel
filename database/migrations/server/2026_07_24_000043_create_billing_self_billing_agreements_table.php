@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * A creator's standing agreement that the platform may settle them by self-billing.
@@ -37,7 +38,7 @@ return new class extends Migration
             // The creator IS the merchant, and the morph follows the merchant erasure axis exactly —
             // merchant_type/merchant_id/merchant_erased_at — so the eraser can retain-and-stamp this row
             // rather than delete it, the same as the tax standing and the routed charge.
-            $table->nullableMorphs('merchant');
+            BillingSchema::nullableMorphs($table, 'merchant');
             $table->timestamp('merchant_erased_at')->nullable();
 
             // The ex-ante anchor: a document for a supply is authorized only by an agreement accepted at or

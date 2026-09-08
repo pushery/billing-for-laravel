@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * A seller's declaration about where they are taxed, for the United States regime.
@@ -28,7 +29,7 @@ return new class extends Migration
     {
         Schema::create('billing_us_tax_forms', function (Blueprint $table): void {
             $table->id();
-            $table->nullableMorphs('merchant', 'billing_us_tax_forms_merchant_index');
+            BillingSchema::nullableMorphs($table, 'merchant', 'billing_us_tax_forms_merchant_index');
             $table->string('form_type', 16);
             // Asked-for and arrived look identical in every other field, and the difference decides whether
             // anything may be paid out under the regime.

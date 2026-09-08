@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * One row per HELD unit of allowance: the claim a request makes on a metered ceiling before it does the
@@ -25,7 +26,7 @@ return new class extends Migration
         Schema::create('billing_usage_reservations', function (Blueprint $table): void {
             $table->id();
             $table->ulid('token')->unique();
-            $table->morphs('owner');
+            BillingSchema::morphs($table, 'owner');
             $table->string('meter_key');
             $table->string('period');
             $table->unsignedBigInteger('amount');

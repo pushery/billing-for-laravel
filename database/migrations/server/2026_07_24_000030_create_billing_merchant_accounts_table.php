@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * A merchant's account at the payment provider, and the capabilities the provider has confirmed for it.
@@ -29,7 +30,7 @@ return new class extends Migration
             // The morph is NOT nullable, unlike the one on a retained invoice, because this row does not
             // outlive its merchant: a provider account reference is an operational key, not a financial
             // record, so the merchant axis of the erasure map purges it outright.
-            $table->morphs('merchant');
+            BillingSchema::morphs($table, 'merchant');
             $table->string('provider');
             $table->string('account_reference');
 

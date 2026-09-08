@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The usage outbox: every unit of usage that will be billed, recorded locally BEFORE anyone tries to
@@ -25,7 +26,7 @@ return new class extends Migration
     {
         Schema::create('billing_usage_events', function (Blueprint $table): void {
             $table->id();
-            $table->morphs('owner');
+            BillingSchema::morphs($table, 'owner');
             $table->string('meter_key');
             // The PROVIDER's meter name, stamped when the usage is recorded rather than looked up when
             // it is flushed: an owner who changes tier between the two must still have the usage they

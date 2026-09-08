@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Pushery\Billing\Exceptions\RetentionHoldUnavailable;
 use Pushery\Billing\ValueObjects\ErasureAxis;
 
 /**
@@ -151,10 +152,23 @@ final readonly class SubjectScopedRecords
      * construction rather than by the caller remembering: a value that reached here from a request could
      * not satisfy the type.
      *
+     * A record the host holds is left where it is, however far past the window it is. The two duties are
+     * both real and they point opposite ways — storage limitation says delete, a legal hold says preserve —
+     * so the host, which is the side that received the order, decides per record. The gate is a REQUIRED
+     * parameter rather than an optional one: a seam a caller may forget is a seam that silently stops being
+     * asked, and the symptom of forgetting it here is a destroyed record nobody can get back.
+     *
      * @param  array<string, literal-string>  $issueColumns  table => the column holding its issue date
+     *
+     * @throws RetentionHoldUnavailable when the host's seam cannot answer
      */
-    public function pruneExpired(ErasureAxis $axis, string $cutoff, array $issueColumns, bool $dryRun): int
-    {
+    public function pruneExpired(
+        ErasureAxis $axis,
+        string $cutoff,
+        array $issueColumns,
+        bool $dryRun,
+        RetentionHoldGate $holds,
+    ): int {
         $count = 0;
 
         foreach ($axis->retained as $table) {
@@ -167,6 +181,12 @@ final readonly class SubjectScopedRecords
                 // as a datetime STRING: a raw binding does not go through the datetime caster, so a Carbon
                 // here would compare as an unusable value and quietly match nothing.
                 ->whereRaw("COALESCE({$issueColumn}, created_at) < ?", [$cutoff]);
+
+            $held = $holds->heldIn($table, $rows);
+
+            if ($held !== []) {
+                $rows->whereNotIn('id', $held);
+            }
 
             $count += $dryRun ? $rows->count() : $rows->delete();
         }

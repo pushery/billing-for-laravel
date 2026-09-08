@@ -10,6 +10,7 @@ use Illuminate\Console\Command;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Consumer\GermanWithdrawalPolicy;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\AddonContentMap;
@@ -30,6 +31,7 @@ use Pushery\Billing\Models\Order;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
 use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
+use Pushery\Billing\Support\BillingSchema;
 use Pushery\Billing\Tax\DatabaseExchangeRateSource;
 use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
 use Pushery\Billing\Tax\ShippedTaxRates;
@@ -146,6 +148,8 @@ final class DoctorCommand extends Command
         // check held separately has to be remembered at every exit, and forgetting one is invisible —
         // the command still prints the warning, it just stops counting it.
         $failing = $this->reportStrandedOrders() || $failing;
+
+        $failing = $this->reportHostKeyTypeMismatch() || $failing;
 
         $pinned = $this->pinnedVersion($config);
 
@@ -476,6 +480,42 @@ final class DoctorCommand extends Command
      *
      * @return bool whether any stranded order was found
      */
+    /**
+     * The configured host key type against what the tables actually hold.
+     *
+     * `billing.schema.host_key_type` is read when a table is CREATED. Turning it on afterwards therefore
+     * changes nothing about tables that already exist, and the two disagree silently until the next write
+     * to one of them fails — at which point the error names a bigint column and says nothing about a
+     * setting. This is where that costs a line of output instead of an afternoon.
+     *
+     * Read from the DATABASE rather than from the migration: the column type is precisely the thing nobody
+     * had looked at.
+     */
+    private function reportHostKeyTypeMismatch(): bool
+    {
+        $configured = BillingSchema::hostKeyType();
+
+        if (! Schema::hasTable('billing_subscriptions')) {
+            return false;
+        }
+
+        $actual = strtolower(Schema::getColumnType('billing_subscriptions', 'owner_id'));
+        $isInteger = str_contains($actual, 'int');
+
+        if (($configured === 'int') === $isInteger) {
+            return false;
+        }
+
+        $this->components->error(
+            "billing.schema.host_key_type is '{$configured}', but billing_subscriptions.owner_id is "
+            ."'{$actual}'. The setting is read when a table is created, so changing it later does not "
+            .'alter tables that already exist. Every write keyed to one of your models will fail until the '
+            .'columns are migrated to match — this is a data migration, not a setting change.'
+        );
+
+        return true;
+    }
+
     private function reportStrandedOrders(): bool
     {
         // The model's own scope, which `billing:release-claim` refuses to act outside of. Inlining the three

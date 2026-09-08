@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
+use Pushery\Billing\Contracts\ArrearsClock;
+use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
  * The package's own coupon — a local discount definition the billing engine applies, independent of any
@@ -31,8 +34,22 @@ use Pushery\Billing\Casts\UtcDateTime;
  * the redemption side. So a column here with no writer in `src/` is the correct state and not a gap; what
  * would be a defect is a READER that turns an absent value into an answer.
  *
+ * ## Who a coupon belongs to
+ *
+ * `merchant_uid` is the issuer: the platform (`platform`) or one merchant (`m:<type>#<id>`). It exists
+ * because `code` used to be globally unique, which meant two sellers could not both run a `SUMMER25` — the
+ * namespace was shared, so it was effectively reserved for whoever claimed a name first. On a marketplace
+ * the seller's own discount code is the acquisition tool, so that is not a limitation of the feature, it is
+ * its absence.
+ *
+ * Always read a coupon through {@see Coupon::scopeIssuedBy()}. A bare `where('code', ...)` finds ANY
+ * issuer's coupon of that name, which after this column exists means one seller's discount can be spent on
+ * another seller's sale. `CouponsAreReadScopedTest` holds that, because the mistake is a query that looks
+ * completely ordinary.
+ *
  * @property int $id
  * @property string $code
+ * @property string $merchant_uid
  * @property string $type
  * @property int $value
  * @property ?string $currency
@@ -50,7 +67,7 @@ final class Coupon extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'code', 'type', 'value', 'currency', 'duration', 'duration_in_cycles',
+        'code', 'merchant_uid', 'type', 'value', 'currency', 'duration', 'duration_in_cycles',
         'max_redemptions', 'redeemed_count', 'expires_at', 'provider_coupon_id', 'active',
     ];
 
@@ -61,11 +78,14 @@ final class Coupon extends Model
      * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
      * it hides. Held against the migration by ModelSchemaDefaultsTest.
      *
-     * @var array<string, bool|int>
+     * @var array<string, bool|int|string>
      */
     protected $attributes = [
         'redeemed_count' => 0,
         'active' => true,
+        // The platform sentinel, matching the schema default. A coupon created without an issuer belongs to
+        // the platform, which is what every coupon that existed before this column meant.
+        'merchant_uid' => 'platform',
     ];
 
     /** @var array<string,string> */
@@ -84,5 +104,24 @@ final class Coupon extends Model
     public function redemptions(): HasMany
     {
         return $this->hasMany(CouponRedemption::class);
+    }
+
+    /**
+     * Only the coupons this issuer put out.
+     *
+     * The scope is part of the QUESTION rather than a filter applied to the answer — the same shape
+     * {@see ArrearsClock} uses, and for the same reason. A lookup that finds a
+     * coupon first and checks its issuer afterwards has already read somebody else's row, and the check is
+     * the step that gets dropped.
+     *
+     * A null scope means the PLATFORM, which in a single-seller install is the only issuer there is. That
+     * makes it the same query the package ran before this column existed.
+     *
+     * @param  Builder<$this>  $query
+     * @return Builder<$this>
+     */
+    public function scopeIssuedBy(Builder $query, ?MerchantScope $merchant = null): Builder
+    {
+        return $query->where('merchant_uid', ($merchant ?? MerchantScope::platform())->uid());
     }
 }

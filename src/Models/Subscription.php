@@ -206,6 +206,22 @@ final class Subscription extends Model
     }
 
     /**
+     * Whoever holds this subscription.
+     *
+     * Five other models in this package already declare the same relation over the same two columns; this
+     * one did not, so anything that needed the person behind a subscription resolved `owner_type` and
+     * `owner_id` by hand. That is one hand-rolled morph lookup per caller, and under
+     * `preventLazyLoading` it is also the shape that turns a sweep into an N+1 the moment somebody adds a
+     * read inside the loop.
+     *
+     * @return MorphTo<Model, $this>
+     */
+    public function owner(): MorphTo
+    {
+        return $this->morphTo();
+    }
+
+    /**
      * The subscription type an owner has when they have exactly one.
      *
      * A constant because the string had thirteen readers and two writers, and a literal with fifteen sites

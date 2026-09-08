@@ -117,6 +117,14 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
     /** @return iterable<AddonRefunded|ChargebackReceived|MandateEstablished|PaymentFailed|PaymentSucceeded> */
     public function map(Request $request): iterable
     {
+        // Answered BEFORE the id is looked at, because the id cannot answer it. A next-generation delivery
+        // names its own kind of entity — `dis_…`, `po_…` — and running that through the payment check
+        // produces a warning about the id when the real subject is the TYPE, which somebody has already
+        // decided about.
+        if ($this->isDecidedAgainst($request)) {
+            return;
+        }
+
         $id = $this->entityIdOf($request);
 
         if ($id === null) {
@@ -201,6 +209,45 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
      * refund, then its payment, then deciding whether that is the same event the payment's own ping already
      * produced. That is its own piece of work, and guessing at it here would emit the same refund twice.
      */
+    /**
+     * Whether this delivery announces a next-generation type this package deliberately does not act on.
+     *
+     * Three states, and the middle one is what this adds. A type that was CONSIDERED and declined passes
+     * silently; a type the SDK knows and nobody here has classified WARNS, because Mollie adding an event
+     * and this package never noticing is the case worth a line. An unrecognized type is not this method's
+     * business at all — it falls through to the id checks, where a forged or malformed body belongs.
+     *
+     * Before this, every next-generation delivery produced "named a resource that is not a payment": a
+     * warning fired by the ordinary case, which is a warning nobody reads by the time it matters.
+     */
+    private function isDecidedAgainst(Request $request): bool
+    {
+        $type = $request->input('type');
+
+        if (! is_string($type) || trim($type) === '') {
+            return false;
+        }
+
+        $type = trim($type);
+
+        if (! MollieNextGenEventTypes::known($type)) {
+            return false;
+        }
+
+        $reason = MollieNextGenEventTypes::decidedAgainst($type);
+
+        if ($reason === null) {
+            Log::warning('billing: Mollie sent a webhook event type this package has never classified', [
+                'type' => $type,
+                'entity' => $request->input('entityId'),
+            ]);
+
+            return true;
+        }
+
+        return true;
+    }
+
     private function namesAPayment(string $id): bool
     {
         if (str_starts_with($id, 'tr_')) {

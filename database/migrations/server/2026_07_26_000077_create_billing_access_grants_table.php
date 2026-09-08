@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Who owns which work, and on what terms — the content-ownership register.
@@ -61,12 +62,15 @@ return new class extends Migration
             // PostgreSQL the same migration applies without complaint, which is exactly why that mirror
             // exists.
             $table->string('owner_type', 191);
-            $table->unsignedBigInteger('owner_id');
+            // The id half through the helper, so this hand-declared pair follows the host's key type like
+            // every other reference in the schema. Spelled `unsignedBigInteger` here it would have been the
+            // one column that silently stayed an integer after the setting was turned on.
+            BillingSchema::hostKey($table, 'owner_id');
 
             // Who PAID, when that is somebody else. Null on an ordinary purchase; set on a gift, where the
             // two parties are genuinely different and a refund belongs to the purchaser while the work
             // belongs to the recipient.
-            $table->nullableMorphs('purchaser');
+            BillingSchema::nullableMorphs($table, 'purchaser');
 
             // What is owned. An opaque reference into the host's own content, never a foreign key — see the
             // class docblock. The type is carried beside it so a consumer with several kinds of work can
@@ -120,7 +124,7 @@ return new class extends Migration
             // Attribution, never seller status: the platform is the seller toward the buyer for every
             // content flow. A schema that made the merchant the seller would be the inverse of that.
             $table->string('merchant_uid', 191)->default('platform');
-            $table->nullableMorphs('merchant');
+            BillingSchema::nullableMorphs($table, 'merchant');
 
             $table->timestamps();
 

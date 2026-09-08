@@ -71,4 +71,38 @@ final readonly class MerchantScope
 
         return 'm:'.$this->type.'#'.$this->id;
     }
+
+    /**
+     * The scope a stored `merchant_uid` names.
+     *
+     * The rendering is lossless by construction — the type and the key are both in the string — but until
+     * this existed nothing read them back, so anything holding only the sentinel could scope a query and
+     * could not say WHOSE relationship it had. That is the shape a sweep needs: it finds rows first and has
+     * to name the merchant afterwards.
+     *
+     * Splits on the FIRST `#` only. A merchant type is a class name or a morph alias and contains no `#`;
+     * a KEY may well contain one, and splitting on the last would move part of it into the type.
+     *
+     * Anything that is not a well-formed merchant sentinel reads as the platform. That is the same
+     * direction `isPlatform()` already takes for a half-built scope, and it is the safe one here: an
+     * unparseable value becoming "the platform" narrows a query to the single-seller row, while inventing a
+     * merchant out of it would point the query at somebody.
+     */
+    public static function fromUid(string $uid): self
+    {
+        if (! str_starts_with($uid, 'm:')) {
+            return self::platform();
+        }
+
+        $rest = substr($uid, 2);
+        $separator = strpos($rest, '#');
+
+        if ($separator === false || $separator === 0) {
+            return self::platform();
+        }
+
+        $id = substr($rest, $separator + 1);
+
+        return $id === '' ? self::platform() : new self(substr($rest, 0, $separator), $id);
+    }
 }

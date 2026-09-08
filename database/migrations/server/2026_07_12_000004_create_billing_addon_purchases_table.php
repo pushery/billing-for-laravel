@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The one-time add-on purchase ledger. A checkout session's `reference` is unique, so a webhook
@@ -17,7 +18,7 @@ return new class extends Migration
     {
         Schema::create('billing_addon_purchases', function (Blueprint $table): void {
             $table->id();
-            $table->morphs('owner');
+            BillingSchema::morphs($table, 'owner');
             $table->string('reference')->unique();
             $table->string('addon_key');
             $table->unsignedBigInteger('amount_minor');

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The billing-domain audit ledger. Every meaningful billing event (plan sync, credit, dunning
@@ -18,7 +19,7 @@ return new class extends Migration
         Schema::create('billing_events', function (Blueprint $table): void {
             $table->id();
             $table->string('type')->index();
-            $table->nullableMorphs('subject');
+            BillingSchema::nullableMorphs($table, 'subject');
             $table->json('payload');
             $table->timestamps();
         });

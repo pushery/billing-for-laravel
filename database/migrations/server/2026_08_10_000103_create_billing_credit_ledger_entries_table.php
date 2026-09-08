@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The movements behind an owner's credit balance.
@@ -35,7 +36,7 @@ return new class extends Migration
     {
         Schema::create('billing_credit_ledger_entries', function (Blueprint $table): void {
             $table->id();
-            $table->morphs('owner');
+            BillingSchema::morphs($table, 'owner');
             // Signed: credits positive, debits negative. bigInteger for the same reason the balance uses one
             // — a minor-unit total in a low-denomination currency outgrows a 32-bit column.
             $table->bigInteger('amount_minor');

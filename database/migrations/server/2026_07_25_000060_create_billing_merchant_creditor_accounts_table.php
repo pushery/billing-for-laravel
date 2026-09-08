@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The ledger account number a merchant gets when the installation books individual creditors.
@@ -28,7 +29,7 @@ return new class extends Migration
             // number must outlive the merchant: bookings already made point at it, and freeing it would hand
             // it to the next merchant — two people's obligations on one account, reconciling perfectly and
             // telling nobody.
-            $table->nullableMorphs('merchant', 'billing_creditor_accounts_merchant_index');
+            BillingSchema::nullableMorphs($table, 'merchant', 'billing_creditor_accounts_merchant_index');
             $table->string('number');
             $table->timestamp('merchant_erased_at')->nullable();
             $table->timestamps();

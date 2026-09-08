@@ -255,7 +255,11 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
             return null;
         }
 
-        $coupon = Coupon::query()->where('code', $code)->first();
+        // Scoped to the issuer. This lane starts platform subscriptions (every row it writes carries the
+        // platform sentinel), so the explicit scope is the same query it always ran — written out rather
+        // than implied, because an unscoped read is what lets one seller's code discount another's sale the
+        // day this lane learns about merchants.
+        $coupon = Coupon::query()->issuedBy(MerchantScope::platform())->where('code', $code)->first();
 
         if (! $coupon instanceof Coupon || ! $coupon->active) {
             return null;
