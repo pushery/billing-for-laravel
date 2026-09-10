@@ -33,6 +33,8 @@
     },
     "require": {
         "php": "^8.4",
+        "ext-ctype": "*",
+        "ext-hash": "*",
         "ext-json": "*",
         "ext-mbstring": "*",
         "illuminate/auth": "^13.0",

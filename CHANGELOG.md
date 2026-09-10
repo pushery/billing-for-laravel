@@ -4,6 +4,14 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.2] - 2026-09-10
+
+### Changed
+
+- **The manifest now declares `ext-ctype` and `ext-hash`**, which the shipped code already called and nothing required. `hash` is the one worth naming: it carries every verification in this package — signature comparison and the audit trail — and that is exactly where a missing extension must not first surface as a runtime fatal.
+
+  **Nothing changes about who can install this package, and that is worth stating plainly rather than leaving you to check:** both were already required transitively by this package's own direct dependencies — `ext-ctype` through `illuminate/support`, `ext-hash` through `illuminate/auth` and `illuminate/routing`. Every PHP that could resolve this package already had them, and `hash` has been compiled in and not disableable since PHP 7.4 besides. What changes is where the requirement is written: a transitive guarantee is a property of somebody else's manifest, invisible to anything that reads ours. A contract test holds both directions, so a declared extension cannot outlive its call site.
+
 ## [0.21.1] - 2026-09-09
 
 ### Fixed
@@ -6542,7 +6550,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.21.1...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.21.2...HEAD
+[0.21.2]: https://github.com/pushery/billing-for-laravel/compare/v0.21.1...v0.21.2
 [0.21.1]: https://github.com/pushery/billing-for-laravel/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/pushery/billing-for-laravel/compare/v0.20.1...v0.21.0
 [0.20.1]: https://github.com/pushery/billing-for-laravel/compare/v0.20.0...v0.20.1
