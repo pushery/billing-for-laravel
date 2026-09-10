@@ -4,6 +4,15 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.21.1] - 2026-09-09
+
+### Fixed
+
+- The `tax_status_hold` example in the marketplace documentation omitted its `marketplace` level. The real keys are `billing.marketplace.tax_status_hold.*`, so copying that block left the sales lock OFF while the configuration looked configured -- a missing key falls back to the shipped default without an error.
+- `reference/commands.md` carried its footer at line 180 of 381, with seven sections after the closing line. It is now at the end, where the neighboring reference pages already had theirs.
+- The contracts table said a local-engine driver is not built yet while four other pages document Mollie as shipped. The source settles it: `LocalBillingEngine` exists and the Mollie provider constructs it. The sentence now says what the column actually distinguishes -- which side owns the recurring clock, not which side exists.
+- A change note about what a paragraph said until a given date is out of the shipped prose; it belongs in this file. It also carried the only emoji in the documentation corpus.
+
 ## [0.21.0] - 2026-09-08
 
 ### Added
@@ -6533,7 +6542,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.21.1...HEAD
+[0.21.1]: https://github.com/pushery/billing-for-laravel/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/pushery/billing-for-laravel/compare/v0.20.1...v0.21.0
 [0.20.1]: https://github.com/pushery/billing-for-laravel/compare/v0.20.0...v0.20.1
 [0.20.0]: https://github.com/pushery/billing-for-laravel/compare/v0.19.1...v0.20.0
