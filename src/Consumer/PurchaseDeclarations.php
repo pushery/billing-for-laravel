@@ -111,4 +111,34 @@ final readonly class PurchaseDeclarations
             throw WithdrawalDeclarationsMissing::incomplete($addonKey);
         }
     }
+
+    /**
+     * Refuse to start a subscription checkout whose declarations are not on file.
+     *
+     * The subscription twin of assertMayCheckout(), with one difference that follows from what a tier is: the
+     * resolver classifies a tier as a subscription unless its catalog says otherwise, so a profile that lets a
+     * plain subscription start without declarations lets it start here too, and only a tier classified as
+     * something whose right ends at provision asks for them.
+     *
+     * @throws WithdrawalDeclarationsMissing
+     */
+    public function assertMaySubscribe(Model $owner, string $tierKey, ?string $declarationReference): void
+    {
+        // No profile, no rule, checked first for the reason assertMayCheckout() gives.
+        if (! $this->gate->isEnforced()) {
+            return;
+        }
+
+        $type = $this->types->forTier($tierKey);
+
+        if (! $type instanceof WithdrawalType) {
+            throw WithdrawalDeclarationsMissing::unclassifiedTier($tierKey);
+        }
+
+        $consent = $declarationReference === null ? null : $this->ledger->for($owner, $declarationReference);
+
+        if (! $this->gate->mayProvide($type, $consent)) {
+            throw WithdrawalDeclarationsMissing::incompleteForTier($tierKey);
+        }
+    }
 }

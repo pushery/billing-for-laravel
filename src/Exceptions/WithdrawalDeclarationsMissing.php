@@ -40,11 +40,15 @@ use RuntimeException;
  */
 final class WithdrawalDeclarationsMissing extends RuntimeException
 {
+    /**
+     * @param  string  $addonKey  the product the checkout was for: an add-on key, or a tier key when `$product` is `Tier`
+     */
     public function __construct(
         public readonly string $addonKey,
         public readonly string $why,
+        public readonly string $product = 'Add-on',
     ) {
-        parent::__construct("Add-on '{$addonKey}' cannot go to checkout: {$why}");
+        parent::__construct("{$product} '{$addonKey}' cannot go to checkout: {$why}");
     }
 
     /** The buyer made neither declaration, or only one of the two. */
@@ -68,6 +72,31 @@ final class WithdrawalDeclarationsMissing extends RuntimeException
             .'tell whether it needs declarations. Set `billing.addons.'.$addonKey.'.archetype`. Unclassified '
             .'is not the same as "no right applies" — treating it that way is how a work gets sold and '
             .'delivered with no consent on file.',
+        );
+    }
+
+    /** A subscription tier whose declarations the buyer did not make, or made only one of. */
+    public static function incompleteForTier(string $tierKey): self
+    {
+        return new self(
+            $tierKey,
+            'a consumer-rights profile is active and this tier is classified as a product that needs the buyer to '
+            .'(a) ask for provision to begin before the withdrawal period runs out and (b) acknowledge that it ends '
+            .'their right to withdraw. Record both with PurchaseDeclarations before starting the subscription and '
+            .'pass the key it returns; neither alone is enough, and a single combined checkbox is not two declarations.',
+            'Tier',
+        );
+    }
+
+    /** The taxonomy gives this tier's archetype no fixed withdrawal answer. */
+    public static function unclassifiedTier(string $tierKey): self
+    {
+        return new self(
+            $tierKey,
+            'a consumer-rights profile is active and this tier\'s archetype (`billing.tiers.'.$tierKey.'.archetype`, '
+            .'or `subscription` when unset) is one the taxonomy gives no fixed withdrawal answer, so the runtime '
+            .'cannot tell whether it needs declarations. Classify the tier as what it sells.',
+            'Tier',
         );
     }
 }

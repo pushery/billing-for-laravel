@@ -31,7 +31,7 @@ use Pushery\Billing\ValueObjects\SubscriptionStart;
  */
 final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding, OneTimeCharge, StartsSubscriptions, SubscriptionActions
 {
-    /** @var list<array{owner: Model, tier: string, coupon: ?string}> */
+    /** @var list<array{owner: Model, tier: string, coupon: ?string, declaration: ?string}> */
     private array $subscribes = [];
 
     /** @var list<array{owner: Model, tier: string, prorate: bool, merchant: ?MerchantScope}> */
@@ -63,9 +63,9 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      */
     private bool $couponsAreHonored = false;
 
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null): ClientIntent
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): ClientIntent
     {
-        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode];
+        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference];
 
         return $this->intent();
     }
@@ -78,9 +78,9 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      * seam or the driver-neutral one. Which of the two it was is an implementation detail of the driver
      * they configured, and the assertion surface should not move when they change it.
      */
-    public function start(Model $billable, string $tierKey, ?string $couponCode = null): SubscriptionStart
+    public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): SubscriptionStart
     {
-        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode];
+        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference];
 
         return new SubscriptionStart(SubscriptionState::Activating, 'https://checkout.test/session');
     }
@@ -184,6 +184,41 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
             $seen === []
                 ? 'no checkout for that owner and tier was started at all'
                 : 'the coupons seen were ['.implode(', ', $seen).']',
+        ));
+    }
+
+    /**
+     * The subscription start, with the declaration reference the caller actually passed.
+     *
+     * The subscription twin of assertPurchasedWithDeclaration(), with the same null semantics: `null` asserts that
+     * NO reference was passed.
+     */
+    public function assertSubscribeStartedWithDeclaration(Model $owner, string $tierKey, ?string $declarationReference): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->subscribes as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['tier'] !== $tierKey) {
+                continue;
+            }
+
+            if ($call['declaration'] === $declarationReference) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['declaration'] ?? 'none';
+        }
+
+        PHPUnit::assertTrue($found, sprintf(
+            'Expected a checkout for tier [%s] with declaration [%s], but %s.',
+            $tierKey,
+            $declarationReference ?? 'none',
+            $seen === []
+                ? 'no checkout for that owner and tier was started at all'
+                : 'the declarations seen were ['.implode(', ', $seen).']',
         ));
     }
 

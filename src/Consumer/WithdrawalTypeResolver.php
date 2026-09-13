@@ -7,11 +7,13 @@ namespace Pushery\Billing\Consumer;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\ProductTaxonomy;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
+use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\WithdrawalType;
 
 /**
- * What kind of withdrawal right an add-on carries, read from the taxonomy rather than assumed.
+ * What kind of withdrawal right an add-on or a subscription tier carries, read from the taxonomy rather
+ * than assumed.
  *
  * ## Why this is its own class
  *
@@ -40,6 +42,7 @@ final readonly class WithdrawalTypeResolver
     public function __construct(
         private AddonCatalog $addons,
         private ProductTaxonomy $taxonomy,
+        private ?TierCatalog $tiers = null,
     ) {}
 
     /** The withdrawal type this add-on carries, or null when nothing classifies it. */
@@ -55,6 +58,27 @@ final readonly class WithdrawalTypeResolver
             return null;
         }
 
+        return $this->withdrawalOf($archetype);
+    }
+
+    /**
+     * The withdrawal type a subscription to this tier carries, or null when the taxonomy fixes none.
+     *
+     * A tier is a subscription unless its catalog says otherwise, so an unset archetype is not unclassified here
+     * the way it is for an add-on: `TaxArchetype::Subscription` IS the classification, and the explicit
+     * `archetype` key refines it for a tier that sells something whose right ends differently. Null still means
+     * UNCLASSIFIED, and it is reached where the taxonomy itself leaves the withdrawal answer open.
+     */
+    public function forTier(string $tierKey): ?WithdrawalType
+    {
+        $archetype = $this->tiers instanceof SuppliesProductArchetypes ? $this->tiers->archetypeFor($tierKey) : null;
+
+        return $this->withdrawalOf($archetype ?? TaxArchetype::Subscription);
+    }
+
+    /** The withdrawal answer the taxonomy fixes for an archetype, or null when it delegates or defers it. */
+    private function withdrawalOf(TaxArchetype $archetype): ?WithdrawalType
+    {
         $cell = $this->taxonomy->classify($archetype)->withdrawal;
 
         if (! $cell->isFixed()) {
