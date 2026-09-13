@@ -59,11 +59,15 @@ interface StartsSubscriptions
      * ignored where it cannot -- a coupon never blocks a subscription, the same direction the hosted
      * checkout takes. Ask `honorsCoupon()` first if the answer has to reach the customer.
      *
+     * @param  ?string  $declarationReference  the key the buyer's withdrawal declarations were recorded under,
+     *                                         carried onto the subscription so the ledger finds them again; null
+     *                                         starts exactly the subscription started before the parameter existed
+     *
      * @throws SubscriptionNotPermitted when the tier is not one this install
      *                                  sells, or the billable already has a
      *                                  live subscription
      */
-    public function start(Model $billable, string $tierKey, ?string $couponCode = null): SubscriptionStart;
+    public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): SubscriptionStart;
 
     /**
      * Whether a subscription started here would actually apply this code.

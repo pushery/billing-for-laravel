@@ -337,6 +337,26 @@ final readonly class SyncPlanFromSubscription
     }
 
     /**
+     * The declarations key this row keeps: the event's, or the one on file for the same subscription.
+     *
+     * An update that carries no key must not erase a known one, the rule every column in attributes() follows.
+     * But only for the SAME provider subscription: a new signup taking the row over is a new purchase, and the
+     * previous subscription's declarations do not cover it.
+     */
+    private function declarationReference(?Subscription $subscription, SubscriptionStateChanged $event): ?string
+    {
+        if ($event->declarationReference !== null) {
+            return $event->declarationReference;
+        }
+
+        if (! $subscription instanceof Subscription || $subscription->provider_id !== $event->subscriptionReference) {
+            return null;
+        }
+
+        return $subscription->declaration_reference;
+    }
+
+    /**
      * The row attributes an event resolves to. An event that conveys no tier, recency or cycle must never
      * erase a known one, so each of those falls back to the existing row's value (null on a first insert).
      *
@@ -374,6 +394,9 @@ final readonly class SyncPlanFromSubscription
             // The subscription trial's end, so the trial banner and the trial CTA can read the days left.
             // Same never-erase rule: an event with no trial end keeps the one we know.
             'trial_ends_at' => $this->moment($event->trialEnd) ?? $subscription?->trial_ends_at,
+            // The key the buyer's withdrawal declarations were recorded under. Never erased by an event that
+            // carries none, like the columns above, and never inherited by a different subscription either.
+            'declaration_reference' => $this->declarationReference($subscription, $event),
         ];
     }
 

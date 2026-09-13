@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Pushery\Billing\Catalogs;
 
 use Illuminate\Contracts\Config\Repository;
+use InvalidArgumentException;
+use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Contracts\TierCatalog;
+use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\TierIdentity;
 
@@ -13,9 +16,37 @@ use Pushery\Billing\ValueObjects\TierIdentity;
  * The config-driven tier catalog: reads config('billing.tiers') (an ordered map keyed by tier key)
  * and answers identity/label/price-display questions. The configured order is the upgrade ranking.
  */
-final readonly class ConfigTierCatalog implements TierCatalog
+final readonly class ConfigTierCatalog implements SuppliesProductArchetypes, TierCatalog
 {
     public function __construct(private Repository $config) {}
+
+    /**
+     * What kind of subscription this tier sells, from `billing.tiers.<key>.archetype`.
+     *
+     * An UNSET key answers null, and the withdrawal resolver reads that as a plain subscription, which is what a
+     * tier is. An unreadable value REFUSES for the reason the add-on catalog gives: a typo resolved to null would
+     * hand the caller a classification somebody believed they had changed.
+     */
+    public function archetypeFor(string $key): ?TaxArchetype
+    {
+        $archetype = $this->config->get("billing.tiers.{$key}.archetype");
+
+        if ($archetype === null) {
+            return null;
+        }
+
+        $resolved = is_string($archetype) ? TaxArchetype::tryFrom($archetype) : null;
+
+        if (! $resolved instanceof TaxArchetype) {
+            throw new InvalidArgumentException(
+                "Tier '{$key}': archetype must be one of "
+                .implode(', ', array_map(static fn (TaxArchetype $case): string => $case->value, TaxArchetype::cases()))
+                .'.'
+            );
+        }
+
+        return $resolved;
+    }
 
     public function all(): array
     {

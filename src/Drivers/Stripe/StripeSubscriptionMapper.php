@@ -57,7 +57,25 @@ final readonly class StripeSubscriptionMapper
             trialEnd: $this->int($subscription, 'trial_end'),
             merchant: $merchant,
             merchantAccountReference: $merchantAccount,
+            declarationReference: $this->declaration($subscription),
         );
+    }
+
+    /**
+     * The withdrawal-declaration key the checkout stamped onto the subscription, or null.
+     *
+     * Read off `metadata`, where `subscription_data.metadata` lands on the subscription object and stays for
+     * every later event about it. Anything that is not a non-empty string is no key: an empty value coming back
+     * must not become a reference that finds nothing and reads as "the buyer declared nothing".
+     *
+     * @param  array<array-key, mixed>  $subscription
+     */
+    private function declaration(array $subscription): ?string
+    {
+        $metadata = $subscription['metadata'] ?? null;
+        $value = is_array($metadata) ? $this->string($metadata, 'withdrawal_declaration') : null;
+
+        return $value === '' ? null : $value;
     }
 
     /**

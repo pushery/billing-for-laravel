@@ -167,7 +167,7 @@ final class ManageSubscription extends AccountScreen
      * point: without the hasLiveSubscription() branch, an owner with a subscription could open a SECOND
      * one at the provider (a live money bug — two subscriptions, double-billed).
      */
-    public function subscribe(string $tierKey): void
+    public function subscribe(string $tierKey, ?string $declarationReference = null): void
     {
         $this->denyInAppCheckout();
         $this->ensureEligible();
@@ -181,11 +181,17 @@ final class ManageSubscription extends AccountScreen
         $coupon = trim($this->couponCode);
         $coupon = $coupon !== '' ? $coupon : null;
 
+        // BEFORE the provider is asked for anything, for the reasons purchaseAddon() below gives. Silent without
+        // a consumer-rights profile, and a plain subscription passes under a profile that lets one start without
+        // declarations; only a tier classified as something whose right ends at provision is refused here.
+        Container::getInstance()->make(PurchaseDeclarations::class)
+            ->assertMaySubscribe($this->owner(), $tierKey, $declarationReference);
+
         // `StartsSubscriptions`, not `Checkout`. Only the hosted-checkout driver binds `Checkout`, so this
         // line used to resolve an unbound interface under every other driver and the button ended in a
         // `BindingResolutionException` -- the package's own screen could not reach the package's own
         // subscribe flow. This contract is what every driver answers, each in its own shape.
-        $start = Container::getInstance()->make(StartsSubscriptions::class)->start($this->owner(), $tierKey, $coupon);
+        $start = Container::getInstance()->make(StartsSubscriptions::class)->start($this->owner(), $tierKey, $coupon, $declarationReference);
         $url = SafeExternalUrl::orNull($start->checkoutUrl);
 
         if ($url !== null) {

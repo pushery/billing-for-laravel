@@ -4,6 +4,22 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.23.0] - 2026-09-13
+
+### Added
+
+- **A subscription carries the buyer's withdrawal declarations home.** Only an add-on purchase kept the key its declarations were recorded under, so an application that took the two declarations before a subscription checkout had no way to find them again once the subscription existed, short of keeping a key of its own. `Checkout::subscribe()` and `StartsSubscriptions::start()` take that key as an optional fourth argument. The Stripe checkout puts it on `subscription_data.metadata`, the subscription webhook reads it back, and the local row keeps it; under a driver the package bills itself it waits on the subscription intent until the mandate lands. `WithdrawalConsentLedger::forSubscription()` finds the declarations for a subscription and answers `null` for one started without a key. A new subscription that reuses an owner's row never inherits the previous one's key.
+- **A subscription checkout is checked like an add-on checkout.** `WithdrawalTypeResolver::forTier()` classifies a tier as a `subscription` unless `billing.tiers.<key>.archetype` says what else it sells, and `PurchaseDeclarations::assertMaySubscribe()` refuses to start a subscription whose declarations the active consumer-rights profile asks for and does not find. The account hub calls it before the provider is asked for anything, and `ManageSubscription::subscribe()` takes the key as its second argument. Without a profile nothing changes.
+- **`BillingFake::assertSubscribeStartedWithDeclaration()`**, the subscription twin of `assertPurchasedWithDeclaration()`, with the same meaning for `null`. The facade now documents the three value-carrying assertions.
+
+### Changed (breaking — pre-1.0)
+
+- **An implementation of `Checkout` or `StartsSubscriptions` has to declare the new parameter.** PHP refuses a `subscribe()` or `start()` that does not accept `?string $declarationReference = null`. Code that only calls them, and the shipped drivers, need nothing. The upgrade guide has the signature.
+
+### Fixed
+
+- **Deleting an account ends its subscriptions in every merchant scope, not only the platform's.** `BillableAccountDeleting` canceled one subscription, and `cancelNow()` without a scope is the platform's, so a marketplace member who had subscribed to creators kept those subscriptions after the account was deleted and went on paying for them at the provider. `BillingEraser` dispatches the same event and carried the same gap. The listener now cancels the platform subscription and one in every merchant scope where the owner still has a subscription that is not over; a subscription that already ended keeps the day it ended. A failure in one scope no longer stops the others, and the warning names the scope it happened in.
+
 ## [0.22.0] - 2026-09-13
 
 ### Added
@@ -6556,7 +6572,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/pushery/billing-for-laravel/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/pushery/billing-for-laravel/compare/v0.21.2...v0.22.0
 [0.21.2]: https://github.com/pushery/billing-for-laravel/compare/v0.21.1...v0.21.2
 [0.21.1]: https://github.com/pushery/billing-for-laravel/compare/v0.21.0...v0.21.1

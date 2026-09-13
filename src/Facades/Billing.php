@@ -26,12 +26,15 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * `Billing::assertSwapped(...)`, `Billing::assertNothingCharged()` — exactly like `Bus::fake()`.
  *
  * @method static void assertSubscribeStarted(Model $owner, string $tierKey)
+ * @method static void assertSubscribeStartedWithCoupon(Model $owner, string $tierKey, ?string $couponCode)
+ * @method static void assertSubscribeStartedWithDeclaration(Model $owner, string $tierKey, ?string $declarationReference)
  * @method static void assertNothingSubscribed()
  * @method static void assertSwapped(Model $owner, string $tierKey)
  * @method static void assertCanceled(Model $owner, ?MerchantScope $merchant = null)
  * @method static void assertResumed(Model $owner, ?MerchantScope $merchant = null)
  * @method static void assertCanceledNow(Model $owner, ?MerchantScope $merchant = null)
  * @method static void assertPurchased(Model $owner, string $addonKey)
+ * @method static void assertPurchasedWithDeclaration(Model $owner, string $addonKey, ?string $declarationReference)
  * @method static void assertNothingCharged()
  *
  * @see BillingFake

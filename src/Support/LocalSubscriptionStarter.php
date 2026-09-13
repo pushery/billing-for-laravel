@@ -78,7 +78,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         private CouponRedeemer $coupons,
     ) {}
 
-    public function start(Model $billable, string $tierKey, ?string $couponCode = null): SubscriptionStart
+    public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): SubscriptionStart
     {
         // The key has to be a KEY of the tier map, not a path INTO it. The catalog resolves
         // `billing.tiers.{$key}` through dot notation, so `pro.price_display` reaches a node that is an
@@ -161,6 +161,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
                 $tierKey,
                 CarbonImmutable::createFromInterface($trialEndsAt),
                 $now,
+                $declarationReference,
             );
 
             // This shape has its subscription NOW, so the coupon is spent now. The redirect shape cannot do
@@ -202,6 +203,9 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
             // Carried, not redeemed. The mandate webhook spends it once the subscription is real.
             'coupon_code' => $couponCode,
             'payment_reference' => $handshake->paymentReference,
+            // Carried like the coupon, and for the same reason: the subscription becomes real on the mandate
+            // webhook, and that is where the row that has to hold it is written.
+            'declaration_reference' => $declarationReference,
             'trial_ends_at' => $intentTrialEndsAt,
         ]);
 
@@ -389,6 +393,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         string $tierKey,
         CarbonImmutable $trialEndsAt,
         CarbonImmutable $now,
+        ?string $declarationReference,
     ): Subscription {
         // updateOrCreate on the UNIQUE KEY, for the same reason the webhook path does it: a subscription is
         // unique on (owner, type, merchant_uid), and an ENDED row still holds that slot. This method is
@@ -421,6 +426,9 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
                 'terminated_at' => null,
                 'scheduled_tier_key' => null,
                 'scheduled_swap_at' => null,
+                // This purchase's declarations, or none. A reused row is a new subscription, and the previous
+                // one's declarations do not cover it.
+                'declaration_reference' => $declarationReference,
             ],
         );
     }

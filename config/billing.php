@@ -471,6 +471,12 @@ return [
     | locale — which PricingCatalog::bulletsFor() resolves in order. `highlight` and
     | `badge` are optional; leaving them off simply renders a plain card.
     |
+    | A tier may also say what KIND of product it sells for the consumer-rights
+    | profile, with the key an add-on carries: 'archetype' => 'download'. Unset, a
+    | tier is a 'subscription', which is what it is. Set it only for a tier whose
+    | right of withdrawal ends differently, and the subscription checkout then asks
+    | for the buyer's declarations (PurchaseDeclarations::assertMaySubscribe()).
+    |
     */
 
     'tiers' => [

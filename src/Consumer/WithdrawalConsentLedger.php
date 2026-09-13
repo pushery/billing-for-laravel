@@ -6,6 +6,7 @@ namespace Pushery\Billing\Consumer;
 
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Models\AddonPurchase;
+use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Models\WithdrawalConsentRecord;
 use Pushery\Billing\ValueObjects\WithdrawalConsent;
 
@@ -109,5 +110,30 @@ final readonly class WithdrawalConsentLedger
         // The session reference stays as the second reading, for an install that records against it out of
         // band. That is the only other shape this ledger has ever been written in.
         return $this->for($owner, $purchase->declaration_reference ?? $purchase->reference);
+    }
+
+    /**
+     * What this subscription's buyer declared, read off the key the subscription carries.
+     *
+     * The subscription twin of forPayment(). A declaration is recorded before the buyer leaves for the checkout,
+     * under a key the package mints, and the subscription row carries that key home: from the provider's
+     * subscription metadata on a hosted checkout, from the intent on a driver the package bills itself. The owner
+     * is the row's own, so a declaration recorded for somebody else under the same string can never be borrowed.
+     *
+     * Null when the subscription carries no key, the ordinary case: a subscription started without declarations,
+     * one started before this existed, or any subscription on an install with no consumer-rights profile.
+     */
+    public function forSubscription(Subscription $subscription): ?WithdrawalConsent
+    {
+        if ($subscription->declaration_reference === null) {
+            return null;
+        }
+
+        return WithdrawalConsentRecord::query()
+            ->where('owner_type', $subscription->owner_type)
+            ->where('owner_id', $subscription->owner_id)
+            ->where('reference', $subscription->declaration_reference)
+            ->first()
+            ?->toConsent();
     }
 }

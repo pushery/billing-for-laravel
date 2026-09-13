@@ -45,6 +45,7 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * @property string $merchant_uid
  * @property ?string $merchant_type
  * @property int|string|null $merchant_id
+ * @property ?string $declaration_reference
  */
 final class Subscription extends Model
 {
@@ -56,7 +57,7 @@ final class Subscription extends Model
         'scheduled_tier_key', 'scheduled_swap_at',
         'trial_ends_at', 'ends_at', 'delinquent_since', 'dunning_level', 'payment_reminded_on', 'synced_event_at',
         'current_period_start', 'current_period_end', 'scheduled_processing_at',
-        'merchant_uid', 'merchant_type', 'merchant_id',
+        'merchant_uid', 'merchant_type', 'merchant_id', 'declaration_reference',
     ];
 
     /**

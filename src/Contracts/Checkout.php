@@ -21,6 +21,11 @@ interface Checkout
      * optional coupon CODE (never a discount amount — anti-injection, like the tier key) is resolved by
      * the DiscountResolver and applied by the driver; an unknown/expired code is ignored so a bad code
      * never blocks checkout.
+     *
+     * @param  ?string  $declarationReference  the key the package minted for the buyer's withdrawal declarations
+     *                                         (PurchaseDeclarations::declare()), carried to the provider so the
+     *                                         subscription the webhook reports finds them again; null sends exactly
+     *                                         what was sent before the parameter existed
      */
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null): ClientIntent;
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): ClientIntent;
 }

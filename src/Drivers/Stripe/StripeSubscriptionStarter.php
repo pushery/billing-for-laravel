@@ -36,9 +36,9 @@ final readonly class StripeSubscriptionStarter implements StartsSubscriptions
 {
     public function __construct(private Checkout $checkout, private StripeCheckout $stripe) {}
 
-    public function start(Model $billable, string $tierKey, ?string $couponCode = null): SubscriptionStart
+    public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): SubscriptionStart
     {
-        $intent = $this->checkout->subscribe($billable, $tierKey, $couponCode);
+        $intent = $this->checkout->subscribe($billable, $tierKey, $couponCode, $declarationReference);
 
         // Validated here rather than at the caller, and the caller keeps its own check as well. A payload
         // is provider-shaped and this is the seam that stops being provider-shaped, so a tampered or absent

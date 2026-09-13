@@ -158,6 +158,9 @@ final readonly class StartSubscriptionOnMandate
                     ? SubscriptionState::Trialing
                     : SubscriptionState::Active)->value,
                 'tier_key' => $intent->tier_key,
+                // The declarations this purchase was made under, and only those: a returning customer's row is
+                // reused, and the previous subscription's declarations do not cover this one.
+                'declaration_reference' => $intent->declaration_reference,
                 // PRESERVED, never nulled — the same shape `SyncPlanFromSubscription` uses for this exact
                 // column. `LocalSubscriptionStarter` decides "has this owner had a trial" from it, so a
                 // plain write destroys the evidence the guard reads: the second, trial-LESS subscribe

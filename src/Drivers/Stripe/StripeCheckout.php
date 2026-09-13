@@ -64,7 +64,7 @@ final readonly class StripeCheckout implements Checkout
         private CanReceiveMoney $receiving,
     ) {}
 
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null): ClientIntent
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): ClientIntent
     {
         // Defense in depth: refuse to open a paid checkout for an ineligible owner even if a caller
         // bypassed the UI eligibility guard (mirrors StripeOneTimeCharge).
@@ -88,7 +88,7 @@ final readonly class StripeCheckout implements Checkout
         // trial/tax/promo/discount groups, a variable line-item list). The payload IS a valid
         // subscription-mode Checkout Session request; its shape is asserted field-by-field in StripeCheckoutTest.
         // @phpstan-ignore argument.type
-        $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant));
+        $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant, $declarationReference));
 
         $url = $session->url ?? null;
 
@@ -105,7 +105,7 @@ final readonly class StripeCheckout implements Checkout
      *
      * @return array<string, mixed>
      */
-    private function payload(Model $billable, string $tierKey, string $price, string $customerId, ?string $couponCode, ?Model $merchant): array
+    private function payload(Model $billable, string $tierKey, string $price, string $customerId, ?string $couponCode, ?Model $merchant, ?string $declarationReference = null): array
     {
         $payload = [
             'mode' => 'subscription',
@@ -147,6 +147,18 @@ final readonly class StripeCheckout implements Checkout
             $payload['automatic_tax'] = ['enabled' => true];
             $payload['tax_id_collection'] = ['enabled' => true];
             $payload['customer_update'] = ['address' => 'auto'];
+        }
+
+        // The declaration key rides on the SUBSCRIPTION, not on the session. Session metadata stays behind on
+        // the session, while `subscription_data.metadata` is copied onto the subscription object, which is what
+        // every later webhook reports and the local row mirrors. MERGED like the routing below, so a trial block
+        // already in `subscription_data` survives. A null adds nothing: a checkout without declarations sends
+        // the payload it sent before the key existed.
+        if ($declarationReference !== null) {
+            $payload['subscription_data'] = [
+                ...($payload['subscription_data'] ?? []),
+                'metadata' => ['withdrawal_declaration' => $declarationReference],
+            ];
         }
 
         // A routed sale MERGES its destination and fee into subscription_data rather than assigning it: the

@@ -33,6 +33,11 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * job: a provider customer id is unique only WITHIN its account, so the effect resolves the owner
  * account-scoped, never globally where the same id under another merchant would resolve to a stranger. Null
  * on a platform event (the global lookup is correct there); the merchant webhook mapper stamps it.
+ *
+ * `declarationReference` is the key the buyer's withdrawal declarations were recorded under, read back off the
+ * subscription the checkout stamped it on, so the local row can carry it and the ledger can find the
+ * declarations for this subscription. Null when the subscription carries none, the ordinary case on every
+ * install without a consumer-rights profile.
  */
 final readonly class SubscriptionStateChanged implements BillingDomainEvent, IdentifiesCustomer
 {
@@ -47,5 +52,6 @@ final readonly class SubscriptionStateChanged implements BillingDomainEvent, Ide
         public ?int $trialEnd = null,
         public ?MerchantScope $merchant = null,
         public ?string $merchantAccountReference = null,
+        public ?string $declarationReference = null,
     ) {}
 }
