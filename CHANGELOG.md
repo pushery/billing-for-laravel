@@ -4,6 +4,12 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.22.0] - 2026-09-13
+
+### Added
+
+- **`BillingFake::assertCanceled()`, `assertResumed()` and `assertCanceledNow()` take an optional `MerchantScope`.** The fake recorded the scope of every cancel, resume and immediate cancel and never read it back, so a marketplace consumer could not prove which subscription its code ended: canceling a member's subscription at the wrong creator passed the same assertion as canceling the right one. Given a scope, the action has to have run under that merchant, compared by `uid()`, and a failure names the scope it expected and every scope the action did run under. An action recorded without a scope counts as `MerchantScope::platform()`, the scope a null merchant collapses to everywhere else. Without the argument nothing changes.
+
 ## [0.21.2] - 2026-09-10
 
 ### Changed
@@ -6550,7 +6556,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.21.2...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/pushery/billing-for-laravel/compare/v0.21.2...v0.22.0
 [0.21.2]: https://github.com/pushery/billing-for-laravel/compare/v0.21.1...v0.21.2
 [0.21.1]: https://github.com/pushery/billing-for-laravel/compare/v0.21.0...v0.21.1
 [0.21.0]: https://github.com/pushery/billing-for-laravel/compare/v0.20.1...v0.21.0

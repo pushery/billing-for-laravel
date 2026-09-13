@@ -17,6 +17,7 @@ use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Testing\BillingFake;
 use Pushery\Billing\Testing\FakeMarketplaceRails;
+use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
  * A testing facade for the money-mutating billing seams. Call {@see Billing::fake()} in a test to bind a
@@ -27,9 +28,9 @@ use Pushery\Billing\Testing\FakeMarketplaceRails;
  * @method static void assertSubscribeStarted(Model $owner, string $tierKey)
  * @method static void assertNothingSubscribed()
  * @method static void assertSwapped(Model $owner, string $tierKey)
- * @method static void assertCanceled(Model $owner)
- * @method static void assertResumed(Model $owner)
- * @method static void assertCanceledNow(Model $owner)
+ * @method static void assertCanceled(Model $owner, ?MerchantScope $merchant = null)
+ * @method static void assertResumed(Model $owner, ?MerchantScope $merchant = null)
+ * @method static void assertCanceledNow(Model $owner, ?MerchantScope $merchant = null)
  * @method static void assertPurchased(Model $owner, string $addonKey)
  * @method static void assertNothingCharged()
  *

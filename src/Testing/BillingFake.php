@@ -205,19 +205,22 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         PHPUnit::assertTrue($found, "Expected a swap to tier [{$tierKey}], but it did not happen.");
     }
 
-    public function assertCanceled(Model $owner): void
+    /** The owner's subscription was canceled, under the given merchant when one is named. */
+    public function assertCanceled(Model $owner, ?MerchantScope $merchant = null): void
     {
-        $this->assertLifecycle($owner, 'cancel');
+        $this->assertLifecycle($owner, 'cancel', $merchant);
     }
 
-    public function assertResumed(Model $owner): void
+    /** The owner's cancellation was taken back, under the given merchant when one is named. */
+    public function assertResumed(Model $owner, ?MerchantScope $merchant = null): void
     {
-        $this->assertLifecycle($owner, 'resume');
+        $this->assertLifecycle($owner, 'resume', $merchant);
     }
 
-    public function assertCanceledNow(Model $owner): void
+    /** The owner's subscription ended immediately, under the given merchant when one is named. */
+    public function assertCanceledNow(Model $owner, ?MerchantScope $merchant = null): void
     {
-        $this->assertLifecycle($owner, 'cancelNow');
+        $this->assertLifecycle($owner, 'cancelNow', $merchant);
     }
 
     public function assertPurchased(Model $owner, string $addonKey): void
@@ -346,17 +349,52 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         PHPUnit::assertTrue($denied, 'Expected the receive gate to have denied the merchant, but it did not refuse one.');
     }
 
-    private function assertLifecycle(Model $owner, string $action): void
+    /**
+     * A lifecycle action for the owner, held to the merchant scope it ran under when the caller names one.
+     *
+     * The scope was recorded from the start and never read back, so a member with subscriptions at two
+     * creators could have the wrong one canceled and the test would still pass. An optional parameter is
+     * enough here, unlike the coupon on assertSubscribeStartedWithCoupon(): null has one meaning left, "do
+     * not check", because the platform's own subscription is spelled MerchantScope::platform(). A recorded
+     * null counts as that platform, the scope a null merchant collapses to everywhere else in the package.
+     */
+    private function assertLifecycle(Model $owner, string $action, ?MerchantScope $merchant = null): void
     {
         $found = false;
+        $seen = [];
 
         foreach ($this->lifecycle as $call) {
-            if ($this->sameOwner($call['owner'], $owner) && $call['action'] === $action) {
-                $found = true;
+            if (! $this->sameOwner($call['owner'], $owner) || $call['action'] !== $action) {
+                continue;
             }
+
+            $recorded = ($call['merchant'] ?? MerchantScope::platform())->uid();
+
+            if (! $merchant instanceof MerchantScope || $recorded === $merchant->uid()) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $recorded;
         }
 
-        PHPUnit::assertTrue($found, "Expected the subscription action [{$action}] for the owner, but it did not happen.");
+        if (! $merchant instanceof MerchantScope) {
+            PHPUnit::assertTrue($found, "Expected the subscription action [{$action}] for the owner, but it did not happen.");
+
+            return;
+        }
+
+        // The scopes it DID run under go in the message, for the reason the coupon assertion gives: the fake
+        // is holding the answer, and a bare "it did not happen" sends the reader off to add a dump.
+        PHPUnit::assertTrue($found, sprintf(
+            'Expected the subscription action [%s] for the owner under merchant [%s], but %s.',
+            $action,
+            $merchant->uid(),
+            $seen === []
+                ? 'that action did not happen for the owner at all'
+                : 'it happened under ['.implode(', ', $seen).']',
+        ));
     }
 
     private function sameOwner(Model $a, Model $b): bool
