@@ -114,6 +114,11 @@ final class OwnerScopedTables
         // it would remove the platform's only proof and hand every past sale back to the fourteen-day rule.
         // So it outlives the person named on it, unlinked rather than deleted, exactly as the invoice does.
         'billing_withdrawal_consents',
+
+        // What a tax authority's register said about a buyer's tax ID, one row per answer. It records when the
+        // platform could first have known that a reverse-charged sale went to a number the register does not
+        // know, and it supports invoices that are kept for years, so it follows them: unlinked, never deleted.
+        'billing_tax_id_verifications',
     ];
 
     /** The row survives; the personal data inside it does not. */

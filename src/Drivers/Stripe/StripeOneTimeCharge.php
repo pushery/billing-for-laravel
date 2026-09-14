@@ -151,7 +151,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // literal — and so PHPStan can see that it only happens where a routing exists at all.
         $intent = $routed['intent'] ?? null;
 
-        if ($buyerFee instanceof FeeLine && $intent !== null) {
+        if ($buyerFee instanceof FeeLine) {
             // THE WHOLE CORRECTNESS OF THIS LANE. The buyer now pays item + fee, and the provider moves
             // everything that is not the application fee to the merchant — so leaving it alone would hand
             // the platform's own intermediation revenue to the seller, on every sale, silently. What must

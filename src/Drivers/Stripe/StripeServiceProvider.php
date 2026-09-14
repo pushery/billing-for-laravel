@@ -59,6 +59,7 @@ use Pushery\Billing\Events\RoutedChargeConfirmed;
 use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
 use Pushery\Billing\Events\SaleCountryReported;
 use Pushery\Billing\Events\SubscriptionStateChanged;
+use Pushery\Billing\Events\TaxIdVerificationReported;
 use Pushery\Billing\Events\TrialEnding;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\WebhookSecretGuard;
@@ -75,6 +76,7 @@ use Pushery\Billing\Webhooks\Effects\RecordFailedMerchantPayout;
 use Pushery\Billing\Webhooks\Effects\RecordProviderFee;
 use Pushery\Billing\Webhooks\Effects\RecordProviderTransferReversal;
 use Pushery\Billing\Webhooks\Effects\RecordRoutedSubscriptionCharge;
+use Pushery\Billing\Webhooks\Effects\RecordTaxIdVerification;
 use Pushery\Billing\Webhooks\Effects\RefreshMerchantCapabilities;
 use Pushery\Billing\Webhooks\Effects\ReopenWriteOffOnLateReceipt;
 use Pushery\Billing\Webhooks\Effects\ReverseAddonPurchase;
@@ -299,6 +301,9 @@ final class StripeServiceProvider extends ServiceProvider
         // A sale Stripe taxed in a country `billing.tax_markets` does not open is undone: the subscription ended,
         // the payment refunded. Inert without a market map, so an install that configured none sees no change.
         $registry->on(SaleCountryReported::class, ReverseSaleIntoClosedMarket::class);
+        // What a tax authority's register said about a buyer's tax ID, kept per answer. A no raises
+        // TaxIdVerificationFailed with the invoices issued with the charge reversed under that number.
+        $registry->on(TaxIdVerificationReported::class, RecordTaxIdVerification::class);
         $registry->on(InvoiceCorrected::class, PersistInvoiceCorrection::class);
         $registry->on(MandateRevoked::class, RevokeMandate::class);
         // Its counterpart, and the reason the pair matters: without this the package could watch charging
