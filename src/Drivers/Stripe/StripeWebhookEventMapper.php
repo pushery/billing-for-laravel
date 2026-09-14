@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Enums\InvoiceStatus;
+use Pushery\Billing\Enums\TaxIdVerificationStatus;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\BillingDomainEvent;
@@ -25,6 +26,7 @@ use Pushery\Billing\Events\RoutedChargeConfirmed;
 use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
 use Pushery\Billing\Events\SaleCountryReported;
 use Pushery\Billing\Events\SubscriptionStateChanged;
+use Pushery\Billing\Events\TaxIdVerificationReported;
 use Pushery\Billing\Events\TrialEnding;
 use Pushery\Billing\ValueObjects\InvoiceCorrectionSnapshot;
 use Pushery\Billing\ValueObjects\InvoiceSnapshot;
@@ -119,6 +121,11 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             ],
             'checkout.session.completed',
             'checkout.session.async_payment_succeeded' => $this->checkoutEvents($object),
+            // What a tax authority's register said about a buyer's tax ID. The checkout checks only the format, and
+            // the register answers afterwards: `created` carries a first answer where there is one, `updated` every
+            // later one.
+            'customer.tax_id.created',
+            'customer.tax_id.updated' => $this->taxIdVerificationEvents($object),
             // `@partially-mapped:` payment_intent.succeeded, payment_intent.payment_failed and
             // payment_intent.canceled ARE answered, for routed marketplace charges only. What stays out is
             // every INVOICE-DRIVEN payment, which is the whole customer-facing surface — and that qualifier
@@ -435,7 +442,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             // it as opaque metadata and hands it back here. Read from the same metadata bag as the add-on
             // key, so a session that lost one lost both -- which is far easier to notice than a payment that
             // quietly arrives with no declaration attached.
-            is_array($metadata) ? $this->string($metadata, 'withdrawal_declaration') : null,
+            $this->string($metadata, 'withdrawal_declaration'),
         ), new SaleCountryReported(
             $customer,
             $id,
@@ -445,6 +452,48 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             $amount,
             paid: $this->string($object, 'payment_status') === 'paid',
             chargeReference: $this->string($object, 'payment_intent'),
+        )];
+    }
+
+    /**
+     * The answer a register gave about a customer's tax ID, or nothing while there is none.
+     *
+     * A tax ID without `verification` was never sent to a register, and a status this package does not know is
+     * left alone rather than guessed at, because the answer decides whether a reverse-charged sale owed tax. The
+     * customer is read from `customer`, and from `owner.customer` where the object reports it there.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function taxIdVerificationEvents(array $object): array
+    {
+        $verification = $object['verification'] ?? null;
+
+        if (! is_array($verification)) {
+            return [];
+        }
+
+        $owner = $object['owner'] ?? null;
+        $customer = $this->string($object, 'customer')
+            ?? (is_array($owner) && $this->string($owner, 'type') === 'customer' ? $this->string($owner, 'customer') : null);
+        $id = $this->string($object, 'id');
+        $type = $this->string($object, 'type');
+        $value = $this->string($object, 'value');
+        $status = TaxIdVerificationStatus::tryFrom($this->string($verification, 'status') ?? '');
+
+        if ($customer === null || $id === null || $type === null || $value === null || ! $status instanceof TaxIdVerificationStatus) {
+            return [];
+        }
+
+        return [new TaxIdVerificationReported(
+            $customer,
+            'stripe',
+            $id,
+            $type,
+            $value,
+            $status,
+            $this->string($verification, 'verified_name'),
+            $this->string($verification, 'verified_address'),
         )];
     }
 

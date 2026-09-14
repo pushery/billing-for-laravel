@@ -44,7 +44,9 @@
             <nav class="mt-6 space-y-6" aria-label="{{ __('billing::account.title') }}">
                 @foreach ($accountNav->visible() as $group)
                     <div wire:key="nav-group-{{ $group['key'] }}">
-                        <p class="px-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
+                        {{-- gray-500 in the light scheme: gray-400 on the gray-50 page measured 2.48:1, under the
+                             4.5:1 small text needs. The dark scheme keeps gray-400, which reads well on gray-950. --}}
+                        <p class="px-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                             {{ __($group['label']) }}
                         </p>
                         <ul class="mt-2 space-y-1">

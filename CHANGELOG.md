@@ -4,6 +4,16 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.26.0] - 2026-09-14
+
+### Added
+
+- **A buyer's tax ID that turns out not to be registered is reported, with the invoices it touched.** A checkout that collects a tax ID has only its format checked while the buyer is on the page, and Stripe Tax reverses the charge on that format alone. Whether the number is registered is asked afterwards, and until now nothing read the answer. The package now keeps every answer Stripe reports in `billing_tax_id_verifications`, one row per answer and retained on erasure like the invoices it supports, and raises `TaxIdVerificationFailed` when the register does not know the number, naming the owner's invoices issued with the charge reversed under it. Run the migrations, and send `customer.tax_id.created` and `customer.tax_id.updated` to the Stripe endpoint.
+
+### Fixed
+
+- **The account navigation's group headings are readable against the page.** The four headings above the sidebar groups used a gray that measured 2.48:1 against the light page background, under the 4.5:1 that small text needs, on every account screen. They now use a darker gray in the light scheme, measured at 4.63:1, and keep their color in the dark scheme, measured at 7.74:1. A layout you published keeps the old heading color until you publish it again.
+
 ## [0.25.0] - 2026-09-14
 
 ### Added
@@ -6616,7 +6626,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/pushery/billing-for-laravel/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/pushery/billing-for-laravel/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/pushery/billing-for-laravel/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/pushery/billing-for-laravel/compare/v0.22.0...v0.23.0

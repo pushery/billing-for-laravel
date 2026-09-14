@@ -308,7 +308,7 @@ final class ManageSubscription extends AccountScreen
         // A downgrade waits for the period end (the current cycle is already paid at the higher tier). It is
         // recorded, shown, and cancellable until then — the provider is not touched now; ScheduledSwapRunner
         // performs the swap when the date arrives. An upgrade takes effect immediately.
-        if ($timing === SwapTiming::PeriodEnd && $subscription instanceof Subscription) {
+        if ($timing === SwapTiming::PeriodEnd) {
             $subscription->scheduleSwap($tierKey, $subscription->current_period_end ?? Carbon::now()->utc());
             $this->audit('subscription.swap_scheduled', ['tier' => $tierKey]);
         } else {

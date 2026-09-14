@@ -59,7 +59,7 @@
     },
     "require-dev": {
         "horstoeko/zugferd": "^1.0",
-        "larastan/larastan": "3.10.0",
+        "larastan/larastan": "3.12.1",
         "laravel/pao": "^1.1",
         "laravel/pint": "^1.0",
         "livewire/livewire": "^4.3",
@@ -71,8 +71,8 @@
         "pestphp/pest-plugin-evals": "^5.0",
         "pestphp/pest-plugin-laravel": "^5.0",
         "pestphp/pest-plugin-type-coverage": "^5.0",
-        "phpstan/phpstan": "2.2.9",
-        "rector/rector": "2.6.3",
+        "phpstan/phpstan": "2.2.14",
+        "rector/rector": "2.6.7",
         "spaze/phpstan-disallowed-calls": "4.14.0"
     },
     "suggest": {
@@ -98,7 +98,8 @@
         "test": "pest",
         "test:coverage": "@php vendor/bin/pest --coverage-clover=build/clover.xml",
         "test:type-coverage": "@php vendor/bin/pest --type-coverage --type-coverage-json=build/types.json --min=100",
-        "test:browser": "pest tests/Browser",
+        "demo-css": "npx @tailwindcss/cli -i workbench/resources/css/account.src.css -o workbench/resources/css/account.css --minify",
+        "test:browser": "composer demo-css && pest tests/Browser",
         "test:stripe-live": "pest tests/LiveStripe",
         "test:evals": "pest tests/Evals --evals",
         "test:database": "pest --testsuite=Postgres,MySql",
