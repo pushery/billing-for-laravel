@@ -357,6 +357,29 @@ final readonly class SyncPlanFromSubscription
     }
 
     /**
+     * When the subscription in the row began: the event's start, the one on file for the same subscription, or now.
+     *
+     * The start of the SAME provider subscription never moves, so an event that carries none keeps the known one. A
+     * different subscription taking the row over is a new contract and must not inherit the old start, or its
+     * withdrawal window would have closed before it began. With no start from the provider, the moment the package
+     * first hears of the subscription is the nearest honest answer, and a late one only keeps the window open longer.
+     */
+    private function startedAt(?Subscription $subscription, SubscriptionStateChanged $event): ?Carbon
+    {
+        $conveyed = $this->moment($event->startedAt);
+
+        if ($conveyed instanceof Carbon) {
+            return $conveyed;
+        }
+
+        if ($subscription instanceof Subscription && $subscription->provider_id === $event->subscriptionReference) {
+            return $subscription->started_at;
+        }
+
+        return Carbon::now();
+    }
+
+    /**
      * The row attributes an event resolves to. An event that conveys no tier, recency or cycle must never
      * erase a known one, so each of those falls back to the existing row's value (null on a first insert).
      *
@@ -397,6 +420,8 @@ final readonly class SyncPlanFromSubscription
             // The key the buyer's withdrawal declarations were recorded under. Never erased by an event that
             // carries none, like the columns above, and never inherited by a different subscription either.
             'declaration_reference' => $this->declarationReference($subscription, $event),
+            // When the subscription in the row began, so a withdrawal can find the day its window opened.
+            'started_at' => $this->startedAt($subscription, $event),
         ];
     }
 

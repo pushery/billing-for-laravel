@@ -26,6 +26,7 @@ use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\ReadsRoutedInvoiceCommission;
+use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
 use Pushery\Billing\Contracts\ReportsMovedShares;
 use Pushery\Billing\Contracts\SeatBilling;
 use Pushery\Billing\Contracts\StartsSubscriptions;
@@ -140,6 +141,8 @@ final class StripeServiceProvider extends ServiceProvider
         $this->app->bind(Invoices::class, StripeInvoices::class);
         $this->app->bind(UpcomingInvoice::class, StripeUpcomingInvoice::class);
         $this->app->bind(SubscriptionActions::class, StripeSubscriptionActions::class);
+        // The payment behind a subscription's period in progress, which a withdrawal refunds against.
+        $this->app->bind(ReadsSubscriptionPayments::class, StripeSubscriptionPayments::class);
         $this->app->bind(OneTimeCharge::class, StripeOneTimeCharge::class);
         $this->app->bind(Checkout::class, StripeCheckout::class);
         // The screen's own question -- start a subscription -- answered in this driver's shape. Bound

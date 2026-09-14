@@ -18,6 +18,7 @@ use Pushery\Billing\ValueObjects\MandateReference;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\RefundResult;
 use Pushery\Billing\ValueObjects\TokenizedMethod;
+use RuntimeException;
 use Stripe\Charge;
 use Stripe\Exception\CardException;
 use Stripe\PaymentIntent;
@@ -153,7 +154,7 @@ final readonly class StripePaymentRails implements PaymentRails
 
     public function refund(string $chargeReference, Money $amount, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): RefundResult
     {
-        $params = ['payment_intent' => $chargeReference, 'amount' => $amount->minorUnits];
+        $params = ['payment_intent' => $this->paymentIntentFor($chargeReference), 'amount' => $amount->minorUnits];
 
         // The flag only means something on a DESTINATION charge, where the transfer is part of the payment
         // and the provider can unwind both together. On a separate transfer the money moved in its own call,
@@ -211,6 +212,36 @@ final readonly class StripePaymentRails implements PaymentRails
             // second partial refund exists — and a number that is right until it quietly is not is worse
             // than none at all.
         );
+    }
+
+    /**
+     * The payment intent a refund has to name for this charge reference.
+     *
+     * A reference is usually the intent itself: the one-time lanes record the PaymentIntent they created. A
+     * routed SUBSCRIPTION cycle is recorded under its INVOICE instead, because one invoice is exactly one
+     * cycle and that is what keeps a second payment of the same subscription from landing on the first
+     * cycle's ledger row. The refund API takes no invoice, so sending the ledger's reference as it stands
+     * asked Stripe to refund a payment intent called `in_…`, and a support refund or a withdrawal of a
+     * creator subscription never reached the buyer.
+     *
+     * An invoice with no payment behind it has nothing to refund against, and that refuses loudly rather
+     * than sending a request that cannot succeed.
+     */
+    private function paymentIntentFor(string $chargeReference): string
+    {
+        if (! str_starts_with($chargeReference, 'in_')) {
+            return $chargeReference;
+        }
+
+        $intent = StripeInvoicePayments::intentIdOf(
+            $this->stripe->invoices->retrieve($chargeReference, ['expand' => ['payments']])->toArray(),
+        );
+
+        if ($intent === null) {
+            throw new RuntimeException("Stripe names no payment behind invoice {$chargeReference}, so there is nothing to refund it against.");
+        }
+
+        return $intent;
     }
 
     /**

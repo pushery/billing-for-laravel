@@ -58,6 +58,7 @@ final readonly class StripeSubscriptionMapper
             merchant: $merchant,
             merchantAccountReference: $merchantAccount,
             declarationReference: $this->declaration($subscription),
+            startedAt: $this->int($subscription, 'start_date'),
         );
     }
 

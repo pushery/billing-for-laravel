@@ -121,6 +121,7 @@ use Pushery\Billing\Contracts\PlatformFeeResolver;
 use Pushery\Billing\Contracts\ProductTaxonomy;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\PublishesExchangeRates;
+use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
 use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\RendersReportingRecord;
 use Pushery\Billing\Contracts\ReportingProfile;
@@ -233,6 +234,7 @@ use Pushery\Billing\Support\BillingConfigValidator;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\CustodyGuard;
 use Pushery\Billing\Support\GoLivePreflightGuard;
+use Pushery\Billing\Support\LocalSubscriptionPayments;
 use Pushery\Billing\Support\LocalSubscriptionStateReader;
 use Pushery\Billing\Support\MarketplaceSupportGuard;
 use Pushery\Billing\Support\MeteringSupportGuard;
@@ -450,6 +452,11 @@ final class BillingServiceProvider extends ServiceProvider
         // The consumer-withdrawal reading, bound to the German one. Behind its own profile, off by
         // default; a consumer elsewhere binds their own and the core stays free of any statute.
         $this->app->bind(ConsumerWithdrawalPolicy::class, GermanWithdrawalPolicy::class);
+
+        // Where a subscription withdrawal finds the payment behind the period in progress. The local answer is the
+        // default because it asks no provider; the Stripe provider registered below replaces it, and a local-engine
+        // driver puts it back when that driver is the active one.
+        $this->app->bind(ReadsSubscriptionPayments::class, LocalSubscriptionPayments::class);
 
         // The conformity obligation reads from its own profile, bound beside the withdrawal one rather than
         // folded into it: they answer different questions and a jurisdiction may well change one without the
@@ -800,6 +807,7 @@ final class BillingServiceProvider extends ServiceProvider
         // does not have. (UsageProvider and TierResolver are already provider-free, so they need no rebind.)
         if (! (bool) $this->app->make(Repository::class)->get('billing.enabled', true)) {
             $this->app->bind(SubscriptionActions::class, NullSubscriptionActions::class);
+            $this->app->bind(ReadsSubscriptionPayments::class, LocalSubscriptionPayments::class);
             $this->app->bind(UpcomingInvoice::class, NullUpcomingInvoice::class);
             $this->app->bind(Invoices::class, NullInvoices::class);
         }

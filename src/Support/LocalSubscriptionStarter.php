@@ -412,6 +412,8 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
                 'status' => SubscriptionState::Trialing->value,
                 'tier_key' => $tierKey,
                 'trial_ends_at' => $trialEndsAt,
+                // A new contract, whatever the row held before: its withdrawal window opens now.
+                'started_at' => $now,
                 'current_period_start' => $now,
                 'current_period_end' => $trialEndsAt,
                 // The first cycle runs when the trial ends, not before. A trial that scheduled processing

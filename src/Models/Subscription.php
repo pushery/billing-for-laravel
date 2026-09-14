@@ -46,6 +46,9 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * @property ?string $merchant_type
  * @property int|string|null $merchant_id
  * @property ?string $declaration_reference
+ * @property ?Carbon $started_at
+ * @property ?Carbon $created_at
+ * @property ?Carbon $updated_at
  */
 final class Subscription extends Model
 {
@@ -57,7 +60,7 @@ final class Subscription extends Model
         'scheduled_tier_key', 'scheduled_swap_at',
         'trial_ends_at', 'ends_at', 'delinquent_since', 'dunning_level', 'payment_reminded_on', 'synced_event_at',
         'current_period_start', 'current_period_end', 'scheduled_processing_at',
-        'merchant_uid', 'merchant_type', 'merchant_id', 'declaration_reference',
+        'merchant_uid', 'merchant_type', 'merchant_id', 'declaration_reference', 'started_at',
     ];
 
     /**
@@ -96,6 +99,7 @@ final class Subscription extends Model
         'current_period_end' => UtcDateTime::class,
         'scheduled_processing_at' => UtcDateTime::class,
         'scheduled_swap_at' => UtcDateTime::class,
+        'started_at' => UtcDateTime::class,
     ];
 
     public function onTrial(): bool
