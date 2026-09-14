@@ -260,14 +260,15 @@ final readonly class XRechnungInvoice implements EInvoice
             $exempt,
             $rate,
             $invoice->destination_country,
+            $invoice->taxation_basis,
         );
 
         $this->el($doc, $category, 'cbc:ID', $resolved->code);
         $this->el($doc, $category, 'cbc:Percent', $this->rate($reverseCharge || $exempt ? 0.0 : $rate));
 
         if ($withReason && $resolved->needsReason()) {
-            // AE, K and G each carry their own VATEX code; an exempt supply (E) needs only its reason text
-            // (BR-E-10 accepts the text alone). BT-120 is the derived reason (from vat_note), falling back to
+            // AE, K and G each carry their own VATEX code, and so does a margin-taxed resale (E, VATEX-EU-F); any
+            // other exempt supply (E) needs only its reason text (BR-E-10 accepts the text alone). BT-120 is the derived reason (from vat_note), falling back to
             // the wording that belongs to the category — never hardcoded past that fallback.
             if ($resolved->vatexCode !== null) {
                 $this->el($doc, $category, 'cbc:TaxExemptionReasonCode', $resolved->vatexCode);

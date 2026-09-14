@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Invoicing;
 
 use Pushery\Billing\Contracts\SuppliesMarginSchemeWording;
+use Pushery\Billing\Invoicing\Guards\MarginStatesNoTaxGuard;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use RuntimeException;
@@ -26,18 +27,17 @@ final readonly class MarginDocumentGuard
 {
     public function __construct(private CheckpointRegistry $profiles) {}
 
-    /** @throws RuntimeException when a margin-taxed document carries a tax amount */
+    /**
+     * The refusal the table already applies when a document is created, asked again at render.
+     *
+     * A row saved before that guard existed, or past it, still reaches the renderer. The rule lives in one
+     * place so the two answers cannot drift apart.
+     *
+     * @throws RuntimeException when a margin-taxed document carries a tax amount
+     */
     public function assertNoStatedTax(InvoiceRecord $invoice): void
     {
-        if (($invoice->tax_minor ?? 0) === 0) {
-            return;
-        }
-
-        throw new RuntimeException(
-            'A margin-taxed document must not state a tax amount. Stating one does not merely misreport it: '
-            .'the seller owes the tax on the margin AND the amount written down, while the buyer can deduct '
-            .'neither. Put the margin tax in the seller\'s own books and leave the document silent.'
-        );
+        new MarginStatesNoTaxGuard()->assertStatesNoTax($invoice);
     }
 
     /** The translation key of the prescribed wording, or null where the jurisdiction supplies none. */

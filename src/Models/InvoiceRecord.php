@@ -34,6 +34,7 @@ use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Enums\TaxRateCategory;
 use Pushery\Billing\Invoicing\Guards\ChargeClaimKeyDeriver;
 use Pushery\Billing\Invoicing\Guards\ImmutableIssuedInvoiceGuard;
+use Pushery\Billing\Invoicing\Guards\MarginStatesNoTaxGuard;
 use Pushery\Billing\Invoicing\Guards\RegimePostureGuard;
 use Pushery\Billing\Invoicing\Guards\SellerMatchesPostureGuard;
 use Pushery\Billing\Invoicing\Guards\TaxWithoutBasisGuard;
@@ -302,7 +303,7 @@ final class InvoiceRecord extends Model
     #[Override]
     protected static function booted(): void
     {
-        // Five delegations, and that shape is the point. Every rule below used to live here as a closure —
+        // Seven delegations, and that shape is the point. Every rule below used to live here as a closure —
         // a third of this class in one static method — which meant each of them could only be exercised by
         // saving a real row against a real database. A rule that expensive to reach is a rule whose edge
         // cases do not get written, and the ungiven edge cases are the ones that come back as defects.
@@ -362,6 +363,11 @@ final class InvoiceRecord extends Model
             // because there are seven of them and the next one is written by somebody who has not read this
             // paragraph — the table is the one place every document must pass through.
             new TaxWithoutBasisGuard()->assertHasBasis($invoice);
+
+            // And that a margin-taxed document states no tax. On create for the same reason: the package
+            // issues no such document itself, so every one comes from consumer code, and a stated tax on a
+            // frozen row can only be canceled, never corrected.
+            new MarginStatesNoTaxGuard()->assertStatesNoTax($invoice);
         });
 
         // And what an issued document may no longer change.

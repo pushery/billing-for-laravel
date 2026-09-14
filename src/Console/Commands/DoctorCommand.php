@@ -26,6 +26,7 @@ use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Marketplace\GermanTaxDisclosurePolicy;
+use Pushery\Billing\Marketplace\UnmovedMerchantShares;
 use Pushery\Billing\Models\ExchangeRateRecord;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Preflight\CheckpointRegistry;
@@ -115,7 +116,7 @@ final class DoctorCommand extends Command
         ConsumerWithdrawalPolicy::class => GermanWithdrawalPolicy::class,
     ];
 
-    public function handle(Repository $config, StripeClient $stripe, AddonCatalog $addons, AddonContentMap $works, DistanceSaleThresholdMonitor $thresholds): int
+    public function handle(Repository $config, StripeClient $stripe, AddonCatalog $addons, AddonContentMap $works, DistanceSaleThresholdMonitor $thresholds, UnmovedMerchantShares $unmoved): int
     {
         if (! (bool) $config->get('billing.enabled', true)) {
             $this->components->info('Billing is disabled; nothing to check.');
@@ -148,6 +149,8 @@ final class DoctorCommand extends Command
         // check held separately has to be remembered at every exit, and forgetting one is invisible —
         // the command still prints the warning, it just stops counting it.
         $failing = $this->reportStrandedOrders() || $failing;
+
+        $failing = $this->reportUnmovedMerchantShares($unmoved) || $failing;
 
         $failing = $this->reportHostKeyTypeMismatch() || $failing;
 
@@ -511,6 +514,32 @@ final class DoctorCommand extends Command
             ."'{$actual}'. The setting is read when a table is created, so changing it later does not "
             .'alter tables that already exist. Every write keyed to one of your models will fail until the '
             .'columns are migrated to match — this is a data migration, not a setting change.'
+        );
+
+        return true;
+    }
+
+    /**
+     * Report paid sales whose merchant share failed to move.
+     *
+     * The buyer has paid and the merchant has not been. No webhook ever arrives for a transfer that was never
+     * created, so without this line the only trace is a row nobody reads, and the merchant is the one who finds
+     * out, much later, by asking where their money went.
+     *
+     * @return bool whether any was found
+     */
+    private function reportUnmovedMerchantShares(UnmovedMerchantShares $shares): bool
+    {
+        $unmoved = $shares->count();
+
+        if ($unmoved === 0) {
+            return false;
+        }
+
+        $this->components->error(
+            "{$unmoved} routed sale(s) were paid for and the merchant's share never moved. Fix the cause, then run "
+            .'billing:marketplace:retry-transfers. It retries under the key the sale used, so a provider that kept '
+            .'the failed answer can replay it for a while (Stripe: 24 hours) before a retry goes through.'
         );
 
         return true;

@@ -13,13 +13,16 @@ use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\RefundAttemptStatus;
 use Pushery\Billing\Enums\ReversalCause;
+use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\SettlementState;
+use Pushery\Billing\Events\MerchantShareNotMoved;
 use Pushery\Billing\Events\MerchantTransferReversed;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\RefundAttempt;
 use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
+use Throwable;
 
 /**
  * The record of what was routed, and the only writer of the three reversal totals.
@@ -106,6 +109,14 @@ final readonly class RoutedChargeLedger
          * happened, which is a different statement from a fee of nought.
          */
         ?FeeLine $buyerFee = null,
+        /**
+         * Who the tax law treated as the seller, frozen for the small-business turnover.
+         *
+         * Under the commission chain the merchant supplies the platform and their turnover is the payout.
+         * Otherwise they supply the buyer, and it is the whole price less their own tax. Null means "written
+         * before this was recorded", and a reader counts such a row under the installation's posture.
+         */
+        ?SellerOfRecordPosture $sellerPosture = null,
     ): MerchantCharge {
         return MerchantCharge::query()->firstOrCreate(
             ['provider' => $provider, 'charge_reference' => $chargeReference],
@@ -115,6 +126,7 @@ final readonly class RoutedChargeLedger
                 'gross_minor' => $gross->minorUnits,
                 'fee_minor' => $fee->minorUnits,
                 'charge_type' => $chargeType,
+                'seller_posture' => $sellerPosture,
                 'fee_bps' => $policy?->bps,
                 'fee_flat_minor' => $policy?->flatMinor,
                 // The DIRECTION, frozen beside the rate and the flat part, because a clawback is a
@@ -157,7 +169,7 @@ final readonly class RoutedChargeLedger
         //
         // The class docblock has claimed a row lock covers every advance since it was written. It covered
         // exactly one of them.
-        return $this->advanceFromPending($charge, fn (MerchantCharge $locked): array => [
+        return $this->changeWhilePending($charge, fn (MerchantCharge $locked): array => [
             'settlement_state' => SettlementState::Settled,
             'transfer_reference' => $transferReference ?? $locked->transfer_reference,
             // What the provider says it moved, where it said anything. Kept beside what was owed rather
@@ -177,13 +189,48 @@ final readonly class RoutedChargeLedger
      */
     public function fail(MerchantCharge $charge): bool
     {
-        return $this->advanceFromPending($charge, static fn (): array => [
+        return $this->changeWhilePending($charge, static fn (): array => [
             'settlement_state' => SettlementState::Failed,
         ]);
     }
 
     /**
-     * Move a charge out of `pending`, once, with the row held.
+     * Note that a paid sale's share failed to move, and say so.
+     *
+     * The row stays `pending`: the share has not settled, and a third reading of that column would ask every
+     * reader of it to learn a case. What changes is that the row now carries when it failed and why, which is
+     * what separates it from a payment still clearing, and what the retry and `billing:doctor` look for.
+     *
+     * Only while pending, under the same lock as every other change here. A share that settled in the meantime
+     * did move, and recording a failure over it would send somebody to fix a payment that happened.
+     */
+    public function recordTransferFailure(MerchantCharge $charge, Model $merchant, Throwable $failure): bool
+    {
+        $recorded = $this->changeWhilePending($charge, static fn (): array => [
+            'transfer_failed_at' => Carbon::now(),
+            // The class as well as the message: "Could not connect" and "account restricted" need different
+            // hands, and a message alone does not always say which kind of failure it was.
+            'transfer_failure' => mb_substr($failure::class.': '.$failure->getMessage(), 0, 255),
+        ]);
+
+        if ($recorded) {
+            ($this->events ?? Container::getInstance()->make(Dispatcher::class))->dispatch(new MerchantShareNotMoved(
+                merchant: $merchant,
+                provider: $charge->provider,
+                chargeReference: $charge->charge_reference,
+                amount: $charge->net(),
+                reason: $failure->getMessage(),
+            ));
+        }
+
+        return $recorded;
+    }
+
+    /**
+     * Change a charge that is still `pending`, once, with the row held.
+     *
+     * Most changes move it out of `pending`. Recording a failed transfer changes the row and leaves it there,
+     * and it needs the same guarantee for the same reason.
      *
      * The transition is decided from the row read INSIDE the lock, never from the instance the caller
      * happened to be holding — that instance was loaded before the other delivery arrived, and deciding
@@ -195,7 +242,7 @@ final readonly class RoutedChargeLedger
      *
      * @param  callable(MerchantCharge): array<string, mixed>  $changes
      */
-    private function advanceFromPending(MerchantCharge $charge, callable $changes): bool
+    private function changeWhilePending(MerchantCharge $charge, callable $changes): bool
     {
         return (bool) DB::transaction(function () use ($charge, $changes): bool {
             $locked = MerchantCharge::query()

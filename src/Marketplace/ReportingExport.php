@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace;
 
 use Carbon\CarbonInterface;
+use Pushery\Billing\Contracts\RendersDueDiligenceRecord;
 use Pushery\Billing\Contracts\RendersReportingRecord;
 use Pushery\Billing\Contracts\SuppliesSellerRecords;
 use Pushery\Billing\Exceptions\ReportingNotPlausible;
@@ -59,7 +60,7 @@ final readonly class ReportingExport
     {
         $this->gate->assertClear($year, $currency);
 
-        $reports = $this->period->reportsFor($year, $currency);
+        $reports = $this->handedToTheRenderer($this->period->reportsFor($year, $currency));
 
         return $this->archive->store(
             year: $year,
@@ -70,6 +71,30 @@ final readonly class ReportingExport
             sellerCount: count($reports),
             at: $at,
         );
+    }
+
+    /**
+     * The sellers the renderer is given, which depends on what the renderer is.
+     *
+     * A record of the due diligence gets every seller the period examined. Anything else gets the reportable
+     * ones only, and with them only their records: a renderer that is not a due-diligence record is a
+     * transmission, and a transmission that carries a seller the duty does not cover is not a correct one.
+     * {@see RendersDueDiligenceRecord} says why this is decided here rather than left to the renderer.
+     *
+     * `reportable()` refuses a seller with an unclassified line, and the refusal is left to propagate. The
+     * plausibility gate has already run, so reaching it means a finding was answered that should not have
+     * been, and filing either way would record a decision nobody made.
+     *
+     * @param  list<SellerPeriodReport>  $reports
+     * @return list<SellerPeriodReport>
+     */
+    private function handedToTheRenderer(array $reports): array
+    {
+        if ($this->renderer instanceof RendersDueDiligenceRecord) {
+            return $reports;
+        }
+
+        return array_values(array_filter($reports, static fn (SellerPeriodReport $report): bool => $report->reportable()));
     }
 
     /**

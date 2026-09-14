@@ -501,6 +501,36 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
      * @param  array<array-key, mixed>  $data
      */
     /**
+     * How much of the customer's Stripe balance this invoice consumed.
+     *
+     * Stripe keeps a customer balance where a CREDIT is negative: `starting_balance` is what the customer
+     * held when the invoice was created, `ending_balance` what they hold after it. Credit consumed is
+     * therefore `ending - starting` — with EUR 100 of credit and an invoice for the same, `-10000` to `0`
+     * gives `10000`.
+     *
+     * An invoice can also move the balance the other way, which comes out negative here and is floored at
+     * zero: a reader debits this figure, and debiting a negative one would take credit away at the moment
+     * the customer gained it.
+     *
+     * `ending_balance` is null while an invoice is still a draft. Null there is not "consumed nothing" — it
+     * is "not decided yet" — and both come out as zero, which is right rather than convenient: a draft has
+     * consumed nothing, and the figure is read again on the finalized delivery that follows.
+     *
+     * @param  array<array-key, mixed>  $object
+     */
+    private function creditApplied(array $object): int
+    {
+        $starting = $this->int($object, 'starting_balance');
+        $ending = $this->int($object, 'ending_balance');
+
+        if ($starting === null || $ending === null) {
+            return 0;
+        }
+
+        return max(0, $ending - $starting);
+    }
+
+    /**
      * Build the neutral finalized-invoice snapshot from a Stripe invoice object, ready to persist and to
      * render an EN 16931 document from without going back to Stripe.
      *
@@ -536,6 +566,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             // Stripe stamps the customer's tax status onto the finalized invoice: 'reverse' is an intra-EU
             // B2B reverse charge (the buyer accounts for the VAT). That is the fact the e-invoice must carry.
             reverseCharge: $this->string($object, 'customer_tax_exempt') === 'reverse',
+            creditAppliedMinor: $this->creditApplied($object),
         ))];
 
         // Where the provider taxed a subscription cycle, reported with every invoice of a subscription, finalized

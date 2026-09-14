@@ -62,4 +62,18 @@ enum CreditReason: string
      * and a report that netted them would show a dunning customer as having spent nothing.
      */
     case ChargeOffsetReturned = 'charge_offset_returned';
+
+    /**
+     * Credit the PROVIDER applied to an invoice it raised, brought back onto this ledger.
+     *
+     * A driver with a customer balance mirrors a credit onto the provider so it reduces the next invoice
+     * automatically. The provider then spends it on its own, and this is the entry that tells the ledger —
+     * which this package calls its source of truth — that the money is gone.
+     *
+     * A separate case rather than a ChargeOffset, for the reason ChargeOffsetReturned is separate from
+     * ChargeOffset: one is credit this package decided to spend and the other is credit it learned had been
+     * spent. A reconciliation that netted them could not tell an installation whose provider consumes the
+     * balance from one whose local engine does, and those are different lanes with different evidence.
+     */
+    case ProviderInvoiceOffset = 'provider_invoice_offset';
 }

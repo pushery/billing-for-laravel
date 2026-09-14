@@ -24,6 +24,20 @@ enum VoucherInstrumentType: string
     /** The supply is already determined at issue, so the tax falls there. */
     case SinglePurpose = 'single_purpose';
 
+    /**
+     * Where an installation states which instrument it issues.
+     *
+     * The key lives here rather than in each reader: two readers spelling it themselves is how one of them
+     * ends up reading a key nobody sets, answering the default forever while the other follows the setting.
+     */
+    public const string CONFIG_KEY = 'billing.marketplace.vouchers.instrument_type';
+
+    /** The configured type, or the one that taxes nothing yet — the safer answer where nobody has said. */
+    public static function fromConfigured(mixed $configured): self
+    {
+        return self::tryFrom(is_string($configured) ? $configured : '') ?? self::MultiPurpose;
+    }
+
     /** Whether issuing this voucher is itself a taxable supply. */
     public function taxedAtIssue(): bool
     {

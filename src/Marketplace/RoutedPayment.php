@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\BillingDriver;
@@ -28,6 +30,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
 use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 use Pushery\Billing\ValueObjects\TaxonomyCell;
 use Pushery\Billing\ValueObjects\TransferResult;
+use Throwable;
 
 /**
  * Take a routed payment AND write down what was routed, as one operation.
@@ -303,6 +306,22 @@ final readonly class RoutedPayment
 
         $routesSeparately = $routing->type === ChargeType::SeparateTransfer;
 
+        // Asked BEFORE the provider, which is what `MarketplaceUnsupported::cannotMoveMerchantShare()` has
+        // always promised and this path did not keep: the check sat inside the transfer, after the buyer had
+        // been charged, so an installation without a way to move shares took the whole payment first and
+        // only then refused to pay the merchant.
+        // Held in a local from here on, so the answer is carried to the transfer below rather than asked of
+        // the property a second time, after calls that could in principle have changed what it holds.
+        $transfers = null;
+
+        if ($routesSeparately) {
+            if (! $this->transfers instanceof MovesMerchantShare) {
+                throw MarketplaceUnsupported::cannotMoveMerchantShare($this->driver->name());
+            }
+
+            $transfers = $this->transfers;
+        }
+
         // The provider first. A row written before the charge would describe a payment that may never
         // happen, and the reversal caps would then be willing to give back money nobody ever took.
         //
@@ -322,7 +341,7 @@ final readonly class RoutedPayment
             return $result;
         }
 
-        $charge = $this->record($merchant, $result, $gross, $fee, $taxBps, $routing->type);
+        $charge = $this->record($merchant, $result, $gross, $fee, $taxBps, $routing->type, $posture);
 
         // A settled payment is settled NOW, from what the provider just said — not later, from a webhook
         // re-deriving it. The result already carries the transfer reference on a destination charge,
@@ -362,13 +381,35 @@ final readonly class RoutedPayment
         // On the lane the package moves the share itself, the provider's own figure comes back with the
         // reference and is recorded beside what was owed. On a destination charge nothing here moves money,
         // so there is no figure to record and the column stays null rather than claiming one.
-        $moved = $routesSeparately ? $this->moveMerchantShare($charge, $routing) : null;
+        $moved = null;
+        $failure = null;
 
-        $this->ledger->settle(
-            $charge,
-            $moved instanceof TransferResult ? $moved->reference : $result->transferReference,
-            $moved?->moved,
-        );
+        if ($transfers instanceof MovesMerchantShare) {
+            try {
+                $moved = $this->moveMerchantShare($transfers, $charge, $routing);
+            } catch (Throwable $caught) {
+                $failure = $caught;
+            }
+        }
+
+        // A share that failed to move is KEPT, not thrown. The buyer's payment has gone through, so an exception
+        // here reaches a caller holding a charged buyer, and a caller that retries charge() without an
+        // idempotency key charges them a second time. It used to do exactly that, and the row it left behind
+        // was `pending`, indistinguishable from a payment still clearing, with nothing that would ever move it.
+        //
+        // So the failure is reported to the host's handler, written to the row and announced, and the row stays
+        // `pending` until `billing:marketplace:retry-transfers` moves the share under the same idempotency key.
+        if ($failure instanceof Throwable) {
+            $this->report($failure);
+
+            $this->ledger->recordTransferFailure($charge, $merchant, $failure);
+        } else {
+            $this->ledger->settle(
+                $charge,
+                $moved instanceof TransferResult ? $moved->reference : $result->transferReference,
+                $moved?->moved,
+            );
+        }
 
         $this->issueBuyerDocument(
             $buyerOwner, $posture, $gross, $taxBps, $buyerIsDomestic, $charge, $archetype, $classification,
@@ -376,6 +417,23 @@ final readonly class RoutedPayment
         );
 
         return $result;
+    }
+
+    /**
+     * Hand a share that would not move to the application's exception handler, where one is bound.
+     *
+     * Through the contract rather than Foundation's `report()` helper, which this package does not ship
+     * against: it requires `illuminate/contracts`, not `laravel/framework`, and a global helper that only
+     * exists inside a full application is a dependency the composer file does not declare. A container with
+     * no handler bound has nobody to tell, and the row written next carries the failure either way.
+     */
+    private function report(Throwable $failure): void
+    {
+        $container = Container::getInstance();
+
+        if ($container->bound(ExceptionHandler::class)) {
+            $container->make(ExceptionHandler::class)->report($failure);
+        }
     }
 
     /**
@@ -524,7 +582,7 @@ final readonly class RoutedPayment
     }
 
     /**
-     * Move the merchant's share on the lane where the provider does not move it for us.
+     * Move the merchant's share on the lane where the provider does not move it for us, and keep the WHOLE answer.
      *
      * On a destination charge the transfer is part of the payment. On a separate transfer it is a second
      * call, and if nobody makes it the merchant is simply never paid while every signal looks healthy -- a
@@ -539,27 +597,20 @@ final readonly class RoutedPayment
      * two places would have had to change together or the merchant would have been transferred a share the
      * ledger says they were not paid. Reading what was written down cannot drift from what was written down.
      *
-     * @throws MarketplaceUnsupported when the driver cannot move a share at all
-     */
-    /**
-     * Move the merchant's share and keep the WHOLE answer.
+     * It returns the provider's whole answer rather than the reference alone, because the amount that
+     * actually moved is the one number the provider contributes that the package cannot derive. A journal that
+     * records its own request cannot disagree with the provider, and the reconciliation would have nothing to
+     * compare.
      *
-     * It used to return only the reference, which threw away the one number the provider contributes that
-     * the package cannot derive: how much actually moved. The journal then recorded the request, and a
-     * journal that records its own request cannot disagree with the provider — so the reconciliation this
-     * milestone promises had nothing to compare, and a divergence was invisible by construction.
+     * This used to be two docblocks stacked on one method, and PHP reads only the second.
      */
-    private function moveMerchantShare(MerchantCharge $charge, ChargeRouting $routing): TransferResult
+    private function moveMerchantShare(MovesMerchantShare $transfers, MerchantCharge $charge, ChargeRouting $routing): TransferResult
     {
-        if (! $this->transfers instanceof MovesMerchantShare) {
-            throw MarketplaceUnsupported::cannotMoveMerchantShare($this->driver->name());
-        }
-
-        return $this->transfers->transferShare(
+        return $transfers->transferShare(
             $routing->destination,
             $charge->net(),
             $charge->charge_reference,
-            "billing_merchant_charge_{$charge->id}",
+            $charge->transferIdempotencyKey(),
         );
     }
 
@@ -570,7 +621,7 @@ final readonly class RoutedPayment
      * the same charge converges on the row it already wrote rather than starting a second one with all its
      * reversal totals back at zero.
      */
-    private function record(Model $merchant, ChargeResult $result, Money $gross, PlatformFee $fee, int $taxBps, ChargeType $chargeType): MerchantCharge
+    private function record(Model $merchant, ChargeResult $result, Money $gross, PlatformFee $fee, int $taxBps, ChargeType $chargeType, SellerOfRecordPosture $posture): MerchantCharge
     {
         // THE COMMISSION IS TAKEN ON THE NET. The configuration has said so in as many words since the fee
         // was introduced -- "it is applied to the transaction's net, not to what the buyer paid" -- and the
@@ -613,6 +664,9 @@ final readonly class RoutedPayment
             // first two: a partial clawback recomputes the commission on what remains of the sale, and
             // without the rate it would have to derive the remainder's net from today's configuration.
             commissionTaxBps: $taxBps,
+            // And WHO SOLD, for the small-business turnover: a creator who supplies the buyer counts the whole
+            // price less their tax, one who supplies the platform counts the payout.
+            sellerPosture: $posture,
         );
     }
 }

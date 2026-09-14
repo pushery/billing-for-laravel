@@ -38,6 +38,7 @@ use Pushery\Billing\Console\Commands\ExportOwnerCommand;
 use Pushery\Billing\Console\Commands\FlushUsageCommand;
 use Pushery\Billing\Console\Commands\FreezeReportingRatesCommand;
 use Pushery\Billing\Console\Commands\GrantTierCommand;
+use Pushery\Billing\Console\Commands\ImportExchangeRateFileCommand;
 use Pushery\Billing\Console\Commands\ImportExchangeRatesCommand;
 use Pushery\Billing\Console\Commands\InstallCommand;
 use Pushery\Billing\Console\Commands\MarketplacePreflightCommand;
@@ -56,6 +57,7 @@ use Pushery\Billing\Console\Commands\RemindDelinquentSubscriptionsCommand;
 use Pushery\Billing\Console\Commands\ReplayWebhooksCommand;
 use Pushery\Billing\Console\Commands\ReportingFileCommand;
 use Pushery\Billing\Console\Commands\ReportingRunCommand;
+use Pushery\Billing\Console\Commands\RetryMerchantTransfersCommand;
 use Pushery\Billing\Console\Commands\SyncSubscriptionsCommand;
 use Pushery\Billing\Console\Commands\TaxReturnExportCommand;
 use Pushery\Billing\Console\Commands\WarnEndingTrialsCommand;
@@ -222,6 +224,7 @@ use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Marketplace\RoutedPayment;
 use Pushery\Billing\Marketplace\SelfBillingAgreementGuard;
 use Pushery\Billing\Marketplace\SelfBillingEngine;
+use Pushery\Billing\Marketplace\UnmovedMerchantShares;
 use Pushery\Billing\Notifiers\LaravelDunningNotifier;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
@@ -396,6 +399,15 @@ final class BillingServiceProvider extends ServiceProvider
             $app->bound(MovesMerchantShare::class) ? $app->make(MovesMerchantShare::class) : null,
             $app->bound(MerchantAccountDirectory::class) ? $app->make(MerchantAccountDirectory::class) : null,
             $app->make(Dispatcher::class),
+        ));
+
+        // The shares that failed to move, bound explicitly for the clock's reason above: both seams are nullable
+        // parameters with defaults, and autowiring would hand it two nulls on an installation that bound both,
+        // so a retry would skip every share and report it.
+        $this->app->bind(UnmovedMerchantShares::class, fn (Application $app): UnmovedMerchantShares => new UnmovedMerchantShares(
+            $app->make(RoutedChargeLedger::class),
+            $app->bound(MovesMerchantShare::class) ? $app->make(MovesMerchantShare::class) : null,
+            $app->bound(MerchantAccountDirectory::class) ? $app->make(MerchantAccountDirectory::class) : null,
         ));
 
         // Bound explicitly, and the reason is a container subtlety that cost a debugging round: the engine's
@@ -941,6 +953,7 @@ final class BillingServiceProvider extends ServiceProvider
                 PruneBillingCommand::class,
                 DoctorCommand::class,
                 ReleaseAbandonedClaimCommand::class,
+                RetryMerchantTransfersCommand::class,
                 AnnounceLapsedAttestationsCommand::class,
                 ExpireDelinquentSubscriptionsCommand::class,
                 RemindDelinquentSubscriptionsCommand::class,
@@ -948,6 +961,7 @@ final class BillingServiceProvider extends ServiceProvider
                 AnnounceUpcomingFilingsCommand::class,
                 AnnounceVoucherVolumeCommand::class,
                 ImportExchangeRatesCommand::class,
+                ImportExchangeRateFileCommand::class,
                 FreezeReportingRatesCommand::class,
                 ReconcileTaxStatusCommand::class,
                 ProbeRatesCommand::class,

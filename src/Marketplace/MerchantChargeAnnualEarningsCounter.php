@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Marketplace;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -13,6 +14,7 @@ use Pushery\Billing\Contracts\AnnualEarningsCounter;
 use Pushery\Billing\Contracts\CountsEarnings;
 use Pushery\Billing\Enums\RefundAttemptStatus;
 use Pushery\Billing\Enums\ReversalAttribution;
+use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Exceptions\ReportingCounterDisabled;
 use Pushery\Billing\Models\MerchantCharge;
@@ -105,6 +107,10 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
         // rather than a neutral rewrite.
         $reversals = $this->reversalsOf($charges);
 
+        // Resolved once per window rather than per row. It answers for every row that never recorded its own
+        // posture, and reading configuration per row would let a change mid-sweep split one window in two.
+        $unrecorded = $this->unrecordedPosture();
+
         $total = 0;
 
         $placedByTheSale = $attribution === ReversalAttribution::OriginalPeriod;
@@ -113,7 +119,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
             $settledHere = $this->settledInside($charge, $start, $end);
 
             if ($settledHere) {
-                $total += $charge->payoutNet()->minorUnits;
+                $total += $charge->smallBusinessTurnover($unrecorded)->minorUnits;
             }
 
             $mine = $reversals[$this->keyOf($charge)] ?? [];
@@ -125,8 +131,8 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
             //
             // Placed by itself: the window is the reversal's own, and a charge from any year can reduce it.
             $total -= $placedByTheSale
-                ? ($settledHere ? $this->reversedInside($charge, $mine, null, null) : 0)
-                : $this->reversedInside($charge, $mine, $start, $end);
+                ? ($settledHere ? $this->reversedInside($charge, $mine, null, null, $unrecorded) : 0)
+                : $this->reversedInside($charge, $mine, $start, $end, $unrecorded);
         }
 
         return Money::of($total, $code);
@@ -227,7 +233,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
      *                          every succeeded reversal belongs here — including one with no completion
      *                          moment, which has no window of its own to be placed in
      */
-    private function reversedInside(MerchantCharge $charge, array $reversals, ?string $start, ?string $end): int
+    private function reversedInside(MerchantCharge $charge, array $reversals, ?string $start, ?string $end, SellerOfRecordPosture $unrecorded): int
     {
         $gross = $charge->gross();
         $refundedBefore = 0;
@@ -272,10 +278,30 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
             //
             // Zero is also the honest answer there rather than a clamp: the merchant kept what they held, so
             // on a receipts basis nothing came back out of what they received.
-            $lost += max(0, $applied - $taxReturned->minorUnits);
+            // What left the creator's TURNOVER, which is not always what left the creator. Under the commission
+            // chain their supply is to the platform and its value is the payout, so the clawback is what came
+            // back out of it. Otherwise their supply is to the buyer, and a refund reduces its consideration by
+            // what the buyer got back, whether or not anything was clawed back from the merchant.
+            $removed = $charge->postureOr($unrecorded) === SellerOfRecordPosture::PlatformDeemedSupplier
+                ? $applied
+                : $before->minus($after)->minorUnits;
+
+            $lost += max(0, $removed - $taxReturned->minorUnits);
         }
 
         return $lost;
+    }
+
+    /**
+     * The posture a row that never recorded one is counted under: this installation's configured one.
+     *
+     * Counting such rows under the configured posture corrects them for every installation that never changed
+     * it, which is every installation this matters to: until the posture was stored, all of them were counted
+     * as though the platform were the deemed supplier.
+     */
+    private function unrecordedPosture(): SellerOfRecordPosture
+    {
+        return Container::getInstance()->make(MarketplaceSaleContext::class)->posture();
     }
 
     /**

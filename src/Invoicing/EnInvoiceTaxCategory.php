@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Invoicing;
 
 use Pushery\Billing\Enums\TaxArchetype;
+use Pushery\Billing\Enums\TaxationBasis;
 use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Exceptions\ContradictoryExemption;
 use Pushery\Billing\Tax\UnionMembership;
@@ -41,6 +42,11 @@ use Pushery\Billing\Tax\UnionMembership;
  *   the BR-O-* rules forbid it stating a tax amount or a rate at all. A taxed band on such a document is
  *   refused here rather than downgraded, because the business answer is two documents and a downgrade
  *   would file a supply frozen as outside the scope as though it had been taxed.
+ * - **`E` with `VATEX-EU-F`** — a margin-taxed resale used to render as `Z`, and it is neither zero-rated nor
+ *   exempt: tax is due, contained in the margin, and the document may not state it. EN 16931 has a statement
+ *   for exactly that, category `E` carrying the margin scheme's own exemption code. It is decided from the
+ *   frozen `taxation_basis` before any exemption reason, because a margin document that also names one is a
+ *   contradiction rather than a category question.
  */
 final readonly class EnInvoiceTaxCategory
 {
@@ -59,8 +65,9 @@ final readonly class EnInvoiceTaxCategory
      * @param  bool  $exempt  the supply is exempt for a reason the reason enum does not model — a
      *                        small-business relief, for instance, which is exempt (E) and NOT zero-rated (Z)
      * @param  float  $rate  the rate actually charged, which decides only between S and Z once nothing above applies
+     * @param  ?TaxationBasis  $basis  the basis the document froze; a margin-taxed one decides the category on its own
      */
-    public static function for(?TaxExemptionReason $exemption, ?TaxArchetype $archetype, bool $exempt, float $rate, ?string $destinationCountry = null): self
+    public static function for(?TaxExemptionReason $exemption, ?TaxArchetype $archetype, bool $exempt, float $rate, ?string $destinationCountry = null, ?TaxationBasis $basis = null): self
     {
         // A supply frozen as leaving the union, stated as going to a member of it, is a contradiction in the
         // document's OWN data. Refused rather than rendered: whichever of the two is wrong, one of them is,
@@ -72,6 +79,23 @@ final readonly class EnInvoiceTaxCategory
             && in_array(strtoupper($destinationCountry), array_map(strtoupper(...), UnionMembership::members()), true)
         ) {
             throw ContradictoryExemption::exportInsideTheUnion($destinationCountry);
+        }
+
+        // A margin-taxed resale is neither exempt nor zero-rated. Tax is due, contained in the margin, and the
+        // document may not state it. Asked before every exemption reason, because a margin document that also
+        // names one asserts two incompatible things, and a taxed band on it would state the very tax the
+        // scheme forbids stating.
+        if ($basis?->taxesMarginOnly() === true) {
+            if ($exemption instanceof TaxExemptionReason || $exempt) {
+                throw ContradictoryExemption::marginSchemeWithExemption();
+            }
+
+            if ($rate > 0) {
+                throw ContradictoryExemption::taxedMarginSupply($rate);
+            }
+
+            // The second-hand goods code only: it is the one margin scheme whose wording the package ships.
+            return new self('E', 'VATEX-EU-F', 'Margin scheme — second-hand goods');
         }
 
         $goods = self::isGoods($archetype);

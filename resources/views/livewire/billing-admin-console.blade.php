@@ -48,6 +48,9 @@
             @endif
         </div>
 
+        {{-- From `sm` up each form on this screen is one row, and every control in a row is 40px tall by
+             declaration. Only the fields have a border, which made them 2px taller than the buttons beside them,
+             and WebKit's Linux build draws a date field 40px tall on its own. --}}
         <form wire:submit="comp" class="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div class="flex-1">
                 <label for="comp-owner" class="block text-sm font-medium">
@@ -56,17 +59,17 @@
                 {{-- text-base on mobile (≥16px) avoids iOS Safari's zoom-on-focus; the focus ring is an explicit,
                      high-contrast focus indicator so it does not rely on the fragile UA default outline. --}}
                 <input id="comp-owner" type="text" wire:model="compOwnerId" required
-                    class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base shadow-sm focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900 sm:text-sm dark:border-gray-700 dark:bg-gray-900 dark:focus:ring-gray-100">
+                    class="sm:h-10 mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base shadow-sm focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900 sm:text-sm dark:border-gray-700 dark:bg-gray-900 dark:focus:ring-gray-100">
             </div>
             <div class="flex-1">
                 <label for="comp-tier" class="block text-sm font-medium">
                     {{ __('billing::admin.comp.tier') }} <span aria-hidden="true" class="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <input id="comp-tier" type="text" wire:model="compTier" required
-                    class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base shadow-sm focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900 sm:text-sm dark:border-gray-700 dark:bg-gray-900 dark:focus:ring-gray-100">
+                    class="sm:h-10 mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base shadow-sm focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900 sm:text-sm dark:border-gray-700 dark:bg-gray-900 dark:focus:ring-gray-100">
             </div>
             <button type="submit"
-                class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 dark:focus:ring-gray-100 dark:focus:ring-offset-gray-950">
+                class="rounded-lg sm:h-10 bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 dark:focus:ring-gray-100 dark:focus:ring-offset-gray-950">
                 {{ __('billing::admin.comp.submit') }}
             </button>
         </form>
@@ -104,19 +107,22 @@
             @endif
         </div>
 
-        <form wire:submit="exportDatev" class="flex flex-wrap items-end gap-3">
-            <div class="space-y-1">
+        {{-- Stacked at full width on a phone and one row from `sm` up, like the two forms around it. The date
+             fields used to take the width their engine gave them, 155px in Blink and 113px in WebKit, so on a
+             320px phone this form broke into three rows in one engine and two in the other. --}}
+        <form wire:submit="exportDatev" class="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div class="space-y-1 sm:w-44">
                 <label for="datev-from" class="block text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('billing::admin.datev.from') }}</label>
                 <input id="datev-from" type="date" wire:model="datevFrom" required
-                    class="rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900">
+                    class="sm:h-10 w-full rounded-lg border border-gray-300 px-3 py-2 text-base sm:text-sm dark:border-gray-700 dark:bg-gray-900">
             </div>
-            <div class="space-y-1">
+            <div class="space-y-1 sm:w-44">
                 <label for="datev-to" class="block text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('billing::admin.datev.to') }}</label>
                 <input id="datev-to" type="date" wire:model="datevTo" required
-                    class="rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900">
+                    class="sm:h-10 w-full rounded-lg border border-gray-300 px-3 py-2 text-base sm:text-sm dark:border-gray-700 dark:bg-gray-900">
             </div>
             <button type="submit"
-                class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100">
+                class="rounded-lg sm:h-10 bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-100">
                 {{ __('billing::admin.datev.submit') }}
             </button>
         </form>
@@ -150,12 +156,12 @@
                     {{ __('billing::admin.cancel.owner_id') }} <span aria-hidden="true" class="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <input id="cancel-owner" type="text" wire:model="cancelOwnerId" required
-                    class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base shadow-sm focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900 sm:text-sm dark:border-gray-700 dark:bg-gray-900 dark:focus:ring-gray-100">
+                    class="sm:h-10 mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base shadow-sm focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900 sm:text-sm dark:border-gray-700 dark:bg-gray-900 dark:focus:ring-gray-100">
             </div>
             {{-- Destructive, and colored to say so. A support agent reaches this form beside the comp form,
                  and the two must not look like the same kind of button. --}}
             <button type="submit"
-                class="rounded-lg bg-red-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-700 focus:ring-offset-2 dark:focus:ring-offset-gray-950">
+                class="rounded-lg sm:h-10 bg-red-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-800 focus:outline-none focus:ring-2 focus:ring-red-700 focus:ring-offset-2 dark:focus:ring-offset-gray-950">
                 {{ __('billing::admin.cancel.submit') }}
             </button>
         </form>
@@ -168,7 +174,11 @@
         @if ($events->isEmpty())
             <p class="text-sm text-gray-500 dark:text-gray-400">{{ __('billing::admin.audit.empty') }}</p>
         @else
-            <div class="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-800">
+            {{-- Focusable and named, because on a narrow screen this box scrolls sideways, and a keyboard can only
+                 scroll what it can reach. A group rather than a region: the section around it is already the
+                 region with this name, and two landmarks with one name are a finding of their own. --}}
+            <div tabindex="0" role="group" aria-labelledby="audit-heading"
+                class="overflow-x-auto rounded-xl border border-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 dark:border-gray-800 dark:focus-visible:ring-gray-100">
                 <table class="w-full text-left text-sm">
                     <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500 dark:bg-gray-900 dark:text-gray-400">
                         <tr>

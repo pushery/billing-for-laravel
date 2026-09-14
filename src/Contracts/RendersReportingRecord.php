@@ -21,6 +21,13 @@ use Pushery\Billing\ValueObjects\SellerPeriodReport;
  * and `UsRegimeBoundaryTest` holds the line by scanning `src/` for it. A consumer who has been told they owe
  * one binds it here, which is exactly the right place for a duty the package does not have.
  *
+ * ## Which sellers it is handed
+ *
+ * The reportable ones, and their records, and nobody else's. A renderer produces what somebody transmits, and a
+ * transmission that carries a seller the duty does not cover is not a correct one. A renderer that has to see
+ * every seller the period examined, because it is a record of the due diligence rather than a transmission,
+ * implements {@see RendersDueDiligenceRecord} instead.
+ *
  * ## The version is data, not a comment
  *
  * A record that does not say which version of a format it was built to is unverifiable years later, and the
@@ -43,7 +50,8 @@ interface RendersReportingRecord
     public function version(): string;
 
     /**
-     * @param  list<SellerPeriodReport>  $reports  every seller in the period, in the run's own order
+     * @param  list<SellerPeriodReport>  $reports  the reportable sellers in the period, or every examined seller for a
+     *                                             {@see RendersDueDiligenceRecord} -- in the run's own order either way
      * @param  array<string, array<string, mixed>>  $records  the sellers' own values, keyed by `type#id` —
      *                                                        supplied by the caller because the package does
      *                                                        not store seller master data

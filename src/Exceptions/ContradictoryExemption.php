@@ -51,4 +51,35 @@ final class ContradictoryExemption extends RuntimeException
             .'out-of-scope service on its own document, the taxed supply on another.'
         );
     }
+
+    /**
+     * A document frozen as taxed on the margin that also names an exemption.
+     *
+     * A margin-taxed supply is not exempt: the tax is due and contained in the margin, and only stating it is
+     * forbidden. Rendered either way, the document would drop one of its own two statements without saying so.
+     */
+    public static function marginSchemeWithExemption(): self
+    {
+        return new self(
+            'This document is frozen as taxed on the margin and also names an exemption. A margin-taxed supply '
+            .'is not exempt: the tax is due, contained in the margin, and only stating it is forbidden. One of '
+            .'the two is wrong. Correct the record rather than issuing a document that claims both.'
+        );
+    }
+
+    /**
+     * A document frozen as taxed on the margin whose lines carry a tax rate.
+     *
+     * Naming a rate on such a document is itself a statement of tax, which the seller then owes on top of the
+     * tax on the margin. Refused rather than rendered with the rate dropped: the rate came from the document's
+     * own lines, and dropping it quietly would hide which of the two statements is wrong.
+     */
+    public static function taxedMarginSupply(float $rate): self
+    {
+        return new self(
+            "This document is frozen as taxed on the margin but carries a band taxed at {$rate}%. Naming a rate "
+            .'on a margin-taxed document is itself a statement of tax, which the seller would owe on top of the '
+            .'tax on the margin. Issue it without a rate.'
+        );
+    }
 }

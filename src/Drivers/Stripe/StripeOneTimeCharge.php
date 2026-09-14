@@ -16,10 +16,12 @@ use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\VoucherInstrumentType;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\ReceiveEligibilityDenied;
 use Pushery\Billing\Marketplace\ChargedBuyerFee;
+use Pushery\Billing\Marketplace\CreditTopUpVolume;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\ValueObjects\ClientIntent;
@@ -194,7 +196,20 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         //
         // Nothing is red when it happens. Stripe opens a valid session, the money moves, the webhook grants
         // the add-on. The absence surfaces at a VAT return, or never.
-        if ($this->context->providerTax()) {
+        // A money-credit add-on is a voucher, and a voucher's tax falls where its instrument type says. An
+        // add-on that grants no units credits the owner's balance at face value: money against a promise,
+        // with neither the place nor the rate of the eventual supply decided. Taxing it here taxes a supply
+        // nobody has made yet — and the same money is taxed again when the balance pays an invoice, which is
+        // the error a credit cannot be corrected out of afterwards.
+        //
+        // Where an installation sells into exactly one country at one rate, the supply IS determined at
+        // issue; `billing.marketplace.vouchers.instrument_type` says so, and then the tax falls here as it
+        // always did. That knob is the voucher feature's own, deliberately — a second one beside it would let
+        // one installation configure the same instrument two ways and never notice.
+        $taxedHere = ! CreditTopUpVolume::isMoneyCredit($this->addons, $addonKey)
+            || VoucherInstrumentType::fromConfigured($this->config->get(VoucherInstrumentType::CONFIG_KEY))->taxedAtIssue();
+
+        if ($this->context->providerTax() && $taxedHere) {
             $payload['automatic_tax'] = ['enabled' => true];
 
             // The same switch as the subscription lane, read the same way. See StripeCheckout for why a platform
@@ -436,6 +451,9 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // hands tax to the provider and holds no rate, so the line records a gross with no split rather
             // than asserting one. The gross and the place are exact, and those are what a return needs.
             $buyerFee,
+            // Who sold, from the same context that checked the charge type against it above, so the small-business
+            // turnover counts this sale on the basis its seller actually had.
+            sellerPosture: $this->context->posture(),
         );
     }
 

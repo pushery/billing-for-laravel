@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Config;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\RoundingResidual;
+use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\Money;
@@ -27,6 +28,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property string $charge_reference
  * @property ?string $transfer_reference
  * @property ?ChargeType $charge_type
+ * @property ?SellerOfRecordPosture $seller_posture who the tax law treated as the seller, null on rows written before it was recorded
  * @property int $gross_minor
  * @property int $fee_minor
  * @property ?int $fee_bps
@@ -37,6 +39,8 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property ?int $transfer_moved_minor what the provider reported it actually moved to the merchant, or
  *                                      null where nothing reported a figure — a destination charge moves
  *                                      the share as part of the payment and makes no transfer call
+ * @property ?Carbon $transfer_failed_at when the share last failed to move after the sale was paid, null if it never did
+ * @property ?string $transfer_failure what was said when it did, class first
  * @property string $currency
  * @property SettlementState $settlement_state
  * @property ?Carbon $settled_at
@@ -57,7 +61,7 @@ final class MerchantCharge extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'transfer_reference', 'transfer_moved_minor', 'charge_type',
+        'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'transfer_reference', 'transfer_moved_minor', 'charge_type', 'seller_posture',
         'gross_minor', 'fee_minor', 'fee_bps', 'fee_flat_minor', 'fee_residual', 'commission_tax_bps', 'net_minor', 'currency', 'settlement_state', 'settled_at',
         'settlement_invoice_id',
         'refunded_minor', 'transfer_reversed_minor', 'fee_refunded_minor', 'merchant_erased_at',
@@ -90,6 +94,7 @@ final class MerchantCharge extends Model
         // Deliberately NOT defaulted. Null means no provider figure was reported — a destination charge
         // never makes a transfer call — and that is a different claim from "zero moved".
         'transfer_moved_minor' => 'integer',
+        'transfer_failed_at' => UtcDateTime::class,
         'refunded_minor' => 'integer',
         'transfer_reversed_minor' => 'integer',
         'fee_refunded_minor' => 'integer',
@@ -99,9 +104,22 @@ final class MerchantCharge extends Model
         'buyer_fee_refunded_minor' => 'integer',
         'settlement_state' => SettlementState::class,
         'charge_type' => ChargeType::class,
+        'seller_posture' => SellerOfRecordPosture::class,
         'settled_at' => UtcDateTime::class,
         'merchant_erased_at' => UtcDateTime::class,
     ];
+
+    /**
+     * The idempotency key every transfer of this sale's share is sent under.
+     *
+     * The row's id rather than anything about the amount, so a retry that works the share out even slightly
+     * differently still cannot make a second transfer. One definition, because the sale, a buyer-protection
+     * release and the retry command each send it, and three spellings of one key are three chances to pay twice.
+     */
+    public function transferIdempotencyKey(): string
+    {
+        return "billing_merchant_charge_{$this->id}";
+    }
 
     /** @return MorphTo<Model, $this> */
     public function merchant(): MorphTo
@@ -236,7 +254,9 @@ final class MerchantCharge extends Model
     }
 
     /**
-     * What this sale was worth to the merchant BEFORE their own tax — the section-19 basis.
+     * What this sale was worth to the merchant BEFORE their own tax and after the commission — the section-19
+     * basis under the commission chain, and only there. {@see self::smallBusinessTurnover()} decides which basis a
+     * sale is counted on.
      *
      * Three different numbers come off one routed sale and only one of them belongs here. On 119.00 at 19%
      * with a 10% rate: the buyer paid 119.00, 109.00 reached the merchant, and 90.00 is what the supply was
@@ -254,6 +274,40 @@ final class MerchantCharge extends Model
     public function payoutNet(): Money
     {
         return $this->commissionBase($this->gross())->minus($this->fee());
+    }
+
+    /** The posture this sale was made under, or the given one where the row never recorded it. */
+    public function postureOr(SellerOfRecordPosture $unrecorded): SellerOfRecordPosture
+    {
+        return $this->seller_posture ?? $unrecorded;
+    }
+
+    /**
+     * What this sale adds to the creator's small-business turnover, which depends on whom they supplied.
+     *
+     * The turnover is the consideration for the creator's own supplies, less their own tax, with nothing else
+     * taken off: the small-business rule's list of what is left out is closed, and a commission is not on it.
+     *
+     * - **Under the commission chain** (`PlatformDeemedSupplier`) the creator supplies the platform and the
+     *   platform supplies the buyer. What the platform pays for the creator's supply is the payout, so the
+     *   payout is the turnover.
+     * - **As a seller of record or through a disclosed intermediary** the creator supplies the buyer. What the
+     *   buyer paid, less the creator's own tax, is the consideration. The commission pays for a service the
+     *   platform performed for the creator, and a sum a third party keeps back for its own service to the
+     *   seller stays in the seller's taxable amount (CJEU C-18/92 Bally).
+     *
+     * Counting the payout for every sale under-counted every creator who supplies the buyer by the whole
+     * commission, and that is the expensive direction: the sale that crosses the limit is already taxable,
+     * so a creator counted out of the regime too late owes tax on documents that stated none.
+     *
+     * A row that never recorded its posture is counted under the one given, which a reader takes from the
+     * installation's configuration.
+     */
+    public function smallBusinessTurnover(SellerOfRecordPosture $unrecorded): Money
+    {
+        return $this->postureOr($unrecorded) === SellerOfRecordPosture::PlatformDeemedSupplier
+            ? $this->payoutNet()
+            : $this->commissionBase($this->gross());
     }
 
     /**
