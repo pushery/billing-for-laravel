@@ -265,13 +265,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         // day this lane learns about merchants.
         $coupon = Coupon::query()->issuedBy(MerchantScope::platform())->where('code', $code)->first();
 
-        if (! $coupon instanceof Coupon || ! $coupon->active) {
-            return null;
-        }
-
-        return $coupon->expires_at !== null && CarbonImmutable::instance($coupon->expires_at)->isPast()
-            ? null
-            : $coupon;
+        return $coupon instanceof Coupon && $coupon->isLive() ? $coupon : null;
     }
 
     /**

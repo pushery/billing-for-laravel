@@ -31,7 +31,7 @@ use Pushery\Billing\ValueObjects\SubscriptionStart;
  */
 final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding, OneTimeCharge, StartsSubscriptions, SubscriptionActions
 {
-    /** @var list<array{owner: Model, tier: string, coupon: ?string, declaration: ?string}> */
+    /** @var list<array{owner: Model, tier: string, coupon: ?string, declaration: ?string, country: ?string}> */
     private array $subscribes = [];
 
     /** @var list<array{owner: Model, tier: string, prorate: bool, merchant: ?MerchantScope}> */
@@ -40,7 +40,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     /** @var list<array{owner: Model, action: string, survey?: ?CancellationSurvey, merchant: ?MerchantScope}> */
     private array $lifecycle = [];
 
-    /** @var list<array{owner: Model, addon: string, declaration: ?string}> */
+    /** @var list<array{owner: Model, addon: string, declaration: ?string, country: ?string}> */
     private array $purchases = [];
 
     /** @var list<array{merchant: Model, refresh: string, return: string}> */
@@ -63,9 +63,9 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      */
     private bool $couponsAreHonored = false;
 
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): ClientIntent
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent
     {
-        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference];
+        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => $buyerCountry];
 
         return $this->intent();
     }
@@ -80,7 +80,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      */
     public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): SubscriptionStart
     {
-        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference];
+        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => null];
 
         return new SubscriptionStart(SubscriptionState::Activating, 'https://checkout.test/session');
     }
@@ -98,12 +98,12 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         return $this;
     }
 
-    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null): ClientIntent
+    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent
     {
         // Recorded, not dropped. A consumer asserting that their checkout collected the declarations has
         // nothing else to assert against -- the key is the only observable the package produces before the
         // buyer leaves, and a fake that swallowed it would make the round trip untestable from outside.
-        $this->purchases[] = ['owner' => $billable, 'addon' => $addonKey, 'declaration' => $declarationReference];
+        $this->purchases[] = ['owner' => $billable, 'addon' => $addonKey, 'declaration' => $declarationReference, 'country' => $buyerCountry];
 
         return $this->intent();
     }
@@ -250,6 +250,28 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     public function assertResumed(Model $owner, ?MerchantScope $merchant = null): void
     {
         $this->assertLifecycle($owner, 'resume', $merchant);
+    }
+
+    /**
+     * The owner's subscription was NOT canceled: under the given merchant when one is named, under none at all when
+     * none is. A failure lists every action the owner did see, because that is what the reader of a failing negative
+     * assertion goes looking for.
+     */
+    public function assertNotCanceled(Model $owner, ?MerchantScope $merchant = null): void
+    {
+        $this->assertNoLifecycle($owner, 'cancel', $merchant);
+    }
+
+    /** The owner's subscription did NOT end immediately, under the given merchant when one is named. */
+    public function assertNotCanceledNow(Model $owner, ?MerchantScope $merchant = null): void
+    {
+        $this->assertNoLifecycle($owner, 'cancelNow', $merchant);
+    }
+
+    /** The owner's cancellation was NOT taken back, under the given merchant when one is named. */
+    public function assertNotResumed(Model $owner, ?MerchantScope $merchant = null): void
+    {
+        $this->assertNoLifecycle($owner, 'resume', $merchant);
     }
 
     /** The owner's subscription ended immediately, under the given merchant when one is named. */
@@ -430,6 +452,29 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
                 ? 'that action did not happen for the owner at all'
                 : 'it happened under ['.implode(', ', $seen).']',
         ));
+    }
+
+    private function assertNoLifecycle(Model $owner, string $action, ?MerchantScope $merchant = null): void
+    {
+        $matching = [];
+        $seen = [];
+
+        foreach ($this->lifecycle as $call) {
+            if (! $this->sameOwner($call['owner'], $owner)) {
+                continue;
+            }
+
+            $recorded = ($call['merchant'] ?? MerchantScope::platform())->uid();
+            $seen[] = $call['action'].' under ['.$recorded.']';
+
+            if ($call['action'] === $action && (! $merchant instanceof MerchantScope || $recorded === $merchant->uid())) {
+                $matching[] = $recorded;
+            }
+        }
+
+        $where = $merchant instanceof MerchantScope ? ' under merchant ['.$merchant->uid().']' : '';
+
+        PHPUnit::assertSame([], $matching, "Expected no subscription action [{$action}] for the owner{$where}, but the owner saw: ".implode(', ', $seen).'.');
     }
 
     private function sameOwner(Model $a, Model $b): bool

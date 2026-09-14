@@ -104,13 +104,18 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         ];
     }
 
-    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null): ClientIntent
+    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent
     {
         // Defense in depth: refuse to open a paid checkout for an ineligible owner even if a caller
         // bypassed the UI eligibility guard.
         if (! $this->eligibility->check($billable)) {
             throw EligibilityDenied::forMoneyMovement();
         }
+
+        // The buyer's country, where the caller already knows it, is checked before the provider is asked for
+        // anything. A hosted checkout cannot restrict the address the buyer enters afterwards, so what they enter
+        // is checked again once the provider reports where it taxed the sale (ReverseSaleIntoClosedMarket).
+        $this->context->assertMarketOpen($buyerCountry);
 
         $price = $this->addons->providerPriceFor($addonKey);
 

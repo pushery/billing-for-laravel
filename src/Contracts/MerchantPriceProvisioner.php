@@ -20,8 +20,13 @@ use Pushery\Billing\ValueObjects\Money;
  * the same price rather than a duplicate — a provider price is immutable, so an unchanged tier must reuse the
  * one it already has, while a genuine price change (a different amount) is a new price the host records in
  * its place.
+ *
+ * A null interval mints a ONE-TIME price, for a single purchase such as a paid post: no recurring component,
+ * on the same account a recurring price for this merchant would live on, so the checkout that charges it finds
+ * it. `$tierKey` is then the key of the item being sold. The idempotency key tells the two apart, so a one-time
+ * price never reuses a recurring one of the same amount, or the other way round.
  */
 interface MerchantPriceProvisioner
 {
-    public function provision(Model $merchant, string $tierKey, Money $amount, BillingInterval $interval): string;
+    public function provision(Model $merchant, string $tierKey, Money $amount, ?BillingInterval $interval): string;
 }

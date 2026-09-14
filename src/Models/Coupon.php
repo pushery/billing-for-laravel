@@ -124,4 +124,20 @@ final class Coupon extends Model
     {
         return $query->where('merchant_uid', ($merchant ?? MerchantScope::platform())->uid());
     }
+
+    /**
+     * Whether this coupon can still be honored: switched on, and not past its expiry.
+     *
+     * ONE definition for every reader that answers yes or no: the resolver, the hosted checkout's provider mapping
+     * and the local driver's coupon question. Each used to spell it out on its own, and the hosted checkout's copy
+     * left it out entirely, so a withdrawn coupon's Stripe discount still reached the invoice wherever the config
+     * accepted the same code. `CouponRedeemer` keeps its own checks, because it has to say WHICH condition failed.
+     *
+     * The redemption cap is not part of it. That is a race by nature, and the only place it can be enforced
+     * truthfully is the redeemer's locked transaction.
+     */
+    public function isLive(): bool
+    {
+        return $this->active && (! $this->expires_at instanceof Carbon || ! $this->expires_at->isPast());
+    }
 }

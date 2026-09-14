@@ -8,6 +8,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\DiscountResolver;
 use Pushery\Billing\ValueObjects\Discount;
+use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -17,12 +18,18 @@ use Pushery\Billing\ValueObjects\Money;
  * malformed entry — resolves to null. Resolving is ALL this does: no package path applies the
  * resolved Discount to a charge, a subscription or an invoice. An app that offers coupons resolves
  * the code here and applies the result itself (Discount::applyTo).
+ *
+ * The map carries no issuer, so the scope of the sale is not consulted: a code declared here is the
+ * platform's and resolves on every sale, a merchant's included. That is deliberate, and it is what an
+ * installation declaring its coupons in config has always had. A code only one seller should honor is a
+ * `billing_coupons` row issued by that seller, which {@see DatabaseDiscountResolver} reads under the scope
+ * and the bound {@see LayeredDiscountResolver} asks first.
  */
 final readonly class ConfigDiscountResolver implements DiscountResolver
 {
     public function __construct(private Repository $config) {}
 
-    public function resolve(string $code): ?Discount
+    public function resolve(string $code, ?MerchantScope $merchant = null): ?Discount
     {
         $coupons = $this->config->get('billing.coupons');
         $coupon = is_array($coupons) ? ($coupons[$code] ?? null) : null;

@@ -10,6 +10,7 @@ use Pushery\Billing\Contracts\MerchantResolver;
 use Pushery\Billing\Contracts\SellerOfRecordResolver;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
+use Pushery\Billing\Exceptions\MarketNotOpen;
 use Pushery\Billing\Tax\TaxCalculatorFactory;
 
 /**
@@ -46,7 +47,24 @@ final readonly class MarketplaceSaleContext
         private MerchantResolver $merchants,
         private SellerOfRecordResolver $postures,
         private ChargeRoutingConsistencyGuard $routingGuard,
+        private MarketAllowlist $markets,
     ) {}
+
+    /**
+     * Refuse a sale into a country the operator has not opened, where the caller already knows the country.
+     *
+     * One of the answers a lane used to be about to derive for itself, so it is asked here once. A null country
+     * checks nothing: a hosted checkout learns the buyer's address only on the provider's page, and what the buyer
+     * enters there is checked once the provider reports where it taxed the sale.
+     *
+     * @throws MarketNotOpen
+     */
+    public function assertMarketOpen(?string $buyerCountry): void
+    {
+        if ($buyerCountry !== null) {
+            $this->markets->assertOpen($buyerCountry);
+        }
+    }
 
     /**
      * The merchant this sale routes to, or null where this installation does not route at all.

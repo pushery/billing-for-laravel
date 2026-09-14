@@ -30,7 +30,7 @@ final readonly class StripeMerchantPriceProvisioner implements MerchantPriceProv
         private MerchantAccountDirectory $accounts,
     ) {}
 
-    public function provision(Model $merchant, string $tierKey, Money $amount, BillingInterval $interval): string
+    public function provision(Model $merchant, string $tierKey, Money $amount, ?BillingInterval $interval): string
     {
         $account = $this->accounts->accountFor($merchant);
 
@@ -51,10 +51,9 @@ final readonly class StripeMerchantPriceProvisioner implements MerchantPriceProv
 
         $key = $merchant->getKey();
 
-        $price = $this->stripe->prices->create([
+        $payload = [
             'unit_amount' => $amount->minorUnits,
             'currency' => strtolower($amount->currency),
-            'recurring' => ['interval' => $interval->value],
             'lookup_key' => $lookupKey,
             'product_data' => ['name' => $tierKey],
             'metadata' => [
@@ -62,7 +61,15 @@ final readonly class StripeMerchantPriceProvisioner implements MerchantPriceProv
                 'billing_merchant_id' => is_scalar($key) ? (string) $key : '',
                 'billing_tier_key' => $tierKey,
             ],
-        ], $options);
+        ];
+
+        // A null interval is a one-time price: the same request without its recurring component, which is what
+        // a checkout in payment mode charges.
+        if ($interval instanceof BillingInterval) {
+            $payload['recurring'] = ['interval' => $interval->value];
+        }
+
+        $price = $this->stripe->prices->create($payload, $options);
 
         return (string) $price->id;
     }
@@ -71,8 +78,8 @@ final readonly class StripeMerchantPriceProvisioner implements MerchantPriceProv
      * The idempotency key. It carries the amount and interval on purpose: an unchanged tier resolves to the
      * same key and reuses its price, while a repriced tier resolves to a new key and mints a new one.
      */
-    private function lookupKey(string $tierKey, Money $amount, BillingInterval $interval): string
+    private function lookupKey(string $tierKey, Money $amount, ?BillingInterval $interval): string
     {
-        return 'billing_'.$tierKey.'_'.$amount->minorUnits.'_'.strtolower($amount->currency).'_'.$interval->value;
+        return 'billing_'.$tierKey.'_'.$amount->minorUnits.'_'.strtolower($amount->currency).'_'.($interval->value ?? 'once');
     }
 }

@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Listeners;
 
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Events\BillableAccountDeleting;
+use Pushery\Billing\Exceptions\DeletedAccountStillSubscribed;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Throwable;
@@ -25,10 +28,10 @@ use Throwable;
  * subscription the local mirror has not recorded yet.
  *
  * Runs SYNCHRONOUSLY (never queued): the cancel must complete while the owner still exists and before the
- * row is erased. A transient provider failure is TOLERATED — it is logged (class name and scope only, no
- * provider PII) and the deletion continues, because leaving a user who asked to leave undeletable is worse
- * than a cancel that has to be retried. A failure in one scope does not stop the others. The failure is
- * visible in the log with its scope and can be re-driven by re-running cancelNow for the owner in that scope.
+ * row is erased. A transient provider failure is TOLERATED, because leaving a user who asked to leave
+ * undeletable is worse than a cancel that has to be retried, and a failure in one scope does not stop the
+ * others. It is not SILENT: it is logged, and reported as {@see DeletedAccountStillSubscribed} through the
+ * application's exception handler, both with the class name and the scope only, never the provider's message.
  */
 final readonly class StopBillingForDeletedAccount
 {
@@ -44,7 +47,26 @@ final readonly class StopBillingForDeletedAccount
                     'exception' => $e::class,
                     'merchant' => $merchant->uid(),
                 ]);
+
+                // The log line reached nobody who could end the subscription by hand, so the application's
+                // exception handler hears about it too: the class and the scope, never the provider's message.
+                $this->report(DeletedAccountStillSubscribed::whileDeleting($event->owner, $merchant, $e));
             }
+        }
+    }
+
+    /**
+     * Hand the failure to the application's exception handler, where one is bound.
+     *
+     * Through the contract rather than Foundation's `report()` helper, which this package does not ship against. A
+     * container without a handler has nobody to tell, and the log line above has already been written.
+     */
+    private function report(DeletedAccountStillSubscribed $failure): void
+    {
+        $container = Container::getInstance();
+
+        if ($container->bound(ExceptionHandler::class)) {
+            $container->make(ExceptionHandler::class)->report($failure);
         }
     }
 

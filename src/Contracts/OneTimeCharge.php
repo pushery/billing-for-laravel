@@ -22,6 +22,9 @@ interface OneTimeCharge
      *                                         gets null must send exactly the payload it sent before this
      *                                         parameter existed -- Mode S is a byte-identity promise, not
      *                                         a behavioral one.
+     * @param  ?string  $buyerCountry  the buyer's ISO country where the caller already knows it; checked against
+     *                                 `billing.tax_markets` before the provider is asked for anything, so a market
+     *                                 that is not open throws MarketNotOpen. Null checks nothing here
      */
-    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null): ClientIntent;
+    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent;
 }

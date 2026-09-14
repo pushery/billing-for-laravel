@@ -23,6 +23,7 @@ use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Events\RoutedChargeAbandoned;
 use Pushery\Billing\Events\RoutedChargeConfirmed;
 use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
+use Pushery\Billing\Events\SaleCountryReported;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\Events\TrialEnding;
 use Pushery\Billing\ValueObjects\InvoiceCorrectionSnapshot;
@@ -420,10 +421,12 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             return [];
         }
 
+        $amount = Money::of($this->int($object, 'amount_total') ?? 0, strtoupper($currency));
+
         return [new AddonPurchased(
             $customer,
             $addonKey,
-            Money::of($this->int($object, 'amount_total') ?? 0, strtoupper($currency)),
+            $amount,
             $id,
             // The PaymentIntent — the reversal key a later refund webhook carries (the session id it does not).
             $this->string($object, 'payment_intent'),
@@ -433,6 +436,15 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             // key, so a session that lost one lost both -- which is far easier to notice than a payment that
             // quietly arrives with no declaration attached.
             is_array($metadata) ? $this->string($metadata, 'withdrawal_declaration') : null,
+        ), new SaleCountryReported(
+            $customer,
+            $id,
+            // The address the buyer entered in the session, which is where a hosted checkout taxes. The package's
+            // sessions collect a billing address and nothing else, so that is the address to read.
+            $this->countryAt($object, 'customer_details', 'address'),
+            $amount,
+            paid: $this->string($object, 'payment_status') === 'paid',
+            chargeReference: $this->string($object, 'payment_intent'),
         )];
     }
 
@@ -459,7 +471,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         $total = $this->int($object, 'total') ?? 0;
         [$net, $tax] = $this->netAndTax($object, $total);
 
-        return [new InvoiceFinalized(new InvoiceSnapshot(
+        $events = [new InvoiceFinalized(new InvoiceSnapshot(
             provider: 'stripe',
             providerId: $id,
             customerReference: $customer,
@@ -476,6 +488,48 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             // B2B reverse charge (the buyer accounts for the VAT). That is the fact the e-invoice must carry.
             reverseCharge: $this->string($object, 'customer_tax_exempt') === 'reverse',
         ))];
+
+        // Where the provider taxed a subscription cycle, reported with every invoice of a subscription, finalized
+        // and paid alike. For an invoice the provider takes the customer's shipping address first and their billing
+        // address after it, so the country is read in that order. A one-off invoice has no subscription and is
+        // left to the checkout that sold it.
+        $subscription = $this->string($object, 'subscription');
+
+        if ($subscription !== null) {
+            $events[] = new SaleCountryReported(
+                $customer,
+                $id,
+                $this->countryAt($object, 'customer_shipping', 'address') ?? $this->countryAt($object, 'customer_address'),
+                Money::of($total, strtoupper($currency)),
+                paid: $this->string($object, 'status') === 'paid',
+                chargeReference: $id,
+                subscriptionReference: $subscription,
+            );
+        }
+
+        return $events;
+    }
+
+    /**
+     * The upper-cased `country` of the address at a path of nested keys, or null where any step is missing.
+     *
+     * @param  array<array-key, mixed>  $data
+     */
+    private function countryAt(array $data, string ...$path): ?string
+    {
+        foreach ($path as $key) {
+            $next = $data[$key] ?? null;
+
+            if (! is_array($next)) {
+                return null;
+            }
+
+            $data = $next;
+        }
+
+        $country = $this->string($data, 'country');
+
+        return $country === null || $country === '' ? null : strtoupper($country);
     }
 
     /**

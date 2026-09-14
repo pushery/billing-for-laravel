@@ -61,6 +61,15 @@ enum RefundKind: string
     case WithdrawnBuyerFee = 'withdrawn_buyer_fee';
 
     /**
+     * A sale the provider taxed in a country the operator has not opened, undone by the package.
+     *
+     * Its own kind because it is neither goodwill nor a right the buyer exercised: nobody asked for the money back,
+     * and the sale should not have been possible. Booked as goodwill it would hide how often the market gate had to
+     * act after a payment instead of before it.
+     */
+    case ClosedMarket = 'closed_market';
+
+    /**
      * Whether the amount was decided by a rule rather than by whoever pressed the button.
      *
      * The distinction a reader needs before asking "is this figure right?": for a goodwill refund there is
