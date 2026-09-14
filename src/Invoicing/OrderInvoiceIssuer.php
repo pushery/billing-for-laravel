@@ -36,19 +36,43 @@ use Throwable;
  * second attempt lose rather than mint, and the insert is attempted rather than checked-then-inserted,
  * because between a check and an insert is exactly where a concurrent run fits.
  *
- * ## What this deliberately does NOT state
+ * ## The tax is stated only where it was established
  *
- * **No tax.** `tax_minor` is left null rather than written as zero. A driver whose provider does not
- * determine tax (`supportsProviderTax: false`) has no basis for either number, and zero is not the absence
- * of a claim — it is the claim that no tax was due, which nothing here established. Determining place of
- * supply, rate and archetype for a local cycle is its own work with legal weight, tracked separately; an
- * invoice that states a tax nobody computed is worse than one that states none.
+ * `tax_minor` was left null on every document this ever raised, and that was honest rather than complete:
+ * a driver whose provider does not determine tax (`supportsProviderTax: false`) has no result to copy, and
+ * zero is not the absence of a claim — it is the claim that no tax was due.
+ *
+ * {@see OrderTaxBasis} now determines it where the basis exists, and refuses where it does not. When it
+ * refuses, this writes exactly what it always wrote: a null tax, a subtotal equal to the total, and no
+ * characteristics. When it answers, the document freezes the whole basis beside the figure — archetype,
+ * place of supply, rate band, exemption, destination and the period supplied — which is what makes the
+ * figure defensible years later and what {@see Guards\TaxWithoutBasisGuard} insists on.
+ *
+ * ## A basis that fails must never cost the document
+ *
+ * The determination runs in its own try/catch, and a throw leaves the document without tax rather than
+ * without existence. A misconfigured archetype is a configuration defect that `billing:doctor` reports;
+ * losing the numbered document for money that already moved is not recoverable in the same way.
  */
 final readonly class OrderInvoiceIssuer
 {
     public function __construct(
         private InvoiceNumberSequence $numbers,
         private Repository $config,
+        /**
+         * REQUIRED, and it was optional for about an hour.
+         *
+         * A nullable parameter with a default is not auto-resolved: `Container::resolveClass()` returns the
+         * default whenever one exists and the class is not explicitly bound, without ever attempting to
+         * build it. So every container-resolved issuer held null, the determination never ran, and the whole
+         * seam shipped inert — with the test suite green, because a document with no tax is precisely what
+         * this issuer produced before and every existing arm asserts exactly that.
+         *
+         * An optional dependency also says the wrong thing about this class. An issuer that cannot consult
+         * the basis cannot decide whether a figure may be stated, and the honest shape of that is a
+         * constructor that will not build without one.
+         */
+        private OrderTaxBasis $basis,
     ) {}
 
     /**
@@ -74,20 +98,86 @@ final readonly class OrderInvoiceIssuer
         }
 
         $issuedAt = Carbon::now();
+        $tax = $this->determined($order);
 
-        return InvoiceRecord::query()->create([
+        // Filled in two passes rather than created from one spread literal, and the reason is a type
+        // rather than a taste: the model's own property list is what makes a create() literal checkable,
+        // and spreading a computed array into it erases that for every key at once. Two fills keep the
+        // document's fixed columns under that check while the tax columns stay a computed set — one
+        // insert either way, so the unique constraint on `order_id` still decides a concurrent second run.
+        $invoice = new InvoiceRecord;
+
+        $invoice->fill([
             'owner_type' => $order->owner_type,
             'owner_id' => $order->owner_id,
             'provider' => $order->provider,
             'order_id' => $order->getKey(),
             'number' => $this->number($issuedAt),
             'total_minor' => $order->total_minor,
-            'subtotal_minor' => $order->total_minor,
+            // The net, where one was established. Equal to the total otherwise — which is not a claim that
+            // the cycle was untaxed, it is the same figure this column has always carried beside a null tax.
+            'subtotal_minor' => $tax?->net->minorUnits ?? $order->total_minor,
             'currency' => $order->currency,
             'status' => InvoiceStatus::Paid,
             'issued_at' => $issuedAt,
             'lines' => $this->frozenLines($order),
         ]);
+
+        $invoice->fill($this->taxAttributes($tax));
+        $invoice->save();
+
+        return $invoice;
+    }
+
+    /**
+     * The tax basis for this cycle, or null where none could be established or the attempt failed.
+     *
+     * The catch is deliberate and narrow in its consequence: it costs the tax, never the document. See the
+     * class docblock — the money is already collected by the time this runs.
+     */
+    private function determined(Order $order): ?DeterminedOrderTax
+    {
+        try {
+            return $this->basis->for($order);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * The tax columns a determined cycle freezes, or none at all.
+     *
+     * An empty array rather than a row of nulls, so a document with no basis is written exactly as it was
+     * before this seam existed — the model's own defaults decide those columns, and a null spread over them
+     * here would be a second place that says what they are.
+     *
+     * @return array<string, mixed>
+     */
+    private function taxAttributes(?DeterminedOrderTax $tax): array
+    {
+        if (! $tax instanceof DeterminedOrderTax) {
+            return [];
+        }
+
+        $supply = $tax->characteristics;
+
+        return [
+            'tax_minor' => $tax->tax->minorUnits,
+            'tax_rate_bps' => $tax->rateBps,
+            'reverse_charge' => $tax->reverseCharge,
+            'tax_exempt' => $tax->exempt,
+            'oss' => $tax->oneStopShop,
+            'tax_archetype' => $supply->archetype,
+            'place_of_supply_rule' => $supply->placeOfSupply,
+            'tax_rate_category' => $supply->rateCategory,
+            'tax_exemption_reason' => $supply->exemptionReason,
+            'destination_country' => $supply->destinationCountry,
+            'destination_subdivision' => $supply->destinationSubdivision,
+            // Both inclusive, and the end is a day earlier than the subscription's own period end — see
+            // OrderTaxBasis::periodOf(), which is the one place that conversion is made.
+            'service_period_start' => $tax->period->from,
+            'service_period_end' => $tax->period->to,
+        ];
     }
 
     /**

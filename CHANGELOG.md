@@ -4,6 +4,18 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.28.0] - 2026-09-14
+
+### Added
+
+- **A locally billed subscription cycle determines its own tax, and states it only where the basis exists.** Under a provider that determines tax the package copies a result; under a local engine there was none to copy, so every invoice a cycle raised left `tax_minor` null. That was honest and not a complete document for a cycle that triggers VAT. Everything needed to complete it was already in the package and none of it was called: the sale-tax decision had one caller on the commission path, the place-of-supply decision had **none at all**, and no cycle had ever recorded where it was supplied. `OrderTaxBasis` is the caller, and it refuses far more often than it answers — four things must be established, and a null from any of them writes the document exactly as before: a null tax, a subtotal equal to the total, no characteristics. **Null says nobody established this; zero would say none was due.**
+
+  The four are the tier's `archetype` (an unset one refuses rather than assuming a subscription — a guessed archetype is a guessed treatment frozen onto an immutable document), the recorded place of supply, a period the cycle covers, and the customer's tax status where a register has confirmed it. The place is **read, never re-derived**: the signals exist only at the sale, a cycle is billed weeks later by a scheduler with nothing fresh to read, and deriving from a stored address would let a customer who has since moved change what an old cycle was taxed under. The evidence standard is the one the package already had, unweakened — an application records it at signup under `OrderTaxBasis::placeReferenceFor()`, which is published as a method precisely so a reader and a writer cannot spell the same convention two ways.
+
+  What the document freezes beside the figure: archetype, place-of-supply rule, rate band, exemption reason, destination country and subdivision, reverse charge, exempt, the cross-border consumer scheme flag, and both service-period dates — the end being the **last day covered**, a day before the subscription's own period end, which is the next period's first day. The cycle is split from its **gross**, because that is what the customer was charged, so the parts add back to the total exactly. A basis that throws costs the tax and never the document: the money has already moved by the time an invoice is raised, and a missing number is recoverable where a missing numbered document is not.
+
+- **`OrderInvoiceIssuer` now requires the tax basis, and it was optional for about an hour.** A constructor parameter with a default is not auto-resolved by the container — it returns the default whenever one exists and the class is not explicitly bound, without attempting to build it. So every issuer held null, the determination never ran, and the whole seam would have shipped inert with the suite green, because a document with no tax is exactly what this issuer produced before.
+
 ## [0.27.0] - 2026-09-14
 
 ### Changed
@@ -6657,7 +6669,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.27.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.28.0...HEAD
+[0.28.0]: https://github.com/pushery/billing-for-laravel/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/pushery/billing-for-laravel/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/pushery/billing-for-laravel/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/pushery/billing-for-laravel/compare/v0.24.0...v0.25.0
