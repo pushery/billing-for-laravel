@@ -208,6 +208,10 @@ return [
         // likely to need. Absent it still falls back to the payment-methods route, exactly as before.
         'payment_methods_return_url' => env('BILLING_PAYMENT_METHODS_RETURN_URL'),
         'promotion_codes' => env('BILLING_CHECKOUT_PROMOTION_CODES', true),
+        // Whether a provider-taxed checkout asks the buyer for a tax ID. Stripe reverse-charges on an ID's format
+        // before it verifies the ID, so a platform that sells to consumers can leave the field out and charge every
+        // buyer the tax of their country. Only read while the provider computes tax.
+        'tax_id_collection' => env('BILLING_CHECKOUT_TAX_ID_COLLECTION', true),
     ],
 
     /*

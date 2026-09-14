@@ -26,6 +26,16 @@ final readonly class WithdrawalSettlement
         public Money $retained,
         /** What goes back to the buyer: the difference, never its own rounding. */
         public Money $refundable,
+        /**
+         * Whether the provider refused to return what goes back.
+         *
+         * The figures above still state what is owed when it did, and it is still owed. A caller that keeps a
+         * withdrawal open until the money has moved reads that here, not in the audit log. A settlement that
+         * was only computed, or that had nothing to return, had nothing refused.
+         */
+        public bool $refundRefused = false,
+        /** The payment the refund went against, so a second attempt can name it. Null on a computed settlement. */
+        public ?string $chargeReference = null,
     ) {}
 
     /** Whether any money actually moves. A period used in full owes nothing back and is not a refund. */

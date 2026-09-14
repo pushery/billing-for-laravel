@@ -10,17 +10,23 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\ContentOwnership\AccessRevocations;
+use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
+use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\RefundKind;
 use Pushery\Billing\Enums\RevokeReason;
 use Pushery\Billing\Enums\WithdrawalType;
+use Pushery\Billing\Exceptions\SubscriptionWithdrawalUnavailable;
 use Pushery\Billing\Exceptions\WithdrawalWindowClosed;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Models\AccessGrant;
 use Pushery\Billing\Models\MerchantCharge;
+use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingAdmin;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\ValueObjects\FeeLine;
+use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\SubscriptionPeriodPayment;
 use Pushery\Billing\ValueObjects\WithdrawalSettlement;
 
 /**
@@ -88,6 +94,16 @@ final readonly class ConsumerWithdrawal
          */
         private ?AccessRevocations $revocations = null,
         private ?Repository $config = null,
+        /**
+         * What a subscription withdrawal reads and acts through: the tier's withdrawal type, the payment behind the
+         * period in progress, and the action that ends the subscription.
+         *
+         * Defaulted and resolved at the point of use for the reason the register above is: a consumer constructing
+         * this class by hand to withdraw a sale supplies none of them and needs none.
+         */
+        private ?WithdrawalTypeResolver $types = null,
+        private ?ReadsSubscriptionPayments $payments = null,
+        private ?SubscriptionActions $actions = null,
     ) {}
 
     /**
@@ -167,7 +183,79 @@ final readonly class ConsumerWithdrawal
 
         $this->endOwnership($chargeReference, $refundMoved);
 
-        return $settlement;
+        // The same figures, now with what happened to them. Returning the computed settlement unchanged made a
+        // refund the provider refused look exactly like one that reached the buyer, to every caller.
+        return new WithdrawalSettlement(
+            $settlement->paid,
+            $settlement->retained,
+            $settlement->refundable,
+            refundRefused: ! $refundMoved,
+            chargeReference: $chargeReference,
+        );
+    }
+
+    /**
+     * Withdraw from a subscription, knowing only whose it is and which seller it is with.
+     *
+     * ## The keys a consumer already holds
+     *
+     * A withdrawal function is reached from an account screen that knows the owner and the seller, the same two keys
+     * a cancellation takes. What {@see self::withdraw()} needs beyond them, the payment behind the period and how
+     * much of it was used, is billing data, so it is read here rather than asked for: the payment through the
+     * driver's {@see ReadsSubscriptionPayments}, the days from the period that payment bought.
+     *
+     * ## The window opens when the subscription began
+     *
+     * Read through the active profile from the start of the subscription standing in the row, and refused with
+     * {@see WithdrawalWindowClosed} once it has passed, before the provider is asked anything and before anything
+     * moves.
+     *
+     * ## Ended first, settled second
+     *
+     * The subscription ends before the refund. Should something fail between the two, the buyer holds no contract
+     * they withdrew from, and their refund is one call away: {@see self::withdraw()} with the reference of the
+     * period's payment. The other order would leave a refunded subscription still billing, and its next cycle would
+     * charge the buyer again for a contract they left.
+     *
+     * A provider that refuses the refund leaves the subscription ended as well. The settlement then says
+     * `refundRefused` and names the payment in `chargeReference`, which is what a second attempt needs.
+     *
+     * @return ?WithdrawalSettlement null when no payment covers the period in progress: the subscription ended and no
+     *                               money moved, which is the normal case on a driver that collects a period at its end
+     *
+     * @throws SubscriptionWithdrawalUnavailable
+     * @throws WithdrawalWindowClosed
+     */
+    public function withdrawSubscription(
+        Model $owner,
+        ?MerchantScope $merchant = null,
+        ?string $reason = null,
+        ?Model $actor = null,
+    ): ?WithdrawalSettlement {
+        $subscription = $this->liveSubscription($owner, $merchant);
+        $type = $this->typeOf($subscription);
+
+        $this->assertSubscriptionWindowIsOpen($subscription, $type);
+
+        $payment = ($this->payments ?? Container::getInstance()->make(ReadsSubscriptionPayments::class))
+            ->currentPeriodPayment($subscription);
+
+        ($this->actions ?? Container::getInstance()->make(SubscriptionActions::class))->cancelNow($owner, $merchant);
+
+        if (! $payment instanceof SubscriptionPeriodPayment) {
+            return null;
+        }
+
+        return $this->withdraw(
+            $owner,
+            $payment->chargeReference,
+            $type,
+            $payment->gross,
+            $payment->elapsedDaysAt(CarbonImmutable::now()),
+            $payment->periodDays(),
+            $reason,
+            $actor,
+        );
     }
 
     /**
@@ -341,6 +429,76 @@ final readonly class ConsumerWithdrawal
         // would refuse a buyer who was in time on the one day it matters most.
         if (CarbonImmutable::now()->greaterThan($window)) {
             throw new WithdrawalWindowClosed($chargeReference, $window);
+        }
+    }
+
+    /**
+     * The subscription the owner holds with this seller, while it is still one a withdrawal can end.
+     *
+     * Ended, lapsed and terminated rows are refused: the first two are the list a new signup may replace, and a
+     * terminated one was decided away. None of them has a contract left to withdraw from.
+     *
+     * @throws SubscriptionWithdrawalUnavailable
+     */
+    private function liveSubscription(Model $owner, ?MerchantScope $merchant): Subscription
+    {
+        $subscription = Subscription::query()
+            ->forOwner($owner)
+            ->ofDefaultType()
+            ->forMerchant($merchant)
+            ->latest('id')
+            ->first();
+
+        if (! $subscription instanceof Subscription || $subscription->isReplaceableByANewSubscription() || $subscription->terminated()) {
+            throw SubscriptionWithdrawalUnavailable::noLiveSubscription(($merchant ?? MerchantScope::platform())->uid());
+        }
+
+        return $subscription;
+    }
+
+    /**
+     * The withdrawal type the subscription's tier carries, refused where the taxonomy leaves it open.
+     *
+     * A row with no resolved tier is still a subscription. The catalog knows no archetype for an empty key, and the
+     * resolver reads that as the plain subscription it is.
+     *
+     * @throws SubscriptionWithdrawalUnavailable
+     */
+    private function typeOf(Subscription $subscription): WithdrawalType
+    {
+        $tierKey = $subscription->tier_key ?? '';
+        $type = ($this->types ?? Container::getInstance()->make(WithdrawalTypeResolver::class))->forTier($tierKey);
+
+        if (! $type instanceof WithdrawalType) {
+            throw SubscriptionWithdrawalUnavailable::unclassifiedTier($tierKey);
+        }
+
+        return $type;
+    }
+
+    /**
+     * Refuse a subscription withdrawal once the window that opened when the subscription began has passed.
+     *
+     * ## Computed, where a sale's window is frozen
+     *
+     * A sale freezes its window on the access grant when the work is provided. Nothing froze one when a subscription
+     * started, so it is computed here from the active profile, and a profile shortened later shortens it too.
+     *
+     * ## From the start of the subscription in the row
+     *
+     * `started_at`, because `created_at` belongs to the first subscription a reused row ever held. A row written
+     * before that column existed answers with `created_at`. Null from the gate passes, for the reasons
+     * {@see self::assertWindowIsOpen()} gives, and the comparison includes the last day.
+     *
+     * @throws WithdrawalWindowClosed
+     */
+    private function assertSubscriptionWindowIsOpen(Subscription $subscription, WithdrawalType $type): void
+    {
+        $began = $subscription->started_at ?? $subscription->created_at;
+        $window = $began === null ? null : $this->gate->windowEndsFor($type, null, $began);
+
+        if ($window instanceof CarbonInterface && CarbonImmutable::now()->greaterThan($window)) {
+            throw new WithdrawalWindowClosed($subscription->provider_id ?? 'subscription '.$subscription->id, $window);
         }
     }
 }

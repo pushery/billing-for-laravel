@@ -19,6 +19,7 @@ use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProrationStrategy;
+use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
 use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\TierCatalog;
@@ -41,6 +42,7 @@ use Pushery\Billing\Support\CreditLedger;
 use Pushery\Billing\Support\CycleItemPricer;
 use Pushery\Billing\Support\LocalBillingEngine;
 use Pushery\Billing\Support\LocalSubscriptionActions;
+use Pushery\Billing\Support\LocalSubscriptionPayments;
 use Pushery\Billing\Support\LocalSubscriptionStarter;
 use Pushery\Billing\Support\OrderItemPreprocessorChain;
 use Pushery\Billing\Support\WebhookSecretGuard;
@@ -113,6 +115,9 @@ final class MollieServiceProvider extends ServiceProvider
         // Without this the local driver fell back to NullSubscriptionActions, whose methods are empty:
         // canceling did nothing, swapping did nothing, and neither said so.
         $this->app->bind(SubscriptionActions::class, LocalSubscriptionActions::class);
+        // Rebound because the Stripe provider binds its own reader unconditionally, and that one would ask Stripe
+        // about a subscription it never saw. This engine collects a period at its end, which the local reader says.
+        $this->app->bind(ReadsSubscriptionPayments::class, LocalSubscriptionPayments::class);
         // Without this the local driver kept Stripe's strategy, whose applySwap() is a deliberate no-op
         // because Stripe books the proration itself. Mollie does not — so a plan change credited the
         // subscriber nothing for the time they had already paid for, and no state anywhere looked wrong.

@@ -4,6 +4,21 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.24.0] - 2026-09-14
+
+### Added
+
+- **A provider-taxed checkout can leave out the tax ID field.** `billing.checkout.tax_id_collection` (`BILLING_CHECKOUT_TAX_ID_COLLECTION`) decides whether the Stripe subscription and add-on checkouts ask the buyer for a tax ID while Stripe computes the tax. Stripe checks only an ID's format during the session and verifies it afterwards, yet applies the reverse charge on the format alone, so a consumer who enters a well-formed invalid ID bought without VAT the platform still owes. A platform that sells to consumers can now set the key to `false` and charge every buyer their country's tax; automatic tax and the saved address stay as they were. The default is `true`, so an existing installation keeps the field.
+
+- **A subscription can be withdrawn from with nothing but its owner and its seller.** `ConsumerWithdrawal::withdrawSubscription($owner, $merchant, $reason, $actor)` finds the live subscription in that scope, refuses with `WithdrawalWindowClosed` once the window that opened when the subscription began has passed, ends the subscription at once, and refunds the unused part of the period in progress as a statutory withdrawal. Until now a consumer holding only those two keys had to find the payment behind the period and count its days itself. The payment is read through the new `ReadsSubscriptionPayments` seam: on Stripe it is the newest invoice that started or renewed the subscription, and on a driver the package bills itself there is none, because that engine collects a period at its end. The method returns `null` when no payment covers the period, in which case the subscription ends and no money moves. `SubscriptionWithdrawalUnavailable` names the three cases it refuses before anything happens: no live subscription in the scope, a tier whose taxonomy leaves the withdrawal open, and a payment still being collected.
+- **A subscription row records when the subscription began.** The new nullable `started_at` column is filled from Stripe's `start_date`, and when the package's own engine starts a card-less trial or a mandate makes a subscription real. A returning customer's reused row starts again instead of keeping the first subscription's start, which `created_at` could not do. `SubscriptionStateChanged` carries it as `startedAt`.
+
+### Fixed
+
+- **A withdrawal whose refund the provider refuses says so.** `ConsumerWithdrawal::withdraw()` returned the same `WithdrawalSettlement` whether the refund reached the buyer or the provider turned it down, so a caller could only find a refused refund in the audit log and would treat the withdrawal as settled while the buyer was still owed their money. The settlement it returns now carries `refundRefused`, and `chargeReference` names the payment a second attempt goes against. A settlement that had nothing to return, or was only computed through `settlementFor()`, reports nothing refused. `withdrawSubscription()` returns the same shape, and its subscription ends either way.
+
+- **Refunding a routed subscription cycle reaches Stripe with the payment behind it.** The charge ledger keeps a routed subscription cycle under its invoice, one row per cycle, while a one-time sale is kept under its payment intent. Stripe's refund API takes only a payment intent, so a refund of a creator subscription's cycle asked Stripe to refund a payment intent named after the invoice, and a support refund of that cycle could not succeed. The Stripe rails now resolve an invoice reference to the payment intent in its `payments` before refunding, through the same reading the routed commission already used, and refuse with the invoice named when it shows no payment. One-time sales are refunded exactly as before.
+
 ## [0.23.0] - 2026-09-13
 
 ### Added
@@ -6572,7 +6587,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/pushery/billing-for-laravel/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/pushery/billing-for-laravel/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/pushery/billing-for-laravel/compare/v0.21.2...v0.22.0
 [0.21.2]: https://github.com/pushery/billing-for-laravel/compare/v0.21.1...v0.21.2

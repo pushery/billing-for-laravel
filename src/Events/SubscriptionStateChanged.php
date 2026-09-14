@@ -38,6 +38,9 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * subscription the checkout stamped it on, so the local row can carry it and the ledger can find the
  * declarations for this subscription. Null when the subscription carries none, the ordinary case on every
  * install without a consumer-rights profile.
+ *
+ * `startedAt` (Unix seconds) is when the provider says the subscription began, so the local row can hold the day a
+ * subscriber's withdrawal window opens. Null when the provider conveys none.
  */
 final readonly class SubscriptionStateChanged implements BillingDomainEvent, IdentifiesCustomer
 {
@@ -53,5 +56,6 @@ final readonly class SubscriptionStateChanged implements BillingDomainEvent, Ide
         public ?MerchantScope $merchant = null,
         public ?string $merchantAccountReference = null,
         public ?string $declarationReference = null,
+        public ?int $startedAt = null,
     ) {}
 }

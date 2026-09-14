@@ -168,6 +168,9 @@ final readonly class StartSubscriptionOnMandate
                 // trial per two cycles, resettable forever at one verification payment a time — the defect
                 // the guard exists to close, one paid round trip deeper and invisible in the data.
                 'trial_ends_at' => $trialEndsAt ?? $existing?->trial_ends_at,
+                // The moment the subscription became real, and with it the day its withdrawal window opens. A reused
+                // row starts again here rather than keeping the start of the subscription that ended.
+                'started_at' => $now,
                 'current_period_start' => $now,
                 'current_period_end' => $periodEnd,
                 'scheduled_processing_at' => $periodEnd,

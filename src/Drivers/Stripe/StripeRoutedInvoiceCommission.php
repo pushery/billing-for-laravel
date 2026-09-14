@@ -69,7 +69,7 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
             // looking exactly like an unrouted one.
             $invoice = $this->stripe->invoices->retrieve($invoiceReference, ['expand' => ['payments']]);
 
-            $intentId = $this->paymentIntentIdOf($invoice->toArray());
+            $intentId = StripeInvoicePayments::intentIdOf($invoice->toArray());
 
             if ($intentId === null) {
                 return null;
@@ -109,30 +109,6 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
             // revoked key) forever; answering null lets the caller say what it could not do, once.
             return null;
         }
-    }
-
-    /**
-     * The payment intent behind a paid invoice, reachable only through the expanded `payments` collection.
-     *
-     * @param  array<array-key, mixed>  $invoice
-     */
-    private function paymentIntentIdOf(array $invoice): ?string
-    {
-        $payments = $invoice['payments'] ?? null;
-
-        /** @var array<array-key, mixed> $rows */
-        $rows = is_array($payments) && is_array($payments['data'] ?? null) ? $payments['data'] : [];
-
-        foreach ($rows as $row) {
-            $payment = is_array($row) ? ($row['payment'] ?? null) : null;
-            $intent = is_array($payment) ? ($payment['payment_intent'] ?? null) : null;
-
-            if (is_string($intent) && $intent !== '') {
-                return $intent;
-            }
-        }
-
-        return null;
     }
 
     /**

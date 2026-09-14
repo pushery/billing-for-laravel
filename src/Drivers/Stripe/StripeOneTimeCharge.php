@@ -191,7 +191,13 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // the add-on. The absence surfaces at a VAT return, or never.
         if ($this->context->providerTax()) {
             $payload['automatic_tax'] = ['enabled' => true];
-            $payload['tax_id_collection'] = ['enabled' => true];
+
+            // The same switch as the subscription lane, read the same way. See StripeCheckout for why a platform
+            // selling to consumers turns it off.
+            if ($this->config->get('billing.checkout.tax_id_collection', true) !== false) {
+                $payload['tax_id_collection'] = ['enabled' => true];
+            }
+
             // Stripe rejects automatic_tax against an existing customer without permission to save the
             // address it collects — the same caveat, and the same fix, as the subscription lane.
             $payload['customer_update'] = ['address' => 'auto'];
