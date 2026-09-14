@@ -343,8 +343,9 @@ final readonly class ZugferdCiiInvoice implements EInvoice
         $this->amount($doc, $tax, 'ram:BasisAmount', $band['taxable'], $currency);
         $this->el($doc, $tax, 'ram:CategoryCode', $category->code);
 
-        // AE, K and G each carry their own VATEX code; an exempt supply (E) needs only its reason text
-        // (BR-E-10 accepts the text alone), so no code is emitted for it.
+        // AE, K and G each carry their own VATEX code, and so does a margin-taxed resale (E, VATEX-EU-F); any
+        // other exempt supply (E) needs only its reason text (BR-E-10 accepts the text alone), so no code is
+        // emitted for it.
         if ($category->vatexCode !== null) {
             $this->el($doc, $tax, 'ram:ExemptionReasonCode', $category->vatexCode);
         }
@@ -389,6 +390,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
             $treatment->exempt,
             $rate,
             $invoice->destination_country,
+            $invoice->taxation_basis,
         );
     }
 

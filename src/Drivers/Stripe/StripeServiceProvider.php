@@ -66,6 +66,7 @@ use Pushery\Billing\Support\WebhookSecretGuard;
 use Pushery\Billing\Webhooks\Effects\ClaimChargebackClawback;
 use Pushery\Billing\Webhooks\Effects\CorrectChainOnChargeback;
 use Pushery\Billing\Webhooks\Effects\CreditAddonPurchase;
+use Pushery\Billing\Webhooks\Effects\DebitCreditAppliedByProvider;
 use Pushery\Billing\Webhooks\Effects\FlushUpcomingUsage;
 use Pushery\Billing\Webhooks\Effects\GrantPurchasedContent;
 use Pushery\Billing\Webhooks\Effects\IssueLocalCreditNote;
@@ -298,6 +299,12 @@ final class StripeServiceProvider extends ServiceProvider
         // future just disagreed with. Inert until an install actually writes something off.
         $registry->on(PaymentSucceeded::class, ReopenWriteOffOnLateReceipt::class);
         $registry->on(InvoiceFinalized::class, PersistInvoice::class);
+        // Immediately after it, and the order is load-bearing: the ledger's source is a morph, so the
+        // offset is keyed on the invoice RECORD, and the record is what PersistInvoice just wrote. It
+        // brings credit the provider spent on its own back onto the ledger this package calls its source
+        // of truth — without it the local balance is too high from the first such invoice onward, and it
+        // is the balance the account hub shows and a local charge spends from.
+        $registry->on(InvoiceFinalized::class, DebitCreditAppliedByProvider::class);
         // A sale Stripe taxed in a country `billing.tax_markets` does not open is undone: the subscription ended,
         // the payment refunded. Inert without a market map, so an install that configured none sees no change.
         $registry->on(SaleCountryReported::class, ReverseSaleIntoClosedMarket::class);

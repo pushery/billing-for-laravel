@@ -32,6 +32,8 @@ final readonly class SmallBusinessThresholdMonitor
     public function __construct(
         private Repository $config,
         private AnnualEarningsCounter $counter,
+        /** The installation's posture, for the rows that never recorded their own. */
+        private MarketplaceSaleContext $sales,
     ) {}
 
     /**
@@ -61,10 +63,12 @@ final readonly class SmallBusinessThresholdMonitor
             ->where('settled_at', '<', $end)
             ->orderBy('settled_at')
             ->orderBy('id')
-            // Everything `payoutNet()` reads, not just the total. Selecting a narrower set would leave the
+            // Everything `smallBusinessTurnover()` reads, not just the total. Selecting a narrower set would leave the
             // model without the rate and the commission and it would answer from nulls -- a figure that is
             // wrong in the same direction as the defect this replaced, and just as quiet.
-            ->get(['charge_reference', 'gross_minor', 'fee_minor', 'commission_tax_bps', 'currency', 'settled_at']);
+            ->get(['charge_reference', 'gross_minor', 'fee_minor', 'commission_tax_bps', 'currency', 'settled_at', 'seller_posture']);
+
+        $unrecorded = $this->sales->posture();
 
         $cumulative = 0;
 
@@ -78,7 +82,7 @@ final readonly class SmallBusinessThresholdMonitor
             //
             // Early in exactly the expensive direction: a creator is declared out of the small-business
             // regime while still inside it, and owes a tax they do not yet owe on every settlement after.
-            $cumulative += $charge->payoutNet()->minorUnits;
+            $cumulative += $charge->smallBusinessTurnover($unrecorded)->minorUnits;
             $settledAt = $charge->settled_at;
 
             if ($settledAt !== null && $cumulative > $limit) {

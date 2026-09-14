@@ -26,8 +26,9 @@ use Pushery\Billing\Models\ExchangeRateRecord;
  * ## The two lookups, because the rules are two different shapes
  *
  * A **monthly average** covers a month, so the day asked for selects a month and the row for that month
- * answers. Nothing is resolved forward: a month either has an announced average or it does not, and the
- * next month's average is not a late answer for this one.
+ * answers. Nothing is resolved forward and nothing is computed: a month either has an announced average
+ * or it does not, the next month's average is not a late answer for this one, and the mean of the daily
+ * series is a figure nobody announced.
  *
  * A **central-bank rate** belongs to a trading day, and the day asked for is frequently not one. Weekends
  * and holidays have no observation at all, and the law says so: where no rate was published, the next
@@ -54,7 +55,7 @@ final readonly class DatabaseExchangeRateSource implements ExchangeRateSource
     public function rateFor(string $from, string $to, CarbonImmutable $on, ExchangeRateBasis $basis): FrozenExchangeRate
     {
         $record = $basis === ExchangeRateBasis::CentralBankMonthlyAverage
-            ? $this->monthlyAverage($from, $to, $on, $basis)
+            ? $this->announcedMonth($from, $to, $on, $basis)
             : $this->nextPublished($from, $to, $on, $basis);
 
         if (! $record instanceof ExchangeRateRecord) {
@@ -74,55 +75,26 @@ final readonly class DatabaseExchangeRateSource implements ExchangeRateSource
         );
     }
 
-    /** The announced average for the month the date falls in. Stored against the month's first day. */
     /**
-     * The month's average, COMPUTED from the daily series rather than looked up as a row of its own.
+     * The average ANNOUNCED for the month the date falls in, stored against the month's first day.
      *
-     * It used to query for a row carrying this basis, and nothing has ever written one: `ExchangeRateImport`
-     * stores the daily series under the two central-bank-at-a-date rules only. So a German domestic
-     * conversion — which the profile hands exactly this basis — asked for data that could not exist and threw
-     * `ExchangeRateUnavailable` every time. The lookup was written for a ministry importer that was never
-     * buildable: the table is published behind a page that refuses automated retrieval, and it is an
-     * aggregation of these same daily rates in the first place.
+     * Read as a row, never computed from the daily series, and the difference is the point. Taking the
+     * arithmetic mean of the month's published days produces the aggregation the ministry's table is made
+     * OF, which is not the same thing as the table: the two part company the moment a day is missing from
+     * the local series, a publisher revises an observation, or the rounding differs by a digit. Every one of
+     * those is invisible, and what it produces is a plausible figure nobody published, on a tax document
+     * that is checked years later against the official one.
      *
-     * So the average is taken here, from the observations already imported. The arithmetic mean of the
-     * month's published reference rates is what the ministry table itself is, and computing it from the
-     * source removes a fetch that could not be automated rather than reproducing it.
-     *
-     * A month with no published day is still `null` — fail-loud, not an average of nothing. A partial month
-     * averages what was published, which is what an average of a series with holidays in it means.
+     * A month with no announced average is `null`, which becomes a refusal. That is the answer the statute
+     * leaves: the announced average is mandatory, and a daily rate in its place needs the tax office's
+     * permission — neither of which a package may grant itself. `billing:exchange-rates:import-file` is how
+     * the figures get here, because the table is published behind a page that refuses automated retrieval.
      */
-    private function monthlyAverage(string $from, string $to, CarbonImmutable $on, ExchangeRateBasis $basis): ?ExchangeRateRecord
+    private function announcedMonth(string $from, string $to, CarbonImmutable $on, ExchangeRateBasis $basis): ?ExchangeRateRecord
     {
-        // The daily series, under the rule the importer actually writes. Asking under `$basis` would ask for
-        // the rows whose absence is the defect this method exists to close.
-        $days = $this->pair($from, $to, ExchangeRateBasis::CentralBankAtTaxPoint)
-            ->whereDate('rate_date', '>=', $on->startOfMonth()->toDateString())
-            ->whereDate('rate_date', '<=', $on->endOfMonth()->toDateString())
-            ->orderBy('rate_date')
-            ->get();
-
-        if ($days->isEmpty()) {
-            return null;
-        }
-
-        $scaled = $days->map(static fn (ExchangeRateRecord $day): int => $day->rate_scaled);
-        $average = (int) round(array_sum($scaled->all()) / $scaled->count());
-
-        // A record rather than a bare number, so the caller's freeze carries a publisher and a date like any
-        // other rate. The date is the FIRST of the month, because that is what the figure is about — the last
-        // observation's date would name a day whose own rate is a different number.
-        //
-        // The source is the one the observations carry, never a literal: the average of a series is published
-        // by whoever published the series, and naming anything else here would put a stranger on a document.
-        return new ExchangeRateRecord([
-            'from_currency' => $from,
-            'to_currency' => $to,
-            'basis' => $basis->value,
-            'rate_scaled' => $average,
-            'rate_date' => $on->startOfMonth(),
-            'source' => $days->first()->source,
-        ]);
+        return $this->pair($from, $to, $basis)
+            ->whereDate('rate_date', $on->startOfMonth()->toDateString())
+            ->first();
     }
 
     /** The earliest published rate at or after the date asked for, within the forward bound. */

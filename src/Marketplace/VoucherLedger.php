@@ -178,10 +178,7 @@ final readonly class VoucherLedger
 
     private function defaultInstrumentType(): VoucherInstrumentType
     {
-        $configured = $this->config->get('billing.marketplace.vouchers.instrument_type');
-
-        return VoucherInstrumentType::tryFrom(is_string($configured) ? $configured : '')
-            ?? VoucherInstrumentType::MultiPurpose;
+        return VoucherInstrumentType::fromConfigured($this->config->get(VoucherInstrumentType::CONFIG_KEY));
     }
 
     private function ownerKey(?Model $owner): ?string

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Marketplace\Reporting;
 
+use Pushery\Billing\Contracts\RendersDueDiligenceRecord;
 use Pushery\Billing\Contracts\RendersReportingRecord;
 use Pushery\Billing\Marketplace\Plausibility\UnclassifiedActivityRule;
 use Pushery\Billing\Marketplace\SellerReportingPeriod;
@@ -24,6 +25,14 @@ use Pushery\Billing\ValueObjects\SellerQuarterFigures;
  * to get right and easy to get wrong quietly: the ordering, the number format, and the fact that an
  * unclassified seller cannot be rendered at all.
  *
+ * ## Every examined seller, with the verdict beside them
+ *
+ * This is the record of the due diligence rather than a transmission, so it implements
+ * {@see RendersDueDiligenceRecord} and is handed every seller the period examined. The `reportable` column
+ * carries each verdict. A seller who was examined and is not reported is exactly what such a record has to
+ * show. A wire format has no business with that row, which is why a plain {@see RendersReportingRecord} is
+ * never handed it.
+ *
  * ## Determinism, and the three ways it is usually lost
  *
  * The archive compares runs by fingerprint, so equal input must give equal bytes. Three things would break
@@ -42,7 +51,7 @@ use Pushery\Billing\ValueObjects\SellerQuarterFigures;
  * carries an undecided line, `reportable()` throws — and that refusal is left to propagate. Rendering it
  * either way would file a decision nobody made.
  */
-final readonly class DelimitedSellerRecord implements RendersReportingRecord
+final readonly class DelimitedSellerRecord implements RendersDueDiligenceRecord
 {
     /** The columns, in order. Written as a header so the file is self-describing rather than positional. */
     private const array COLUMNS = [

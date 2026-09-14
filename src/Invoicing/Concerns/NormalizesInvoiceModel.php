@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Invoicing\Concerns;
 
+use Illuminate\Container\Container;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Contracts\SellerPartyResolver;
 use Pushery\Billing\Enums\InvoiceCorrectionKind;
 use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Exceptions\InvalidInvoiceCorrection;
 use Pushery\Billing\Invoicing\Line;
+use Pushery\Billing\Invoicing\MarginDocumentGuard;
 use Pushery\Billing\Invoicing\Party;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\EnInvoiceTaxTreatment;
@@ -128,6 +130,10 @@ trait NormalizesInvoiceModel
      * cannot move; only its rendering is computed, which is what makes it translatable — a frozen free-text
      * string could never be. Deriving the fact itself would be the opposite move and would be wrong.
      *
+     * A margin-taxed document is the one exception to the second source. It names its scheme rather than an
+     * exemption, and in the wording the jurisdiction profile prescribes, because paraphrased prescribed
+     * wording is not the prescribed wording.
+     *
      * Null when the supply carries no exemption at all, and null matters: a standard-rated band must carry
      * no reason (BR-S-*), so returning a sentence here would produce a document a validator rejects.
      */
@@ -139,6 +145,15 @@ trait NormalizesInvoiceModel
 
         if (is_string($note) && $note !== '') {
             return $note;
+        }
+
+        // Where the profile supplies no wording, null lets the category's own description stand in, which at
+        // least names the scheme. The same key the PDF half prints, so the two halves cannot say different things.
+        if ($invoice->taxation_basis?->taxesMarginOnly() === true) {
+            $key = Container::getInstance()->make(MarginDocumentGuard::class)->wordingKey();
+            $wording = $key === null ? null : Lang::get($key);
+
+            return is_string($wording) ? $wording : null;
         }
 
         $reason = $invoice->tax_exemption_reason ?? ($reverseCharge ? TaxExemptionReason::ReverseCharge : null);

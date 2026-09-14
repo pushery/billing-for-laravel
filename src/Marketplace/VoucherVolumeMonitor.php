@@ -26,12 +26,29 @@ final readonly class VoucherVolumeMonitor
     public function __construct(
         private Repository $config,
         private VoucherLedger $vouchers,
+        private CreditTopUpVolume $credits,
     ) {}
 
-    /** What has gone into vouchers over the window ending now. */
+    /**
+     * What has gone into prepaid value over the window ending now — BOTH instruments.
+     *
+     * A voucher and a paid credit top-up are the same thing in two tables: prepaid value, held by the
+     * issuer, redeemed later. The threshold asks for the total value of the payment transactions over the
+     * window, not for which table this package keeps them in — so an installation that sells credit and
+     * issues vouchers only incidentally used to cross the line while this counted calmly on.
+     *
+     * The two are added rather than reconciled: they are different rows about different sales, and nothing
+     * can appear in both.
+     */
     public function volume(CarbonInterface $now, string $currency): Money
     {
-        return $this->vouchers->issuedVolumeSince($now->copy()->subMonthsNoOverflow($this->windowMonths()), $currency);
+        $since = $now->copy()->subMonthsNoOverflow($this->windowMonths());
+
+        return Money::of(
+            $this->vouchers->issuedVolumeSince($since, $currency)->minorUnits
+            + $this->credits->since($since, $currency)->minorUnits,
+            $currency,
+        );
     }
 
     /** Past the figure at which a filing is expected. */

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Webhooks\Effects;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\ReadsRoutedInvoiceCommission;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
 use Pushery\Billing\Exceptions\RoutedCycleUnreadable;
+use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\PlatformFee;
@@ -54,6 +56,13 @@ final readonly class RecordRoutedSubscriptionCharge
     public function __construct(
         private ReadsRoutedInvoiceCommission $commissions,
         private RoutedChargeLedger $ledger,
+        /**
+         * Where the posture comes from, resolved from the container when nothing was handed in.
+         *
+         * Optional so the effect constructs as it always did. The cycle's row still states who sold, because the
+         * small-business turnover of a creator who supplies the buyer is not the payout.
+         */
+        private ?MarketplaceSaleContext $sales = null,
     ) {}
 
     public function __invoke(RoutedSubscriptionInvoicePaid $event): void
@@ -107,6 +116,7 @@ final readonly class RecordRoutedSubscriptionCharge
             // separating a net from a gross, and null on this column means "written before this was
             // recorded" -- a description of old rows, which this is not.
             0,
+            sellerPosture: ($this->sales ?? Container::getInstance()->make(MarketplaceSaleContext::class))->posture(),
         );
     }
 }

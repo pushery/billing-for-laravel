@@ -358,7 +358,7 @@ final readonly class BuyerProtectionClock
             $destination,
             Money::of($hold->seller_net_minor, $hold->currency),
             $hold->charge_reference,
-            $charge instanceof MerchantCharge ? "billing_merchant_charge_{$charge->id}" : "billing_protection_hold_{$hold->id}",
+            $charge instanceof MerchantCharge ? $charge->transferIdempotencyKey() : "billing_protection_hold_{$hold->id}",
         );
 
         return true;

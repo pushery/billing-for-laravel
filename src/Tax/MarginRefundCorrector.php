@@ -6,6 +6,7 @@ namespace Pushery\Billing\Tax;
 
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\Money;
+use RuntimeException;
 
 /**
  * What a refund of a margin-taxed sale gives back in tax.
@@ -34,6 +35,11 @@ use Pushery\Billing\ValueObjects\Money;
  * Refund more than the margin and the margin is zero, not negative. A negative margin would produce tax
  * flowing back on a transaction that never produced any — and refunds larger than the margin are ordinary
  * here, because goods are frequently sold at a small markup and returned in full.
+ *
+ * ## Who calls it
+ *
+ * The consumer that issued the document. The package issues no margin-taxed document itself, so the refund of
+ * one is the consumer's to correct, and this is the arithmetic it would otherwise have to get right alone.
  */
 final readonly class MarginRefundCorrector
 {
@@ -42,6 +48,8 @@ final readonly class MarginRefundCorrector
      *
      * @param  Money  $refunded  what is being returned to the buyer
      * @param  int  $standardRateBps  the rate the margin was taxed at — the standard one, never the goods'
+     *
+     * @throws RuntimeException when the sale was not taxed on the margin, or carries no frozen margin
      */
     public function correctionFor(InvoiceRecord $sale, Money $refunded, int $standardRateBps): Money
     {
@@ -60,23 +68,60 @@ final readonly class MarginRefundCorrector
      * How much of the margin the refund removes.
      *
      * @return Money the amount the taxable base is reduced by, never more than the margin itself
+     *
+     * @throws RuntimeException when the sale was not taxed on the margin, or carries no frozen margin
      */
     public function correctedBase(InvoiceRecord $sale, Money $refunded): Money
     {
-        $currency = $refunded->currency;
-        $margin = Money::of(max(0, $sale->margin_minor ?? 0), $currency);
+        $margin = $this->frozenMargin($sale);
 
         // The refund lowers the sale price by its own full amount; what the seller paid for the goods is
         // unchanged. So the margin falls by the refund, floored at nothing left to tax.
-        return Money::of(min($refunded->minorUnits, $margin->minorUnits), $currency);
+        return Money::of(min($refunded->minorUnits, $margin), $refunded->currency);
     }
 
-    /** What remains taxable after the refund — the margin the seller is left with. */
+    /**
+     * What remains taxable after the refund — the margin the seller is left with.
+     *
+     * @throws RuntimeException when the sale was not taxed on the margin, or carries no frozen margin
+     */
     public function remainingMargin(InvoiceRecord $sale, Money $refunded): Money
     {
-        $currency = $refunded->currency;
-        $margin = max(0, $sale->margin_minor ?? 0);
+        return Money::of(max(0, $this->frozenMargin($sale) - $refunded->minorUnits), $refunded->currency);
+    }
 
-        return Money::of(max(0, $margin - $refunded->minorUnits), $currency);
+    /**
+     * The margin frozen onto the sale, refused where there is none to read.
+     *
+     * Two refusals, and both used to be answers. A sale taxed on its price has no margin, and correcting it
+     * here would give back a fraction of the tax it really stated. A margin-taxed sale with no margin frozen
+     * onto it was read as a margin of zero, so its refund gave no tax back at all, with a figure that added
+     * up. Neither can be repaired from in here: what the seller paid for the goods is a fact this system
+     * never held.
+     *
+     * The second refusal has an ordinary cause, and the message names it. A reseller who works out the margin
+     * over a whole period rather than item by item has no margin per sale to freeze. Their refund lowers the
+     * period's total, which is a different computation rather than a missing value.
+     */
+    private function frozenMargin(InvoiceRecord $sale): int
+    {
+        $document = $sale->number ?? (string) $sale->id;
+
+        if ($sale->taxation_basis?->taxesMarginOnly() !== true) {
+            throw new RuntimeException(
+                "Document {$document} was not taxed on the margin, so its refund is corrected on the tax it "
+                .'states, not here. Corrected on a margin, it would give back a fraction of what was charged.'
+            );
+        }
+
+        if ($sale->margin_minor === null) {
+            throw new RuntimeException(
+                "Document {$document} is taxed on the margin but carries no frozen margin, so its refund cannot "
+                .'be corrected per sale. Freeze margin_minor when the document is issued. Where the margin is '
+                ."worked out over a whole period instead, the refund lowers that period's total and is corrected there."
+            );
+        }
+
+        return max(0, $sale->margin_minor);
     }
 }
