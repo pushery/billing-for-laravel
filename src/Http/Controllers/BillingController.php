@@ -118,9 +118,7 @@ final class BillingController
         // A provider that hosts its own PDFs (Stripe) answers here. A local-engine driver has none,
         // so the package renders the stored invoice itself — a foreign invoice is refused (403), an absent one
         // is a 404, so one owner can never pull another's document by guessing an id.
-        if ($document === null) {
-            $document = $this->renderLocalInvoice($owner, $invoiceId);
-        }
+        $document ??= $this->renderLocalInvoice($owner, $invoiceId);
 
         if ($document === null) {
             throw new NotFoundHttpException;

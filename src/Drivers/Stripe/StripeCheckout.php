@@ -64,13 +64,18 @@ final readonly class StripeCheckout implements Checkout
         private CanReceiveMoney $receiving,
     ) {}
 
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): ClientIntent
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent
     {
         // Defense in depth: refuse to open a paid checkout for an ineligible owner even if a caller
         // bypassed the UI eligibility guard (mirrors StripeOneTimeCharge).
         if (! $this->eligibility->check($billable)) {
             throw EligibilityDenied::forMoneyMovement();
         }
+
+        // The buyer's country, where the caller already knows it, is checked before the provider is asked for
+        // anything. A hosted checkout cannot restrict the address the buyer enters afterwards, so what they enter
+        // is checked again once the provider reports where it taxed the sale (ReverseSaleIntoClosedMarket).
+        $this->context->assertMarketOpen($buyerCountry);
 
         // The merchant this sale routes to, or null for a platform sale. Resolved only when the marketplace
         // is on, so a single-seller install never consults the resolver and everything below is unchanged.
@@ -210,9 +215,15 @@ final readonly class StripeCheckout implements Checkout
         return $items;
     }
 
+    /** The scope of a sale to this merchant — the platform when there is none. */
+    private function scopeOf(?Model $merchant): MerchantScope
+    {
+        return $merchant instanceof Model ? MerchantScope::forMerchant($merchant) : MerchantScope::platform();
+    }
+
     /**
-     * The Stripe coupon a package coupon CODE maps to, or null when the code is empty, invalid/expired, or
-     * has no Stripe mapping.
+     * The Stripe coupon a package coupon CODE maps to on a sale by this seller, or null when the code is
+     * empty, does not resolve for that seller, or has no Stripe mapping.
      *
      * TWO sources, the row before the config. `billing_coupons.provider_coupon_id` describes the coupon it
      * sits on; `billing.coupons.<code>.stripe_coupon` is a global map needing an entry per code. Until this
@@ -221,15 +232,6 @@ final readonly class StripeCheckout implements Checkout
      * That is the whole defect, and it is invisible from inside the application.
      *
      * A config-only installation is unchanged. No row means the config answers, exactly as before.
-     */
-    /** The scope of a sale to this merchant — the platform when there is none. */
-    private function scopeOf(?Model $merchant): MerchantScope
-    {
-        return $merchant instanceof Model ? MerchantScope::forMerchant($merchant) : MerchantScope::platform();
-    }
-
-    /**
-     * The provider coupon this code maps to, or null when it maps to none.
      *
      * Public, and the visibility is the point rather than a convenience: this is also the honest answer to
      * "will this code do anything", which the subscription starter has to give a screen BEFORE the customer
@@ -241,12 +243,15 @@ final readonly class StripeCheckout implements Checkout
             return null;
         }
 
-        // A code that does not resolve (unknown or expired) is ignored — a bad code never blocks checkout.
+        // A code that does not resolve for THIS seller (unknown, expired, or another seller's) is ignored —
+        // a bad code never blocks checkout.
         //
         // This stays FIRST, ahead of both sources. The column is a MAPPING, not an authority: a row must
         // never apply a discount the catalog rejected, or filling one column would be a way past the
-        // validity check rather than a way to reach the provider id.
-        if (! $this->discounts->resolve($couponCode) instanceof Discount) {
+        // validity check rather than a way to reach the provider id. The seller's own live rows are part of
+        // that catalog. Before they were, a code that existed only as a row failed right here, so a
+        // merchant's coupon could be created and scoped and was never applied.
+        if (! $this->discounts->resolve($couponCode, $merchant) instanceof Discount) {
             return null;
         }
 
@@ -256,7 +261,12 @@ final readonly class StripeCheckout implements Checkout
         // Scoped to the SELLER of this sale. Without the scope this finds any issuer's row of that name, so
         // one seller's provider coupon would be applied to another seller's checkout — and on this lane the
         // discount is money Stripe takes off the invoice.
-        $onTheRow = Coupon::query()->issuedBy($merchant)->where('code', $couponCode)->value('provider_coupon_id');
+        //
+        // And only a LIVE row. A deactivated or expired one is a coupon that was withdrawn, and a config entry of the
+        // same code passes the check above on its own account, so a row read without asking would put the withdrawn
+        // coupon's discount on the invoice anyway.
+        $row = Coupon::query()->issuedBy($merchant)->where('code', $couponCode)->first();
+        $onTheRow = $row instanceof Coupon && $row->isLive() ? $row->provider_coupon_id : null;
 
         if (is_string($onTheRow) && $onTheRow !== '') {
             return $onTheRow;
@@ -264,11 +274,28 @@ final readonly class StripeCheckout implements Checkout
 
         // Read by the LITERAL code, never a dotted config path: a code is matched exactly and never split
         // on a dot (the same rule the ConfigDiscountResolver follows).
+        //
+        // NOT scoped, and on purpose. The config map carries no issuer, so a code declared there is the
+        // platform's and its Stripe coupon applies on every sale, a merchant's included — the same reach the
+        // resolver gives it. A code only one seller should honor belongs in a row that seller issued.
         $coupons = $this->config->get('billing.coupons');
         $coupon = is_array($coupons) ? ($coupons[$couponCode] ?? null) : null;
         $stripeCoupon = is_array($coupon) ? ($coupon['stripe_coupon'] ?? null) : null;
 
         return is_string($stripeCoupon) && $stripeCoupon !== '' ? $stripeCoupon : null;
+    }
+
+    /**
+     * The provider coupon this code maps to on the sale {@see subscribe()} would open right now.
+     *
+     * The same routed merchant, from the same context, so the answer a screen shows before the customer
+     * commits is the one the session applies afterwards. {@see providerCouponFor()} without a scope asks
+     * about a platform sale instead, which on a marketplace is a different sale — and the two can disagree
+     * about the very same code.
+     */
+    public function providerCouponForTheSale(?string $couponCode): ?string
+    {
+        return $this->providerCouponFor($couponCode, $this->scopeOf($this->context->routedMerchant()));
     }
 
     /**

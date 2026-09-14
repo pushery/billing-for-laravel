@@ -150,7 +150,7 @@ use Pushery\Billing\Contracts\UsageNotifier;
 use Pushery\Billing\Contracts\UsageProvider;
 use Pushery\Billing\Contracts\UsageReporter;
 use Pushery\Billing\Contracts\VatIdValidator;
-use Pushery\Billing\Discounts\ConfigDiscountResolver;
+use Pushery\Billing\Discounts\LayeredDiscountResolver;
 use Pushery\Billing\Drivers\Mollie\MollieServiceProvider;
 use Pushery\Billing\Drivers\NullCreditSync;
 use Pushery\Billing\Drivers\NullCustomerRegistry;
@@ -303,7 +303,8 @@ final class BillingServiceProvider extends ServiceProvider
         $this->app->singleton(WebhookEffectRegistry::class);
         $this->app->bind(ScheduleHeartbeat::class, NullScheduleHeartbeat::class);
 
-        $this->app->bind(DiscountResolver::class, ConfigDiscountResolver::class);
+        // The seller's own coupon rows first, the platform's config map second -- LayeredDiscountResolver says why.
+        $this->app->bind(DiscountResolver::class, LayeredDiscountResolver::class);
 
         // Resolves a DATEV business transaction to its account from the configured chart. The default reads
         // the single-seller revenue account, so the export is byte-identical until a chart is selected.

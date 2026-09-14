@@ -849,6 +849,11 @@ return [
     | max_redemptions / redeem_by. A code without `stripe_coupon` still resolves
     | (and validates in the UI) but applies no discount at Stripe.
     |
+    | This map carries no issuer: a code declared here is the platform's and
+    | resolves on every sale, a merchant's included. A code only one seller
+    | should honor is a `billing_coupons` row issued by that seller; a live row
+    | answers ahead of this map for that seller's sales.
+    |
     | Example:
     | 'coupons' => [
     |     'WELCOME10' => ['percent' => 10, 'stripe_coupon' => 'coupon_welcome10'],

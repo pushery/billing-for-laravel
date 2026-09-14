@@ -26,6 +26,9 @@ interface Checkout
      *                                         (PurchaseDeclarations::declare()), carried to the provider so the
      *                                         subscription the webhook reports finds them again; null sends exactly
      *                                         what was sent before the parameter existed
+     * @param  ?string  $buyerCountry  the buyer's ISO country where the caller already knows it; checked against
+     *                                 `billing.tax_markets` before the provider is asked for anything, so a market that
+     *                                 is not open throws MarketNotOpen. Null checks nothing here
      */
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): ClientIntent;
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent;
 }

@@ -40,7 +40,7 @@ final readonly class StripePlatformPriceProvisioner implements MerchantPriceProv
 {
     public function __construct(private StripeClient $stripe) {}
 
-    public function provision(Model $merchant, string $tierKey, Money $amount, BillingInterval $interval): string
+    public function provision(Model $merchant, string $tierKey, Money $amount, ?BillingInterval $interval): string
     {
         $lookupKey = $this->lookupKey($merchant, $tierKey, $amount, $interval);
 
@@ -54,10 +54,9 @@ final readonly class StripePlatformPriceProvisioner implements MerchantPriceProv
 
         $key = $merchant->getKey();
 
-        $price = $this->stripe->prices->create([
+        $payload = [
             'unit_amount' => $amount->minorUnits,
             'currency' => strtolower($amount->currency),
-            'recurring' => ['interval' => $interval->value],
             'lookup_key' => $lookupKey,
             'product_data' => ['name' => $tierKey],
             'metadata' => [
@@ -65,7 +64,15 @@ final readonly class StripePlatformPriceProvisioner implements MerchantPriceProv
                 'billing_merchant_id' => is_scalar($key) ? (string) $key : '',
                 'billing_tier_key' => $tierKey,
             ],
-        ]);
+        ];
+
+        // A null interval is a one-time price: the same request without its recurring component, which is what
+        // a checkout in payment mode charges.
+        if ($interval instanceof BillingInterval) {
+            $payload['recurring'] = ['interval' => $interval->value];
+        }
+
+        $price = $this->stripe->prices->create($payload);
 
         return (string) $price->id;
     }
@@ -77,12 +84,12 @@ final readonly class StripePlatformPriceProvisioner implements MerchantPriceProv
      * same key and reuses its price, a repriced one resolves to a new key and mints a new price. A Stripe
      * price is immutable, so minting is the only way to reprice.
      */
-    private function lookupKey(Model $merchant, string $tierKey, Money $amount, BillingInterval $interval): string
+    private function lookupKey(Model $merchant, string $tierKey, Money $amount, ?BillingInterval $interval): string
     {
         $key = $merchant->getKey();
         $identity = $merchant->getMorphClass().'|'.(is_scalar($key) ? (string) $key : '');
 
         return 'billing_'.substr(hash('sha256', $identity), 0, 16)
-            .'_'.$tierKey.'_'.$amount->minorUnits.'_'.strtolower($amount->currency).'_'.$interval->value;
+            .'_'.$tierKey.'_'.$amount->minorUnits.'_'.strtolower($amount->currency).'_'.($interval->value ?? 'once');
     }
 }

@@ -57,9 +57,13 @@ final readonly class StripeSubscriptionStarter implements StartsSubscriptions
      * here, and a code with no mapping reaches the session as nothing at all. A screen that asked only the
      * catalog told the customer their code took and then charged them in full, which is the same silent
      * loss the local driver's answer exists to prevent, arriving by a different route.
+     *
+     * Asked about the sale `start()` would open, which on a marketplace belongs to the merchant it routes to.
+     * It used to ask about a platform sale, so on a routed checkout the screen and the session could answer
+     * the same code differently.
      */
     public function honorsCoupon(string $code): bool
     {
-        return $this->stripe->providerCouponFor($code) !== null;
+        return $this->stripe->providerCouponForTheSale($code) !== null;
     }
 }

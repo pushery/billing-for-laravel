@@ -4,6 +4,35 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.25.0] - 2026-09-14
+
+### Added
+
+- **`BillingFake` can assert that a subscription was left alone.** `assertNotCanceled()`, `assertNotCanceledNow()` and `assertNotResumed()` are the negative side of the three lifecycle assertions, with the same optional merchant scope. A test proving that the provider was not asked no longer has to call the positive assertion and read its failure as success, and a failing one lists every action the owner did see.
+
+- **A checkout can check the buyer's country before the session opens.** `Checkout::subscribe()` and `OneTimeCharge::purchase()` take a `buyerCountry`, and a country `billing.tax_markets` does not open is refused with `MarketNotOpen` before the provider is asked for anything. Without the argument, or without a market map, nothing changes.
+
+- **A one-time price can be minted for a merchant or for the platform.** `MerchantPriceProvisioner::provision()` takes a null interval for a single purchase such as a paid post: the price carries no recurring component, it lands on the account the payment-mode checkout charges (the merchant's connected account, or the platform's under `platform_deemed_supplier`), and its lookup key ends in `once`, so it never reuses a recurring price of the same amount. An application no longer has to talk to Stripe itself to sell something once.
+
+### Changed (breaking — pre-1.0)
+
+- **An implementation of `Checkout` or `OneTimeCharge` has to declare the new parameter.** PHP refuses a `subscribe()` or `purchase()` that does not accept `?string $buyerCountry = null`. Code that only calls them, and the shipped drivers, need nothing. The upgrade guide has the signatures.
+
+- **An implementation of `DiscountResolver` has to accept the sale's scope.** PHP refuses a `resolve()` that does not declare `?MerchantScope $merchant = null`. Code that only calls it, and the shipped resolvers, need nothing. The upgrade guide has the signature.
+
+- **An implementation of `MerchantPriceProvisioner` has to accept a null interval.** PHP refuses a `provision()` that declares `BillingInterval $interval` against the new `?BillingInterval $interval`. Code that only calls it, and the shipped Stripe provisioners, need nothing. The upgrade guide has the signature.
+
+### Fixed
+
+- **A subscription that account deletion could not end is reported, not only logged.** The listener on `BillableAccountDeleting` goes on with the deletion when one scope's cancellation fails, which is right, and wrote a warning to the log, which nobody who could end the subscription by hand was reading. It now also reports `DeletedAccountStillSubscribed` through the application's exception handler, so an error tracker sees it without anybody listening for an event. The exception names the account, the scope and the class of the failure, never the provider's message, and the other scopes are still canceled.
+
+- **A sale into a country without a tax registration no longer goes through at 0% unnoticed.** `billing.tax_markets` had no caller on the way to a payment, and a hosted checkout could not have been one: the buyer enters the billing address on Stripe's page, Stripe cannot restrict its country, and without a registration there it computes zero tax and takes the payment. The package now reads the country Stripe taxed a sale in, from a settled add-on checkout and from every subscription invoice, and undoes a sale into a market that is not open. The subscription ends first and the payment is refunded second, under a refund kind of its own, and `SaleIntoClosedMarketReversed` tells the application so it can tell the buyer. A sale without consideration is left alone unless it starts a subscription.
+
+- **A withdrawn coupon row no longer puts its Stripe discount on a checkout.** The hosted checkout read a row's `provider_coupon_id` without asking whether the row was still active and unexpired, so a code switched off in `billing_coupons` kept its discount wherever `billing.coupons` accepted the same code. A dead row is now passed over and the config's own `stripe_coupon` applies, the same as for a row that carries no provider id.
+
+- **A coupon that exists only as a `billing_coupons` row resolves, for the seller who issued it.** The table carries an issuer, and the redeemer, the model scope and the Stripe mapping all respect it, but the only resolver read `billing.coupons`, and the Stripe checkout asks the resolver before it looks at a row. A merchant's discount code could be created and scoped and was then ignored at checkout without a word. The bound `DiscountResolver` now reads the live row issued by the seller of the sale first and the config map second, so a merchant's code resolves on that merchant's sales and on nobody else's. Where both define a code for the same seller the row answers, which is what the Stripe mapping already did. An installation that keeps its coupons only in config sees no change.
+- **The coupon question a screen asks before the customer commits is about the sale the checkout opens.** On a marketplace the Stripe subscription starter asked about a platform sale while the checkout it opened belonged to the routed merchant, so the screen and the session could answer the same code differently.
+
 ## [0.24.0] - 2026-09-14
 
 ### Added
@@ -6587,7 +6616,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.24.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/pushery/billing-for-laravel/compare/v0.24.0...v0.25.0
 [0.24.0]: https://github.com/pushery/billing-for-laravel/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/pushery/billing-for-laravel/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/pushery/billing-for-laravel/compare/v0.21.2...v0.22.0

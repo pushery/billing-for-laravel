@@ -75,6 +75,11 @@ interface StartsSubscriptions
      * A pure question: it redeems nothing, writes nothing, and says nothing about whether the customer is
      * still entitled to the coupon when they eventually commit -- only that the code names something this
      * driver can act on. That is the claim a screen needs before it tells somebody their code took.
+     *
+     * The question is about the sale `start()` would open, and it takes no scope for that reason. On a
+     * marketplace that sale belongs to the merchant it routes to, so a merchant's own code is honored on
+     * their sale and not on another's. A scope the caller could pass would let a screen ask about a
+     * different sale than the one it then starts.
      */
     public function honorsCoupon(string $code): bool;
 }

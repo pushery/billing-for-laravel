@@ -57,6 +57,7 @@ use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Events\RoutedChargeAbandoned;
 use Pushery\Billing\Events\RoutedChargeConfirmed;
 use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
+use Pushery\Billing\Events\SaleCountryReported;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\Events\TrialEnding;
 use Pushery\Billing\Support\BillingManager;
@@ -77,6 +78,7 @@ use Pushery\Billing\Webhooks\Effects\RecordRoutedSubscriptionCharge;
 use Pushery\Billing\Webhooks\Effects\RefreshMerchantCapabilities;
 use Pushery\Billing\Webhooks\Effects\ReopenWriteOffOnLateReceipt;
 use Pushery\Billing\Webhooks\Effects\ReverseAddonPurchase;
+use Pushery\Billing\Webhooks\Effects\ReverseSaleIntoClosedMarket;
 use Pushery\Billing\Webhooks\Effects\RevokeAccessOnChargeback;
 use Pushery\Billing\Webhooks\Effects\RevokeAccessOnRefund;
 use Pushery\Billing\Webhooks\Effects\RevokeMandate;
@@ -294,6 +296,9 @@ final class StripeServiceProvider extends ServiceProvider
         // future just disagreed with. Inert until an install actually writes something off.
         $registry->on(PaymentSucceeded::class, ReopenWriteOffOnLateReceipt::class);
         $registry->on(InvoiceFinalized::class, PersistInvoice::class);
+        // A sale Stripe taxed in a country `billing.tax_markets` does not open is undone: the subscription ended,
+        // the payment refunded. Inert without a market map, so an install that configured none sees no change.
+        $registry->on(SaleCountryReported::class, ReverseSaleIntoClosedMarket::class);
         $registry->on(InvoiceCorrected::class, PersistInvoiceCorrection::class);
         $registry->on(MandateRevoked::class, RevokeMandate::class);
         // Its counterpart, and the reason the pair matters: without this the package could watch charging
