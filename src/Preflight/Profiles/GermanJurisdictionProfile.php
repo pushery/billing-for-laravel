@@ -21,6 +21,7 @@ use Pushery\Billing\Enums\ExchangeRateBasis;
 use Pushery\Billing\Enums\GoLiveStep;
 use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\TaxArchetype;
+use Pushery\Billing\Enums\TaxationBasis;
 use Pushery\Billing\Preflight\Checkpoints\AttestedCheckpoint;
 
 /**
@@ -115,9 +116,27 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
      * issued in. What must never happen is paraphrasing — a document carrying an approximation of the words
      * is not carrying them — which is why the strings are fixed per locale rather than composed.
      */
-    public function marginSchemeNote(): string
+    public function marginSchemeNote(TaxationBasis $basis): string
     {
-        return 'billing::invoice.margin_scheme_note';
+        // THE THREE KEYS ARE WRITTEN OUT, and that is deliberate rather than lazy. Built by concatenation
+        // they are invisible to `TranslationKeysAreReachableTest`, which scans for the literal key a
+        // package renders -- and a string shipped in seven languages that no scan can reach is exactly
+        // what that guard exists to refuse. Spelled here, the mapping is also greppable: somebody asking
+        // "which words does an antique carry" finds the answer in the file that decides it.
+        //
+        // SECOND-HAND GOODS KEEPS THE UNSUFFIXED KEY, AND THAT IS NOT TIDINESS. `margin_scheme_note` has
+        // shipped for releases, so a host that ran `vendor:publish` carries it under that name in its own
+        // `lang/vendor/billing`. Renaming it would leave every one of those hosts falling back to the
+        // package's copy -- their translation still on disk, silently unused, and only a reader who knew
+        // both files would ever see why the wording changed.
+        //
+        // The default arm answers for a basis the scheme does not apply to, which the guard does not ask
+        // about; it stands for the case this profile actually ships rather than inventing a fourth.
+        return match ($basis) {
+            TaxationBasis::MarginWorksOfArt => 'billing::invoice.margin_scheme_note_works_of_art',
+            TaxationBasis::MarginCollectorsItems => 'billing::invoice.margin_scheme_note_collectors_items',
+            default => 'billing::invoice.margin_scheme_note',
+        };
     }
 
     public function requiresElectronicInvoicing(): bool

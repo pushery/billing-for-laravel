@@ -10,10 +10,12 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Enums\InvoiceStatus;
+use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxIdVerificationStatus;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\BillingDomainEvent;
+use Pushery\Billing\Events\FanTipPaid;
 use Pushery\Billing\Events\InvoiceCorrected;
 use Pushery\Billing\Events\InvoiceFinalized;
 use Pushery\Billing\Events\InvoiceUpcoming;
@@ -417,12 +419,68 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             return [];
         }
 
-        $metadata = $object['metadata'] ?? null;
-        $addonKey = is_array($metadata) ? $this->string($metadata, 'addon_key') : null;
+        // Narrowed HERE rather than at each read. A provider that sent no metadata bag, or something
+        // that is not one, yields the empty bag — and every read below then answers null exactly as
+        // the ternary did, including the `addon_key` that returns early three lines down.
+        //
+        // THE OLD SHAPE WAS TRUE AND UNPROVABLE, WHICH IS A DIFFERENT THING FROM SAFE. Reaching the
+        // second read at all requires `$addonKey` to be non-null, which requires the bag to be an
+        // array — but that chain runs through a ternary and an early return, and whether an analyzer
+        // follows it is a property of the analyzer. An older phpstan than the one this package pins did
+        // not follow it, so the check the gate ran and the check a developer ran disagreed about shipped
+        // code. Narrowing once at the read makes the question moot for both.
+        $bag = $object['metadata'] ?? null;
+        $metadata = is_array($bag) ? $bag : [];
+        $addonKey = $this->string($metadata, 'addon_key');
 
         $customer = $this->string($object, 'customer');
         $id = $this->string($object, 'id');
         $currency = $this->string($object, 'currency');
+
+        // A TIP SESSION CARRIES NO ADD-ON KEY, and reading it as one would be worse than reading it as
+        // nothing: the grant path would look up a catalog key that does not exist and credit nothing,
+        // quietly, because a missing grant is an ordinary state there. So the tip is recognized on its
+        // own marker, before the add-on branch refuses the session for want of a key it never had.
+        //
+        // Both companions are required, and a bag with one of them is deliberately NOT a tip. They are
+        // written by this package's own session opener in a single statement, so a half-filled bag is
+        // only reachable by editing the session at the provider — and guessing the missing half would
+        // mean inventing either the merchant the money is destined for or the treatment it is taxed
+        // under. An arm holds the shape rather than a comment promising it.
+        $soldAlongside = TaxArchetype::tryFrom((string) $this->string($metadata, 'tip_sold_alongside'));
+        $tipMerchant = $this->string($metadata, 'tip_merchant');
+
+        if ($soldAlongside instanceof TaxArchetype && $tipMerchant !== null
+            && $customer !== null && $id !== null && $currency !== null) {
+            $tip = Money::of($this->int($object, 'amount_total') ?? 0, strtoupper($currency));
+
+            return [new FanTipPaid(
+                $customer,
+                $tip,
+                $id,
+                $this->string($object, 'payment_intent'),
+                $soldAlongside,
+                $tipMerchant,
+                // Three answers, not two, and the third is the one this used to swallow. The key said
+                // absent reads as NOT domestic — a safe reading of a missing value, except that the session
+                // opener never wrote the key at all, so EVERY real tip took that branch and every listener
+                // was handed a fact about the buyer nobody had established. The opener writes it now, and
+                // absent has gone back to meaning what it says.
+                match ($this->string($metadata, 'tip_buyer_domestic')) {
+                    '1' => true,
+                    '0' => false,
+                    default => null,
+                },
+                $this->string($metadata, 'withdrawal_declaration'),
+            ), new SaleCountryReported(
+                $customer,
+                $id,
+                $this->countryAt($object, 'customer_details', 'address'),
+                $tip,
+                paid: $this->string($object, 'payment_status') === 'paid',
+                chargeReference: $this->string($object, 'payment_intent'),
+            )];
+        }
 
         if ($addonKey === null || $customer === null || $id === null || $currency === null) {
             return [];
@@ -443,6 +501,16 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             // key, so a session that lost one lost both -- which is far easier to notice than a payment that
             // quietly arrives with no declaration attached.
             $this->string($metadata, 'withdrawal_declaration'),
+            // The same address SaleCountryReported already reports, carried on the purchase too because a
+            // document about this sale has to know whether its buyer was domestic and has no second source
+            // for it. Read here rather than joined later: the two events describe one payload, and a reader
+            // that had to pair them would be pairing on timing.
+            $this->countryAt($object, 'customer_details', 'address'),
+            // What the provider computed in tax, where it reported a breakdown at all. Absent stays absent
+            // — a missing `total_details` is not "no tax", and reading it as zero would turn a payload this
+            // package could not read into a statement about the sale.
+            $this->taxOf($object),
+            'stripe',
         ), new SaleCountryReported(
             $customer,
             $id,
@@ -453,6 +521,22 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             paid: $this->string($object, 'payment_status') === 'paid',
             chargeReference: $this->string($object, 'payment_intent'),
         )];
+    }
+
+    /**
+     * The tax the provider computed on a checkout session, in minor units, or null where it reported none.
+     *
+     * Stripe puts it on `total_details.amount_tax`, which is present when the session carried a total
+     * breakdown and absent otherwise. The distinction is kept rather than flattened: zero is a measured
+     * answer about a sale, and null is the absence of one.
+     *
+     * @param  array<array-key, mixed>  $object
+     */
+    private function taxOf(array $object): ?int
+    {
+        $totals = $object['total_details'] ?? null;
+
+        return is_array($totals) ? $this->int($totals, 'amount_tax') : null;
     }
 
     /**

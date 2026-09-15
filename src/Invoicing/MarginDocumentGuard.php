@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Invoicing;
 
 use Pushery\Billing\Contracts\SuppliesMarginSchemeWording;
+use Pushery\Billing\Enums\TaxationBasis;
 use Pushery\Billing\Invoicing\Guards\MarginStatesNoTaxGuard;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Preflight\CheckpointRegistry;
@@ -40,11 +41,18 @@ final readonly class MarginDocumentGuard
         new MarginStatesNoTaxGuard()->assertStatesNoTax($invoice);
     }
 
-    /** The translation key of the prescribed wording, or null where the jurisdiction supplies none. */
-    public function wordingKey(): ?string
+    /**
+     * The translation key of the prescribed wording for this goods class, or null where the jurisdiction
+     * supplies none.
+     *
+     * The basis is the argument because the phrase is per goods class, not per jurisdiction: one profile
+     * answers three different keys, and which one is a fact the document froze rather than one the guard
+     * decides.
+     */
+    public function wordingKey(TaxationBasis $basis): ?string
     {
         $profile = $this->profiles->profile();
 
-        return $profile instanceof SuppliesMarginSchemeWording ? $profile->marginSchemeNote() : null;
+        return $profile instanceof SuppliesMarginSchemeWording ? $profile->marginSchemeNote($basis) : null;
     }
 }

@@ -61,6 +61,37 @@ final readonly class TaxonomyCell
     }
 
     /**
+     * The fixed answer this cell holds, when it holds one OF THE ASKED-FOR KIND — null otherwise.
+     *
+     * Named `fixedAnswerOf` and not `fixed`, because `fixed()` is already the static that BUILDS such a cell.
+     * Two methods of one name on one class is a fatal, and the collision is the kind a reader's eye slides
+     * over — one is static, one is not.
+     *
+     * Two things collapse into that null on purpose, because a caller writing a document does the same thing
+     * with both: a cell that is delegated or deferred has no answer to state, and a cell holding something
+     * that is not the expected enum is a cell the caller cannot use either. Stating a guess for either is
+     * how a taxonomy that means "ask somebody" ends up printed as a fact.
+     *
+     * It lives here rather than beside each reader for the reason every narrowing does: the second copy is
+     * the one that stops matching.
+     *
+     * @template T of object
+     *
+     * @param  class-string<T>  $type
+     * @return T|null
+     */
+    public function fixedAnswerOf(string $type): ?object
+    {
+        if (! $this->isFixed()) {
+            return null;
+        }
+
+        $value = $this->value();
+
+        return $value instanceof $type ? $value : null;
+    }
+
+    /**
      * The fixed answer.
      *
      * Refuses for the other two kinds rather than returning null, because null at a call site reads as "no

@@ -32,5 +32,37 @@ final readonly class AddonPurchased implements BillingDomainEvent, IdentifiesCus
          * refusal rather than a pass.
          */
         public ?string $declarationReference = null,
+        /**
+         * Where the buyer said they were, as the provider recorded it on the session.
+         *
+         * The address entered in the hosted checkout, which is where a hosted sale is taxed — not a country
+         * this package worked out. Null where the provider reported none, and null must never read as a
+         * country: a receipt tier turns on whether the buyer is domestic, and a guessed one applies a relief
+         * nobody claimed.
+         */
+        public ?string $buyerCountry = null,
+        /**
+         * What the provider charged in tax on this sale, in minor units, where it computed any.
+         *
+         * Null and zero are NOT the same answer, and the difference decides whether a document can be
+         * issued at all. Zero says the provider computed tax and it was none — a sale with no separately
+         * stated tax, where the price is the gross. Null says nothing was reported, which is the honest
+         * reading of a payload that carried no total breakdown.
+         *
+         * A positive figure says the provider computed the tax from the buyer's address, and then this
+         * package holds AMOUNTS and no rate: the rate lives on the session's line items, which a webhook
+         * payload does not carry. What a document may state in that case is an open decision, not a
+         * derivation — see the issuer.
+         */
+        public ?int $taxMinor = null,
+        /**
+         * Which provider's ids the two references above are, where the producer named it.
+         *
+         * A reader matching `paymentReference` against a stored charge needs it: the uniqueness that table
+         * guarantees is on the PAIR, so a lookup without the provider is asking a question the index cannot
+         * answer. Null on an event from a producer that predates this, and a reader that needs it treats
+         * null as "cannot tell" rather than as a default provider.
+         */
+        public ?string $provider = null,
     ) {}
 }

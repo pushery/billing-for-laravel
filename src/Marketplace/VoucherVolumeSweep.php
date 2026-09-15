@@ -24,12 +24,20 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * A monitor answers when asked. Nobody was asking, and nothing told them to.
  *
- * ## The currencies come from the vouchers, not from a list
+ * ## The currencies come from the INSTRUMENTS, not from a list
  *
  * There is no configured currency list here, and adding one would be the wrong shape: it would be a second
- * hand-kept list beside the vouchers themselves, and the failure of such a list is silent — a currency
- * somebody sells in but forgot to add is a currency nobody is counting, and it looks exactly like a currency
- * under the threshold. Asking the ledger which currencies actually carry vouchers cannot drift.
+ * hand-kept list beside the sales themselves, and the failure of such a list is silent — a currency somebody
+ * sells in but forgot to add is a currency nobody is counting, and it looks exactly like a currency under
+ * the threshold. Asking which currencies actually carry sales cannot drift.
+ *
+ * IT USED TO ASK THE VOUCHERS ALONE, AND THAT IS THE SAME SILENCE ONE TABLE OVER. The figure counts two
+ * instruments — vouchers and paid money-credit top-ups — but the loop only ever visited a currency some
+ * voucher had been issued in. An installation that sells credit and issues no vouchers therefore had an
+ * EMPTY list: the monitor would have answered correctly for `EUR`, and nothing asked it. The threshold could
+ * be passed by a wide margin with the sweep running green every morning over nothing, which is precisely the
+ * state this class was written against. Both instruments are asked now, and a currency carried by either is
+ * visited once.
  *
  * ## Once per level, per currency, per year
  *
@@ -48,6 +56,7 @@ final readonly class VoucherVolumeSweep
     public function __construct(
         private Dispatcher $events,
         private VoucherVolumeMonitor $monitor,
+        private CreditTopUpVolume $credits,
     ) {}
 
     /**
@@ -118,15 +127,22 @@ final readonly class VoucherVolumeSweep
     }
 
     /**
-     * Every currency vouchers have actually been issued in.
+     * Every currency either instrument has actually been sold in, once each.
+     *
+     * A union rather than two loops: a currency carried by both a voucher and a top-up is ONE figure with one
+     * threshold, and visiting it twice would announce it twice on the first day and then never again — the
+     * marker is written after the first dispatch, so the second visit reads as already announced and the
+     * duplicate reaches the recipient rather than the log.
      *
      * @return list<string>
      */
     private function currencies(): array
     {
-        return array_values(array_filter(
+        $voucherCurrencies = array_filter(
             Voucher::query()->distinct()->pluck('currency')->all(),
             is_string(...),
-        ));
+        );
+
+        return array_values(array_unique([...$voucherCurrencies, ...$this->credits->currencies()]));
     }
 }

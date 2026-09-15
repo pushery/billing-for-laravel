@@ -92,6 +92,25 @@ final class MarketplaceUnsupported extends RuntimeException
         );
     }
 
+    /**
+     * A tip was asked for on an installation with nobody to tip.
+     *
+     * Refused rather than routed to the platform, and the asymmetry with a purchase is the point: an
+     * unrouted PURCHASE is an ordinary single-seller sale, and the platform keeping the money is exactly
+     * right. An unrouted TIP is money the buyer meant for a person, kept by the platform instead — the
+     * buyer pays, the platform keeps all of it, and the person they meant to tip never hears about it.
+     * Nothing about that is visible from either side afterwards.
+     */
+    public static function noMerchantToRouteTo(): self
+    {
+        return new self(
+            'A tip needs a merchant to route to, and this sale resolved none — so the money would stay '.
+            'with the platform rather than reaching the person it was meant for. Set the sale context\'s '.
+            'merchant before opening a tip checkout (MarketplaceSaleContext::routedMerchant), or do not '.
+            'offer tipping on a single-seller installation.'
+        );
+    }
+
     public static function billingDisabled(): self
     {
         return new self(

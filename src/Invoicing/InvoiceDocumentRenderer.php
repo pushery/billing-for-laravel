@@ -8,6 +8,7 @@ use Illuminate\Contracts\View\Factory as ViewFactory;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Contracts\PdfRenderer;
 use Pushery\Billing\Contracts\SellerPartyResolver;
+use Pushery\Billing\Enums\TaxationBasis;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -29,10 +30,10 @@ final readonly class InvoiceDocumentRenderer
         private SellerPartyResolver $sellers,
     ) {}
 
-    /** The prescribed wording, from the jurisdiction, or nothing where none supplies any. */
-    private function marginNote(): ?string
+    /** The prescribed wording for this document's goods class, or nothing where the jurisdiction supplies none. */
+    private function marginNote(TaxationBasis $basis): ?string
     {
-        $key = $this->margins->wordingKey();
+        $key = $this->margins->wordingKey($basis);
 
         return $key === null ? null : (string) Lang::get($key);
     }
@@ -81,9 +82,18 @@ final readonly class InvoiceDocumentRenderer
             $itemised = false;
         }
 
+        // Two statements rather than a ternary inside the array below, and the repository refuses the
+        // ternary for a measured reason: pcov cannot mark both arms of a multi-line one, so a `?:` there
+        // takes the file under the coverage floor with no test able to lift it.
+        $marginNote = null;
+
+        if ($margin && $invoice->taxation_basis instanceof TaxationBasis) {
+            $marginNote = $this->marginNote($invoice->taxation_basis);
+        }
+
         return [
             'marginScheme' => $margin,
-            'marginNote' => $margin ? $this->marginNote() : null,
+            'marginNote' => $marginNote,
             'seller' => $this->seller($invoice)->toArray(),
             'buyer' => $itemised && is_array($invoice->buyer) ? $invoice->buyer : [],
             'itemisesTax' => $itemised,

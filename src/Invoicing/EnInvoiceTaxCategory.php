@@ -94,8 +94,19 @@ final readonly class EnInvoiceTaxCategory
                 throw ContradictoryExemption::taxedMarginSupply($rate);
             }
 
-            // The second-hand goods code only: it is the one margin scheme whose wording the package ships.
-            return new self('E', 'VATEX-EU-F', 'Margin scheme — second-hand goods');
+            // ONE CODE PER GOODS CLASS, and this used to answer `VATEX-EU-F` for all of them with a comment
+            // saying second-hand was the only wording the package shipped. The directive names three
+            // classes and gives each its own exemption code, so a work of art went out under the
+            // second-hand code -- a statement about WHICH scheme applied, wrong, in the field a receiving
+            // system reads to decide how to book it.
+            //
+            // Read off the basis' own goods class rather than matched a second time here: the enum names
+            // the three, and a second mapping is a second answer to one question.
+            return match ($basis->marginGoodsClass()) {
+                'works_of_art' => new self('E', 'VATEX-EU-I', 'Margin scheme — works of art'),
+                'collectors_items' => new self('E', 'VATEX-EU-J', 'Margin scheme — collectors items and antiques'),
+                default => new self('E', 'VATEX-EU-F', 'Margin scheme — second-hand goods'),
+            };
         }
 
         $goods = self::isGoods($archetype);

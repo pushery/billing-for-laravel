@@ -13,11 +13,13 @@ use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\SubscriptionState;
+use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Facades\Billing;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\MerchantScope;
+use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\SubscriptionStart;
 
 /**
@@ -42,6 +44,9 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
 
     /** @var list<array{owner: Model, addon: string, declaration: ?string, country: ?string}> */
     private array $purchases = [];
+
+    /** @var list<array{owner: Model, amount: Money, soldAlongside: TaxArchetype, declaration: ?string, country: ?string}> */
+    private array $tips = [];
 
     /** @var list<array{merchant: Model, refresh: string, return: string}> */
     private array $onboardings = [];
@@ -104,6 +109,23 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         // nothing else to assert against -- the key is the only observable the package produces before the
         // buyer leaves, and a fake that swallowed it would make the round trip untestable from outside.
         $this->purchases[] = ['owner' => $billable, 'addon' => $addonKey, 'declaration' => $declarationReference, 'country' => $buyerCountry];
+
+        return $this->intent();
+    }
+
+    public function tip(Model $billable, Money $chosen, TaxArchetype $soldAlongside, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent
+    {
+        // Recorded on its OWN list rather than beside the purchases, and the separation is what a consumer
+        // asserts against: a tip has no add-on key, so a shared list would have to carry a null where every
+        // other row carries a string, and `assertPurchased('pro-pack')` would have to learn to skip rows
+        // that are not purchases at all.
+        $this->tips[] = [
+            'owner' => $billable,
+            'amount' => $chosen,
+            'soldAlongside' => $soldAlongside,
+            'declaration' => $declarationReference,
+            'country' => $buyerCountry,
+        ];
 
         return $this->intent();
     }
@@ -278,6 +300,48 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     public function assertCanceledNow(Model $owner, ?MerchantScope $merchant = null): void
     {
         $this->assertLifecycle($owner, 'cancelNow', $merchant);
+    }
+
+    /**
+     * A tip checkout was opened for this owner, for this amount, on this supply.
+     *
+     * All three, because any two of them alone leave the interesting mistake passing: an amount without the
+     * archetype says nothing about whether the tip was placed on the right supply, and an archetype without
+     * the amount says nothing about whether the buyer's figure survived the trip. A consumer asserting a
+     * tip is asserting exactly that those three arrived together.
+     */
+    public function assertTipped(Model $owner, Money $chosen, TaxArchetype $soldAlongside): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->tips as $call) {
+            if (! $this->sameOwner($call['owner'], $owner)) {
+                continue;
+            }
+
+            if ($call['amount']->equals($chosen) && $call['soldAlongside'] === $soldAlongside) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['amount']->minorUnits.' '.$call['amount']->currency.' on '.$call['soldAlongside']->value;
+        }
+
+        PHPUnit::assertTrue($found, sprintf(
+            'Expected a tip of %d %s paid on [%s], but %s.',
+            $chosen->minorUnits,
+            $chosen->currency,
+            $soldAlongside->value,
+            $seen === [] ? 'no tip was opened for this owner' : 'these were: '.implode(', ', $seen),
+        ));
+    }
+
+    /** No tip checkout was opened at all — the assertion a screen that hides tipping actually needs. */
+    public function assertNothingTipped(): void
+    {
+        PHPUnit::assertSame([], $this->tips, 'Expected no tip checkout to have been opened, but one was.');
     }
 
     public function assertPurchased(Model $owner, string $addonKey): void

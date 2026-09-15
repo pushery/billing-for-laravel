@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Contracts;
 
+use Pushery\Billing\Enums\TaxationBasis;
+
 /**
  * A jurisdiction profile that knows the wording a margin-taxed document must carry.
  *
@@ -18,10 +20,18 @@ namespace Pushery\Billing\Contracts;
 interface SuppliesMarginSchemeWording
 {
     /**
-     * The translation key of the words such a document must carry.
+     * The translation key of the words such a document must carry, for the goods class it was sold under.
      *
      * A key rather than the words, because each language has its own prescribed form and the document is
      * read in the language it was issued in. What is never permitted is composing or paraphrasing them.
+     *
+     * IT TAKES THE BASIS, AND IT USED TO TAKE NOTHING. Art. 226(14) prescribes ONE PHRASE PER GOODS
+     * CLASS — second-hand goods, works of art, collectors' items and antiques — and a profile answering
+     * with one key for all three puts the second-hand phrase on an antique. That is not a missing
+     * paragraph; it is the wrong mandatory statement, in the field an auditor reads first.
+     *
+     * A basis that is not margin-taxed at all never reaches here: the guard asks only for a document the
+     * scheme applies to.
      */
-    public function marginSchemeNote(): string;
+    public function marginSchemeNote(TaxationBasis $basis): string;
 }

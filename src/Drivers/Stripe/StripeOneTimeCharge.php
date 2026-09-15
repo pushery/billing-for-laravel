@@ -16,6 +16,7 @@ use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\VoucherInstrumentType;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
@@ -150,15 +151,27 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         );
 
         // Built before the payload so the rise is one statement rather than a condition inside an array
-        // literal — and so PHPStan can see that it only happens where a routing exists at all.
-        $intent = $routed['intent'] ?? null;
+        // literal — and so a reader can see it only happens where a routing exists at all.
+        //
+        // NESTED, NOT `?? null` PLUS A SEPARATE CONDITION, AND THAT IS A CORRECTION. `$buyerFee` is
+        // non-null only where `$routed` is, so the two conditions were the same condition — but stated
+        // apart, whether the analyzer can join them is a property of the ANALYZER. An older phpstan than
+        // the one this package pins did not join them and reported the offset as possibly missing, so the
+        // check the gate ran and the check a developer ran disagreed about shipped code. The pinned one
+        // joins them — the shape stays anyway, because a relationship the code relies on is cheaper said
+        // than inferred, and this one cost nothing to say.
+        $intent = null;
 
-        if ($buyerFee instanceof FeeLine) {
-            // THE WHOLE CORRECTNESS OF THIS LANE. The buyer now pays item + fee, and the provider moves
-            // everything that is not the application fee to the merchant — so leaving it alone would hand
-            // the platform's own intermediation revenue to the seller, on every sale, silently. What must
-            // not move is the merchant's share of the ITEM.
-            $intent['application_fee_amount'] += $buyerFee->gross->minorUnits;
+        if ($routed !== null) {
+            $intent = $routed['intent'];
+
+            if ($buyerFee instanceof FeeLine) {
+                // THE WHOLE CORRECTNESS OF THIS LANE. The buyer now pays item + fee, and the provider moves
+                // everything that is not the application fee to the merchant — so leaving it alone would hand
+                // the platform's own intermediation revenue to the seller, on every sale, silently. What must
+                // not move is the merchant's share of the ITEM.
+                $intent['application_fee_amount'] += $buyerFee->gross->minorUnits;
+            }
         }
 
         $payload = array_filter([
@@ -242,6 +255,198 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             payload: ['checkout_url' => is_string($url) ? $url : '', 'session_id' => $session->id],
             offSessionCapable: false,
         );
+    }
+
+    public function tip(Model $billable, Money $chosen, TaxArchetype $soldAlongside, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent
+    {
+        if (! $this->eligibility->check($billable)) {
+            throw EligibilityDenied::forMoneyMovement();
+        }
+
+        $this->context->assertMarketOpen($buyerCountry);
+
+        // The switch belongs to the pricing class and is asked of it. An installation with tipping off
+        // that still opened a session would take money it has said it does not take.
+        if (! $this->context->tipsEnabled()) {
+            throw new InvalidArgumentException(
+                'Tipping is switched off for this installation, so no tip checkout can be opened. '
+                .'Turn it on under `billing.marketplace.fan_pricing` before offering one.'
+            );
+        }
+
+        // THE GUARD THE CATALOG NORMALLY IS. `purchase()` cannot be handed an amount at all; this method
+        // must be, so the refusal that a key gives for free is written out here. A zero is the ordinary way
+        // to get here — a buyer who leaves the tip box empty — and what it would otherwise buy is a
+        // provider call, a charge row, an earnings figure and a line in a tax return, all describing a sale
+        // nobody made. Negative is the same claim and is refused by the same check.
+        if (! $chosen->isPositive()) {
+            throw new InvalidArgumentException(
+                "A tip needs a positive amount; got {$chosen->minorUnits} {$chosen->currency}."
+            );
+        }
+
+        $merchant = $this->context->routedMerchant();
+
+        // A tip TO THE PLATFORM is not what this seam is for, and silently opening one would be the worst
+        // reading of a null: the buyer would pay, the platform would keep all of it, and the person they
+        // meant to tip would never hear. A single-seller installation has no merchant to route to, and
+        // that is a configuration answer rather than a runtime one.
+        if (! $merchant instanceof Model) {
+            throw MarketplaceUnsupported::noMerchantToRouteTo();
+        }
+
+        $customerId = $this->customers->resolve($billable);
+        $merchantKey = $merchant->getKey();
+        $routed = $this->tipRouting($merchant, $chosen);
+
+        $payload = array_filter([
+            'mode' => 'payment',
+            'customer' => $customerId,
+            // `price_data` rather than a price id, and this is the one place in the package that builds a
+            // line from an amount instead of resolving one. It is what a buyer-chosen figure means: there
+            // is no catalog entry to point at, and there cannot be. The server-side refusals above are what
+            // stands in for the catalog's protection.
+            'line_items' => [[
+                'quantity' => 1,
+                'price_data' => [
+                    'currency' => strtolower($chosen->currency),
+                    'unit_amount' => $chosen->minorUnits,
+                    'product_data' => ['name' => $this->tipLineName()],
+                ],
+            ]],
+            // What the confirmation needs and cannot re-derive. The archetype the tip was paid ON is known
+            // here and nowhere later; the merchant is written down so a reconciler reading the session sees
+            // who the money was destined for without joining anything. The declaration key rides the same
+            // round trip it rides on a purchase, so a session that lost one lost both.
+            'metadata' => array_filter([
+                'tip_sold_alongside' => $soldAlongside->value,
+                // THE MAPPER HAS READ THIS KEY SINCE THE LANE WAS BUILT AND NOTHING EVER WROTE IT. Every
+                // real tip therefore arrived with the flag off, under a comment calling that the
+                // conservative direction — a decision about an absent value, describing one that could not
+                // be present. It is written here now, from the two stated countries and from nothing else:
+                // the buyer's as the caller gave it, the seller's from configuration. Where the caller named
+                // no country the key stays out, and the reader answers `unknown` rather than `not domestic`.
+                'tip_buyer_domestic' => match ($this->buyerIsDomestic($buyerCountry)) {
+                    true => '1',
+                    false => '0',
+                    null => null,
+                },
+                // Narrowed the way every other Stripe class in this package narrows a model key: a key is
+                // typed `mixed` and a custom one need not be scalar, and metadata is a string map.
+                'tip_merchant' => is_scalar($merchantKey) ? (string) $merchantKey : '',
+                'withdrawal_declaration' => $declarationReference,
+            ], static fn (?string $value): bool => $value !== null && $value !== ''),
+            'success_url' => $this->returnUrl('success_url'),
+            'cancel_url' => $this->returnUrl('cancel_url'),
+            'payment_intent_data' => $routed['intent'],
+        ]);
+
+        // NO BUYER FEE ON A TIP, and the omission is a decision. A buyer fee is charged ON TOP of a price
+        // the buyer was quoted; a tip has no quoted price — the total IS what they chose. Adding a fee to
+        // it would charge them more than the number they typed, which is the one thing a voluntary payment
+        // must never do.
+        //
+        // No `automatic_tax` either, for the reason the routing below states: a tip's rate is decided by
+        // what it was paid alongside, and that decision belongs to the supply rather than to the buyer's
+        // address. The lane records no rate rather than asserting the provider's.
+        $session = $this->stripe->checkout->sessions->create($payload);
+
+        $this->recordPendingSale($routed, $session->payment_intent ?? null, null);
+
+        $url = $session->url ?? null;
+
+        return new ClientIntent(
+            driver: 'stripe',
+            payload: ['checkout_url' => is_string($url) ? $url : '', 'session_id' => $session->id],
+            offSessionCapable: false,
+        );
+    }
+
+    /**
+     * What a tip line is called on the buyer's checkout page.
+     *
+     * Configurable because it is the only string in this lane a buyer reads, and a package that hardcoded
+     * it in English would put a foreign word on a German checkout. The default is deliberately plain: it
+     * names the act rather than the merchant, because the merchant's name is the consumer's to place and
+     * a provider page is not where this package starts composing sentences about other people.
+     */
+    private function tipLineName(): string
+    {
+        $configured = $this->config->get('billing.marketplace.tips.line_name');
+
+        return is_string($configured) && $configured !== '' ? $configured : 'Tip';
+    }
+
+    /**
+     * The routing a TIP carries — the same shape a purchase gets, from an amount instead of a price.
+     *
+     * ## Why it is not `routing()` with a different argument
+     *
+     * `routing()` reads the unit amount off the provider's price, and its whole justification is that the
+     * commission and the payment must come from the same number. For a tip that number is the argument:
+     * the buyer chose it, it is what the line will charge, and there is no price to retrieve. So the
+     * provider call that method makes is not merely unnecessary here — there is nothing for it to ask
+     * about.
+     *
+     * ## And the commission is the TIP's, not the platform's ordinary one
+     *
+     * `feeForTip()` is asked, which is the whole reason `FanChosenPricing` is a dependency of this class.
+     * An installation that charges less on voluntary payments — the common case, and why the setting
+     * exists — would otherwise have its ordinary rate applied to every hosted tip while the token lane
+     * honored the tip rate. Two lanes, two answers, and the one nobody watches is the one that ships.
+     *
+     * ## What it records as the tax basis, and why zero is honest here
+     *
+     * Zero, exactly as `routing()` records it and for the same reason: this lane holds no rate. A tip's
+     * rate is decided by what it was paid alongside, and that decision needs the buyer's evidenced place
+     * of supply — which does not exist when the session opens. Zero is the honest record of what was
+     * computed here; it is not a claim that the basis was the net.
+     *
+     * @return array{
+     *     merchant: Model,
+     *     intent: array{application_fee_amount: int, transfer_data: array{destination: string}},
+     *     gross: Money,
+     *     platformFee: Money,
+     *     policy: PlatformFee,
+     * }
+     */
+    private function tipRouting(Model $merchant, Money $chosen): array
+    {
+        $chargeType = $this->context->chargeType();
+
+        // The same refusal `routing()` makes, for the same reason: a hosted session cannot serve a separate
+        // transfer, because the merchant's share moves in a second call that can only be made once the
+        // payment has succeeded — a webhook away, long after this method has returned.
+        if ($chargeType === ChargeType::SeparateTransfer) {
+            throw MarketplaceUnsupported::separateTransferNeedsRoutedPayment();
+        }
+
+        $this->context->assertRoutingCompatible($chargeType);
+
+        if (! $this->receiving->check($merchant)) {
+            throw ReceiveEligibilityDenied::forMerchant();
+        }
+
+        $account = $this->accounts->accountFor($merchant);
+
+        if (! $account instanceof MerchantAccountReference) {
+            throw ReceiveEligibilityDenied::forMerchant();
+        }
+
+        $policy = $this->context->tipFee($this->fees->feeFor($merchant));
+
+        [$platformFee] = $policy->splitOf($chosen);
+
+        return [
+            'merchant' => $merchant,
+            'intent' => [
+                'application_fee_amount' => $platformFee->minorUnits,
+                'transfer_data' => ['destination' => $account->accountId],
+            ],
+            'gross' => $chosen,
+            'platformFee' => $platformFee,
+            'policy' => $policy,
+        ];
     }
 
     /**
@@ -364,6 +569,27 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             'platformFee' => $platformFee,
             'policy' => $policy,
         ];
+    }
+
+    /**
+     * Whether the seller's own small-value rules apply to this buyer, or null where nobody could say.
+     *
+     * Two STATED countries and nothing else: the buyer's as the caller gave it, the seller's from
+     * configuration. Both halves have to be there — a buyer country with no configured home answers nothing,
+     * because "is this domestic" has no meaning without a home, and defaulting to false would state a
+     * cross-border supply on an installation that never said where it sells from.
+     *
+     * Upper-cased on both sides and nowhere else: a configuration written `de` and a caller passing `DE`
+     * describe one country, and reading them as two would make a domestic sale cross-border on a keystroke.
+     */
+    private function buyerIsDomestic(?string $buyerCountry): ?bool
+    {
+        $seller = $this->config->get('billing.company.country');
+
+        $buyer = $buyerCountry === null || $buyerCountry === '' ? null : mb_strtoupper($buyerCountry);
+        $home = is_string($seller) && $seller !== '' ? mb_strtoupper($seller) : null;
+
+        return $buyer !== null && $home !== null ? $buyer === $home : null;
     }
 
     /**

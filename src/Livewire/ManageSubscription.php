@@ -308,6 +308,15 @@ final class ManageSubscription extends AccountScreen
         // A downgrade waits for the period end (the current cycle is already paid at the higher tier). It is
         // recorded, shown, and cancellable until then — the provider is not touched now; ScheduledSwapRunner
         // performs the swap when the date arrives. An upgrade takes effect immediately.
+        //
+        // `$subscription` IS NON-NULL HERE BY CONSTRUCTION, AND NOTHING RESTATES IT. `PeriodEnd` is
+        // reachable only where a subscription was resolved, because the other branch of the ternary
+        // above answers `Immediate`. An `instanceof` conjunct saying so was added here and taken
+        // straight back out: the analyzer this package pins derives the relationship and reports the
+        // conjunct as always true, so the line written to make the gate and a developer machine agree
+        // is the line that made them disagree. What produced it was a local vendor tree two analyzer
+        // releases behind the pin, which DevToolPinsTest now reports rather than leaving to be found
+        // by a red integration run.
         if ($timing === SwapTiming::PeriodEnd) {
             $subscription->scheduleSwap($tierKey, $subscription->current_period_end ?? Carbon::now()->utc());
             $this->audit('subscription.swap_scheduled', ['tier' => $tierKey]);

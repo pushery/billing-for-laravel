@@ -27,5 +27,7 @@ return [
     'small_business_note' => 'Steuerfrei nach § 19 UStG (Kleinunternehmerregelung).',
     'union_small_business_note' => 'Steuerfrei nach der Kleinunternehmerregelung des Ansässigkeitsstaats des Leistenden.',
     'margin_scheme_note' => 'Gebrauchtgegenstände/Sonderregelung',
+    'margin_scheme_note_works_of_art' => 'Kunstgegenstände/Sonderregelung',
+    'margin_scheme_note_collectors_items' => 'Sammlungsstücke und Antiquitäten/Sonderregelung',
     'self_billed_note' => 'Gutschrift: vom Leistungsempfänger im Namen des Leistenden ausgestellt, nach vorheriger Vereinbarung.',
 ];
