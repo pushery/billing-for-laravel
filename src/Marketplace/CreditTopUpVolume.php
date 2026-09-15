@@ -61,13 +61,55 @@ final readonly class CreditTopUpVolume
         return ! $addons->grantsFor($key) instanceof UnitGrant;
     }
 
-    /** What was paid into money credit over a window, net of what was refunded. */
-    public function since(CarbonInterface $since, string $currency): Money
+    /**
+     * Every currency money credit has actually been sold in.
+     *
+     * The sweep needs this for the same reason it reads the voucher table for its half: a currency somebody
+     * sells in is a currency that has to be counted, and the only list that cannot drift out of step with
+     * the sales is the one derived from them. Reading only the vouchers left an installation that sells
+     * credit and issues no vouchers with an empty list, so the figure was computed correctly for currencies
+     * nobody asked about and the sweep announced nothing.
+     *
+     * Not windowed, deliberately, and the voucher half is not either: the window belongs to the FIGURE, and
+     * a currency dropped from this list because its last top-up aged out would take its own rolling total
+     * with it — the answer would fall to nothing at the moment it stopped being asked, which is the shape of
+     * a counter that goes quiet rather than down.
+     *
+     * @return list<string>
+     */
+    public function currencies(): array
     {
-        $keys = array_values(array_filter(
+        $keys = $this->moneyCreditKeys();
+
+        // Same refusal as `since()`: no credit add-on configured is an installation that does not sell
+        // credit, not an empty answer arrived at by matching nothing.
+        if ($keys === []) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            AddonPurchase::query()->whereIn('addon_key', $keys)->distinct()->pluck('currency')->all(),
+            is_string(...),
+        ));
+    }
+
+    /**
+     * The catalog keys that credit money rather than granting units.
+     *
+     * @return list<string>
+     */
+    private function moneyCreditKeys(): array
+    {
+        return array_values(array_filter(
             $this->addons->all(),
             fn (string $key): bool => self::isMoneyCredit($this->addons, $key),
         ));
+    }
+
+    /** What was paid into money credit over a window, net of what was refunded. */
+    public function since(CarbonInterface $since, string $currency): Money
+    {
+        $keys = $this->moneyCreditKeys();
 
         // No credit add-on configured is not a zero somebody measured — it is an installation that does not
         // sell credit at all, and `whereIn` over an empty list would answer zero by matching nothing, which

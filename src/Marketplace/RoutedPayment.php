@@ -572,13 +572,7 @@ final readonly class RoutedPayment
      */
     private function fixedAnswer(TaxonomyCell $cell, string $type): ?object
     {
-        if (! $cell->isFixed()) {
-            return null;
-        }
-
-        $value = $cell->value();
-
-        return $value instanceof $type ? $value : null;
+        return $cell->fixedAnswerOf($type);
     }
 
     /**

@@ -8,6 +8,7 @@ use Illuminate\Container\Container;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Contracts\SellerPartyResolver;
 use Pushery\Billing\Enums\InvoiceCorrectionKind;
+use Pushery\Billing\Enums\TaxationBasis;
 use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Exceptions\InvalidInvoiceCorrection;
 use Pushery\Billing\Invoicing\Line;
@@ -149,8 +150,8 @@ trait NormalizesInvoiceModel
 
         // Where the profile supplies no wording, null lets the category's own description stand in, which at
         // least names the scheme. The same key the PDF half prints, so the two halves cannot say different things.
-        if ($invoice->taxation_basis?->taxesMarginOnly() === true) {
-            $key = Container::getInstance()->make(MarginDocumentGuard::class)->wordingKey();
+        if ($invoice->taxation_basis instanceof TaxationBasis && $invoice->taxation_basis->taxesMarginOnly()) {
+            $key = Container::getInstance()->make(MarginDocumentGuard::class)->wordingKey($invoice->taxation_basis);
             $wording = $key === null ? null : Lang::get($key);
 
             return is_string($wording) ? $wording : null;

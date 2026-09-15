@@ -27,5 +27,7 @@ return [
     'small_business_note' => 'Vrijgesteld van btw op grond van de kleineondernemersregeling (§ 19 UStG).',
     'union_small_business_note' => 'Vrijgesteld van btw op grond van de kleineondernemersregeling van de lidstaat van de leverancier.',
     'margin_scheme_note' => 'Margeregeling — gebruikte goederen',
+    'margin_scheme_note_works_of_art' => 'Margeregeling — kunstvoorwerpen',
+    'margin_scheme_note_collectors_items' => 'Margeregeling — voorwerpen voor verzamelingen en antiquiteiten',
     'self_billed_note' => 'Self-billing: opgesteld door de afnemer namens de leverancier, op grond van een voorafgaande afspraak.',
 ];

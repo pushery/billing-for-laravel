@@ -27,5 +27,7 @@ return [
     'small_business_note' => 'Exento de IVA en virtud del régimen de pequeñas empresas (§ 19 UStG).',
     'union_small_business_note' => 'Exento de IVA en virtud del régimen de pequeñas empresas del Estado miembro del proveedor.',
     'margin_scheme_note' => 'Régimen del margen de beneficio — bienes de ocasión',
+    'margin_scheme_note_works_of_art' => 'Régimen del margen de beneficio — objetos de arte',
+    'margin_scheme_note_collectors_items' => 'Régimen del margen de beneficio — objetos de colección y antigüedades',
     'self_billed_note' => 'Autofactura: emitida por el destinatario en nombre del proveedor, por acuerdo previo.',
 ];

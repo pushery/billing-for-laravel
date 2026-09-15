@@ -17,6 +17,7 @@ use Pushery\Billing\Contracts\Invoices;
 use Pushery\Billing\Contracts\LateFees;
 use Pushery\Billing\Contracts\MarketplaceWebhookEventMapper;
 use Pushery\Billing\Contracts\MarketplaceWebhookVerifier;
+use Pushery\Billing\Contracts\MerchantCouponProvisioner;
 use Pushery\Billing\Contracts\MerchantOnboarding;
 use Pushery\Billing\Contracts\MerchantPriceProvisioner;
 use Pushery\Billing\Contracts\MeterInspector;
@@ -69,6 +70,7 @@ use Pushery\Billing\Webhooks\Effects\CreditAddonPurchase;
 use Pushery\Billing\Webhooks\Effects\DebitCreditAppliedByProvider;
 use Pushery\Billing\Webhooks\Effects\FlushUpcomingUsage;
 use Pushery\Billing\Webhooks\Effects\GrantPurchasedContent;
+use Pushery\Billing\Webhooks\Effects\IssueDocumentForRoutedHostedPurchase;
 use Pushery\Billing\Webhooks\Effects\IssueLocalCreditNote;
 use Pushery\Billing\Webhooks\Effects\MarkMerchantDeauthorized;
 use Pushery\Billing\Webhooks\Effects\PersistInvoice;
@@ -194,6 +196,12 @@ final class StripeServiceProvider extends ServiceProvider
                 ? $app->make(StripePlatformPriceProvisioner::class)
                 : $app->make(StripeMerchantPriceProvisioner::class);
         });
+        // ONE implementation, not the pair the price side has, and the difference is where the refusal
+        // lives rather than a gap. A coupon has to exist on the account its session runs on, so the same
+        // posture decides it — but a coupon minted on the wrong account does not fail at the provider, it
+        // fails as a session that quietly applies no discount. So the platform one is bound and refuses
+        // under the other posture, instead of a second class minting somewhere a session cannot reach.
+        $this->app->bind(MerchantCouponProvisioner::class, StripePlatformCouponProvisioner::class);
         $this->app->bind(MarketplaceWebhookVerifier::class, StripeMarketplaceWebhookVerifier::class);
         $this->app->bind(MarketplaceWebhookEventMapper::class, StripeMarketplaceWebhookEventMapper::class);
         // Stripe books proration on its own side, but the account hub still previews the cost of a
@@ -268,6 +276,10 @@ final class StripeServiceProvider extends ServiceProvider
         // past_due back to active does not welcome the customer a second time.
         $registry->on(SubscriptionStateChanged::class, SendSubscriptionActivatedNotice::class);
         $registry->on(AddonPurchased::class, CreditAddonPurchase::class);
+        // AFTER the credit, and the order is a statement rather than a preference: a document is about a
+        // sale that happened, and the effect that records what the buyer got should not be waiting behind
+        // one that writes paper. Each effect is its own queued job, so neither can take the other down.
+        $registry->on(AddonPurchased::class, IssueDocumentForRoutedHostedPurchase::class);
         // Ownership beside the money, deliberately as a second effect: they are different facts with
         // different lifetimes, and folded together a failure in either half would roll back the other —
         // leaving a buyer charged, credited, and without the row saying they own what they paid for.

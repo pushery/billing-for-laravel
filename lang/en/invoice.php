@@ -27,5 +27,7 @@ return [
     'small_business_note' => 'Exempt from VAT under the small business scheme (§ 19 UStG).',
     'union_small_business_note' => 'Exempt from VAT under the small business scheme of the supplier\'s member state.',
     'margin_scheme_note' => 'Margin scheme — second-hand goods',
+    'margin_scheme_note_works_of_art' => 'Margin scheme — works of art',
+    'margin_scheme_note_collectors_items' => 'Margin scheme — collectors’ items and antiques',
     'self_billed_note' => 'Self-billed invoice: issued by the recipient on behalf of the supplier, by prior agreement.',
 ];

@@ -5,7 +5,11 @@ declare(strict_types=1);
 namespace Pushery\Billing\Contracts;
 
 use Illuminate\Database\Eloquent\Model;
+use InvalidArgumentException;
+use Pushery\Billing\Enums\TaxArchetype;
+use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\ValueObjects\ClientIntent;
+use Pushery\Billing\ValueObjects\Money;
 
 /**
  * A first-class, subscription-independent one-time purchase (an add-on / top-up). Returns a
@@ -27,4 +31,32 @@ interface OneTimeCharge
      *                                 that is not open throws MarketNotOpen. Null checks nothing here
      */
     public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent;
+
+    /**
+     * A hosted checkout for a tip — a buyer-chosen amount with no catalog entry behind it.
+     *
+     * ## Why it is a second method rather than a special add-on key
+     *
+     * `purchase()` takes a KEY and never an amount, and that is deliberate: the price comes from the
+     * catalog so a caller cannot inject one. A tip has no catalog entry and cannot have one — the figure
+     * is the buyer's, chosen at the moment of paying. The two rules are opposite, so they are two methods
+     * rather than one with a flag, and the anti-injection rule stays absolute where it applies.
+     *
+     * What replaces the catalog as the guard is the SERVER: the amount is refused when tipping is off,
+     * when it is not positive, and when the installation has no merchant for the sale to route to.
+     *
+     * ## Why a tip has to say what it was paid ON
+     *
+     * A tip has no tax treatment of its own. It is placed by the supply it accompanies — a tip on
+     * commissioned work and a tip on a file download are taxed in different countries — so
+     * `$soldAlongside` is required rather than defaulted. There is no safe guess, and a default would make
+     * the wrong one the quiet normal case.
+     *
+     * @param  Money  $chosen  the gross amount the buyer chose, tax included, as they will be charged it
+     * @param  TaxArchetype  $soldAlongside  what the tip was paid on
+     *
+     * @throws MarketplaceUnsupported when the installation has no merchant to route to
+     * @throws InvalidArgumentException when tipping is off or the amount is not positive
+     */
+    public function tip(Model $billable, Money $chosen, TaxArchetype $soldAlongside, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent;
 }

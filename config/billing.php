@@ -2200,6 +2200,14 @@ return [
             // `: strlen('abc')` in the same position are both counted. Wrapped, this single line
             // takes the whole package below its 100 % floor and no test can lift it back.
             'commission_bps' => env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS') !== null ? (int) env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS') : null,
+
+            // What the tip line is called on the buyer's hosted checkout page — the ONE string this
+            // package puts in front of a buyer on somebody else's site. Configurable because a package
+            // that hardcoded it in English would put a foreign word on a German checkout, and the default
+            // deliberately names the ACT rather than the merchant: whose page it is and whose name belongs
+            // on it is the consumer's to decide, and a provider page is not where this package starts
+            // composing sentences about other people.
+            'line_name' => env('BILLING_MARKETPLACE_TIPS_LINE_NAME', 'Tip'),
         ],
         'pwyw' => [
             'minimum_minor' => (int) env('BILLING_MARKETPLACE_PWYW_MINIMUM_MINOR', 0),

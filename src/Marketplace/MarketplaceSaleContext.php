@@ -12,6 +12,7 @@ use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Exceptions\MarketNotOpen;
 use Pushery\Billing\Tax\TaxCalculatorFactory;
+use Pushery\Billing\ValueObjects\PlatformFee;
 
 /**
  * What this installation is, as a marketplace, for one sale — asked once instead of derived in each lane.
@@ -48,7 +49,29 @@ final readonly class MarketplaceSaleContext
         private SellerOfRecordResolver $postures,
         private ChargeRoutingConsistencyGuard $routingGuard,
         private MarketAllowlist $markets,
+        /**
+         * The buyer-chosen rules, pooled here rather than taken by each lane that needs them.
+         *
+         * The two methods below are DELEGATIONS and deliberately hold no logic: whether tipping is on and
+         * what a tip costs are `FanChosenPricing`'s to answer, and a second reader of either would be a
+         * second place the same switch can be read differently. What this class contributes is that a lane
+         * asks ONE object for the answers it would otherwise assemble for itself — the same reason the four
+         * readers above were pooled here, and the reason the lanes' constructors have a ratchet on them.
+         */
+        private FanChosenPricing $fanPricing,
     ) {}
+
+    /** Whether this installation takes voluntary payments at all. Answered by the class that owns it. */
+    public function tipsEnabled(): bool
+    {
+        return $this->fanPricing->tipsEnabled();
+    }
+
+    /** The commission a TIP carries, which is not always the platform's ordinary one. */
+    public function tipFee(PlatformFee $normalFee): PlatformFee
+    {
+        return $this->fanPricing->feeForTip($normalFee);
+    }
 
     /**
      * Refuse a sale into a country the operator has not opened, where the caller already knows the country.
