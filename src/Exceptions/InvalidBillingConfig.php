@@ -55,6 +55,24 @@ final class InvalidBillingConfig extends RuntimeException
         );
     }
 
+    public static function missingFoundingYear(string $status): self
+    {
+        return new self(
+            "A {$status} standing was declared without a founding year. The year is collected rather than "
+            .'derived, because a threshold reads it and a derived year would be wrong invisibly. Only a private '
+            .'individual, who is not in business at all, declares without one.'
+        );
+    }
+
+    public static function foundingYearForPrivateIndividual(int $year): self
+    {
+        return new self(
+            "A private individual was declared with the business founding year {$year}. Somebody who is not in "
+            .'business at all has no founding year, so it is refused rather than stored: a threshold that later '
+            .'read it would treat them as an established business.'
+        );
+    }
+
     public static function unreadableHoldEnforcementDate(string $configured): self
     {
         return new self(

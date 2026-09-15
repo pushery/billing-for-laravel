@@ -22,7 +22,12 @@
     <div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-8 sm:flex-row">
         {{-- Header + grouped sidebar nav. This shell is plain, framework-agnostic markup so the package needs
              no UI-kit dependency; publish `billing-views` to replace it wholesale (e.g. with your own design
-             system's app shell). --}}
+             system's app shell).
+
+             Below `sm` the nav wraps its links into a few rows, without its group labels. Stacked above the
+             content it was a column of eight links, and on a phone every screen's own heading began below the
+             first screen. Wrapping rather than scrolling sideways keeps every destination on screen: a row that
+             scrolls hides whatever sits past its edge and gives no sign that anything does. --}}
         <header class="sm:w-56 sm:shrink-0">
             <div class="flex items-center justify-between">
                 <a href="{{ route('billing.account.overview') }}" wire:navigate class="text-lg font-semibold">
@@ -41,21 +46,21 @@
                 @endif
             </div>
 
-            <nav class="mt-6 space-y-6" aria-label="{{ __('billing::account.title') }}">
+            <nav class="mt-4 flex flex-wrap gap-x-3 gap-y-1 sm:mt-6 sm:block sm:space-y-6" aria-label="{{ __('billing::account.title') }}">
                 @foreach ($accountNav->visible() as $group)
                     <div wire:key="nav-group-{{ $group['key'] }}">
                         {{-- gray-500 in the light scheme: gray-400 on the gray-50 page measured 2.48:1, under the
                              4.5:1 small text needs. The dark scheme keeps gray-400, which reads well on gray-950. --}}
-                        <p class="px-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                        <p class="hidden px-2 text-xs font-semibold uppercase tracking-wide text-gray-500 sm:block dark:text-gray-400">
                             {{ __($group['label']) }}
                         </p>
-                        <ul class="mt-2 space-y-1">
+                        <ul class="flex flex-wrap gap-1 sm:mt-2 sm:block sm:space-y-1">
                             @foreach ($group['items'] as $item)
                                 <li wire:key="nav-item-{{ $item['key'] }}">
                                     <a href="{{ $item['url'] }}" wire:navigate
                                         @if ($item['active']) aria-current="page" @endif
                                         @class([
-                                            'block rounded-lg px-2 py-1.5 text-sm',
+                                            'block whitespace-nowrap rounded-lg px-2 py-1.5 text-sm',
                                             'bg-gray-900 text-white dark:bg-white dark:text-gray-900' => $item['active'],
                                             'text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800' => ! $item['active'],
                                         ])>
