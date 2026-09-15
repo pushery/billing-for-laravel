@@ -64,7 +64,10 @@ final readonly class StripeSubscriptionSync implements SubscriptionSync
             // by that same transfer_data. Reconciling it here would stamp a creator's tier onto the platform
             // plan — and picking a "liveliest" across a fan's platform sub and several creator subs is
             // meaningless anyway. The merchant-scoped return reconcile is a separate path; here we skip it.
-            if (isset($array['transfer_data'])) {
+            //
+            // A separate-transfer subscription belongs to a merchant just the same; it names the account in its
+            // metadata instead of transfer_data.
+            if (isset($array['transfer_data']) || StripeSubscriptionRouting::accountOf($array) !== null) {
                 continue;
             }
 

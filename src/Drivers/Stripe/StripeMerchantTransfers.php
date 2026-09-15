@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Drivers\Stripe;
 
 use Pushery\Billing\Contracts\MovesMerchantShare;
+use Pushery\Billing\Contracts\NamesPaymentTransfer;
 use Pushery\Billing\Contracts\ReportsMovedShares;
 use Pushery\Billing\Contracts\ReversesMerchantShare;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
@@ -12,9 +13,12 @@ use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\MovedShare;
 use Pushery\Billing\ValueObjects\TransferResult;
 use Pushery\Billing\ValueObjects\TransferReversal;
+use RuntimeException;
+use Stripe\Charge;
 use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
+use Stripe\Transfer;
 
 /**
  * The second half of a separate-transfer sale: moving the merchant's share to them.
@@ -34,6 +38,15 @@ use Stripe\StripeClient;
  * Naming the charge makes the provider wait for that specific payment to settle and then move its share.
  * That is the behavior a separate transfer is supposed to have.
  *
+ * ## And it has to name a CHARGE, which the ledger does not hold
+ *
+ * The reference a caller passes is the one the payment lane recorded: the PaymentIntent a payment created
+ * (`pi_…`), or the invoice a routed subscription cycle is keyed on (`in_…`). Stripe's `source_transaction` takes
+ * the id of a charge. This class used to send the reference as it stood, so every separate transfer named a
+ * PaymentIntent where a charge belongs, while the tests fed it `ch_1` and stayed green. The reference is now
+ * resolved here, at the one boundary that knows what a Stripe id is: an invoice to the payment behind it, a
+ * payment to its `latest_charge`. A charge id (`ch_…`, `py_…`) is already what the field wants.
+ *
  * ## The idempotency key is the caller's, and deliberately so
  *
  * This class does not invent one. A key derived here would have to come from the arguments, and the amount
@@ -41,7 +54,7 @@ use Stripe\StripeClient;
  * key and a second transfer. The caller holds stable local state (a row id) and is the only party that can
  * key this safely.
  */
-final readonly class StripeMerchantTransfers implements MovesMerchantShare, ReportsMovedShares, ReversesMerchantShare
+final readonly class StripeMerchantTransfers implements MovesMerchantShare, NamesPaymentTransfer, ReportsMovedShares, ReversesMerchantShare
 {
     public function __construct(private StripeClient $stripe) {}
 
@@ -57,7 +70,7 @@ final readonly class StripeMerchantTransfers implements MovesMerchantShare, Repo
                 'currency' => strtolower($amount->currency),
                 'destination' => $destination->accountId,
                 // Funded by THIS payment, never by the platform balance. See the class docblock.
-                'source_transaction' => $sourceCharge,
+                'source_transaction' => $this->fundingChargeOf($sourceCharge),
             ],
             $idempotencyKey === null ? [] : ['idempotency_key' => $idempotencyKey],
         );
@@ -68,6 +81,67 @@ final readonly class StripeMerchantTransfers implements MovesMerchantShare, Repo
         return new TransferResult(
             (string) $transfer->id,
             new Money((int) $transfer->amount, strtoupper((string) $transfer->currency)),
+        );
+    }
+
+    /**
+     * The id of the charge that funds a transfer, from the payment reference the ledger holds.
+     *
+     * A payment with no charge behind it yet refuses, and so does an invoice with no payment: there is nothing
+     * that could fund the transfer, and a transfer sent without `source_transaction` would draw on the platform
+     * balance instead, which is the failure the parameter exists to prevent. The caller records the refusal as
+     * a share that did not move, where the retry command finds it.
+     */
+    private function fundingChargeOf(string $reference): string
+    {
+        if (str_starts_with($reference, 'in_')) {
+            $reference = $this->intentOfInvoice($reference)
+                ?? throw new RuntimeException("Stripe names no payment behind invoice {$reference}, so no charge can fund the transfer from it.");
+        }
+
+        if (! str_starts_with($reference, 'pi_')) {
+            return $reference;
+        }
+
+        $charge = $this->stripe->paymentIntents->retrieve($reference)->latest_charge ?? null;
+        $chargeId = $charge instanceof Charge ? $charge->id : $charge;
+
+        if (! is_string($chargeId) || $chargeId === '') {
+            throw new RuntimeException("Stripe names no charge behind payment {$reference} yet, so the transfer cannot be funded from it.");
+        }
+
+        return $chargeId;
+    }
+
+    /**
+     * The transfer a destination charge's share went out on, read off the payment's charge.
+     *
+     * A PaymentIntent does not carry it; its charge does. So a payment is read with `latest_charge` expanded, an
+     * invoice-keyed cycle through the payment behind it, and a charge id directly.
+     */
+    public function transferOfPayment(string $paymentReference): ?string
+    {
+        $reference = str_starts_with($paymentReference, 'in_') ? $this->intentOfInvoice($paymentReference) : $paymentReference;
+
+        if ($reference === null) {
+            return null;
+        }
+
+        $charge = str_starts_with($reference, 'pi_')
+            ? ($this->stripe->paymentIntents->retrieve($reference, ['expand' => ['latest_charge']])->latest_charge ?? null)
+            : $this->stripe->charges->retrieve($reference);
+
+        $transfer = $charge instanceof Charge ? ($charge->transfer ?? null) : null;
+        $transferId = $transfer instanceof Transfer ? $transfer->id : $transfer;
+
+        return is_string($transferId) && $transferId !== '' ? $transferId : null;
+    }
+
+    /** The PaymentIntent behind an invoice, with its payments expanded, or null when it names none. */
+    private function intentOfInvoice(string $invoice): ?string
+    {
+        return StripeInvoicePayments::intentIdOf(
+            $this->stripe->invoices->retrieve($invoice, ['expand' => ['payments']])->toArray(),
         );
     }
 

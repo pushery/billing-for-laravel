@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Webhooks\Effects;
 
+use Illuminate\Support\Facades\Bus;
+use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Events\RoutedChargeAbandoned;
 use Pushery\Billing\Events\RoutedChargeConfirmed;
+use Pushery\Billing\Jobs\MoveMerchantShareOnConfirmation;
+use Pushery\Billing\Jobs\NameTransferOnConfirmation;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Models\MerchantCharge;
 
@@ -61,6 +65,19 @@ final readonly class SettleRoutedChargeOnConfirmation
         }
 
         if ($event instanceof RoutedChargeConfirmed) {
+            // A SEPARATE TRANSFER IS NOT SETTLED HERE, because nothing has paid the merchant yet.
+            //
+            // This settled every confirmed row, and on this lane that was the defect rather than a shortcut: the
+            // platform took the whole payment, the share moves only in a second call, and a row settled without
+            // one said the merchant was paid while the retry, which reads pending rows only, never saw it again.
+            // The job makes the call the synchronous path makes, after this transaction commits, and settles the
+            // row with the transfer or records why it could not.
+            if ($charge->charge_type === ChargeType::SeparateTransfer) {
+                Bus::dispatch(new MoveMerchantShareOnConfirmation((int) $charge->id));
+
+                return;
+            }
+
             // WITH the transfer the provider named, when it named one — and nothing when it did not.
             //
             // This used to settle without a reference, on the reasoning that the provider has not named one
@@ -73,6 +90,13 @@ final readonly class SettleRoutedChargeOnConfirmation
             // That column exists to be checkable against the provider, so a placeholder would be worse than
             // null. Null still says nothing; a made-up string says something false.
             $this->ledger->settle($charge, $event->transferReference);
+
+            // And a destination charge confirmed this way never names one: the delivery is the PaymentIntent, and
+            // the transfer is a field of its charge. The reference is asked of the provider after this transaction
+            // commits, and written only where the row still has none.
+            if ($event->transferReference === null && $charge->charge_type === ChargeType::Destination) {
+                Bus::dispatch(new NameTransferOnConfirmation((int) $charge->id));
+            }
 
             return;
         }

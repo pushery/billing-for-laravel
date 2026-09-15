@@ -29,8 +29,10 @@ interface OneTimeCharge
      * @param  ?string  $buyerCountry  the buyer's ISO country where the caller already knows it; checked against
      *                                 `billing.tax_markets` before the provider is asked for anything, so a market
      *                                 that is not open throws MarketNotOpen. Null checks nothing here
+     * @param  ?bool  $collectTaxId  whether THIS checkout asks the buyer for a tax ID while the provider computes tax;
+     *                               null follows `billing.checkout.tax_id_collection`
      */
-    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent;
+    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null): ClientIntent;
 
     /**
      * A hosted checkout for a tip — a buyer-chosen amount with no catalog entry behind it.

@@ -34,7 +34,7 @@ final readonly class NotifyMerchantOfAutomaticTaxStatusChange
         }
 
         // Asked of the object rather than of its traits: a host may route notifications their own way, and
-        // a check on the shipped trait would refuse to tell a merchant who is perfectly reachable.
+        // a check on the shipped concern would refuse to tell a merchant who is perfectly reachable.
         if (! method_exists($event->merchant, 'notify')) {
             return;
         }

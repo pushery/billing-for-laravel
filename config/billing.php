@@ -246,7 +246,7 @@ return [
     | whenever your membership events fire. A user-owner app ignores all of this.
     |
     | - membership_relation: the relation on the team model that returns its members.
-    |   The HasSeats trait counts it for seatCount().
+    |   HasSeats counts it for seatCount().
     | - active_status_column / active_status_value: filter the count to ACTIVE members
     |   when the relation is not already scoped to them (a pending invite is not a paid
     |   seat). Leave the column null when the relation only ever returns active members.
@@ -1888,8 +1888,12 @@ return [
         //
         // Separate transfer takes the whole payment and then makes a SECOND provider call to move the
         // merchant their share. That call ships: `StripeMerchantTransfers::transferShare()`, bound
-        // unconditionally, made by `RoutedPayment::charge()` — which is the supported way to start such a
-        // sale, and the one that writes the ledger row the transfer is reconciled against.
+        // unconditionally, made by `RoutedPayment::charge()` for a payment that succeeds at once, and by the
+        // `payment_intent.succeeded` confirmation for one that clears later. A hosted one-off purchase and a
+        // hosted tip take this lane too: the session carries no routing, the row is written pending when it
+        // opens, and the confirmation moves the share. So does a hosted subscription: the merchant's account
+        // and the fee terms ride in the subscription's metadata, and each paid cycle writes its row and moves
+        // the share.
         //
         // `PaymentRails::charge()` refuses it, and that refusal is PERMANENT rather than a placeholder: the
         // transfer can only go out after the payment has succeeded, which is after that method has already

@@ -12,6 +12,7 @@ use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -64,36 +65,63 @@ final readonly class UnmovedMerchantShares
         $outcome = ['moved' => 0, 'failed' => 0, 'skipped' => 0];
 
         foreach ($this->unmoved()->lazyById() as $charge) {
-            $merchant = $this->merchantOf($charge);
-
-            if (! $merchant instanceof Model) {
-                $outcome['skipped']++;
-
-                continue;
-            }
-
-            $destination = $this->accounts?->accountFor($merchant);
-
-            if (! $this->transfers instanceof MovesMerchantShare || ! $destination instanceof MerchantAccountReference) {
-                $outcome['skipped']++;
-
-                continue;
-            }
-
-            try {
-                $moved = $this->transfers->transferShare($destination, $charge->net(), $charge->charge_reference, $charge->transferIdempotencyKey());
-            } catch (Throwable $failure) {
-                $this->ledger->recordTransferFailure($charge, $merchant, $failure);
-                $outcome['failed']++;
-
-                continue;
-            }
-
-            $this->ledger->settle($charge, $moved->reference, $moved->moved);
-            $outcome['moved']++;
+            $outcome[$this->move($charge)]++;
         }
 
         return $outcome;
+    }
+
+    /**
+     * Move one sale's share under its own key, and write down what happened.
+     *
+     * The retry walks the failed rows through here, and so does a separate-transfer sale whose payment the
+     * provider confirmed after the fact: both owe the same transfer and have to leave the same row behind. A
+     * moved share settles the row with the provider's reference and figure; a refused one records the failure
+     * where the retry finds it; a share that cannot be tried at all is left exactly as it was.
+     *
+     * @return 'moved'|'failed'|'skipped'
+     */
+    public function move(MerchantCharge $charge): string
+    {
+        $merchant = $this->merchantOf($charge);
+
+        if (! $merchant instanceof Model) {
+            return 'skipped';
+        }
+
+        $destination = $this->accounts?->accountFor($merchant);
+
+        if (! $this->transfers instanceof MovesMerchantShare || ! $destination instanceof MerchantAccountReference) {
+            return 'skipped';
+        }
+
+        try {
+            $moved = $this->transfers->transferShare($destination, $charge->net(), $charge->charge_reference, $charge->transferIdempotencyKey());
+        } catch (Throwable $failure) {
+            $this->ledger->recordTransferFailure($charge, $merchant, $failure);
+
+            return 'failed';
+        }
+
+        $this->ledger->settle($charge, $moved->reference, $moved->moved);
+
+        return 'moved';
+    }
+
+    /**
+     * Record a paid sale whose share this installation cannot move at all, so it is counted and retried.
+     *
+     * Only for a row that has not failed before, and only where the merchant still exists: the failure is written
+     * against the merchant, and a row that already carries a failure is already where the doctor and the retry
+     * look.
+     */
+    public function recordUnmovable(MerchantCharge $charge, string $why): void
+    {
+        $merchant = $this->merchantOf($charge);
+
+        if ($merchant instanceof Model && $charge->transfer_failed_at === null) {
+            $this->ledger->recordTransferFailure($charge, $merchant, new RuntimeException($why));
+        }
     }
 
     /** @return Builder<MerchantCharge> */
@@ -110,7 +138,7 @@ final readonly class UnmovedMerchantShares
      * Resolved from the morph columns and checked before touching them, the way `BuyerProtectionClock` does it:
      * a stored class that no longer exists is an ordinary answer here and must not stop the run for one row.
      */
-    private function merchantOf(MerchantCharge $charge): ?Model
+    public function merchantOf(MerchantCharge $charge): ?Model
     {
         $class = Relation::getMorphedModel($charge->merchant_type) ?? $charge->merchant_type;
 

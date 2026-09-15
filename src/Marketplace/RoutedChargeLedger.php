@@ -182,6 +182,28 @@ final readonly class RoutedChargeLedger
     }
 
     /**
+     * Name the transfer a destination charge's share went out on, where the row does not name one yet.
+     *
+     * Not a state change, and deliberately not bound to `pending`: a payment confirmed by webhook settles first
+     * and its transfer is looked up after the transaction that settled it has committed. The one rule is that a
+     * reference already written is never replaced, so a lookup that races a second delivery cannot overwrite
+     * what the first one wrote.
+     */
+    public function nameTransfer(MerchantCharge $charge, string $transferReference): bool
+    {
+        $named = MerchantCharge::query()
+            ->whereKey($charge->getKey())
+            ->whereNull('transfer_reference')
+            ->update(['transfer_reference' => $transferReference]) === 1;
+
+        if ($named) {
+            $charge->forceFill(['transfer_reference' => $transferReference])->syncOriginal();
+        }
+
+        return $named;
+    }
+
+    /**
      * Mark a charge as one that will not complete.
      *
      * Only from pending. A settled charge that later goes wrong is a refund or a dispute, not a failure —

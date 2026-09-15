@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Pushery\Billing\Drivers\Stripe;
 
 use Pushery\Billing\Contracts\ReadsRoutedInvoiceCommission;
+use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\PlatformFee;
 use Pushery\Billing\ValueObjects\RoutedInvoiceCommission;
 use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
@@ -82,10 +84,10 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
             $fee = $intent['application_fee_amount'] ?? null;
             $currency = $intent['currency'] ?? null;
 
-            // Not routed. A plain platform subscription has neither, and that is the ordinary case rather
-            // than a failure -- the caller writes no ledger row for it, exactly as before this lane existed.
+            // Not routed with a destination. A plain platform subscription has neither, and so has one on the
+            // separate-transfer lane, which names its merchant and terms in its own metadata instead.
             if (! is_string($account) || $account === '' || ! is_int($fee) || ! is_string($currency)) {
-                return null;
+                return $this->separateTransferCycle($invoice->toArray());
             }
 
             $gross = $invoice->toArray()['amount_paid'] ?? null;
@@ -112,6 +114,51 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
     }
 
     /**
+     * A cycle of a separate-transfer subscription, priced from the terms frozen onto the subscription at checkout.
+     *
+     * Computed rather than read, and that is not the shortcut the class docblock warns about: on this lane nothing
+     * is withheld by the provider, so there is no figure to read back. The platform takes the invoice's whole
+     * payment and moves the merchant's share afterwards. The split is taken on what the buyer actually paid,
+     * `amount_paid`, so a discounted cycle moves the share of the discounted amount rather than of the list price.
+     *
+     * Null for an invoice whose subscription is not on this lane, or whose terms cannot be read: a subscription
+     * that names a merchant and no readable terms cannot be priced, and a guessed rate would be a plausible wrong
+     * number on the row.
+     *
+     * @param  array<array-key, mixed>  $invoice
+     */
+    private function separateTransferCycle(array $invoice): ?RoutedInvoiceCommission
+    {
+        $subscriptionId = StripeInvoiceSubscription::idOf($invoice);
+        $paid = $invoice['amount_paid'] ?? null;
+        $currency = $invoice['currency'] ?? null;
+
+        if ($subscriptionId === null || ! is_int($paid) || ! is_string($currency)) {
+            return null;
+        }
+
+        $subscription = $this->stripe->subscriptions->retrieve($subscriptionId)->toArray();
+        $account = StripeSubscriptionRouting::accountOf($subscription);
+        $terms = StripeSubscriptionRouting::termsOf($subscription);
+
+        if ($account === null || ! $terms instanceof PlatformFee) {
+            return null;
+        }
+
+        $gross = Money::of($paid, strtoupper($currency));
+        [$fee] = $terms->splitOf($gross);
+
+        return new RoutedInvoiceCommission(
+            merchantAccountReference: $account,
+            gross: $gross,
+            fee: $fee,
+            feeBps: $terms->bps,
+            chargeType: ChargeType::SeparateTransfer,
+            terms: $terms,
+        );
+    }
+
+    /**
      * The rate this cycle was billed at, from the subscription that raised the invoice.
      *
      * Read rather than derived from the two amounts. `fee ÷ gross` looks exact and is not: the provider
@@ -126,9 +173,12 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
      */
     private function feeBpsOf(array $invoice): ?int
     {
-        $subscription = $invoice['subscription'] ?? null;
+        // This invoice came from the package's own client, so on the pinned version it names its subscription
+        // only under `parent`. Asking the old field alone answered null for every cycle, and every row went
+        // without its terms.
+        $subscription = StripeInvoiceSubscription::idOf($invoice);
 
-        if (! is_string($subscription) || $subscription === '') {
+        if ($subscription === null) {
             return null;
         }
 

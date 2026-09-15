@@ -77,6 +77,12 @@ use Pushery\Billing\ValueObjects\Money;
  * What the routed arms map instead is a payment with NO invoice at all — the discriminator is taken from the
  * payload rather than from a lookup, and the effect behind it no-ops on a reference this package never wrote
  * as a routed charge. So an ordinary invoice-less checkout emits an event that finds nothing.
+ *
+ * **On the pinned API version that discriminator is gone.** Stripe removed `invoice` from the PaymentIntent in
+ * `2025-03-31.basil`, with no link to the invoice left on the intent, so only an endpoint rendering an older
+ * version still sends it. On the pinned version an invoice-driven payment maps to a routed event like any other.
+ * The dunning pin holds regardless, because these arms never emit `PaymentFailed` or `PaymentSucceeded`, and the
+ * routed event finds nothing: a subscription cycle's row is keyed by its invoice, never by the payment's id.
  */
 final readonly class StripeWebhookEventMapper implements WebhookEventMapper
 {
@@ -141,8 +147,10 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             //
             // A ROUTED marketplace charge is not that. It is not invoiced through the provider at all, so
             // the payload carries no `invoice` — and that absence is the discriminator, taken from the
-            // payload itself rather than from a database lookup a mapper has no business doing. Every case
-            // the pin covers carries an invoice and still maps to nothing.
+            // payload itself rather than from a database lookup a mapper has no business doing. On an endpoint
+            // older than `basil` every case the pin covers carries an invoice and maps to nothing. On the pinned
+            // version the intent names no invoice at all, so an invoice-driven payment does map here — to a
+            // routed event, never to PaymentFailed, and the event finds no row keyed by the payment's id.
             //
             // The rest of the narrowing happens downstream: the effect only acts on a reference matching a
             // routed charge this package wrote as pending, and no-ops otherwise. So an ordinary one-time
@@ -282,6 +290,12 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         // Expanded, the destination is an account object; unexpanded (the webhook default) it is the id.
         $accountId = is_array($destination) ? $this->string($destination, 'id') : (is_string($destination) ? $destination : null);
 
+        // A separate-transfer subscription carries no transfer_data: it names its merchant's account in its metadata,
+        // because the share moves after each paid invoice rather than with the payment.
+        if ($accountId === null || $accountId === '') {
+            $accountId = StripeSubscriptionRouting::accountOf($object);
+        }
+
         if ($accountId === null || $accountId === '') {
             return null;
         }
@@ -347,6 +361,9 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
      * A one-off invoice with no subscription yields nothing. There is no cycle, so there is no rate, and
      * the routed one-time lane records its own row at checkout anyway.
      *
+     * The subscription is read in both shapes the provider names it. Reading only the old `subscription` field
+     * made every cycle on the pinned version look like a one-off invoice, so no routed cycle ever wrote its row.
+     *
      * @param  array<array-key, mixed>  $object
      * @return list<BillingDomainEvent>
      */
@@ -354,9 +371,16 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     {
         $customer = $this->string($object, 'customer');
         $invoice = $this->string($object, 'id');
-        $subscription = $this->string($object, 'subscription');
+        $subscription = StripeInvoiceSubscription::idOf($object);
 
         if ($customer === null || $invoice === null || $subscription === null) {
+            return [];
+        }
+
+        // A cycle that charged nothing moved no money: a trial's first invoice, a fully discounted month, a cycle the
+        // customer's credit balance paid. No payment stands behind it to read a commission from, and asking would
+        // turn every routed trial into an unreadable-cycle failure.
+        if ($this->int($object, 'amount_paid') === 0) {
             return [];
         }
 
@@ -657,7 +681,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         // and paid alike. For an invoice the provider takes the customer's shipping address first and their billing
         // address after it, so the country is read in that order. A one-off invoice has no subscription and is
         // left to the checkout that sold it.
-        $subscription = $this->string($object, 'subscription');
+        $subscription = StripeInvoiceSubscription::idOf($object);
 
         if ($subscription !== null) {
             $events[] = new SaleCountryReported(
@@ -925,6 +949,10 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         // Invoice-driven means customer-facing, and customer-facing is what the pin protects. Checked for
         // PRESENCE rather than truthiness: the provider sends `invoice: null` on a payment that has none,
         // and a null-check that treated that as "has an invoice" would map nothing, forever, silently.
+        //
+        // Only an endpoint older than `basil` sends the field at all; the pinned version removed it from the
+        // intent. There this check passes every payment, and the effect's lookup by the payment's id is what
+        // leaves an invoice-driven one untouched.
         if (($object['invoice'] ?? null) !== null) {
             return [];
         }
@@ -935,20 +963,15 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             return [];
         }
 
-        // THE TRANSFER THE PROVIDER ALREADY MADE, carried through instead of dropped.
+        // NO TRANSFER IS READ HERE, because this payload cannot carry one.
         //
-        // On a destination charge the transfer is created as the payment settles, and the payload names it.
-        // The synchronous path has always passed that reference on; this one settled the charge WITHOUT it,
-        // so a hosted checkout produced a settled row whose link to the provider's transfer never existed —
-        // and that link is the key any reconciliation against the provider has to join on.
-        //
-        // Read as a string only. Stripe expands this field to an object when asked to, and an expanded
-        // transfer is not an id: storing `Array` or a nested payload here would be worse than the null it
-        // replaced, because null at least says nothing.
-        $transfer = $object['transfer'] ?? null;
-
+        // This read `transfer` off the object, to carry the destination charge's transfer through to the row. The
+        // object is a PaymentIntent, and `transfer` is a field of a Charge: the intent names its charge in
+        // `latest_charge`, as an id, and nothing else. Every confirmation therefore carried null while the comment
+        // here described the reference arriving. The settle effect now asks the provider for it, after the
+        // webhook's transaction commits, which a mapper that makes no provider call cannot do.
         return [$confirmed
-            ? new RoutedChargeConfirmed('stripe', $reference, is_string($transfer) && $transfer !== '' ? $transfer : null)
+            ? new RoutedChargeConfirmed('stripe', $reference)
             : new RoutedChargeAbandoned('stripe', $reference)];
     }
 }

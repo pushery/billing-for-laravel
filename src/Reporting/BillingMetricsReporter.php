@@ -7,6 +7,7 @@ namespace Pushery\Billing\Reporting;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Contracts\MerchantCatalog;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -16,7 +17,7 @@ use Pushery\Billing\ValueObjects\Plan;
 /**
  * Computes {@see BillingMetrics} from the local subscription rows — no provider round-trip.
  *
- * MRR is the monthly-normalized DECLARED list price: each active tier's `price_display`, a yearly plan
+ * MRR is the monthly-normalized DECLARED list price: each active tier's declared price, a yearly plan
  * divided by twelve, a weekly one times 52/12, summed in the configured billing currency. It is what
  * your CATALOG says you charge, not what the provider actually collected after a coupon or a mid-cycle
  * proration — a deliberately provider-independent, plan-level number. A tier with no `price_display`
@@ -37,6 +38,12 @@ use Pushery\Billing\ValueObjects\Plan;
  * diverge the first time either changes a status rule — leaving a different number on the seller's page
  * than on the platform's, both defensible.
  *
+ * **A row is priced from the catalog of the seller it belongs to.** A merchant's tiers live in the merchant
+ * catalog, not in `billing.tiers`, and a scope that narrowed the rows while pricing them from the platform's
+ * catalog found no plan for any of them: a creator with paying fans read an MRR of zero, counted as active,
+ * and the platform total lacked every marketplace tier. A single-seller install binds one catalog for every
+ * scope, so nothing changes there.
+ *
  * **A null scope means EVERY merchant, and that is not what a null means one level down.**
  * {@see Subscription::scopeForMerchant()} reads null as the PLATFORM's own rows — the single-seller case —
  * because a subscription row always belongs to exactly one seller. Here there is a third thing to ask for,
@@ -46,7 +53,17 @@ use Pushery\Billing\ValueObjects\Plan;
  */
 final readonly class BillingMetricsReporter
 {
-    public function __construct(private PlanCatalog $plans, private Repository $config) {}
+    public function __construct(
+        private PlanCatalog $plans,
+        private Repository $config,
+        /**
+         * Where a merchant's own tiers are priced, resolved from the container when nothing was handed in.
+         *
+         * Optional so the reporter constructs as it always did. Without one, every row is priced from the platform's
+         * catalog, which is also what a single-seller install binds here.
+         */
+        private ?MerchantCatalog $catalogs = null,
+    ) {}
 
     /**
      * @param  ?MerchantScope  $merchant  one seller, or null for every one of them — see the class docblock
@@ -57,12 +74,22 @@ final readonly class BillingMetricsReporter
 
         $mrrMinor = 0;
         $activeCount = 0;
+        /** @var array<string, int> $activeByTier */
+        $activeByTier = [];
+        /** @var array<string, PlanCatalog> $catalogs */
+        $catalogs = [];
 
-        // One pass over the active rows serves both the count and the MRR sum.
-        $this->scoped($merchant)->where('status', 'active')->cursor()->each(function (Subscription $sub) use (&$mrrMinor, &$activeCount): void {
+        // One pass over the active rows serves the count, the breakdown by tier and the MRR sum.
+        $this->scoped($merchant)->where('status', 'active')->cursor()->each(function (Subscription $sub) use (&$mrrMinor, &$activeCount, &$activeByTier, &$catalogs): void {
             $activeCount++;
 
-            $plan = $sub->tier_key !== null ? $this->plans->planFor($sub->tier_key) : null;
+            if ($sub->tier_key === null) {
+                return;
+            }
+
+            $activeByTier[$sub->tier_key] = ($activeByTier[$sub->tier_key] ?? 0) + 1;
+
+            $plan = $this->catalogOf($sub, $catalogs)->planFor($sub->tier_key);
 
             if ($plan instanceof Plan) {
                 $mrrMinor += (int) round($plan->amount->minorUnits * $plan->interval->perYear() / 12);
@@ -83,6 +110,12 @@ final readonly class BillingMetricsReporter
             ->whereBetween('ends_at', [$now->copy()->subDays($windowDays), $now])
             ->count();
 
+        // The other side of churn: rows whose subscription began within the same window. `started_at` rather than
+        // `created_at`, because a row outlives the subscription it first held and a new signup can take it over.
+        $startedInWindow = $this->scoped($merchant)
+            ->whereBetween('started_at', [$now->copy()->subDays($windowDays), $now])
+            ->count();
+
         return new BillingMetrics(
             mrr: Money::of($mrrMinor, $this->currency()),
             activeSubscriptions: $activeCount,
@@ -90,7 +123,27 @@ final readonly class BillingMetricsReporter
             inDunning: $inDunning,
             canceledInWindow: $canceledInWindow,
             windowDays: $windowDays,
+            startedInWindow: $startedInWindow,
+            activeByTier: $activeByTier,
         );
+    }
+
+    /**
+     * The catalog a row's tier is priced from: its merchant's own, or the platform's for a platform row.
+     *
+     * One catalog per merchant for the whole pass, so a creator with a thousand subscribers is asked for once.
+     *
+     * @param  array<string, PlanCatalog>  $catalogs
+     */
+    private function catalogOf(Subscription $sub, array &$catalogs): PlanCatalog
+    {
+        $scope = MerchantScope::fromUid((string) $sub->merchant_uid);
+
+        if ($scope->isPlatform() || ! $this->catalogs instanceof MerchantCatalog) {
+            return $this->plans;
+        }
+
+        return $catalogs[$scope->uid()] ??= $this->catalogs->planCatalog($scope);
     }
 
     /**
