@@ -4,6 +4,18 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.30.0] - 2026-09-15
+
+### Fixed
+
+- **On a phone, every account screen starts with its own heading instead of the whole navigation.** Below the `sm` breakpoint the shell stacked its grouped sidebar above the content, so on an iPhone SE each screen's heading began about 550 px down a 568 px screen, and the overview then listed all eight destinations again as cards that named nothing but the destination. The navigation now wraps its links into a few rows at that width, without its group labels, so every destination stays on screen, and the overview's cards give way to it. From `sm` up, nothing changes.
+
+  **Upgrade:** a host that published `billing-views` keeps its copies of `layouts/account.blade.php` and `livewire/account-overview.blade.php` until it publishes them again or applies the same change.
+
+- **A private individual can be recorded through `CreatorSelfDeclaration::declare()`.** The service took the founding year as an `int` and validated it, but somebody who is not in business at all has none, so a platform had to invent a year or write to `CreatorTaxStatusLedger::record()` directly and assemble the expiry itself. `businessFoundedYear` is now `?int`: `null` for `CreatorTaxStatus::PrivateIndividual`, required for every other standing, and a year given for a private individual is refused.
+
+  **Upgrade:** a platform that passed an invented year for a private individual passes `null` instead; the same call with a year is refused now. Every business standing still takes its year as before.
+
 ## [0.29.0] - 2026-09-15
 
 ### Added
@@ -6715,7 +6727,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.30.0...HEAD
+[0.30.0]: https://github.com/pushery/billing-for-laravel/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/pushery/billing-for-laravel/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/pushery/billing-for-laravel/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/pushery/billing-for-laravel/compare/v0.26.0...v0.27.0
