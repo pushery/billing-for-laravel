@@ -25,7 +25,16 @@ final readonly class BillingMetrics
         public int $inDunning,
         /** Subscriptions that ended within the trailing window — the churn count for {@see $windowDays}. */
         public int $canceledInWindow,
-        /** The trailing window, in days, the churn count is measured over. */
+        /** The trailing window, in days, the churn and start counts are measured over. */
         public int $windowDays,
+        /** Subscriptions that began within the trailing window — the counterpart of {@see $canceledInWindow}. */
+        public int $startedInWindow = 0,
+        /**
+         * The active subscriptions by tier key. A row with no tier is counted in {@see $activeSubscriptions} and not
+         * here, so the breakdown can sum to less than the total.
+         *
+         * @var array<string, int>
+         */
+        public array $activeByTier = [],
     ) {}
 }

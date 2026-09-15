@@ -70,7 +70,7 @@ final readonly class XRechnungInvoice implements EInvoice
         $this->el($doc, $root, 'cbc:ID', $reference);
         $this->el($doc, $root, 'cbc:IssueDate', ($invoice->issued_at ?? Carbon::now())->format('Y-m-d'));
         // BT-3 Type code: 380 invoice, 381 cancellation, 384 amendment, 389 self-billed invoice — derived
-        // once in the shared trait so UBL and CII never disagree. The code, not a negative amount, carries
+        // once in the shared concern so UBL and CII never disagree. The code, not a negative amount, carries
         // the correcting meaning, so the amounts below stay positive.
         //
         // All FOUR are named on purpose. This sentence used to list three and leave out 384, which reads as

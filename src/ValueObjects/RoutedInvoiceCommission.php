@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\ValueObjects;
 
+use Pushery\Billing\Enums\ChargeType;
+
 /**
  * What a provider actually withheld on one routed subscription invoice, and from whom.
  *
@@ -48,11 +50,38 @@ final readonly class RoutedInvoiceCommission
          * the terms could not be established — and a caller must treat that as unknown rather than as zero.
          */
         public ?int $feeBps,
+        /**
+         * The lane the cycle took. A destination subscription's fee is the provider's withheld figure; a
+         * separate-transfer subscription's is computed from the terms frozen onto the subscription at checkout,
+         * because the platform takes the whole payment and nothing is withheld to read back.
+         */
+        public ChargeType $chargeType = ChargeType::Destination,
+        /**
+         * The whole terms, where the lane states more than a rate: the fixed part and the rounding direction.
+         *
+         * A destination subscription can only say `application_fee_percent`, so it leaves this null and its row
+         * carries the rate alone. A separate-transfer subscription froze all three at checkout, and a partial
+         * clawback on a fee with a fixed part is wrong by that part if the row keeps only the rate.
+         */
+        public ?PlatformFee $terms = null,
     ) {}
 
     /** What is left for the merchant. Derived, because net is what remains by definition. */
     public function net(): Money
     {
         return $this->gross->minus($this->fee);
+    }
+
+    /**
+     * The terms to freeze onto the cycle's row: the whole terms where the lane states them, the rate alone where it
+     * states only that, and null where it stated nothing, which means unknown rather than free.
+     */
+    public function policy(): ?PlatformFee
+    {
+        if ($this->terms instanceof PlatformFee) {
+            return $this->terms;
+        }
+
+        return $this->feeBps === null ? null : new PlatformFee(bps: $this->feeBps);
     }
 }

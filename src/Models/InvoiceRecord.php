@@ -416,7 +416,7 @@ final class InvoiceRecord extends Model
      * Whether the recipient wrote this document on the supplier's behalf — a Gutschrift in the settlement
      * sense, not a correction.
      *
-     * Here rather than in the XML writers' trait because BOTH halves of a hybrid document need it and they
+     * Here rather than in the XML writers' shared concern because BOTH halves of a hybrid document need it and they
      * are rendered by different code. It lived only in the trait, so the machine-readable half said 389 and
      * the half a person opens said nothing — one file contradicting itself, with the conformance-checked
      * half being the correct one, which is why no validator ever complained.

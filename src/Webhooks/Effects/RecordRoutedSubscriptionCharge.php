@@ -6,14 +6,17 @@ namespace Pushery\Billing\Webhooks\Effects;
 
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Bus;
 use Pushery\Billing\Contracts\ReadsRoutedInvoiceCommission;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
 use Pushery\Billing\Exceptions\RoutedCycleUnreadable;
+use Pushery\Billing\Jobs\MoveMerchantShareOnConfirmation;
+use Pushery\Billing\Jobs\NameTransferOnConfirmation;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Models\Subscription;
-use Pushery\Billing\ValueObjects\PlatformFee;
 use Pushery\Billing\ValueObjects\RoutedInvoiceCommission;
 
 /**
@@ -32,6 +35,11 @@ use Pushery\Billing\ValueObjects\RoutedInvoiceCommission;
  * one sale with one known amount. A subscription is priced with a RATE — the lane sets
  * `application_fee_percent` and the provider applies it per invoice — so there is no moment at which the
  * figures are known in advance. They exist once per cycle, at the provider.
+ *
+ * A subscription on the separate-transfer lane has no rate at the provider at all. It carries its merchant and the
+ * terms it was sold under in its own metadata, the platform takes each cycle's whole payment, and the reader
+ * computes the cycle's split from those terms on what the buyer paid. The row is the same row; the share moves
+ * after it.
  *
  * ## The local row decides whether to ask at all
  *
@@ -91,7 +99,7 @@ final readonly class RecordRoutedSubscriptionCharge
             throw RoutedCycleUnreadable::forInvoice($event->invoiceReference, $event->subscriptionReference);
         }
 
-        $this->ledger->record(
+        $charge = $this->ledger->record(
             $merchant,
             'stripe',
             // The INVOICE is the reference, one per cycle. A subscription id would collapse every cycle of
@@ -107,16 +115,40 @@ final readonly class RecordRoutedSubscriptionCharge
             // The terms as they stood for THIS cycle. Null when the provider stated none, and null here
             // means "unknown" rather than "no fee" -- a partial clawback refuses on it rather than
             // reconstructing one from today's configuration and clawing an old cycle back at a new rate.
-            $commission->feeBps === null ? null : new PlatformFee(bps: $commission->feeBps, flatMinor: 0),
-            // The hosted subscription lane is unconditionally a destination charge -- `StripeCheckout`
-            // refuses the other lane outright -- so the row states the lane it actually took rather than
-            // reading today's configuration back when a refund needs to know.
-            ChargeType::Destination,
+            //
+            // On the separate-transfer lane that is the whole terms the subscription was sold under, fixed part and
+            // rounding direction included, because a clawback against a fee with a fixed part needs both.
+            $commission->policy(),
+            // The lane this cycle took, as the subscription was sold under it, rather than today's configuration read
+            // back when a refund needs to know.
+            $commission->chargeType,
             // Zero, stated rather than left null. The rate is applied to the invoice total with no tax rate
             // separating a net from a gross, and null on this column means "written before this was
             // recorded" -- a description of old rows, which this is not.
             0,
             sellerPosture: ($this->sales ?? Container::getInstance()->make(MarketplaceSaleContext::class))->posture(),
         );
+
+        // SETTLED AS IT IS WRITTEN, because nothing is left to happen to this money. The paid invoice is the
+        // payment having succeeded, and a destination charge moves the merchant's share with the payment itself.
+        //
+        // Left pending, the row was invisible exactly where it was written to be seen: the earnings counter and the
+        // small-business monitor count settled rows only, and the confirmation that settles a hosted sale looks its
+        // row up by the payment's id, while a cycle is keyed by its invoice. Nothing ever reached it.
+        //
+        // The transfer is a field of the payment's charge, which this event does not carry, so it is asked for
+        // after the webhook's transaction commits. A redelivery settles nothing a second time and asks nothing.
+        if ($charge->charge_type === ChargeType::Destination && $this->ledger->settle($charge)) {
+            Bus::dispatch(new NameTransferOnConfirmation((int) $charge->id));
+        }
+
+        // A SEPARATE TRANSFER IS NOT SETTLED HERE, because nothing has paid the merchant yet: the platform took the
+        // cycle's whole payment. The share moves in a second call once the webhook's transaction commits, funded by
+        // the charge behind this invoice and made under the sale's own idempotency key, through the same job a
+        // confirmed hosted sale on this lane uses. It settles the row with the transfer, or records why it could not
+        // where the retry and `billing:doctor` look. A redelivery asks again, and the job finds the row settled.
+        if ($charge->charge_type === ChargeType::SeparateTransfer && $charge->settlement_state === SettlementState::Pending) {
+            Bus::dispatch(new MoveMerchantShareOnConfirmation((int) $charge->id));
+        }
     }
 }

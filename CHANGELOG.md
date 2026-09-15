@@ -4,6 +4,44 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.31.0] - 2026-09-15
+
+### Added
+
+- **A hosted subscription can take a separate transfer, so a platform that is the deemed supplier can sell one.** Under `platform_deemed_supplier` the posture table permits only `separate_transfer`, and `StripeCheckout::subscribe()` refused that lane outright, so a subscription had no hosted way to a merchant at all. The session now carries no routing on this lane: the merchant's account and the fee terms, flat part and rounding direction included, ride in the subscription's metadata and stay frozen for its life, so a rate changed later never reprices an old subscription. Each paid cycle is priced from those terms on what the buyer actually paid, written to the ledger as pending, and the merchant's share moves from the charge behind the cycle's invoice after the webhook commits, under the sale's own idempotency key. A transfer that fails leaves the row where `billing:marketplace:retry-transfers` and `billing:doctor` look. The webhook mapper resolves the merchant from the same metadata, and the platform subscription reconcile skips such a subscription just as it skips a destination one.
+
+  **Upgrade:** on the shipped defaults (`charge_type` `separate_transfer`) `subscribe()` for a merchant opens a session where it used to throw `MarketplaceUnsupported`. A flat fee part is accepted on this lane, because the package computes each cycle's split itself; the destination lane still refuses one.
+
+- **A hosted one-off purchase and a hosted tip can take a separate transfer.** Both lanes refused `separate_transfer` with `MarketplaceUnsupported::separateTransferNeedsRoutedPayment()`, because the merchant's share moves in a second call that nothing could make a webhook away. That left a marketplace whose seller-of-record posture allows only this charge type, `platform_deemed_supplier`, with no way to route a hosted sale at all. The session now carries no routing on this lane, the sale is written down as pending on the separate-transfer lane when the session opens, and the `payment_intent.succeeded` confirmation moves the merchant's net share from the charge behind the payment under the sale's own idempotency key. A destination charge opens exactly the session it did before.
+
+  **Upgrade:** nothing to do on a destination installation. On `separate_transfer` a hosted purchase or tip that used to throw now opens a session, so the platform webhook has to deliver `payment_intent.succeeded`, which it already does for routed payments that clear later.
+
+- **A single checkout decides whether it asks for a tax ID.** `billing.checkout.tax_id_collection` applied to every checkout, and a marketplace selling to consumers and to businesses needs both answers at once: consumers without the field, because Stripe reverse-charges on a tax ID's format before it verifies it, and businesses with it, because the reverse charge needs their verified number. `Checkout::subscribe()` and `OneTimeCharge::purchase()` take `collectTaxId`: `true` asks on this checkout, `false` leaves the field out, and `null`, the default, follows the setting, so an installation that passes nothing sees no change. A tip checkout never asked for a tax ID and still does not. `BillingFake` records the value beside the country.
+
+  **Upgrade:** nothing to do for callers. A class that implements `Checkout` or `OneTimeCharge` itself adds the trailing `?bool $collectTaxId = null` parameter to `subscribe()` or `purchase()`.
+
+- **`BillingMetrics` counts the subscriptions that began within the window and breaks the active ones down by tier.** `startedInWindow` is the counterpart of `canceledInWindow`, measured over the same trailing window from the row's `started_at`. `activeByTier` maps each tier key to its active subscriptions; a subscription with no tier stays in `activeSubscriptions` only. Both are new trailing constructor arguments with defaults, so code that builds the snapshot itself keeps compiling.
+
+### Changed
+
+- **The dev toolchain carries `laravel/mcp`, `laravel/ai` and `laravel/boost`.** They sit in `require-dev`, so nothing a consumer installs, calls or configures changes, and a Renovate rule keeps their constraints following each release.
+
+### Fixed
+
+- **A separate transfer names the charge that funds it.** Stripe's `source_transaction` takes a charge id, and the ledger holds the reference the payment lane recorded: the PaymentIntent a payment created, or the invoice a routed subscription cycle is keyed on. `StripeMerchantTransfers` sent that reference as it stood, so the transfer named a PaymentIntent where a charge belongs. It now resolves the reference first: an invoice to the payment behind it, a payment to its `latest_charge`, and a charge id as it is. A payment with no charge yet, or an invoice with no payment, is refused instead of producing a transfer the platform balance would fund, and the refusal is recorded as a share that did not move, where `billing:marketplace:retry-transfers` finds it.
+
+- **A separate-transfer sale whose payment clears after the fact pays the merchant.** A card that demands 3-D Secure and a bank debit both leave the sale `pending` with nothing moved, and the confirmation that arrives later settled the row without making the transfer. The row then said the merchant was paid, and `billing:marketplace:retry-transfers`, which reads pending rows only, never looked at it again. The confirmation now does what a sale that succeeds at once does: under buyer protection it opens the hold, otherwise it moves the net share under the sale's own idempotency key after the webhook's transaction commits, and settles the row with the provider's reference. A refused transfer, or a sale with no account on file for its merchant, is recorded where the doctor counts it and the retry moves it. A destination charge settles as before.
+
+- **A destination charge confirmed after the fact carries its transfer reference.** A hosted checkout, a tip or a payment that asked for 3-D Secure is settled from a `payment_intent.succeeded` delivery, and the webhook mapper read `transfer` off that PaymentIntent. The field belongs to the payment's charge, so every such sale settled with no transfer reference: the join a reconciliation against the provider makes, and the reference a lost dispute reverses. The confirmation now asks the provider for the transfer after the webhook's transaction commits, through the new `NamesPaymentTransfer` contract, which the Stripe driver implements, and writes it only where the row has none. A driver that does not implement the contract settles the row as before.
+
+- **A sale released from buyer protection is settled.** Releasing a hold moved the merchant's share and wrote nothing back, so the sale stayed `pending` after the merchant was paid: the readers that count settled sales, the small-business turnover threshold among them, never counted it, and a lost dispute found no transfer to reverse. The release now settles the sale with the transfer and the amount the provider says it moved. A release whose transfer is refused keeps the hold `ReleasePending` as before, and now also records the refusal on the sale, where `billing:doctor` counts it and `billing:marketplace:retry-transfers` moves it.
+
+- **A merchant's subscriptions count toward MRR.** `BillingMetricsReporter` narrowed the rows to a merchant and then priced them from the platform's `PlanCatalog`, which reads `billing.tiers`. A merchant's tiers live in the merchant catalog, so every active subscription of a creator with their own tiers found no plan: it was counted as active and added nothing. A creator with paying fans read an MRR of zero, and the platform total without a scope lacked every marketplace tier. Each subscription is now priced from the catalog of the seller it belongs to; a single-seller install binds one catalog for every scope and reads the same figure as before.
+
+- **A subscription invoice is recognized as one on the pinned API version.** Stripe removed `subscription` from the invoice in `2025-03-31.basil` and names it under `parent.subscription_details.subscription` instead, while the webhook mapper and the routed commission reader still asked the old field. On the pinned version every paid cycle therefore looked like a one-off invoice: a routed subscription cycle wrote no ledger row, so the reversal caps, the earnings counter and the small-business judgement never saw it; no subscription invoice reported the country it was taxed in; and the commission reader could not find the terms. Both shapes are read now, the pinned one first, so a webhook endpoint that still renders a version before `basil` keeps working. A cycle that charged nothing, such as a trial's first invoice, asks the provider nothing: there is no payment behind it, and reading one back would fail every routed trial.
+
+- **A routed subscription cycle on a destination charge is settled.** Its ledger row stayed `pending` forever: the confirmation that settles a hosted sale looks its row up by the payment's id, while a cycle is keyed by its invoice, and nothing else reached it. The earnings counter and the small-business monitor count settled rows only, so neither saw the cycle. A paid invoice is the payment having succeeded, and a destination charge moves the merchant's share with it, so the row is now settled as it is written and its transfer is asked for after the webhook's transaction commits. A redelivered cycle settles nothing a second time.
+
 ## [0.30.0] - 2026-09-15
 
 ### Fixed
@@ -6727,7 +6765,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.30.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.31.0...HEAD
+[0.31.0]: https://github.com/pushery/billing-for-laravel/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/pushery/billing-for-laravel/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/pushery/billing-for-laravel/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/pushery/billing-for-laravel/compare/v0.27.0...v0.28.0

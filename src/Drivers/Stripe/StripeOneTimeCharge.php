@@ -107,7 +107,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         ];
     }
 
-    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent
+    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null): ClientIntent
     {
         // Defense in depth: refuse to open a paid checkout for an ineligible owner even if a caller
         // bypassed the UI eligibility guard.
@@ -165,7 +165,9 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         if ($routed !== null) {
             $intent = $routed['intent'];
 
-            if ($buyerFee instanceof FeeLine) {
+            // On a separate transfer there is no application fee to raise: the platform keeps the whole payment,
+            // the buyer fee with it, and moves only the merchant's net share of the ITEM afterwards.
+            if ($buyerFee instanceof FeeLine && isset($intent['application_fee_amount'])) {
                 // THE WHOLE CORRECTNESS OF THIS LANE. The buyer now pays item + fee, and the provider moves
                 // everything that is not the application fee to the merchant — so leaving it alone would hand
                 // the platform's own intermediation revenue to the seller, on every sale, silently. What must
@@ -225,9 +227,9 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         if ($this->context->providerTax() && $taxedHere) {
             $payload['automatic_tax'] = ['enabled' => true];
 
-            // The same switch as the subscription lane, read the same way. See StripeCheckout for why a platform
-            // selling to consumers turns it off.
-            if ($this->config->get('billing.checkout.tax_id_collection', true) !== false) {
+            // The same switch as the subscription lane, read the same way, and overridable for this checkout the same
+            // way. See StripeCheckout for why a platform selling to consumers turns it off.
+            if ($collectTaxId ?? $this->config->get('billing.checkout.tax_id_collection', true) !== false) {
                 $payload['tax_id_collection'] = ['enabled' => true];
             }
 
@@ -404,7 +406,8 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *
      * @return array{
      *     merchant: Model,
-     *     intent: array{application_fee_amount: int, transfer_data: array{destination: string}},
+     *     chargeType: ChargeType,
+     *     intent: array{application_fee_amount?: int, transfer_data?: array{destination: string}},
      *     gross: Money,
      *     platformFee: Money,
      *     policy: PlatformFee,
@@ -413,13 +416,6 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
     private function tipRouting(Model $merchant, Money $chosen): array
     {
         $chargeType = $this->context->chargeType();
-
-        // The same refusal `routing()` makes, for the same reason: a hosted session cannot serve a separate
-        // transfer, because the merchant's share moves in a second call that can only be made once the
-        // payment has succeeded — a webhook away, long after this method has returned.
-        if ($chargeType === ChargeType::SeparateTransfer) {
-            throw MarketplaceUnsupported::separateTransferNeedsRoutedPayment();
-        }
 
         $this->context->assertRoutingCompatible($chargeType);
 
@@ -439,10 +435,8 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
 
         return [
             'merchant' => $merchant,
-            'intent' => [
-                'application_fee_amount' => $platformFee->minorUnits,
-                'transfer_data' => ['destination' => $account->accountId],
-            ],
+            'chargeType' => $chargeType,
+            'intent' => $this->intentFor($chargeType, $platformFee, $account),
             'gross' => $chosen,
             'platformFee' => $platformFee,
             'policy' => $policy,
@@ -507,7 +501,8 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *
      * @return array{
      *     merchant: Model,
-     *     intent: array{application_fee_amount: int, transfer_data: array{destination: string}},
+     *     chargeType: ChargeType,
+     *     intent: array{application_fee_amount?: int, transfer_data?: array{destination: string}},
      *     gross: Money,
      *     platformFee: Money,
      *     policy: PlatformFee,
@@ -516,15 +511,6 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
     private function routing(Model $merchant, string $priceId): array
     {
         $chargeType = $this->context->chargeType();
-
-        // A hosted session cannot serve a separate transfer, and refusing is the honest answer rather than a
-        // gap. On that lane the platform takes the whole payment and the merchant's share moves in a SECOND
-        // call — which can only be made once the payment has actually succeeded, and for a hosted session
-        // that is a webhook away, long after this method has returned. Injecting a destination anyway would
-        // silently turn it into a destination charge and move the merchant of record with it.
-        if ($chargeType === ChargeType::SeparateTransfer) {
-            throw MarketplaceUnsupported::separateTransferNeedsRoutedPayment();
-        }
 
         // The charge type and the seller-of-record posture are independent axes that have to agree, and the
         // check happens BEFORE anything is assembled — the only point at which refusing is still free.
@@ -561,13 +547,38 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // Carried rather than re-derived by the caller: it is the merchant this sale was priced FOR, and
             // asking the resolver a second time could answer differently within one request.
             'merchant' => $merchant,
-            'intent' => [
-                'application_fee_amount' => $platformFee->minorUnits,
-                'transfer_data' => ['destination' => $account->accountId],
-            ],
+            'chargeType' => $chargeType,
+            'intent' => $this->intentFor($chargeType, $platformFee, $account),
             'gross' => $gross,
             'platformFee' => $platformFee,
             'policy' => $policy,
+        ];
+    }
+
+    /**
+     * What the PaymentIntent carries for the lane this sale takes.
+     *
+     * A destination charge names the merchant's account and the platform's fee, and the provider moves the rest
+     * as the payment settles. A separate transfer carries neither: the platform takes the whole payment, the
+     * pending row written beside the session names the merchant and the net, and the share moves in a second
+     * call once `payment_intent.succeeded` confirms the payment, the same call a sale through `RoutedPayment`
+     * makes.
+     *
+     * The hosted lanes used to refuse a separate transfer outright, because nothing could make that second call
+     * a webhook away. The confirmation now makes it, so a platform whose seller-of-record posture allows only this
+     * lane can sell through a hosted checkout at all.
+     *
+     * @return array{application_fee_amount?: int, transfer_data?: array{destination: string}}
+     */
+    private function intentFor(ChargeType $chargeType, Money $platformFee, MerchantAccountReference $account): array
+    {
+        if ($chargeType === ChargeType::SeparateTransfer) {
+            return [];
+        }
+
+        return [
+            'application_fee_amount' => $platformFee->minorUnits,
+            'transfer_data' => ['destination' => $account->accountId],
         ];
     }
 
@@ -622,7 +633,8 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *
      * @param  array{
      *     merchant: Model,
-     *     intent: array{application_fee_amount: int, transfer_data: array{destination: string}},
+     *     chargeType: ChargeType,
+     *     intent: array{application_fee_amount?: int, transfer_data?: array{destination: string}},
      *     gross: Money,
      *     platformFee: Money,
      *     policy: PlatformFee,
@@ -655,10 +667,10 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // Derived here rather than taken from a third computation: net is what is left, by definition.
             $routed['gross']->minus($routed['platformFee']),
             $routed['policy'],
-            // A hosted session is unconditionally a destination charge — `routing()` refuses the other lane
-            // outright — so the row states the lane it actually took rather than reading today's config back
-            // when a refund needs to know.
-            ChargeType::Destination,
+            // The lane this sale took, as the routing resolved it, so a refund reads what happened rather than
+            // today's configuration. On a separate transfer it is also what the confirmation reads to know that
+            // the share still has to move.
+            $routed['chargeType'],
             // Zero, and stated rather than left null. The commission was taken on the price with no tax rate
             // separating a net from a gross, and null on this column means "written before this was
             // recorded" — a description of old rows, which this is not.

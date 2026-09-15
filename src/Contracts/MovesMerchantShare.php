@@ -35,6 +35,10 @@ use Pushery\Billing\ValueObjects\TransferResult;
  * the balance is short, succeeds by accident when it is not, and in both cases loses the link between the
  * money a buyer paid and the money a merchant received. Reconciliation, refunds and reversals all need that
  * link, and it cannot be reconstructed afterwards.
+ *
+ * What a caller passes as the source is the payment reference the ledger holds, exactly as the payment lane
+ * recorded it, and it is opaque here. A driver whose transfer API names something else resolves it: Stripe's
+ * takes a charge, while the ledger holds the PaymentIntent or the invoice.
  */
 interface MovesMerchantShare
 {

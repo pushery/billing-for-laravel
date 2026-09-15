@@ -20,6 +20,7 @@ use Pushery\Billing\Models\BuyerProtectionHold;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\Money;
+use Throwable;
 
 /**
  * The clock a delayed payout runs on, and the only thing that moves it.
@@ -82,6 +83,14 @@ final readonly class BuyerProtectionClock
          * channel was the console output of the sweep.
          */
         private ?Dispatcher $events = null,
+        /**
+         * Where a released share is written down on the sale's own row.
+         *
+         * The release transferred the share and wrote nothing back, so a protected sale stayed `pending` after
+         * the merchant was paid: the readers that count settled sales never counted it, and a lost dispute found
+         * no transfer to reverse. Nullable for the same reason as the seams above.
+         */
+        private ?RoutedChargeLedger $ledger = null,
     ) {}
 
     /**
@@ -354,12 +363,27 @@ final readonly class BuyerProtectionClock
 
         $charge = MerchantCharge::query()->where('charge_reference', $hold->charge_reference)->first();
 
-        $this->transfers->transferShare(
-            $destination,
-            Money::of($hold->seller_net_minor, $hold->currency),
-            $hold->charge_reference,
-            $charge instanceof MerchantCharge ? $charge->transferIdempotencyKey() : "billing_protection_hold_{$hold->id}",
-        );
+        try {
+            $moved = $this->transfers->transferShare(
+                $destination,
+                Money::of($hold->seller_net_minor, $hold->currency),
+                $hold->charge_reference,
+                $charge instanceof MerchantCharge ? $charge->transferIdempotencyKey() : "billing_protection_hold_{$hold->id}",
+            );
+        } catch (Throwable $failure) {
+            // Written onto the sale as well, where `billing:doctor` counts it and the retry moves it under the
+            // same key. The hold stays `ReleasePending` and the exception travels, as before.
+            if ($charge instanceof MerchantCharge) {
+                $this->ledger?->recordTransferFailure($charge, $merchant, $failure);
+            }
+
+            throw $failure;
+        }
+
+        // The sale settles with what the provider says it moved, the same way the immediate lane settles it.
+        if ($charge instanceof MerchantCharge) {
+            $this->ledger?->settle($charge, $moved->reference, $moved->moved);
+        }
 
         return true;
     }

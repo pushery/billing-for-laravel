@@ -68,9 +68,9 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      */
     private bool $couponsAreHonored = false;
 
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null): ClientIntent
     {
-        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => $buyerCountry];
+        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => $buyerCountry, 'collectTaxId' => $collectTaxId];
 
         return $this->intent();
     }
@@ -85,7 +85,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      */
     public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): SubscriptionStart
     {
-        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => null];
+        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => null, 'collectTaxId' => null];
 
         return new SubscriptionStart(SubscriptionState::Activating, 'https://checkout.test/session');
     }
@@ -103,12 +103,12 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         return $this;
     }
 
-    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent
+    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null): ClientIntent
     {
         // Recorded, not dropped. A consumer asserting that their checkout collected the declarations has
         // nothing else to assert against -- the key is the only observable the package produces before the
         // buyer leaves, and a fake that swallowed it would make the round trip untestable from outside.
-        $this->purchases[] = ['owner' => $billable, 'addon' => $addonKey, 'declaration' => $declarationReference, 'country' => $buyerCountry];
+        $this->purchases[] = ['owner' => $billable, 'addon' => $addonKey, 'declaration' => $declarationReference, 'country' => $buyerCountry, 'collectTaxId' => $collectTaxId];
 
         return $this->intent();
     }

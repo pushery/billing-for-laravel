@@ -18,7 +18,6 @@ use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Exceptions\EligibilityDenied;
-use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\ReceiveEligibilityDenied;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Models\Coupon;
@@ -64,7 +63,7 @@ final readonly class StripeCheckout implements Checkout
         private CanReceiveMoney $receiving,
     ) {}
 
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null): ClientIntent
     {
         // Defense in depth: refuse to open a paid checkout for an ineligible owner even if a caller
         // bypassed the UI eligibility guard (mirrors StripeOneTimeCharge).
@@ -93,7 +92,7 @@ final readonly class StripeCheckout implements Checkout
         // trial/tax/promo/discount groups, a variable line-item list). The payload IS a valid
         // subscription-mode Checkout Session request; its shape is asserted field-by-field in StripeCheckoutTest.
         // @phpstan-ignore argument.type
-        $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant, $declarationReference));
+        $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant, $declarationReference, $collectTaxId));
 
         $url = $session->url ?? null;
 
@@ -110,7 +109,7 @@ final readonly class StripeCheckout implements Checkout
      *
      * @return array<string, mixed>
      */
-    private function payload(Model $billable, string $tierKey, string $price, string $customerId, ?string $couponCode, ?Model $merchant, ?string $declarationReference = null): array
+    private function payload(Model $billable, string $tierKey, string $price, string $customerId, ?string $couponCode, ?Model $merchant, ?string $declarationReference = null, ?bool $collectTaxId = null): array
     {
         $payload = [
             'mode' => 'subscription',
@@ -156,7 +155,11 @@ final readonly class StripeCheckout implements Checkout
             // format alone, so a consumer who types a well-formed invalid ID buys without VAT the platform still
             // owes. A platform that sells to consumers may leave the field out and charge every buyer their
             // country's tax. On by default, so an existing installation keeps the field.
-            if ($this->config->get('billing.checkout.tax_id_collection', true) !== false) {
+            //
+            // A caller can decide it for THIS checkout, and the installation's setting is only the default. A
+            // marketplace selling to consumers and to businesses needs both answers at once: no field where a
+            // consumer buys, and the field where a business has to prove its status for the reverse charge.
+            if ($collectTaxId ?? $this->config->get('billing.checkout.tax_id_collection', true) !== false) {
                 $payload['tax_id_collection'] = ['enabled' => true];
             }
 
@@ -179,10 +182,17 @@ final readonly class StripeCheckout implements Checkout
         // trial block above may already have populated it, and overwriting would silently drop the trial. A
         // platform sale adds nothing and its payload is byte-for-byte the single-seller one.
         if ($merchant instanceof Model) {
-            $payload['subscription_data'] = [
-                ...($payload['subscription_data'] ?? []),
-                ...$this->routing($merchant),
-            ];
+            $routing = $this->routing($merchant);
+            $existing = $payload['subscription_data'] ?? [];
+
+            // The METADATA is merged a level deeper. The separate-transfer lane names its merchant and terms there,
+            // and the declaration key above may already sit in the same bag; a plain spread would replace one with
+            // the other.
+            if (isset($routing['metadata'])) {
+                $routing['metadata'] = [...($existing['metadata'] ?? []), ...$routing['metadata']];
+            }
+
+            $payload['subscription_data'] = [...$existing, ...$routing];
         }
 
         return $payload;
@@ -313,13 +323,14 @@ final readonly class StripeCheckout implements Checkout
     }
 
     /**
-     * The destination and fee that route a subscription to a merchant, as a subscription_data fragment.
+     * How a subscription is routed to a merchant, as a subscription_data fragment: a destination and a fee percent,
+     * or on the separate-transfer lane the merchant's account and the frozen terms in the subscription's metadata.
      *
      * Refused before any provider call when the merchant cannot receive — unknown counts as no, because the
-     * capability is reported asynchronously — or has no account on file to route to. The fee is expressed as
-     * application_fee_percent, a PERCENTAGE of each recurring invoice; a flat per-transaction component has no
-     * place in a percentage, and dropping it silently would undercharge the agreed commission on every
-     * renewal, so a flat component is refused loudly instead of quietly discarded.
+     * capability is reported asynchronously — or has no account on file to route to. On the destination lane the
+     * fee is expressed as application_fee_percent, a PERCENTAGE of each recurring invoice; a flat per-transaction
+     * component has no place in a percentage, and dropping it silently would undercharge the agreed commission on
+     * every renewal, so a flat component is refused loudly instead of quietly discarded.
      *
      * ## The basis on this lane is the GROSS, and the configured rate is documented as a net rate
      *
@@ -334,29 +345,14 @@ final readonly class StripeCheckout implements Checkout
      * So on a 119.00 invoice at 19% with a 10% rate this lane takes 11.90, where the routed money path takes
      * 10.00. Which answer the package should settle on is still open; until it is settled, the lane says what
      * it does rather than inheriting a promise it cannot keep. Silence is what made the same divergence
-     * expensive once already.
+     * expensive once already. The separate-transfer lane splits each cycle on the amount paid as well, so both
+     * hosted subscription lanes answer 11.90.
      *
-     * @return array{application_fee_percent: float, transfer_data: array{destination: string}}
+     * @return array{application_fee_percent: float, transfer_data: array{destination: string}}|array{metadata: array<string, string>}
      */
     private function routing(Model $merchant): array
     {
         $chargeType = $this->context->chargeType();
-
-        // A hosted session cannot serve a separate transfer, exactly as on the one-time lane: the platform
-        // takes the whole payment and the merchant's share moves in a SECOND call, which can only be made
-        // once the payment has succeeded — a webhook away, long after this method has returned.
-        //
-        // This refusal is what closes the seam below. The guard checks the CONFIGURED charge type, but the
-        // payload this method assembles is unconditionally a DESTINATION charge (`transfer_data.destination`).
-        // On the shipped defaults those two disagree: separate_transfer is permitted for the deemed-supplier
-        // posture and passes the guard, while the destination charge it then emits is the one pairing the
-        // table forbids for that posture. A guard on the configured half cannot see a broken seam, and the
-        // money moves the wrong way in silence — straight to the merchant, while the documents about to be
-        // issued name the platform as seller. Refusing here makes the configured type and the emitted one
-        // the same statement.
-        if ($chargeType === ChargeType::SeparateTransfer) {
-            throw MarketplaceUnsupported::separateTransferNeedsRoutedPayment();
-        }
 
         // The charge type and the seller-of-record posture are independent axes that must agree, and this
         // lane used to assemble the payment without ever asking. The check happens BEFORE anything is
@@ -374,6 +370,21 @@ final readonly class StripeCheckout implements Checkout
         }
 
         $fee = $this->fees->feeFor($merchant);
+
+        // THE CONFIGURED LANE AND THE EMITTED ONE ARE THE SAME STATEMENT, which is the seam this method once got
+        // wrong. It used to emit `transfer_data.destination` whatever was configured, so on the shipped defaults a
+        // separate transfer passed the posture guard and then went out as the destination charge the table forbids
+        // for that posture: the money went straight to the merchant while the documents named the platform as
+        // seller. The lane then refused separate transfers outright, because the share moves in a second call a
+        // webhook away and nothing made it.
+        //
+        // Something makes it now. A separate-transfer subscription carries no routing at all: the platform takes
+        // each cycle's payment, the merchant's account and the frozen terms ride in the subscription's metadata,
+        // and every paid invoice writes its row and moves the share from the charge behind it. A flat fee is fine
+        // here, because the package computes each cycle's split itself.
+        if ($chargeType === ChargeType::SeparateTransfer) {
+            return ['metadata' => StripeSubscriptionRouting::metadata($account, $fee)];
+        }
 
         if ($fee->flatMinor !== 0) {
             throw new InvalidArgumentException(

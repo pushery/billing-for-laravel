@@ -399,6 +399,7 @@ final class BillingServiceProvider extends ServiceProvider
             $app->bound(MovesMerchantShare::class) ? $app->make(MovesMerchantShare::class) : null,
             $app->bound(MerchantAccountDirectory::class) ? $app->make(MerchantAccountDirectory::class) : null,
             $app->make(Dispatcher::class),
+            $app->make(RoutedChargeLedger::class),
         ));
 
         // The shares that failed to move, bound explicitly for the clock's reason above: both seams are nullable

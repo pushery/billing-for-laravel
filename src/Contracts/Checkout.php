@@ -29,6 +29,9 @@ interface Checkout
      * @param  ?string  $buyerCountry  the buyer's ISO country where the caller already knows it; checked against
      *                                 `billing.tax_markets` before the provider is asked for anything, so a market that
      *                                 is not open throws MarketNotOpen. Null checks nothing here
+     * @param  ?bool  $collectTaxId  whether THIS checkout asks the buyer for a tax ID while the provider computes tax;
+     *                               null follows `billing.checkout.tax_id_collection`. A marketplace selling to both
+     *                               consumers and businesses leaves the field out of the one and asks for it on the other
      */
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent;
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null): ClientIntent;
 }
