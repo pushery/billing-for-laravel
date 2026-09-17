@@ -59,6 +59,7 @@ final readonly class StripeSubscriptionMapper
             merchantAccountReference: $merchantAccount,
             declarationReference: $this->declaration($subscription),
             startedAt: $this->int($subscription, 'start_date'),
+            couponCode: $this->mintedCouponCode($subscription),
         );
     }
 
@@ -186,6 +187,70 @@ final readonly class StripeSubscriptionMapper
 
             if ($tier !== null) {
                 return $tier;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The LOCAL code of a MINTED merchant coupon the provider applied to this subscription, or null.
+     *
+     * Read off the coupon's own `metadata`, where {@see StripePlatformCouponProvisioner} writes
+     * `billing_coupon_code` when it mints. So the mapping back is one the package laid down itself on the
+     * way out -- no lookup, no query, and no rebuilding a local row from a provider id.
+     *
+     * THE NULL IS AS MEANINGFUL AS THE VALUE, and that is why this reads metadata rather than the coupon id.
+     * A CATALOG coupon (`billing.coupons.<code>.stripe_coupon`) was created by a human at the provider, with
+     * the provider's own max_redemptions, so the provider is the authority there and a consumer has nothing
+     * to book. Such a coupon carries no `billing_coupon_code`, so it answers null -- correctly. Keying on the
+     * id would have made both look alike and invited a consumer to book a redemption nobody is counting.
+     *
+     * Both shapes are read because the provider moved this field: `discount` is the older single object,
+     * `discounts` the list that replaced it. Reading only one of them would answer null on half the API
+     * versions, which is the failure mode this package has already paid for once on an invoice field.
+     *
+     * @param  array<array-key, mixed>  $subscription
+     */
+    private function mintedCouponCode(array $subscription): ?string
+    {
+        $candidates = [];
+
+        $single = $subscription['discount'] ?? null;
+
+        if (is_array($single)) {
+            $candidates[] = $single;
+        }
+
+        $many = $subscription['discounts'] ?? null;
+
+        if (is_array($many)) {
+            foreach ($many as $discount) {
+                if (is_array($discount)) {
+                    $candidates[] = $discount;
+                }
+            }
+        }
+
+        foreach ($candidates as $discount) {
+            $coupon = $discount['coupon'] ?? null;
+
+            if (! is_array($coupon)) {
+                continue;
+            }
+
+            $metadata = $coupon['metadata'] ?? null;
+
+            if (! is_array($metadata)) {
+                continue;
+            }
+
+            $code = $metadata['billing_coupon_code'] ?? null;
+
+            // A non-empty string or nothing. An empty value coming back must not become a code that matches
+            // no row and reads to a consumer as "a coupon was redeemed" when none was.
+            if (is_string($code) && trim($code) !== '') {
+                return $code;
             }
         }
 

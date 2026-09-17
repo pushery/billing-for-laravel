@@ -43,16 +43,27 @@ final readonly class StripeInvoices implements InvoicesContract
         $rows = [];
 
         foreach ($invoices->data as $invoice) {
-            // No null guard on the id, and the reason is a version boundary rather than an oversight.
-            // stripe-php declared `null|string $id` up to 17.x and narrowed it to `string` in 18.0, so
-            // against the major this package is analyzed on a guard here is dead code and PHPStan says
-            // so (`is_string() will always evaluate to true`).
+            // READ THROUGH ARRAY ACCESS, NOT THE MAGIC PROPERTY, and the difference is the whole point.
             //
-            // Deliberately no range written out. A constraint transcribed into shipped source is a copy
-            // that goes stale the next time upstream moves, and nothing reads it — the requirement lives
-            // in composer.json, and `DevToolPinsTest` asserts the INSTALLED major is at least 18, which
-            // is the property this line actually depends on.
-            $rows[] = $this->toValue($invoice, $invoice->id);
+            // `Stripe\Invoice::$id` is a docblock `@property string $id` on every major -- there is no
+            // declared property, and `StripeObject::&__get()` answers null for a key the payload does
+            // not carry. Measured on the installed v20.3.1: a fresh Invoice with no id key returns null
+            // and emits "Stripe Notice: Undefined property".
+            //
+            // So the value CAN be null here, and a guard against it is not dead code. PHPStan thought it
+            // was, because it believes the docblock -- and this line used to carry no guard for exactly
+            // that reason. Array access hands back the same value without the overstated type, which
+            // lets the check be written as what it is.
+            //
+            // A floor on the installed major used to stand in for this and could not deliver it: 18.0
+            // narrowed the docblock, not the behavior.
+            $id = $invoice['id'] ?? null;
+
+            if (! is_string($id)) {
+                continue;
+            }
+
+            $rows[] = $this->toValue($invoice, $id);
         }
 
         return new InvoicePage($rows, $invoices->has_more);

@@ -35,6 +35,7 @@ use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Exceptions\MollieNotConfigured;
 use Pushery\Billing\Invoicing\LocalInvoices;
 use Pushery\Billing\Invoicing\OrderInvoiceIssuer;
+use Pushery\Billing\Invoicing\ProrationCreditCorrectionIssuer;
 use Pushery\Billing\Proration\CreditBalanceProrationStrategy;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\CheckoutUrls;
@@ -94,6 +95,7 @@ final class MollieServiceProvider extends ServiceProvider
                 $app->make(OrderInvoiceIssuer::class),
                 $app->make(ConfigDunningLadder::class),
                 MollieCapabilities::make(),
+                $app->make(ProrationCreditCorrectionIssuer::class),
             ),
         ));
     }

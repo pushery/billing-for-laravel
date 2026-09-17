@@ -36,17 +36,27 @@ use Throwable;
  * second attempt lose rather than mint, and the insert is attempted rather than checked-then-inserted,
  * because between a check and an insert is exactly where a concurrent run fits.
  *
- * ## The tax is stated only where it was established
+ * ## The tax AND the net are stated only where they were established
  *
  * `tax_minor` was left null on every document this ever raised, and that was honest rather than complete:
  * a driver whose provider does not determine tax (`supportsProviderTax: false`) has no result to copy, and
  * zero is not the absence of a claim — it is the claim that no tax was due.
  *
  * {@see OrderTaxBasis} now determines it where the basis exists, and refuses where it does not. When it
- * refuses, this writes exactly what it always wrote: a null tax, a subtotal equal to the total, and no
- * characteristics. When it answers, the document freezes the whole basis beside the figure — archetype,
- * place of supply, rate band, exemption, destination and the period supplied — which is what makes the
- * figure defensible years later and what {@see Guards\TaxWithoutBasisGuard} insists on.
+ * answers, the document freezes the whole basis beside the figure — archetype, place of supply, rate band,
+ * exemption, destination and the period supplied — which is what makes the figure defensible years later
+ * and what {@see Guards\TaxWithoutBasisGuard} insists on.
+ *
+ * WHEN IT REFUSES, THE NET IS NOW NULL TOO, AND THAT IS THE HALF THIS USED TO GET WRONG. The sentence
+ * here read "a null tax, a subtotal equal to the total, and no characteristics" — and a subtotal equal to
+ * the total is the same kind of claim as a zero tax: it says the supply was untaxed. True under a
+ * small-business regime or an exemption, false under a taxable supply, and nobody determined which. The
+ * argument that made zero unacceptable makes this unacceptable for exactly the same reason, one column
+ * over.
+ *
+ * Nothing a reader sees changes, and that was measured rather than hoped: `InvoiceDocumentRenderer` falls
+ * back to `total_minor - (tax_minor ?? 0)`, and the e-invoice path in {@see Concerns\NormalizesInvoiceModel}
+ * sums the frozen lines whenever there are any — which this issuer always writes.
  *
  * ## A basis that fails must never cost the document
  *
@@ -114,9 +124,24 @@ final readonly class OrderInvoiceIssuer
             'order_id' => $order->getKey(),
             'number' => $this->number($issuedAt),
             'total_minor' => $order->total_minor,
-            // The net, where one was established. Equal to the total otherwise — which is not a claim that
-            // the cycle was untaxed, it is the same figure this column has always carried beside a null tax.
-            'subtotal_minor' => $tax?->net->minorUnits ?? $order->total_minor,
+            // The net, and ONLY where one was established. Null otherwise, for the same reason `tax_minor`
+            // is null there: a subtotal equal to the total is not the absence of a claim, it is the claim
+            // that the supply was untaxed. That is right under a small-business regime or an exempt supply
+            // and wrong under a taxable one, and nobody determined which — so the document says nothing
+            // rather than guessing, exactly as it already does about the tax.
+            //
+            // THE RENDERED DOCUMENT IS UNCHANGED, AND THAT WAS MEASURED BEFORE THIS WAS TOUCHED. Both
+            // readers of the column derive the same figure from what is left: `InvoiceDocumentRenderer`
+            // falls back to `total_minor - (tax_minor ?? 0)`, and `NormalizesInvoiceModel` — the one the
+            // e-invoice goes through — sums the frozen LINES whenever there are any, which this issuer
+            // always writes. So nothing a consumer sees moves; what stops is the record asserting a number
+            // as established when it was assumed.
+            //
+            // The two tax readers never saw it either: `PeriodicTaxReturn` skips a sale that is not `oss`
+            // with a destination country, and `InvoiceCrossBorderSalesCounter` selects on a non-empty
+            // `destination_country`. Both columns are part of the basis block, so a document without a
+            // basis is outside both — which is why dropping the net here cannot understate a filed return.
+            'subtotal_minor' => $tax?->net->minorUnits,
             'currency' => $order->currency,
             'status' => InvoiceStatus::Paid,
             'issued_at' => $issuedAt,

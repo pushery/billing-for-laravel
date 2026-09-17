@@ -7,6 +7,7 @@ namespace Pushery\Billing\Contracts;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Pushery\Billing\Enums\TaxArchetype;
+use Pushery\Billing\Exceptions\FanPriceTooLow;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\Money;
@@ -45,7 +46,13 @@ interface OneTimeCharge
      * rather than one with a flag, and the anti-injection rule stays absolute where it applies.
      *
      * What replaces the catalog as the guard is the SERVER: the amount is refused when tipping is off,
-     * when it is not positive, and when the installation has no merchant for the sale to route to.
+     * when it is not positive, when it is below the operator's floor, and when the installation has no
+     * merchant for the sale to route to.
+     *
+     * The floor is `billing.marketplace.tips.minimum_minor`, inheriting the pay-what-you-want one where it
+     * says nothing. It was absent while the sale floor beside it was enforced, and a reader of both was
+     * entitled to assume otherwise — a tip is a buyer-chosen amount by the paragraph above, which is the
+     * same argument the floor rests on.
      *
      * ## Why a tip has to say what it was paid ON
      *
@@ -59,6 +66,7 @@ interface OneTimeCharge
      *
      * @throws MarketplaceUnsupported when the installation has no merchant to route to
      * @throws InvalidArgumentException when tipping is off or the amount is not positive
+     * @throws FanPriceTooLow when the amount is below the configured floor
      */
     public function tip(Model $billable, Money $chosen, TaxArchetype $soldAlongside, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent;
 }

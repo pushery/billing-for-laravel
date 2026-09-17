@@ -20,7 +20,10 @@ use Pushery\Billing\ValueObjects\PricedSale;
  *
  * Two things this has to hold that a catalog sale gets for free. A catalog price cannot be chosen by the
  * buyer, which is the package's defense against price injection; a fan-chosen amount reintroduces that
- * exposure, so the floor is enforced HERE, on the server, from config — never trusted from the request. And
+ * exposure, so the floor is enforced HERE, on the server, from config — never trusted from the request.
+ * That sentence stood while it was true of ONE of the two entries: a pay-what-you-want price was floored
+ * and a tip was not, though a tip is a buyer-chosen amount by construction and the contract says so in as
+ * many words. Both are floored now, and a tip may carry its own threshold. And
  * a chosen amount of zero is not a sale of nothing: it is no sale, with no transaction, no document and no
  * reportable inflow, and that has to be an explicit refusal rather than something that merely falls out of
  * the arithmetic.
@@ -41,6 +44,11 @@ final readonly class FanChosenPricing
     /**
      * Price a tip, or return null when there is nothing to charge.
      *
+     * NULL ANSWERS TWO DIFFERENT QUESTIONS and the caller can tell them apart without this saying which:
+     * tipping is switched off, or the buyer chose nothing. Only the first is a configuration answer
+     * somebody may want to act on, and `tipsEnabled()` is public so that a caller who cares can ask it
+     * directly rather than infer it from a null that also means the box was left empty.
+     *
      * A tip runs at the platform's ordinary commission unless a tip-specific rate is configured. The tax
      * rate and the amount both come from the caller, because both belong to the referenced product's
      * archetype, which this class deliberately does not know.
@@ -48,6 +56,8 @@ final readonly class FanChosenPricing
      * @param  Money  $chosen  the gross amount the fan chose to give
      * @param  PlatformFee  $normalFee  the platform's ordinary commission, used unless a tip rate overrides it
      * @param  int  $taxBps  the referenced product's tax rate
+     *
+     * @throws FanPriceTooLow when the chosen amount is below the configured floor
      */
     public function tip(Money $chosen, PlatformFee $normalFee, int $taxBps): ?PricedSale
     {
@@ -60,6 +70,8 @@ final readonly class FanChosenPricing
         if ($chosen->isZero()) {
             return null;
         }
+
+        $this->assertTipMeetsMinimum($chosen);
 
         return $this->pricing->fromFanGross($chosen, $this->feeForTip($normalFee), $taxBps);
     }
@@ -121,6 +133,56 @@ final readonly class FanChosenPricing
         // they set a rate. Both branches are pinned in FanChosenPricingTest — neither was, which is why
         // rewriting this line moved money on every tip and turned nothing red.
         return new PlatformFee($bps, 0, $normalFee->residual);
+    }
+
+    /**
+     * Refuse a tip below the floor, which is the same refusal a pay-what-you-want sale gets.
+     *
+     * Public and separate because three lanes need it and only one of them prices through this class. The
+     * token lane charges from a figure it derived itself, and the hosted lane opens a session from an amount
+     * with no rate to price against at all — so a floor that only guarded `tip()` would guard the preview
+     * and let the money past. That is the shape this package keeps finding: a rule with one caller and two
+     * ways around it.
+     *
+     * @throws FanPriceTooLow
+     */
+    public function assertTipMeetsMinimum(Money $chosen): void
+    {
+        $minimum = $this->minimumForTip($chosen->currency);
+
+        if ($chosen->lessThan($minimum)) {
+            throw new FanPriceTooLow($chosen, $minimum);
+        }
+    }
+
+    /**
+     * The floor a TIP must clear: its own setting where the operator wrote one, otherwise the sale floor.
+     *
+     * The fallback is what makes the setting worth having rather than a second copy. An operator who has
+     * said "a buyer-chosen amount below this is not worth a transaction" has said something that is true of
+     * both entries — the provider's fee does not care which one the buyer used — and the tip key exists for
+     * the installation that wants a voluntary payment to be allowed lower than a purchase, which is a
+     * different judgement rather than the absence of one.
+     *
+     * Null and zero are therefore different answers, and that is the whole reason the key is nullable: null
+     * says nothing about tips and inherits, zero says tips carry no floor even where a sale does.
+     */
+    private function minimumForTip(string $currency): Money
+    {
+        $configured = $this->config->get('billing.marketplace.tips.minimum_minor');
+
+        if ($configured === null) {
+            return $this->minimumFor($currency);
+        }
+
+        if (! is_int($configured) || $configured < 0) {
+            throw InvalidBillingConfig::forKey(
+                'billing.marketplace.tips.minimum_minor',
+                'must be null, or a non-negative integer',
+            );
+        }
+
+        return new Money($configured, $currency);
     }
 
     private function minimumFor(string $currency): Money

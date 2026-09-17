@@ -10,8 +10,10 @@ use Pushery\Billing\Contracts\MerchantResolver;
 use Pushery\Billing\Contracts\SellerOfRecordResolver;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
+use Pushery\Billing\Exceptions\FanPriceTooLow;
 use Pushery\Billing\Exceptions\MarketNotOpen;
 use Pushery\Billing\Tax\TaxCalculatorFactory;
+use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
 
 /**
@@ -71,6 +73,16 @@ final readonly class MarketplaceSaleContext
     public function tipFee(PlatformFee $normalFee): PlatformFee
     {
         return $this->fanPricing->feeForTip($normalFee);
+    }
+
+    /**
+     * Refuse a tip below the operator's floor. Answered by the class that owns it, like the two above.
+     *
+     * @throws FanPriceTooLow
+     */
+    public function assertTipMeetsMinimum(Money $chosen): void
+    {
+        $this->fanPricing->assertTipMeetsMinimum($chosen);
     }
 
     /**

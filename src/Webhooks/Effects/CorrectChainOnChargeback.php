@@ -8,10 +8,13 @@ use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\CreatorTaxStatusResolver;
+use Pushery\Billing\Contracts\DedupesOnReference;
 use Pushery\Billing\Enums\DisputeReason;
+use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\Marketplace\RoutedRefundCorrector;
 use Pushery\Billing\Models\MerchantCharge;
+use RuntimeException;
 
 /**
  * Issues the correcting documents a lost chargeback owes — on the leg or legs it actually owes them on.
@@ -42,13 +45,26 @@ use Pushery\Billing\Models\MerchantCharge;
  * a conversation, whereas an understated tax liability is a filing. A provider that adds a new code
  * therefore degrades into the safe answer rather than into silence.
  *
+ * ## Once per DISPUTE, not once per delivery
+ *
+ * The document this issues is written unconditionally: `SettlementCorrectionIssuer` creates the record, and
+ * nothing downstream asks whether the same correction already exists. `RoutedRefundCorrector` documents
+ * itself as idempotent because the amount is — a redelivered refund moves nothing, so there is nothing to
+ * correct — and that reasoning does not reach this caller, which passes the event's full amount rather than
+ * what a capped reversal actually moved. Two events about one lost dispute would therefore issue two
+ * correcting document pairs for the same sale.
+ *
+ * So the dedup key is the dispute, exactly as it is for the clawback and the provider fee on this same
+ * event. The charge is the fallback, because a charge can carry more than one dispute only where the
+ * provider names them.
+ *
  * ## Why the status is resolved AT THE SUPPLY
  *
  * A correcting document states the taxation of the sale it corrects, not of the day it was written. Reading
  * today's standing would let a creator who has since become a small business receive a correction stating
  * tax that was correctly charged then — and the whitelist, which checks today's status, would not catch it.
  */
-final readonly class CorrectChainOnChargeback
+final readonly class CorrectChainOnChargeback implements DedupesOnReference
 {
     public function __construct(
         private RoutedRefundCorrector $corrector,
@@ -93,5 +109,20 @@ final readonly class CorrectChainOnChargeback
             // fail-safe direction is decided, and the two would drift.
             ($event->reason ?? DisputeReason::Unknown)->taxBaseChangeReason(),
         );
+    }
+
+    /**
+     * Once per lost DISPUTE — a correcting document is not a thing to issue twice.
+     *
+     * Named with the same expression the clawback and the provider fee use, so all three effects on this
+     * event agree about what "the same dispute" means without a shared helper to keep in step.
+     */
+    public function dedupReference(BillingDomainEvent $event): string
+    {
+        if (! $event instanceof ChargebackReceived) {
+            throw new RuntimeException('CorrectChainOnChargeback only handles ChargebackReceived events.');
+        }
+
+        return $event->disputeReference ?? $event->reference;
     }
 }

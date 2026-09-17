@@ -38,6 +38,8 @@ return [
         'unbalanced' => 'Deze batch sluit niet aan en mag niet worden ingediend.',
         'imbalance_figures' => 'Het subgrootboek bevat :subledger aan schulden aan handelaren; de geëxporteerde batch boekt :batch op de schuldrekeningen, een verschil van :difference.',
         'download_anyway' => 'Toch downloaden',
+        'unbooked' => 'Deze batch laat :amount aan tegoedmutatie ongeboekt — daarvoor is geen rekeningpaar. Over al het overige is het bestand volledig.',
+        'unbooked_none' => 'Er bleef geen tegoedmutatie ongeboekt.',
     ],
 
     'cancel' => [

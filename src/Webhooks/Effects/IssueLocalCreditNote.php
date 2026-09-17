@@ -8,9 +8,9 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Events\AddonRefunded;
+use Pushery\Billing\Invoicing\CreditNoteNumber;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\Order;
-use Pushery\Billing\Support\InvoiceNumberSequence;
 
 /**
  * Issues the credit note for money refunded against a LOCALLY raised invoice.
@@ -48,7 +48,7 @@ use Pushery\Billing\Support\InvoiceNumberSequence;
  */
 final readonly class IssueLocalCreditNote
 {
-    public function __construct(private InvoiceNumberSequence $numbers) {}
+    public function __construct(private CreditNoteNumber $numbers) {}
 
     public function __invoke(AddonRefunded $event): void
     {
@@ -132,6 +132,26 @@ final readonly class IssueLocalCreditNote
                 'total_minor' => $credited,
                 'subtotal_minor' => $credited,
                 'currency' => $event->cumulativeRefunded->currency,
+                // THE FROZEN TAX POSITION OF THE SUPPLY BEING REDUCED, COPIED RATHER THAN LEFT NULL.
+                //
+                // These three are exactly what `DatevExport::fanRevenueAccount()` resolves the revenue
+                // account from, and the accounts are Automatikkonten -- the export writes no BU key on
+                // purpose, so DATEV derives the VAT rate FROM THE ACCOUNT. Left null, `tax_rate_bps === 700`
+                // is false and every credit note landed on the standard revenue account: a note against a
+                // 7 % supply reduced 19 % of tax, and one against an OSS sale reduced domestic tax instead
+                // of the destination country's.
+                //
+                // Nothing goes red when that happens. The amount is right, the file is well-formed, and the
+                // batch balances against itself -- the difference first appears in a VAT return.
+                //
+                // Copied, never re-derived: a correction shares the tax position of the supply it corrects,
+                // and determining it again here would be a second opinion about a question that was settled
+                // when the original was issued. The marketplace writers and
+                // {@see \Pushery\Billing\Invoicing\ProrationCreditCorrectionIssuer} already do this; this
+                // was the one correction writer that did not.
+                'tax_rate_bps' => $invoice->tax_rate_bps,
+                'oss' => $invoice->oss,
+                'destination_country' => $invoice->destination_country,
                 'status' => InvoiceStatus::Refunded,
                 'issued_at' => $issuedAt,
                 'buyer' => $invoice->buyer,
@@ -181,11 +201,15 @@ final readonly class IssueLocalCreditNote
             ->first();
     }
 
-    /** A credit note carries its own number from the same sequence, so the series stays gapless. */
+    /**
+     * A credit note carries its own number from the same sequence, so the series stays gapless.
+     *
+     * The prefix and the width moved to {@see CreditNoteNumber} when a second producer appeared. Two copies
+     * of a format string are the pair that stays identical until somebody changes one, and both halves
+     * would go on producing perfectly valid numbers while the series quietly forked.
+     */
     private function number(Carbon $issuedAt): string
     {
-        $year = $issuedAt->format('Y');
-
-        return sprintf('CN-%s-%07d', $year, $this->numbers->next("credit_note:{$year}"));
+        return $this->numbers->next($issuedAt);
     }
 }

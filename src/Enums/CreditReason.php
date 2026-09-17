@@ -76,4 +76,23 @@ enum CreditReason: string
      * balance from one whose local engine does, and those are different lanes with different evidence.
      */
     case ProviderInvoiceOffset = 'provider_invoice_offset';
+
+    /**
+     * Whether a movement for this reason has money or an invoice behind it — the ones the books can
+     * state today.
+     *
+     * Five of the six do. {@see self::ProrationCredit} does not: unused time on a swapped plan
+     * becomes spendable balance with no payment and no credit note, so booking it as a liability
+     * would create one against nothing.
+     *
+     * IT LIVES ON THE REASON BECAUSE TWO PLACES ASK IT. {@see CreditMovement::booksAgainstMoney()}
+     * asks it of a movement about to be booked, and {@see CreditConsumption::unpaidShare()} asks it
+     * of a credit a spend consumed, to size the correction that spend owes. Held in both, the two
+     * would eventually disagree about one case — and the case they would disagree about is the one
+     * where a tax correction is either raised or not.
+     */
+    public function booksAgainstMoney(): bool
+    {
+        return $this !== self::ProrationCredit;
+    }
 }

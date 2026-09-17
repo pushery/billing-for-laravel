@@ -6,13 +6,16 @@ namespace Pushery\Billing\Webhooks\Effects;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Facades\Bus;
+use Pushery\Billing\Contracts\DedupesOnReference;
 use Pushery\Billing\Enums\ReversalCause;
+use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\Jobs\ReverseMerchantShareForChargeback;
 use Pushery\Billing\Marketplace\ClawbackCalculator;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\ValueObjects\PlatformFee;
+use RuntimeException;
 
 /**
  * Writes down that a lost dispute owes a clawback, and hands the provider call to a job.
@@ -28,13 +31,22 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * it is enqueued only once this transaction has actually committed: a chargeback whose effect rolled back
  * cannot leave a reversal in flight against money nobody took back.
  *
- * ## The attempt row IS the claim
+ * ## The attempt row IS the claim, and the claim is per DISPUTE
  *
  * `beginRefund()` writes it before anything is sent and derives the provider's idempotency key from its id.
- * Together with the effect ledger's own dedup — one claim per (provider, reference, effect) — a redelivered
- * dispute produces no second attempt and therefore no second job. Two independent guards, and they guard
- * different things: the ledger stops the effect running twice, the key stops the provider acting twice on a
- * job that did run twice.
+ * That key stops the provider acting twice on one attempt; it cannot stop a SECOND attempt, which gets a new
+ * id and therefore a new key, and which the provider is right to honor.
+ *
+ * So what has to happen once is the effect, and the thing it happens once per is the dispute — not the
+ * delivery. Deduping on the delivery collapses a redelivery of one event and nothing else: two different
+ * events about the same lost dispute each claim, each open an attempt, and the merchant's share comes back
+ * twice. `RecordProviderFee` reaches the same conclusion from the other end and keys its row on
+ * `disputeReference ?? reference`; this names the same claim, so the two agree by construction rather than
+ * by being kept in step.
+ *
+ * The fallback is what makes that safe. A consumer dispatching this event by hand does not have to learn a
+ * new field, and a dispute the provider did not name is still deduped — one dispute per charge is the shape
+ * the coarser key assumes, and it is the shape it always had.
  *
  * ## What this deliberately does not do
  *
@@ -46,7 +58,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * because it answers a question this one does not ask: WHICH legs a dispute corrects turns on the ground
  * code, while what the merchant holds is the same either way.
  */
-final readonly class ClaimChargebackClawback
+final readonly class ClaimChargebackClawback implements DedupesOnReference
 {
     public function __construct(
         private RoutedChargeLedger $ledger,
@@ -96,6 +108,23 @@ final readonly class ClaimChargebackClawback
         );
 
         Bus::dispatch(new ReverseMerchantShareForChargeback((int) $attempt->id, $transfer));
+    }
+
+    /**
+     * Once per lost DISPUTE, never once per delivery of one.
+     *
+     * A charge can carry more than one dispute — only part of an order may be contested — so the charge
+     * reference is too coarse to key on where the provider names the dispute, and keying on it would swallow
+     * the second dispute's clawback entirely. Where it does not name one, the charge is what is left, and it
+     * is what this effect was deduped on before the dispute reference existed at all.
+     */
+    public function dedupReference(BillingDomainEvent $event): string
+    {
+        if (! $event instanceof ChargebackReceived) {
+            throw new RuntimeException('ClaimChargebackClawback only handles ChargebackReceived events.');
+        }
+
+        return $event->disputeReference ?? $event->reference;
     }
 
     /**

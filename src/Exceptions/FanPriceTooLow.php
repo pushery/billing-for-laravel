@@ -8,7 +8,7 @@ use Pushery\Billing\ValueObjects\Money;
 use RuntimeException;
 
 /**
- * A fan chose a pay-what-you-want price below the floor the operator set.
+ * A fan chose an amount below the floor the operator set — a pay-what-you-want price, or a tip.
  *
  * Refused on the server, because the floor is exactly the guarantee a client-side check cannot give: a
  * price the buyer picks is the one place the package's stance against price injection would otherwise

@@ -237,7 +237,7 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
             return [];
         }
 
-        $fee = $this->disputeFee($object, strtoupper($currency));
+        $fee = StripeDisputeFee::from($object, strtoupper($currency));
 
         return [new ChargebackReceived(
             customerReference: is_string($object['payment_intent'] ?? null) ? $object['payment_intent'] : $charge,
@@ -256,51 +256,6 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
             // charge reference silently lost the second one.
             disputeReference: is_string($object['id'] ?? null) ? $object['id'] : null,
         )];
-    }
-
-    /**
-     * What the provider charged for handling the dispute, from the balance transactions it reports.
-     *
-     * THE FIELD IS PLURAL AND IT IS A LIST. This read `$object['balance_transaction']` — singular — and a
-     * Dispute has no such key; it declares `balance_transactions`, "a list of zero, one, or two balance
-     * transactions that show funds withdrawn and reinstated". So the fee was null on every real webhook,
-     * `RecordProviderFee` dropped it at its own guard, and no provider-fee row was ever written for a lost
-     * dispute. The suite stayed green because the fixtures wrote the singular key the code read — a payload
-     * a test invents can only ever confirm the parse it was written against. StripeDisputePayloadShapeTest
-     * now checks the keys against the SDK's own Dispute declaration instead.
-     *
-     * SUMMED, not first-of-list, and that is what makes the two-entry case right. The withdrawal states the
-     * fee as a positive number; a later reinstatement states it back as a negative one. Summing nets those
-     * to nothing, which is the truth — taking the magnitude of each and adding them would report a fee that
-     * was charged and refunded as charged twice.
-     *
-     * Read as a MAGNITUDE only at the end: the provider states a fee as a positive number on a negative
-     * transaction, and a sign slipping through here would later be added where it should be subtracted.
-     *
-     * Absent rather than zero when no entry carries one — zero is a claim that nothing was charged, and this
-     * cannot know that. A fee that nets to zero IS zero, and is reported as such.
-     *
-     * @param  array<array-key, mixed>  $object
-     */
-    private function disputeFee(array $object, string $currency): ?Money
-    {
-        $transactions = $object['balance_transactions'] ?? null;
-
-        if (! is_array($transactions)) {
-            return null;
-        }
-
-        $total = null;
-
-        foreach ($transactions as $transaction) {
-            $fee = is_array($transaction) ? ($transaction['fee'] ?? null) : null;
-
-            if (is_int($fee)) {
-                $total = ($total ?? 0) + $fee;
-            }
-        }
-
-        return $total === null ? null : Money::of(abs($total), $currency);
     }
 
     /**

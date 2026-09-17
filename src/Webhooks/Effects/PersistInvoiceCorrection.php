@@ -80,6 +80,20 @@ final readonly class PersistInvoiceCorrection
             'issued_at' => $snapshot->issuedAt !== null ? Carbon::createFromTimestamp($snapshot->issuedAt) : null,
             'credited_invoice_id' => $original?->getKey(),
             'credited_invoice_number' => $originalNumber ?? $snapshot->creditsNumber ?? $snapshot->creditsProviderId,
+            // WHETHER THIS CANCELS THE ORIGINAL OR AMENDS IT, and the snapshot has always known. Its
+            // constructor VALIDATES this field -- an Amendment without a reference to what it corrects is
+            // refused there -- and the value then fell on the floor here, which is the shape this package
+            // builds against elsewhere: checked, then discarded.
+            //
+            // The reader on the other side treats anything that is not an Amendment as EN 16931 type code
+            // 381, the FULL CANCELLATION of the original document. A partial correction arriving as null
+            // therefore describes itself to a tax authority as a cancellation, with every amount on it
+            // still adding up.
+            //
+            // Nothing wrong ships today: the one producer passes no kind, so the default Cancellation and
+            // the rendered 381 agree. What was missing is the road for the other case -- a consumer or a
+            // second driver building an Amendment got no error, just a silently mistyped document.
+            'correction_kind' => $snapshot->kind,
             // The tax treatment MUST match the corrected invoice: a reverse-charge invoice's correction is
             // itself reverse charge (VAT category AE, not Z). The frozen original is authoritative when we
             // stored it; otherwise trust the snapshot's own signal from the correction payload.

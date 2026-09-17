@@ -26,6 +26,7 @@ use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Contracts\ProrationStrategy;
+use Pushery\Billing\Contracts\ReadsProviderComputedTax;
 use Pushery\Billing\Contracts\ReadsRoutedInvoiceCommission;
 use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
 use Pushery\Billing\Contracts\ReportsMovedShares;
@@ -136,6 +137,10 @@ final class StripeServiceProvider extends ServiceProvider
         // an install on another driver never resolves a Stripe client for it -- and the effect itself never
         // learns whose API answered.
         $this->app->bind(ReadsRoutedInvoiceCommission::class, fn (Application $app): StripeRoutedInvoiceCommission => new StripeRoutedInvoiceCommission($app->make(StripeClient::class)));
+
+        // The second seam of the same shape, and for the same reason: the hosted-purchase effect needs the
+        // rate a provider applied, which lives on the sale's line items rather than in its completion event.
+        $this->app->bind(ReadsProviderComputedTax::class, fn (Application $app): StripeCheckoutSessionTax => new StripeCheckoutSessionTax($app->make(StripeClient::class)));
 
         $this->app->bind(StripeClient::class, fn (Application $app): StripeClient => new StripeClient([
             'api_key' => $this->apiKey($app),

@@ -38,6 +38,8 @@ return [
         'unbalanced' => 'Dieser Stapel stimmt nicht ab und darf nicht eingereicht werden.',
         'imbalance_figures' => 'Das Nebenbuch weist :subledger an Verbindlichkeiten gegenüber Händlern aus; der exportierte Stapel bucht :batch auf die Verbindlichkeitskonten, eine Differenz von :difference.',
         'download_anyway' => 'Trotzdem herunterladen',
+        'unbooked' => 'Dieser Stapel lässt :amount Guthaben-Bewegung ungebucht — dafür gibt es kein Kontenpaar. Über alles Übrige ist die Datei vollständig.',
+        'unbooked_none' => 'Es blieb keine Guthaben-Bewegung ungebucht.',
     ],
 
     'cancel' => [

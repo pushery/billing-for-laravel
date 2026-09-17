@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\CustomerDirectory;
+use Pushery\Billing\Contracts\ReadsProviderComputedTax;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
@@ -19,6 +20,7 @@ use Pushery\Billing\Marketplace\FanReceiptIssuer;
 use Pushery\Billing\Marketplace\FanReceiptTierResolver;
 use Pushery\Billing\Marketplace\ProductClassifier;
 use Pushery\Billing\Models\MerchantCharge;
+use Pushery\Billing\ValueObjects\ProviderComputedTax;
 use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 
 /**
@@ -52,10 +54,12 @@ use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
  * - **A posture other than the platform being the deemed supplier** — the same asymmetry the synchronous
  *   path keeps. Where the merchant is the seller of record the platform is not a party to the supply, and a
  *   document in its own name would name the wrong seller.
- * - **A tax the provider computed** — a positive figure means the rate came from the buyer's address, and
- *   this package then holds amounts and no rate. What a document may state there is an open decision rather
- *   than a derivation, and stating a rate nobody supplied is the defect this class exists to end, one field
- *   over. Zero is a different answer: it says tax was computed and there was none.
+ * - **A tax the provider computed that it cannot state** — a positive figure means the rate came from the
+ *   buyer's address, and the event carries amounts and never a rate. That is now ASKED of the provider
+ *   rather than guessed at, through {@see ReadsProviderComputedTax}; what survives as a refusal is the case
+ *   the provider cannot answer — several rates on one sale, a rate that is not a percentage, one finer than
+ *   the document carries, or a read that failed. Zero is a different answer again: it says tax was computed
+ *   and there was none, and the event settles it without asking anybody.
  * - **A buyer this application does not own** — the same silence `PersistInvoice` keeps.
  * - **An add-on nobody classified** — the classifier refuses one, and refusing is right: a treatment is
  *   not one unknown but five guesses. A document about a supply whose treatment nobody established would
@@ -76,6 +80,15 @@ final readonly class IssueDocumentForRoutedHostedPurchase
         private FanReceiptIssuer $receipts,
         private FanReceiptTierResolver $tiers,
         private Repository $config,
+        /**
+         * Where a provider-computed tax is read from.
+         *
+         * A seam rather than a client, for the reason the contract gives: nothing in this directory reaches
+         * a provider, and an effect that did would be untestable without one. It is required rather than
+         * optional because the branch that needs it is the branch this class exists for — an effect that
+         * constructed without it would look like it works and issue nothing on every taxed sale.
+         */
+        private ReadsProviderComputedTax $taxes,
     ) {}
 
     public function __invoke(AddonPurchased $event): void
@@ -92,11 +105,22 @@ final readonly class IssueDocumentForRoutedHostedPurchase
             return;
         }
 
-        // Null and zero are not the same answer here. Zero says the provider computed the tax and there was
-        // none; null says the payload carried no breakdown, and a document dated off a figure nobody
-        // reported would be this lane's own guess.
+        // Zero is answered by the event itself: the provider computed the tax and there was none, so the
+        // price IS the gross with nothing separately stated. Anything else — a figure, or no breakdown at
+        // all — is a question the event cannot answer, because it carries amounts and never a rate. That is
+        // asked of the provider instead, through a seam, and a sale it cannot answer for gets no document.
+        $providerTax = null;
+
         if ($event->taxMinor !== 0) {
-            return;
+            $providerTax = $this->taxes->forSale($event->reference);
+
+            // The sum is the control, and it is not ceremony. A reading that took the wrong line, lost one,
+            // or picked up a second currency still produces a plausible split; only holding it against what
+            // the buyer actually paid catches that. A document whose parts do not add up to the payment is
+            // the one defect a reader notices immediately.
+            if (! $providerTax instanceof ProviderComputedTax || ! $providerTax->accountsFor($event->amount)) {
+                return;
+            }
         }
 
         $owner = $this->directory->ownerForReference($event->customerReference);
@@ -127,10 +151,12 @@ final readonly class IssueDocumentForRoutedHostedPurchase
             buyerOwner: $owner,
             tier: $this->tiers->tierFor($event->amount, $this->buyerIsDomestic($event->buyerCountry), false),
             gross: $event->amount,
-            // Zero, and stated rather than derived. This branch is only reached where the provider computed
-            // no tax, so the price IS the gross with nothing separately stated — the same honest record the
-            // ledger row makes of the commission on this lane.
-            taxRateBps: 0,
+            // Stated, never derived — and now stated from one of two places. Zero where the provider
+            // computed no tax, so the price IS the gross with nothing separately stated; otherwise the
+            // whole position the provider computed, which carries its own rate AND its own amounts. Handing
+            // over the position rather than the rate alone is what keeps the document's figures the
+            // provider's: deriving them again from the rate can land a cent away.
+            taxRateBps: $providerTax ?? 0,
             soldOn: $soldOn,
             // The anchor the settlement side already uses, so "the same sale" means one thing in both places
             // and a redelivery returns the document it already wrote.

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Bus;
 use Pushery\Billing\Contracts\ReadsRoutedInvoiceCommission;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\MerchantChargePurpose;
 use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
 use Pushery\Billing\Exceptions\RoutedCycleUnreadable;
@@ -127,6 +128,10 @@ final readonly class RecordRoutedSubscriptionCharge
             // recorded" -- a description of old rows, which this is not.
             0,
             sellerPosture: ($this->sales ?? Container::getInstance()->make(MarketplaceSaleContext::class))->posture(),
+            // A cycle, and this is the one lane where that is genuinely hard to read back: the reference on
+            // this row is the invoice, and reaching the subscription from it takes two more hops through an
+            // order that only exists where this package writes it.
+            purpose: MerchantChargePurpose::Subscription,
         );
 
         // SETTLED AS IT IS WRITTEN, because nothing is left to happen to this money. The paid invoice is the

@@ -13,6 +13,7 @@ use Pushery\Billing\Enums\AppendOnlyDeletion;
 use Pushery\Billing\Enums\CreditReason;
 use Pushery\Billing\Models\Concerns\AppendOnly;
 use Pushery\Billing\Support\OwnerScopedTables;
+use Pushery\Billing\ValueObjects\CreditMovement;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -30,6 +31,7 @@ use Pushery\Billing\ValueObjects\Money;
  * here would therefore have had no caller at all — a mechanism whose only proof of life is its own test,
  * which is the shape this package keeps finding and removing rather than adding.
  *
+ * @property int $id
  * @property string $owner_type
  * @property int $owner_id
  * @property int $amount_minor
@@ -64,6 +66,34 @@ final class CreditLedgerEntry extends Model
     public function amount(): Money
     {
         return Money::of($this->amount_minor, $this->currency);
+    }
+
+    /**
+     * The same movement in the form the books take, so the booking layer never touches an Eloquent model.
+     *
+     * The reference is minted from the entry's own id rather than from the source it points at. Two reasons,
+     * and the second is the load-bearing one: the source is optional (a proration credit has one only when
+     * the reading could name ONE paid invoice for the period it returns consideration from), and an
+     * append-only row's id is the one identifier that cannot later be edited to point somewhere else. `GH-`
+     * for Guthaben, which fits the field's alphabet and leaves a reader of the batch somewhere to go.
+     *
+     * The date is the entry's own `created_at`, never today: a batch states a period, and a movement that
+     * borrowed the render time would land in whichever month somebody happened to export in.
+     *
+     * `$unpaidShare` is passed IN rather than derived here, and that is not a detour. Deriving it needs the
+     * owner's whole ledger — a spend consumes what came before it, which is usually in an earlier period —
+     * and a model that queried for it would make one statement per movement out of a monthly batch that
+     * reads them all in one. The period batch replays the log once and hands the answer down.
+     */
+    public function toMovement(?Money $unpaidShare = null): CreditMovement
+    {
+        return new CreditMovement(
+            $this->reason,
+            $this->amount(),
+            'GH-'.$this->id,
+            $this->created_at ?? Carbon::now(),
+            $unpaidShare,
+        );
     }
 
     /** @return MorphTo<Model,$this> */

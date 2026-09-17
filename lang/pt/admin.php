@@ -38,6 +38,8 @@ return [
         'unbalanced' => 'Este lote não fecha e não deve ser entregue.',
         'imbalance_figures' => 'O razão auxiliar regista :subledger em dívidas a comerciantes; o lote exportado lança :batch nas contas de dívidas, uma diferença de :difference.',
         'download_anyway' => 'Transferir mesmo assim',
+        'unbooked' => 'Este lote deixa :amount de movimento de crédito por lançar — não tem par de contas. Sobre tudo o resto o ficheiro está completo.',
+        'unbooked_none' => 'Não ficou nenhum movimento de crédito por lançar.',
     ],
 
     'cancel' => [

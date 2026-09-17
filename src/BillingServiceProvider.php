@@ -9,6 +9,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
@@ -288,9 +289,9 @@ final class BillingServiceProvider extends ServiceProvider
         // Credit stays local unless the active driver can mirror it to the provider.
         $this->app->bind(CreditSync::class, NullCreditSync::class);
 
-        $this->mergeConfigFrom(__DIR__.'/../config/billing.php', 'billing');
-        $this->mergeConfigFrom(__DIR__.'/../config/account.php', 'account');
-        $this->mergeConfigFrom(__DIR__.'/../config/license.php', 'license');
+        $this->mergeConfigRecursivelyFrom(__DIR__.'/../config/billing.php', 'billing');
+        $this->mergeConfigRecursivelyFrom(__DIR__.'/../config/account.php', 'account');
+        $this->mergeConfigRecursivelyFrom(__DIR__.'/../config/license.php', 'license');
 
         // Master switch off → the whole billing surface disappears, including Cashier's own routes
         // (webhook + payment confirmation). Set before Cashier boots so they are never registered.
@@ -1256,5 +1257,90 @@ final class BillingServiceProvider extends ServiceProvider
         $this->app->make(MarketAllowlist::class)->assertEveryOpenMarketIsPriced(
             new EuOssTaxCalculator(is_string($country) ? $country : null, shipped: $this->app->make(ShippedTaxRates::class))->knowsRateFor(...),
         );
+    }
+
+    /**
+     * Lay the shipped defaults UNDER a published config file, all the way down.
+     *
+     * NOT `mergeConfigFrom()`, and the difference only shows up months later. Laravel's own
+     * merge is a single `array_merge` at the top level, so it asks one question per top-level
+     * key: is it there? A host that ran `vendor:publish` has every top-level key, which means
+     * a key added INSIDE one of those blocks by a later release never arrives. The block the
+     * host published wins whole.
+     *
+     * That is not a narrow case in this package. Of the 69 top-level keys the three shipped
+     * files carry, 37 are maps with settings underneath them -- the payment drivers, the
+     * checkout, the dunning schedule, the tax evidence. Every one of them is a block a host
+     * has a reason to publish and edit, and every one is a block a later release adds to.
+     *
+     * The failure is silent in the direction that costs most. Nothing errors and nothing logs:
+     * the new setting simply reads as null, so a feature added in a minor release is off for
+     * exactly the hosts who customized that area, and a corrected default never takes effect.
+     *
+     * RECURSING IS NOT ENOUGH ON ITS OWN -- a LIST is a value, never a structure.
+     * `array_merge_recursive()` concatenates lists and `array_replace_recursive()` merges them
+     * by index. Measured rather than recalled: a host narrowing a shipped ['web', 'auth'] to
+     * ['admin'] gets ['web', 'auth', 'admin'] back from the first and ['admin', 'auth'] from
+     * the second. Both hand back an entry the host deliberately removed, and on the account
+     * middleware that is an access regression rather than a merge. So recursion stops at any
+     * list on either side, and the published value stands exactly as written.
+     *
+     * `array_is_list([])` is true, which is the behavior you want: an empty array is a host
+     * saying "none", and descending into it could only re-introduce what it emptied.
+     *
+     * NOTE THE EARLY RETURN, because it bounds what this can rescue. A host with a CACHED
+     * config is never merged at all -- the framework's design, not this method's limit. For
+     * those installations the published file is the whole truth, which is why a read site
+     * reaching a nested key needs its fallback to agree with the shipped default. The two are
+     * halves of one guarantee.
+     *
+     * One honest note on scope: `license.php` has no nested map today, so routing it through
+     * here changes nothing for it. It is routed through anyway, because the alternative leaves
+     * a trap for whoever adds the first one.
+     */
+    private function mergeConfigRecursivelyFrom(string $path, string $key): void
+    {
+        if ($this->app instanceof CachesConfiguration && $this->app->configurationIsCached()) {
+            return;
+        }
+
+        $shipped = require $path;
+
+        $repository = $this->app->make(Repository::class);
+        $existing = $repository->get($key);
+
+        // Both sides come off disk or out of the container, so neither is provably string-keyed
+        // here -- a config array is just an array. The recursion below is written for exactly
+        // that: it asks whether a value is a LIST, never whether a key is a string.
+        $repository->set($key, $this->mergeConfigSections(
+            is_array($shipped) ? $shipped : [],
+            is_array($existing) ? $existing : [],
+        ));
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $shipped
+     * @param  array<array-key, mixed>  $published
+     * @return array<array-key, mixed>
+     */
+    private function mergeConfigSections(array $shipped, array $published): array
+    {
+        foreach ($shipped as $key => $value) {
+            if (! array_key_exists($key, $published)) {
+                $published[$key] = $value;
+
+                continue;
+            }
+
+            // Recurse only where BOTH sides are maps. If either is a list, or the published
+            // value is a scalar or an explicit null, what the host wrote stands. An explicit
+            // null is a value like any other here, which keeps "set it to null to switch this
+            // off" working exactly as the shipped config file describes it.
+            if (is_array($value) && is_array($published[$key]) && ! array_is_list($value) && ! array_is_list($published[$key])) {
+                $published[$key] = $this->mergeConfigSections($value, $published[$key]);
+            }
+        }
+
+        return $published;
     }
 }

@@ -2212,6 +2212,14 @@ return [
             // on it is the consumer's to decide, and a provider page is not where this package starts
             // composing sentences about other people.
             'line_name' => env('BILLING_MARKETPLACE_TIPS_LINE_NAME', 'Tip'),
+
+            // The floor a buyer-chosen TIP must clear, enforced on the server like the sale floor below.
+            // Null inherits that one, which is the honest default: an operator who has said a buyer-chosen
+            // amount below X is not worth a transaction has said something the provider's fee makes true of
+            // both entries. Set it to allow a voluntary payment lower than a purchase -- or to 0 to carry no
+            // floor on tips at all, which is a different answer from saying nothing.
+            // ONE LINE ON PURPOSE -- DO NOT WRAP THIS TERNARY. See the note above `commission_bps`.
+            'minimum_minor' => env('BILLING_MARKETPLACE_TIPS_MINIMUM_MINOR') !== null ? (int) env('BILLING_MARKETPLACE_TIPS_MINIMUM_MINOR') : null,
         ],
         'pwyw' => [
             'minimum_minor' => (int) env('BILLING_MARKETPLACE_PWYW_MINIMUM_MINOR', 0),

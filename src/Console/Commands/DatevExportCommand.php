@@ -62,18 +62,21 @@ final class DatevExportCommand extends Command
         // a month whose vouchers were never loaded at all. For the whole life of this command it was the
         // second, for both fees and vouchers, and that is precisely why the number goes in the line rather
         // than being left to be rediscovered.
-        $counted = "{$batch['invoices']} invoice(s), {$batch['providerFees']} provider fee(s) and "
-            ."{$batch['voucherMovements']} voucher movement(s) for {$from->toDateString()}–{$to->toDateString()}";
+        $counted = "{$batch['invoices']} invoice(s), {$batch['providerFees']} provider fee(s), "
+            ."{$batch['voucherMovements']} voucher movement(s) and {$batch['creditMovements']} credit "
+            ."movement(s) for {$from->toDateString()}–{$to->toDateString()}";
 
         if (is_string($path) && $path !== '') {
             $files->put($path, $content);
             $this->components->info("Wrote {$counted} to {$path}.");
+            $this->reportUnbookedCredit($batch['unbookedCreditMinor'], $batch['currency']);
 
             return $this->reportTie($batch['reconciliation']);
         }
 
         $this->output->write($content);
         $this->components->info("Exported {$counted}.");
+        $this->reportUnbookedCredit($batch['unbookedCreditMinor'], $batch['currency']);
 
         return $this->reportTie($batch['reconciliation']);
     }
@@ -141,5 +144,52 @@ final class DatevExportCommand extends Command
     private function amount(Money $money): string
     {
         return $money->toDecimal().' '.$money->currency;
+    }
+
+    /**
+     * State the credit movement this batch could not book, always, including the zero.
+     *
+     * ## The figure existed and stood in front of nobody
+     *
+     * `DatevPeriodBatch` has computed it since credit movements reached the export, and argued for it in
+     * its own comment: *"Reporting the amount keeps the batch produceable and puts the gap in front of the
+     * person who runs it — a zero here and a zero because nothing happened look identical, and only this
+     * figure tells them apart."* Measured across the package, the key was read in exactly one place, a test
+     * assertion. Neither this command nor the admin console touched it, so the person who runs the batch
+     * never saw the number the comment promised them — the same shape as a guard with no lane: computed,
+     * correct, and without effect, while the prose beside it reads as an assurance somebody was told.
+     *
+     * ## Why the zero is printed too
+     *
+     * It is the whole argument of the figure. A period that booked everything and a period whose credit
+     * movements were never loaded both produce silence, and the operator cannot tell them apart from the
+     * absence of a line. This is the same rule the counts above follow, for the same reason.
+     *
+     * ## Why it is not a failure
+     *
+     * A grant with no account pair is an open question about the chart of accounts, not a defect in the
+     * batch: the file is correct and complete about everything it does book. The exit code stays with the
+     * reconciliation, which is an arithmetic contradiction and a different kind of statement.
+     *
+     * The figure is a NET, and it can be negative. Spending such a grant takes its share back out, so a
+     * period that granted and redeemed the same credit owes the books nothing and says so with a zero. Read
+     * as a running total of grants it would grow forever while describing a gap that had already closed.
+     */
+    private function reportUnbookedCredit(int $minorUnits, string $currency): void
+    {
+        $amount = $this->amount(Money::of($minorUnits, $currency));
+
+        if ($minorUnits === 0) {
+            $this->components->info('No credit movement was left unbooked.');
+
+            return;
+        }
+
+        // Two short lines rather than one long one, and that is not formatting taste. `components->warn()`
+        // wraps at the terminal width, so a phrase near column 80 is split across lines — and anything
+        // reading the output for it, a test or a person grepping a CI log, then does not find it. Measured:
+        // the single-sentence version broke between "no account" and "pair".
+        $this->components->warn("Unbooked credit movement: {$amount}.");
+        $this->components->warn('It has no account pair. The file is complete about everything else.');
     }
 }

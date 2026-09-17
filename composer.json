@@ -79,6 +79,7 @@
         "spaze/phpstan-disallowed-calls": "4.14.0"
     },
     "suggest": {
+        "laravel/ai": "Required only to score evals with a real judge. Not a dev dependency: it requires aws/aws-sdk-php for a provider this package never calls, which is 67 MB and 3512 files in every checkout and every CI lane.",
         "livewire/livewire": "Required only for the optional account-hub UI — the nine Livewire screens. The billing core (models, webhooks, invoicing, tax, contracts) needs none of it.",
         "horstoeko/zugferd": "Required only to embed the EN 16931 CII XML into a ZUGFeRD/Factur-X hybrid PDF/A-3 via Invoicing\\ZugferdPdfInvoice. The CII and XRechnung XML writers need none of it.",
         "anthropic-ai/sdk": "Required only to score evals with a real judge, which is wired only when ANTHROPIC_API_KEY is set. Deliberately not a dev dependency: without it every eval still runs, the judge-backed expectations are skipped, and no install pays for a client it never calls.",
