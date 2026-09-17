@@ -63,6 +63,8 @@ final readonly class FanPayment
      * @param  PlatformFee  $normalFee  the platform's ordinary commission; a configured tip rate overrides it
      * @param  TaxArchetype  $soldAlongside  what the tip was paid ON — required, because a tip has no
      *                                       treatment of its own
+     *
+     * @throws FanPriceTooLow when the chosen amount is below the configured floor
      */
     public function tip(
         Model $merchant,
@@ -90,6 +92,11 @@ final readonly class FanPayment
             $buyer,
             soldAlongside: $soldAlongside,
         );
+
+        // Called for the floor, exactly as the pay-what-you-want lane below calls its pricing method for
+        // one. This lane derives its own money, so the priced sale is not what is wanted here -- the
+        // refusal is, and asking the class that owns the rule is what keeps one rule from becoming two.
+        $this->pricing->assertTipMeetsMinimum($chosen);
 
         return $this->payments->charge(
             $merchant,

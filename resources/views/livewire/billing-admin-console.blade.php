@@ -107,6 +107,23 @@
             @endif
         </div>
 
+        {{-- A SECOND REGION, POLITE, AND DELIBERATELY NOT THE ONE ABOVE. What the batch left unbooked is
+             not a failure direction: the file is correct and complete about everything it does book, and
+             an unbookable grant is an open question about the chart of accounts. Putting it in the
+             assertive region would rank it with a refusal; leaving it out of a live region entirely would
+             hand a sighted operator a figure a blind one never gets.
+
+             It is not a success announcement either, which is the one thing this screen must never make:
+             it is only ever set where a file was really produced, and the download travels in the same
+             response. --}}
+        <div role="status" aria-live="polite">
+            @if ($datevUnbooked !== '')
+                <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-700 dark:border-gray-800 dark:bg-gray-900/40 dark:text-gray-300">
+                    {{ $datevUnbooked }}
+                </div>
+            @endif
+        </div>
+
         {{-- Stacked at full width on a phone and one row from `sm` up, like the two forms around it. The date
              fields used to take the width their engine gave them, 155px in Blink and 113px in WebKit, so on a
              320px phone this form broke into three rows in one engine and two in the other. --}}

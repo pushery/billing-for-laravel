@@ -57,5 +57,20 @@ final readonly class SubscriptionStateChanged implements BillingDomainEvent, Ide
         public ?string $merchantAccountReference = null,
         public ?string $declarationReference = null,
         public ?int $startedAt = null,
+        /**
+         * The LOCAL code of a minted merchant coupon the provider applied, or null.
+         *
+         * Null is the common and correct answer. It means one of two things, and neither is a gap: no
+         * discount was applied at all, or the discount came from the CATALOG (`billing.coupons`), where a
+         * human created the provider coupon with its own `max_redemptions` and the provider is the authority.
+         * A minted merchant coupon is the one case where this package is the authority and cannot reach the
+         * redemption itself, because the hosted checkout applies the discount inside the provider's session.
+         *
+         * So this is the local code rather than the provider id: a consumer books the redemption against
+         * their own row, and doing that from an id would mean the provider arithmetic this package exists to
+         * encapsulate. See StripePlatformCouponProvisioner for why the limit is enforced locally and what
+         * that requires of a hosted consumer.
+         */
+        public ?string $couponCode = null,
     ) {}
 }

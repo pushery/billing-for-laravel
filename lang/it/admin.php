@@ -38,6 +38,8 @@ return [
         'unbalanced' => 'Questo lotto non quadra e non deve essere trasmesso.',
         'imbalance_figures' => 'Il partitario riporta :subledger di debiti verso i commercianti; il lotto esportato registra :batch sui conti di debito, con una differenza di :difference.',
         'download_anyway' => 'Scaricalo comunque',
+        'unbooked' => 'Questo lotto lascia :amount di movimento di credito non contabilizzato — non ha una coppia di conti. Su tutto il resto il file è completo.',
+        'unbooked_none' => 'Nessun movimento di credito è rimasto non contabilizzato.',
     ],
 
     'cancel' => [

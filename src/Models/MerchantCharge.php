@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Config;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\MerchantChargePurpose;
 use Pushery\Billing\Enums\RoundingResidual;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\SettlementState;
@@ -28,6 +29,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property string $charge_reference
  * @property ?string $transfer_reference
  * @property ?ChargeType $charge_type
+ * @property ?MerchantChargePurpose $purpose what was sold, null on rows written before it was recorded
  * @property ?SellerOfRecordPosture $seller_posture who the tax law treated as the seller, null on rows written before it was recorded
  * @property int $gross_minor
  * @property int $fee_minor
@@ -61,7 +63,7 @@ final class MerchantCharge extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'transfer_reference', 'transfer_moved_minor', 'charge_type', 'seller_posture',
+        'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'transfer_reference', 'transfer_moved_minor', 'charge_type', 'purpose', 'seller_posture',
         'gross_minor', 'fee_minor', 'fee_bps', 'fee_flat_minor', 'fee_residual', 'commission_tax_bps', 'net_minor', 'currency', 'settlement_state', 'settled_at',
         'settlement_invoice_id',
         'refunded_minor', 'transfer_reversed_minor', 'fee_refunded_minor', 'merchant_erased_at',
@@ -104,6 +106,9 @@ final class MerchantCharge extends Model
         'buyer_fee_refunded_minor' => 'integer',
         'settlement_state' => SettlementState::class,
         'charge_type' => ChargeType::class,
+        // Cast for the same reason `fee_residual` above is: a driver comparing a raw string against the enum
+        // it was written as would never match, and would then type its ledger entry by the fallback.
+        'purpose' => MerchantChargePurpose::class,
         'seller_posture' => SellerOfRecordPosture::class,
         'settled_at' => UtcDateTime::class,
         'merchant_erased_at' => UtcDateTime::class,

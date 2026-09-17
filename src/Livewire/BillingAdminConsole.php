@@ -16,11 +16,13 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View as ViewFacade;
 use Illuminate\View\View as ConcreteView;
 use Livewire\Component;
+use Pushery\Billing\Exceptions\DatevTransactionUnresolvable;
 use Pushery\Billing\Exceptions\InvalidDatevBatch;
 use Pushery\Billing\Invoicing\DatevPeriodBatch;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Reporting\BillingMetricsReporter;
 use Pushery\Billing\Support\BillingAdmin;
+use Pushery\Billing\ValueObjects\Money;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Throwable;
@@ -63,6 +65,25 @@ final class BillingAdminConsole extends Component
 
     /** The two totals and their difference, in the operator's own terms, when a batch does not tie out. */
     public string $datevImbalance = '';
+
+    /**
+     * What the LAST downloaded batch left unbooked, as a sentence, or '' when none was produced.
+     *
+     * The command that writes the same file has reported this since credit movements reached the
+     * export, and this screen did not — so an operator who takes the file from here instead of from
+     * a shell got a complete batch with an open question in it and no way to know.
+     *
+     * A ZERO IS STATED TOO, and that is the whole argument for the figure. A period that booked
+     * everything and one whose credit movements were never loaded produce the same silence, and only
+     * the number tells them apart. It is a net rather than a running total: spending such a grant
+     * takes its share back out, so a period that granted and redeemed the same credit owes the books
+     * nothing and says so with a zero.
+     *
+     * Set only where a file is actually produced, and cleared at the start of every attempt and
+     * whenever a bound moves — a figure about a period nobody exported would be a statement about a
+     * file that does not exist.
+     */
+    public string $datevUnbooked = '';
 
     /**
      * Whether the operator has been shown an imbalance for THIS period and asked for the file anyway.
@@ -228,6 +249,7 @@ final class BillingAdminConsole extends Component
         $this->datevResult = null;
         $this->datevRefusal = '';
         $this->datevImbalance = '';
+        $this->datevUnbooked = '';
 
         try {
             $from = CarbonImmutable::parse($this->datevFrom)->startOfDay();
@@ -251,10 +273,24 @@ final class BillingAdminConsole extends Component
 
         try {
             $rendered = $batch->render($from, $to);
-        } catch (InvalidDatevBatch $refused) {
+        } catch (InvalidDatevBatch|DatevTransactionUnresolvable $refused) {
             // The writer's own words, not a generic failure. It refuses over a specific document reference
             // or a specific period boundary, and an operator who is told which one can fix it; one who is
             // told "export failed" reruns it and gets the same nothing.
+            //
+            // THE SECOND TYPE IS A REFUSAL TOO, and it used to leave through this method uncaught: a
+            // transaction the active chart has no account for raises it, and out of a Livewire action
+            // that is an error page. The command that writes the same file catches Throwable and answers
+            // with a line, so one misconfiguration was a sentence on one route and a 500 on the other.
+            //
+            // It joins `refused` rather than becoming a fifth direction because it IS one — no file, and
+            // here is why. Its message already names the transaction, the country where one applies and
+            // the configuration path, which is more than a heading of our own could say.
+            //
+            // The two types are NAMED rather than caught as a common ancestor. Both extend
+            // RuntimeException, and catching that would swallow every defect this screen should show as
+            // an error page — a swallow disguised as a fix, on the surface that hands out the operator's
+            // whole revenue history.
             $this->datevResult = 'refused';
             $this->datevRefusal = $refused->getMessage();
 
@@ -289,6 +325,18 @@ final class BillingAdminConsole extends Component
 
             return null;
         }
+
+        // THE STATE SURVIVES THE DOWNLOAD, and that is measured rather than assumed. Livewire does not
+        // hand a returned StreamedResponse to the browser raw: `SupportFileDownloads` captures its
+        // content into a `download` EFFECT and the request dehydrates normally, so the response the
+        // client gets carries both the file and this property. The warning above — never depend on
+        // state set before a raw stream — is about a raw response and does not reach this one.
+        $this->datevUnbooked = Container::getInstance()->make(Translator::class)->get(
+            $rendered['unbookedCreditMinor'] === 0
+                ? 'billing::admin.datev.unbooked_none'
+                : 'billing::admin.datev.unbooked',
+            ['amount' => Money::of($rendered['unbookedCreditMinor'], $rendered['currency'])->toDecimal().' '.$rendered['currency']],
+        );
 
         $content = $rendered['content'];
         $name = 'datev-'.$from->toDateString().'-'.$to->toDateString().'.csv';
@@ -332,6 +380,12 @@ final class BillingAdminConsole extends Component
     {
         $this->datevImbalanceAcknowledged = false;
         $this->datevImbalance = '';
+
+        // The unbooked figure belongs to the period that was exported, so a moved bound takes it with
+        // it. Left standing it would describe a file nobody downloaded for the dates now on screen —
+        // which is worse than saying nothing, because it reads as a fact about the period in front of
+        // the operator.
+        $this->datevUnbooked = '';
 
         if ($this->datevResult === 'unbalanced') {
             $this->datevResult = null;

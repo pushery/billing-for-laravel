@@ -38,6 +38,8 @@ return [
         'unbalanced' => 'This batch does not tie out and must not be filed.',
         'imbalance_figures' => 'The sub-ledger holds :subledger in merchant payables; the exported batch books :batch to the payables accounts, a difference of :difference.',
         'download_anyway' => 'Download it anyway',
+        'unbooked' => 'This batch leaves :amount of credit movement unbooked — it has no account pair. The file is complete about everything else.',
+        'unbooked_none' => 'No credit movement was left unbooked.',
     ],
 
     'cancel' => [

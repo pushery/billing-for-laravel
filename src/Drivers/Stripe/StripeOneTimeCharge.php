@@ -16,6 +16,7 @@ use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\MerchantChargePurpose;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\VoucherInstrumentType;
 use Pushery\Billing\Exceptions\EligibilityDenied;
@@ -247,7 +248,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // below (the one case where it is legitimately absent) printed a warning every time it did its
             // job. The null-coalescing operator asks `__isset` first, which looks in the same value bag
             // without complaining.
-            $this->recordPendingSale($routed, $session->payment_intent ?? null, $buyerFee);
+            $this->recordPendingSale($routed, $session->payment_intent ?? null, $buyerFee, MerchantChargePurpose::AddonPurchase);
         }
 
         $url = $session->url ?? null;
@@ -286,6 +287,12 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
                 "A tip needs a positive amount; got {$chosen->minorUnits} {$chosen->currency}."
             );
         }
+
+        // AND THE FLOOR, which is the other half of standing in for the catalog. Positive is not the same
+        // as worth charging: a tip under the provider's own fee costs the merchant more than it pays them,
+        // and still produces a document over a taxable inflow. The threshold is the operator's and is
+        // asked of the class that owns it, so this lane and the token one refuse the same amounts.
+        $this->context->assertTipMeetsMinimum($chosen);
 
         $merchant = $this->context->routedMerchant();
 
@@ -353,7 +360,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // address. The lane records no rate rather than asserting the provider's.
         $session = $this->stripe->checkout->sessions->create($payload);
 
-        $this->recordPendingSale($routed, $session->payment_intent ?? null, null);
+        $this->recordPendingSale($routed, $session->payment_intent ?? null, null, MerchantChargePurpose::Tip);
 
         $url = $session->url ?? null;
 
@@ -640,8 +647,16 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *     policy: PlatformFee,
      * }  $routed
      */
-    private function recordPendingSale(array $routed, mixed $paymentIntent, ?FeeLine $buyerFee): void
-    {
+    private function recordPendingSale(
+        array $routed,
+        mixed $paymentIntent,
+        ?FeeLine $buyerFee,
+        // REQUIRED rather than defaulted, though the ledger accepts null: both lanes that reach here know
+        // exactly what they are selling, and a lane added later must be made to say so instead of silently
+        // recording a sale nothing can type. Null on the column means "written before this was recorded",
+        // and a new row is never that.
+        MerchantChargePurpose $purpose,
+    ): void {
         // Stripe hands this back as an id, and as an expanded object when something asked it to. Both are
         // answered; anything else is the refusal below rather than a silent null.
         $reference = match (true) {
@@ -692,6 +707,9 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // Who sold, from the same context that checked the charge type against it above, so the small-business
             // turnover counts this sale on the basis its seller actually had.
             sellerPosture: $this->context->posture(),
+            // What was sold, from the lane that opened the checkout. A tip is the reason this is passed
+            // rather than derived later: nothing else persists that it was one.
+            purpose: $purpose,
         );
     }
 

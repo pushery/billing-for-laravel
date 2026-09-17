@@ -24,6 +24,8 @@ use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Invoicing\OrderInvoiceIssuer;
+use Pushery\Billing\Invoicing\ProrationCreditCorrectionIssuer;
+use Pushery\Billing\Models\CreditLedgerEntry;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\OrderItem;
 use Pushery\Billing\Models\PaymentMandate;
@@ -133,6 +135,17 @@ final readonly class LocalBillingEngine implements BillingEngine
          * changes none of its behavior is indistinguishable from one that is wrong.
          */
         private ?DriverCapabilities $capabilities = null,
+        /**
+         * Raises the § 17 correction a redeemed proration credit owes the invoice it came out of.
+         *
+         * Optional for the same reason as everything above it — a required parameter here would break the
+         * one seam this class exists to keep cheap — and the container supplies it, so every ordinary
+         * install has it. What null means is stated rather than hidden: a driver that constructs this
+         * engine by hand and passes none still offsets balances and raises no corrections for them, and
+         * the unbooked share is then reported by the period batch instead. That is the same answer this
+         * package gave before the correction existed, not a quiet regression.
+         */
+        private ?ProrationCreditCorrectionIssuer $prorationCorrections = null,
     ) {}
 
     public function tick(?DateTimeInterface $now = null): void
@@ -816,6 +829,28 @@ final readonly class LocalBillingEngine implements BillingEngine
 
             if (! $spend->isPositive()) {
                 return $spend;
+            }
+
+            // What this spend consumed, and the § 17 correction it owes for the part nobody paid for.
+            //
+            // The ENTRY is read back rather than returned, and it is exact only here: `spendUpTo` took the
+            // balance row under `lockForUpdate`, and its transaction is nested inside this one — so that is
+            // a savepoint, the lock belongs to THIS transaction, and no second movement can have landed on
+            // this balance in between. Outside this block the newest entry of a balance is a guess.
+            //
+            // THE PROVIDER LANE IS DELIBERATELY NOT HERE, for the reason IssueLocalCreditNote states
+            // about refunds: a provider that issues its own documents also announces its own corrections,
+            // while an invoice this package raised has nobody to announce anything. A ProviderInvoiceOffset
+            // spends the same kind of balance and is the provider's document to correct.
+            $offset = CreditLedgerEntry::query()
+                ->where('owner_type', $owner->getMorphClass())
+                ->where('owner_id', $owner->getKey())
+                ->where('currency', $spend->currency)
+                ->orderByDesc('id')
+                ->first();
+
+            if ($offset instanceof CreditLedgerEntry) {
+                $this->prorationCorrections?->issueFor($offset);
             }
 
             $order->items()->create([

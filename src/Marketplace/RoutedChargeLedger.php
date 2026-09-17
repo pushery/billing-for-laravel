@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\MerchantChargePurpose;
 use Pushery\Billing\Enums\RefundAttemptStatus;
 use Pushery\Billing\Enums\ReversalCause;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
@@ -117,6 +118,26 @@ final readonly class RoutedChargeLedger
          * before this was recorded", and a reader counts such a row under the installation's posture.
          */
         ?SellerOfRecordPosture $sellerPosture = null,
+        /**
+         * WHAT was sold, frozen for the same reason the lane above is — and for one this table has not had
+         * to answer before.
+         *
+         * The amounts say what moved; nothing says what for. That is invisible while the share is
+         * transferred, because a transfer takes an amount and a destination, and it becomes load-bearing the
+         * moment a consumer credits the share to a balance instead: a ledger entry carries a type, and an
+         * append-only ledger with the wrong one cannot be corrected, only offset.
+         *
+         * IT IS DERIVABLE AFTERWARDS FOR TWO OF THE THREE LANES AND NOT FOR THE THIRD, which is what
+         * makes it a column rather than a query. A purchase resolves through its payment reference; a
+         * subscription cycle takes three hops and the middle one only exists where this package writes the
+         * order; a tip persists nothing that names it and is reachable only by the ABSENCE of the other two
+         * — so during a race, a purchase whose rows have not landed yet reads as a tip. The caller knows it
+         * for certain; every route back to it is longer, and the last one is wrong.
+         *
+         * Optional, and null means "written before this was recorded" rather than "none of these", exactly
+         * as the frozen columns above use null. It is deliberately not backfilled: see the migration.
+         */
+        ?MerchantChargePurpose $purpose = null,
     ): MerchantCharge {
         return MerchantCharge::query()->firstOrCreate(
             ['provider' => $provider, 'charge_reference' => $chargeReference],
@@ -126,6 +147,7 @@ final readonly class RoutedChargeLedger
                 'gross_minor' => $gross->minorUnits,
                 'fee_minor' => $fee->minorUnits,
                 'charge_type' => $chargeType,
+                'purpose' => $purpose,
                 'seller_posture' => $sellerPosture,
                 'fee_bps' => $policy?->bps,
                 'fee_flat_minor' => $policy?->flatMinor,

@@ -38,6 +38,8 @@ return [
         'unbalanced' => 'Este lote no cuadra y no debe presentarse.',
         'imbalance_figures' => 'El libro auxiliar registra :subledger en deudas con comerciantes; el lote exportado contabiliza :batch en las cuentas de deudas, una diferencia de :difference.',
         'download_anyway' => 'Descargarlo de todos modos',
+        'unbooked' => 'Este lote deja :amount de movimiento de saldo sin contabilizar — no tiene par de cuentas. Sobre todo lo demás el archivo está completo.',
+        'unbooked_none' => 'No quedó ningún movimiento de saldo sin contabilizar.',
     ],
 
     'cancel' => [

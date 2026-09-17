@@ -38,6 +38,8 @@ return [
         'unbalanced' => 'Ce lot n\'est pas équilibré et ne doit pas être transmis.',
         'imbalance_figures' => 'Le grand livre auxiliaire porte :subledger de dettes envers les marchands ; le lot exporté comptabilise :batch sur les comptes de dettes, soit un écart de :difference.',
         'download_anyway' => 'Le télécharger quand même',
+        'unbooked' => 'Ce lot laisse :amount de mouvement d\'avoir non comptabilisé — il n\'a pas de paire de comptes. Sur tout le reste, le fichier est complet.',
+        'unbooked_none' => 'Aucun mouvement d\'avoir n\'est resté non comptabilisé.',
     ],
 
     'cancel' => [

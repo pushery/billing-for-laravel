@@ -9,12 +9,15 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\WebhookEventMapper;
+use Pushery\Billing\Enums\DisputeReason;
 use Pushery\Billing\Enums\InvoiceStatus;
+use Pushery\Billing\Enums\ReversalCause;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxIdVerificationStatus;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\BillingDomainEvent;
+use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\Events\FanTipPaid;
 use Pushery\Billing\Events\InvoiceCorrected;
 use Pushery\Billing\Events\InvoiceFinalized;
@@ -30,6 +33,8 @@ use Pushery\Billing\Events\SaleCountryReported;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\Events\TaxIdVerificationReported;
 use Pushery\Billing\Events\TrialEnding;
+use Pushery\Billing\Marketplace\RoutedChargeLedger;
+use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\ValueObjects\InvoiceCorrectionSnapshot;
 use Pushery\Billing\ValueObjects\InvoiceSnapshot;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -52,13 +57,19 @@ use Pushery\Billing\ValueObjects\Money;
  * resolve an OWNER from it. The qualifier below carries the whole difference, so it is stated here where a
  * reader looking for the exclusion will find it.
  *
+ * A lost dispute over a sale this package ROUTED yields `ChargebackReceived` rather than `AddonRefunded`,
+ * and the branch turns on the routed-charge row rather than on anything in the payload. Under
+ * `separate_transfer` the platform takes the whole payment, so the charge lives on the platform account and
+ * the dispute arrives here and nowhere else — while the four things a chargeback owes a routed sale all
+ * hang off the neutral event.
+ *
  * Scope notes. A voided credit note (credit_note.voided) is not mapped: reversing an already-booked
  * credit is a distinct accounting action whose direction needs its own decision, and emitting the wrong
  * booking is worse than leaving a rare correction to be made by hand. Dispute and mandate-revocation
  * webhooks (charge.dispute.*, mandate/payment-method events) are not mapped for owner resolution either —
- * the provider dispute and mandate objects carry no customer, so that needs a dedicated design. The
- * neutral ChargebackReceived / MandateRevoked events exist for the driver and consumers that will produce
- * them.
+ * the provider dispute and mandate objects carry no customer, so that needs a dedicated design. That
+ * exclusion is about the OWNER and nothing else: a lost dispute over a routed sale does produce
+ * `ChargebackReceived` here, identified by the charge, because the routed row says whose sale it was.
  *
  * `@partially-mapped:` `payment_intent.succeeded`, `payment_intent.payment_failed` and
  * `payment_intent.canceled` ARE answered — but only for a ROUTED marketplace charge, and every one of them
@@ -86,9 +97,15 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final readonly class StripeWebhookEventMapper implements WebhookEventMapper
 {
+    /**
+     * @param  RoutedChargeLedger  $routed  built here when absent, the same way the ledger's own constructor
+     *                                      resolves its dispatcher — the call sites that build this mapper
+     *                                      directly keep working and still read the real rows
+     */
     public function __construct(
         private StripeSubscriptionMapper $subscriptions,
         private MerchantAccountDirectory $accounts,
+        private RoutedChargeLedger $routed = new RoutedChargeLedger,
     ) {}
 
     public function map(Request $request): iterable
@@ -250,11 +267,53 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             return [];
         }
 
-        return [new AddonRefunded(
-            $paymentReference,
-            Money::of($this->int($object, 'amount') ?? 0, strtoupper($currency)),
-            reason: 'dispute_lost',
-        )];
+        $amount = Money::of($this->int($object, 'amount') ?? 0, strtoupper($currency));
+        $charge = $this->routed->find('stripe', $paymentReference);
+
+        if ($charge instanceof MerchantCharge) {
+            return [$this->routedChargeback($object, $charge, $amount, strtoupper($currency))];
+        }
+
+        return [new AddonRefunded($paymentReference, $amount, reason: 'dispute_lost')];
+    }
+
+    /**
+     * A lost dispute over a sale that was routed to a merchant, reported on the PLATFORM's endpoint.
+     *
+     * Under `separate_transfer` the platform takes the whole payment and moves the merchant's share in a
+     * second call, so the charge lives on the platform account and its dispute is a platform event. Nothing
+     * about the payload says the sale was routed — the connected account is not in it, because no connected
+     * account was involved — and the only thing that knows is the row this package wrote when the sale was
+     * made. So the lookup is the routed ledger, keyed on the payment reference the row was recorded under.
+     *
+     * `AddonRefunded` is the wrong event for such a sale and was the only one it could produce. It ends
+     * access and issues a LOCAL credit note, and it reaches none of the four things a chargeback owes on a
+     * routed sale: the provider's fee booked as the platform's own inbound supply, the chain corrected on
+     * the leg the ground code says it corrects, and the merchant's share taken back. The platform had
+     * already returned the money to the network and already paid the merchant; both stayed that way, and
+     * the journal said nothing about either.
+     *
+     * The merchant reference is resolved from the row rather than read off the event, which is the same
+     * direction the checkout resolves it in. An onboarded merchant always has one; where the account is no
+     * longer on file the event carries null and the fee is booked without an attribution, which is the
+     * honest read — the dispute happened whether or not the account survived it.
+     *
+     * @param  array<array-key, mixed>  $object
+     */
+    private function routedChargeback(array $object, MerchantCharge $charge, Money $amount, string $currency): ChargebackReceived
+    {
+        $merchant = $charge->merchant;
+
+        return new ChargebackReceived(
+            customerReference: $charge->charge_reference,
+            reference: $charge->charge_reference,
+            amount: $amount,
+            merchantReference: $merchant === null ? null : $this->accounts->accountFor($merchant)?->accountId,
+            feeAmount: StripeDisputeFee::from($object, $currency),
+            cause: ReversalCause::DisputeLost,
+            reason: DisputeReason::fromProvider($this->string($object, 'reason')),
+            disputeReference: $this->string($object, 'id'),
+        );
     }
 
     /**

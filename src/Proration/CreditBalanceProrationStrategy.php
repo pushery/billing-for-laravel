@@ -11,9 +11,13 @@ use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\TierResolver;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\CreditReason;
+use Pushery\Billing\Enums\InvoiceStatus;
+use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\CreditLedger;
 use Pushery\Billing\Support\PeriodResolver;
+use Pushery\Billing\ValueObjects\BillingPeriod;
+use Pushery\Billing\ValueObjects\CreditSource;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\Plan;
 
@@ -58,7 +62,7 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
             return null;
         }
 
-        [$remaining, $length] = $this->clock($billable);
+        [$remaining, $length] = $this->clock($this->periods->forOwner($billable));
 
         return $this->calculator->netForSwap($current->amount, $newPlan->amount, $remaining, $length);
     }
@@ -71,9 +75,21 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
             return;
         }
 
-        [$remaining, $length] = $this->clock($billable);
+        $period = $this->periods->forOwner($billable);
+        [$remaining, $length] = $this->clock($period);
 
-        $unused = $this->calculator->proratedAmount($current->amount, $remaining, $length);
+        // The invoice whose consideration this credit gives back -- and, where there is one, the
+        // amount it gives back a share OF. Without it the credit is prorated from the plan's LIST
+        // price, and a customer who paid a discounted invoice would be credited more than they ever
+        // paid: the excess is then a gift rather than a returned consideration, which is a different
+        // thing in the books and in the tax on them.
+        $invoice = $this->invoiceForPeriod($billable, $period, $current->amount->currency);
+
+        $basis = $invoice instanceof InvoiceRecord
+            ? new Money((int) $invoice->total_minor, $current->amount->currency)
+            : $current->amount;
+
+        $unused = $this->calculator->proratedAmount($basis, $remaining, $length);
 
         // A swap at the very end of a period leaves nothing unused. Writing a zero movement would add a
         // ledger entry that says nothing happened, which is noise in the one place that has to stay
@@ -82,7 +98,16 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
             return;
         }
 
-        $this->ledger->credit($billable, $unused, CreditReason::ProrationCredit);
+        // The SOURCE is what makes this credit bookable later. A proration credit gives back part of
+        // an already invoiced and already taxed consideration, so the correction it eventually needs
+        // belongs to THAT invoice, at THAT invoice's tax rate. Written here or never: nothing
+        // downstream can reconstruct which invoice a balance movement came from.
+        $this->ledger->credit(
+            $billable,
+            $unused,
+            CreditReason::ProrationCredit,
+            $invoice instanceof InvoiceRecord ? CreditSource::for($invoice) : null,
+        );
 
         // The balance alone says WHAT the customer has, never WHY. Without this line a support agent
         // looking at a credit has no way to tell a proration from a refund or a goodwill gesture.
@@ -91,7 +116,51 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
             'to_tier' => $newPlan->key,
             'amount' => $unused->minorUnits,
             'currency' => $unused->currency,
+            // Null is a fact worth recording, not an omission: it says the reading could not name
+            // one invoice for this period, so this credit stays out of the books until it can.
+            'invoice_id' => $invoice?->getKey(),
         ], AuditSource::System);
+    }
+
+    /**
+     * The paid invoice this period's consideration was paid on, or null when no ONE invoice answers.
+     *
+     * ## Why a match on fields rather than "the latest paid invoice"
+     *
+     * There is no stored edge from an invoice to the period it covers — `InvoiceRecord` carries an
+     * owner, a status and an `issued_at`, and the period lives on the subscription. So the question
+     * is answered by intersecting what IS stored: same owner, same currency, paid, issued inside
+     * this period. Taking the most recent paid invoice instead would be an ordering guess, and the
+     * thing it guesses at is which invoice a later tax correction belongs to.
+     *
+     * ## Ambiguity is not resolved, it is declined
+     *
+     * Two matching invoices answer null, exactly as none does. "First match wins" would be the same
+     * guess with the guessing hidden — and a credit attached to the wrong invoice corrects the wrong
+     * taxable base, which is worse than a credit attached to none.
+     *
+     * ## What null costs, and why it is the honest fallback
+     *
+     * The credit is written without a source and prorated from the plan's list price, which is what
+     * this class did for every swap before. The amount then appears in the monthly reconciliation as
+     * a named difference rather than as a booking nobody can justify. An application whose invoices
+     * come from a provider and are dated outside the period keeps getting that honest number instead
+     * of a wrong attribution.
+     */
+    private function invoiceForPeriod(Model $billable, BillingPeriod $period, string $currency): ?InvoiceRecord
+    {
+        $matches = InvoiceRecord::query()
+            ->where('owner_type', $billable->getMorphClass())
+            ->where('owner_id', $billable->getKey())
+            ->where('status', InvoiceStatus::Paid)
+            ->where('currency', $currency)
+            ->whereBetween('issued_at', [$period->start, $period->end])
+            // Three is as good as two for this question, and it keeps a pathological schema from
+            // loading a customer's whole invoice history to answer "is there exactly one".
+            ->limit(2)
+            ->get();
+
+        return $matches->count() === 1 ? $matches->first() : null;
     }
 
     private function currentPlan(Model $billable): ?Plan
@@ -107,9 +176,8 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
      *
      * @return array{int, int}
      */
-    private function clock(Model $billable): array
+    private function clock(BillingPeriod $period): array
     {
-        $period = $this->periods->forOwner($billable);
         $now = Carbon::now()->utc();
 
         // Negative would mean the period already ended; the calculator clamps it, but returning a

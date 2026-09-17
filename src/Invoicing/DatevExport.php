@@ -8,6 +8,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\DatevAccountResolver;
+use Pushery\Billing\Enums\CreditReason;
 use Pushery\Billing\Enums\DatevTransaction;
 use Pushery\Billing\Enums\ExchangeRateLayer;
 use Pushery\Billing\Enums\SettlementDocumentType;
@@ -19,6 +20,7 @@ use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\ProviderFee;
 use Pushery\Billing\Tax\FrozenExchangeRate;
 use Pushery\Billing\Tax\UnionMembership;
+use Pushery\Billing\ValueObjects\CreditMovement;
 use Pushery\Billing\ValueObjects\DatevAccount;
 use Pushery\Billing\ValueObjects\VoucherMovement;
 
@@ -86,8 +88,12 @@ final readonly class DatevExport
      *                                               batch byte for byte
      * @param  iterable<VoucherMovement>  $voucherMovements  what happened to vouchers in the period, likewise
      *                                                       appended and empty by default
+     * @param  iterable<CreditMovement>  $creditMovements  what happened to credit balances in the period, on
+     *                                                     the same terms: appended, empty by default, and a
+     *                                                     movement with nothing behind it is skipped rather
+     *                                                     than guessed at
      */
-    public function export(iterable $invoices, CarbonInterface $from, CarbonInterface $to, ?CarbonInterface $generatedAt = null, iterable $providerFees = [], iterable $voucherMovements = []): string
+    public function export(iterable $invoices, CarbonInterface $from, CarbonInterface $to, ?CarbonInterface $generatedAt = null, iterable $providerFees = [], iterable $voucherMovements = [], iterable $creditMovements = []): string
     {
         $this->assertSinglePostingPeriod($from, $to);
 
@@ -115,6 +121,16 @@ final readonly class DatevExport
 
         foreach ($voucherMovements as $movement) {
             foreach ($this->voucherBookings($movement) as $row) {
+                $rows[] = $row;
+            }
+        }
+
+        foreach ($creditMovements as $movement) {
+            // The booking decides whether there is one. A filter here as well would be a second answer to
+            // the same question, and the copy nobody runs is the one that rots.
+            $row = $this->creditBooking($movement);
+
+            if ($row !== null) {
                 $rows[] = $row;
             }
         }
@@ -313,6 +329,79 @@ final readonly class DatevExport
         );
 
         return $rows;
+    }
+
+    /**
+     * What a credit-balance movement books.
+     *
+     * The balance is the same instrument a voucher is — money held against a promise, taxed when it is
+     * finally used — so it books against the SAME liability account. A second account would be a number
+     * nobody agreed with an accountant, and this package has a case
+     * ({@see DatevTransaction::CreatorInputDeReduced}) that exists only to say what that costs.
+     *
+     * BUT THE REDEMPTION BOOKS AGAINST THE RECEIVABLE, NOT AGAINST REVENUE, and that is where this
+     * differs from {@see voucherBookings()}. A voucher redemption IS the sale; a credit redemption pays an
+     * invoice that already exists — the local engine raised one, or the provider's was persisted — and that
+     * invoice booked revenue against the customer account when it was issued. Booking revenue again here
+     * would state the turnover twice, every time credit is spent.
+     *
+     * So: money in and out on one side, the receivable on the other.
+     *
+     *   top-up             money in transit  →  the liability          the customer paid, nothing supplied
+     *   reversal           the liability     →  money in transit       the top-up was given back
+     *   charge offset      the liability     →  the customer account   the balance paid an open item
+     *   offset returned    the customer account → the liability        the cycle was never collected
+     *   provider offset    the liability     →  the customer account   the provider spent it on its invoice
+     *
+     * NULL for a proration credit, which is the one movement with no payment and no credit note behind it:
+     * what it IS in the books is an open question, and a booking would invent a liability nobody owes. The
+     * period batch reports the amount instead of letting it vanish — {@see CreditMovement::booksAgainstMoney()}
+     * is the same fact where a caller can read it.
+     *
+     * AND THE REDEMPTION OF SUCH A CREDIT IS NOT BOOKED EITHER, which is the correction of 2026-09-16.
+     * The balance is fungible, so an offset used to take the route above for its whole amount and debit the
+     * liability — including the part that was never credited to it, because the grant books nothing. The
+     * account therefore ran into debit by exactly the proration share on every offset that touched one: a
+     * liability slowly turning into an asset, in a file that stays valid and reconciles against itself.
+     *
+     * So an offset books only {@see CreditMovement::bookedAmount()}, the part with money behind it, and one
+     * paid for entirely out of a proration credit emits no row at all. That is the decision this package
+     * already made once, in the same place: HALF-BOOKED IS WORSE THAN UNBOOKED. What the unbooked share
+     * really is — a reduction of the original taxable base under § 17 Abs. 2 Nr. 2 UStG — needs the invoice
+     * it came from, because the rate lives in the revenue account and only that document names it. Until
+     * that lookup exists the share is reported rather than guessed at.
+     *
+     * @return ?list<string>
+     */
+    private function creditBooking(CreditMovement $movement): ?array
+    {
+        $liabilities = $this->accounts->resolve(DatevTransaction::VoucherLiabilities);
+        $transit = $this->accounts->resolve(DatevTransaction::MoneyTransit);
+        $customer = new DatevAccount($this->number('customer_account'));
+
+        $booking = match ($movement->reason) {
+            CreditReason::AddonTopup => [$transit, $liabilities->number, 'Guthaben-Aufladung'],
+            CreditReason::AddonReversal => [$liabilities, $transit->number, 'Guthaben-Erstattung'],
+            CreditReason::ChargeOffset, CreditReason::ProviderInvoiceOffset => [$liabilities, $customer->number, 'Guthaben-Einloesung'],
+            CreditReason::ChargeOffsetReturned => [$customer, $liabilities->number, 'Guthaben-Rueckgabe'],
+            CreditReason::ProrationCredit => null,
+        };
+
+        // Two refusals, and they are different questions rather than a belt and braces. The match answers
+        // whether this KIND of movement has a pair of accounts at all; `booksARow()` answers whether THIS
+        // one has anything left to book once the share nobody paid for is taken out of it.
+        if ($booking === null || ! $movement->booksARow()) {
+            return null;
+        }
+
+        [$konto, $gegenkonto, $text] = $booking;
+
+        $booked = $movement->bookedAmount();
+
+        return $this->chainRow(
+            $booked->minorUnits, $booked->currency, $konto, $gegenkonto,
+            $movement->occurredOn, $movement->reference, [$text, $movement->reference],
+        );
     }
 
     /**

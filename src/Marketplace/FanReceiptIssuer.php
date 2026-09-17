@@ -17,6 +17,7 @@ use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Invoicing\Party;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\ProviderComputedTax;
 use Pushery\Billing\ValueObjects\ServicePeriod;
 use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 
@@ -88,6 +89,14 @@ final readonly class FanReceiptIssuer
      *                                  purchase has no period and states none.
      * @param  ?SupplyTaxCharacteristics  $characteristics  what the supply WAS, in the terms its tax treatment turns on
      * @param  ?string  $provider  which provider the charge reference belongs to — the money, not the supply
+     * @param  int|ProviderComputedTax  $taxRateBps  a rate in basis points, or the whole position a PROVIDER
+     *                                               computed. A union rather than an eleventh parameter: the
+     *                                               position already CARRIES its rate, so the two are one
+     *                                               argument's worth of meaning — what this document's tax
+     *                                               position is. Given a position, the base and the tax are
+     *                                               written as they arrived rather than derived, because on a
+     *                                               provider-taxed sale every figure the document states has
+     *                                               to be one the provider stated.
      *
      * The tax characteristics are frozen here for the same reason the rate and the tier already are: the
      * document has to keep saying what the supply WAS, after the product behind it has legitimately
@@ -111,7 +120,7 @@ final readonly class FanReceiptIssuer
         Model $buyerOwner,
         FanReceiptTier $tier,
         Money $gross,
-        int $taxRateBps,
+        int|ProviderComputedTax $taxRateBps,
         CarbonImmutable $soldOn,
         ?string $chargeReference = null,
         ?array $buyer = null,
@@ -134,9 +143,28 @@ final readonly class FanReceiptIssuer
             );
         }
 
+        if ($taxRateBps instanceof ProviderComputedTax && ! $taxRateBps->accountsFor($gross)) {
+            throw new InvalidArgumentException(
+                'The base and the tax a provider computed do not add up to what the buyer paid, so they are '
+                .'not the split of this sale. A document written from them would disagree with the payment '
+                .'its reader holds it against — which is the one defect they exist to prevent.'
+            );
+        }
+
+        $rateBps = $taxRateBps instanceof ProviderComputedTax ? $taxRateBps->rateBps : $taxRateBps;
+
         // Tax as the DIFFERENCE from the gross, the same way the sale was priced: computing the net from the
         // rate and the tax from the net loses a cent the buyer nonetheless paid.
-        [$net, $tax] = $gross->baseFromMarkup($taxRateBps);
+        //
+        // WHERE THE PROVIDER COMPUTED IT, THE SPLIT IS TAKEN RATHER THAN MADE. The rate is still stated —
+        // a tax document has to name one — but it is the provider's own, and deriving the amounts from it
+        // again would replace two exact figures with two of this package's, which may differ by the cent
+        // that rounding falls on. The rate then no longer reproduces the amounts beside it, and on a tax
+        // document that is not a rounding difference but a contradiction a reader can check against the
+        // payment.
+        [$net, $tax] = $taxRateBps instanceof ProviderComputedTax
+            ? [$taxRateBps->net, $taxRateBps->tax]
+            : $gross->baseFromMarkup($taxRateBps);
 
         // Everything below is inside the closure for one reason: `issueOnce()` may not run it at all. A cycle
         // that already has a document returns that document, and a number drawn on the way to finding that
@@ -151,7 +179,7 @@ final readonly class FanReceiptIssuer
             'subtotal_minor' => $net->minorUnits,
             'tax_minor' => $tax->minorUnits,
             'total_minor' => $gross->minorUnits,
-            'tax_rate_bps' => $taxRateBps,
+            'tax_rate_bps' => $rateBps,
             'fan_gross_minor' => $gross->minorUnits,
             'supply_regime' => SupplyRegime::CommissionChain,
             // The regime's locked twin, written out rather than left implied — and the reason is a guard,
@@ -236,7 +264,7 @@ final readonly class FanReceiptIssuer
                 'unit' => 'C62',
                 'unit_price_minor' => $net->minorUnits,
                 'net_minor' => $net->minorUnits,
-                'tax_rate' => $taxRateBps / 100,
+                'tax_rate' => $rateBps / 100,
                 'period_start' => $period?->startsOn(),
                 'period_end' => $period?->endsOn(),
             ], static fn (mixed $value): bool => $value !== null)],
