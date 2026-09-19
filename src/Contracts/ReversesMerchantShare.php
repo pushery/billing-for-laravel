@@ -28,6 +28,19 @@ use Pushery\Billing\ValueObjects\TransferReversal;
  * driver either can reverse a share or it cannot, and the type system answers that before anything runs. The
  * same reasoning already governs {@see RoutesMoney} and {@see SuppliesProductArchetypes}.
  *
+ * ## How an implementation is REACHED, which is the half that used to be missing
+ *
+ * Bind it under THIS contract, or carry it on the object bound under {@see MovesMerchantShare}. Either
+ * works: the chargeback job asks the container for this contract first and falls back to the outbound
+ * object when nothing is bound here.
+ *
+ * UNTIL 2026-09-19 ONLY THE SECOND ROUTE WORKED, AND THIS DOCBLOCK RECOMMENDED THE FIRST. The job
+ * resolved `MovesMerchantShare` and settled the question with an `instanceof`, so a consumer who read the
+ * paragraph above, implemented the reversal in its own class and bound it here was never reached — and saw
+ * nothing: the attempt was recorded as failed with a message that read "this driver cannot", when the truth
+ * was "yours was never asked". It cost a consumer real money before anyone noticed, because the shipped
+ * driver carries both verbs on one class and satisfies the unwritten condition by accident.
+ *
  * ## The amount is the caller's, and that is the point
  *
  * The provider's own proportional reversal is the wrong figure whenever the platform fee has a fixed

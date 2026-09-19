@@ -21,9 +21,20 @@ use Pushery\Billing\ValueObjects\ServicePeriod;
  * merchant's side is taxed period by period, the input tax lags the output tax by up to eleven months —
  * a difference nobody notices and every reconciliation pays for.
  *
- * Neutral by construction: the package knows only "receipt" or "supply", and which one applies is a
- * jurisdiction's rule, read from its profile. Supply is the default, because it is what the package has
- * always done and a silent change of tax period is the last thing an upgrade should do.
+ * Neutral by construction: the package knows only "receipt" or "supply". Supply is the default, because
+ * it is what the package has always done and a silent change of tax period is the last thing an upgrade
+ * should do.
+ *
+ * WHICH ONE APPLIES IS NOT A PROPERTY OF A COUNTRY, AND THIS PARAGRAPH USED TO SAY IT WAS -- "a
+ * jurisdiction's rule, read from its profile". In Germany the two are Soll-Versteuerung (supply) and
+ * Ist-Versteuerung (receipt), and the second exists only on application and approval by the tax office
+ * (§ 20 UStG). Two operators in the same jurisdiction therefore differ, and one of them cannot be
+ * derived from a locale, a currency or a tax profile. It is DECLARED, once, by the operator who holds
+ * the notice -- `billing.tax_point_on_receipt`, whose comment carries who may apply and on what.
+ *
+ * The distinction is not pedantic: read as a country rule, this would be something a profile could set
+ * for a whole market, and setting it for an operator who is on the other basis puts every one of their
+ * transactions in the wrong period.
  */
 final readonly class TaxPoint
 {

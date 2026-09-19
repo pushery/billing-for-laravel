@@ -46,7 +46,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property string $currency
  * @property SettlementState $settlement_state
  * @property ?Carbon $settled_at
- * @property ?int $settlement_invoice_id the collective document that settled this charge, where one claimed it
+ * @property ?int $settlement_invoice_id the settlement document that settled this charge, where one has
  * @property int $refunded_minor
  * @property int $transfer_reversed_minor
  * @property int $fee_refunded_minor
@@ -133,21 +133,53 @@ final class MerchantCharge extends Model
     }
 
     /**
-     * The document that settled this charge, where a COLLECTIVE run claimed it.
+     * The document that settled this charge, whichever shape the settlement took.
      *
-     * Null on a per-transaction settlement, and that is not a gap: there the answer lives on the document,
-     * which carries `settled_charge_reference` and is found through it. This column exists because a
-     * collective document carries no reference at all — its transactions are lines — so without it nothing
-     * connected a routed charge to the month that settled it.
+     * It answered only the COLLECTIVE shape once, and the per-transaction path was left to the opposite
+     * direction — `settled_charge_reference` on the document. One fact reachable two ways is how a reader
+     * ends up covering half the installations: a lookup from the charge found only collective settlements, a
+     * lookup from the document only single ones, and neither could tell which half it was missing. Both
+     * paths write this column now ({@see linkToSettlement()}), so the direction is one.
      *
-     * Null therefore says no collective run has claimed this charge. It does NOT say the charge is
-     * unsettled; `settlement_state` answers that, and the two are separate facts on purpose.
+     * Null therefore says nothing has claimed this charge. It does NOT say the charge is unsettled;
+     * `settlement_state` answers that, and the two are separate facts on purpose — a charge whose money
+     * moved before any document was raised is a real state, and it is the one case the DAC7 fee figure
+     * cannot place by a document.
      *
      * @return BelongsTo<InvoiceRecord, $this>
      */
     public function settlementDocument(): BelongsTo
     {
         return $this->belongsTo(InvoiceRecord::class, 'settlement_invoice_id');
+    }
+
+    /**
+     * Record on named charges which document settled them.
+     *
+     * One writer for both settlement shapes, because the column has to mean the same thing either way. The
+     * rule lives on the model for the reason `InvoiceRecord::scopePlacedIn()` does: a second caller needed
+     * the same answer, and two copies of a narrowing rule are two chances to narrow differently.
+     *
+     * Narrowed by the merchant AS WELL AS the provider and reference. The pair is unique per installation,
+     * not globally — two creators can be settled in the same month and two drivers can mint one reference —
+     * and a run that matched on the pair alone could mark a stranger's sale as settled by a document that
+     * never mentioned them.
+     *
+     * A reference with no row behind it updates nothing and is not an error. The money already moved; this
+     * is a bookkeeping input, and refusing here would strand a creator's whole month over one bad string.
+     *
+     * @param  list<array{0: string, 1: string}>  $charges  provider and charge reference, in that order
+     */
+    public static function linkToSettlement(Model $merchant, InvoiceRecord $document, array $charges): void
+    {
+        foreach ($charges as [$provider, $reference]) {
+            self::query()
+                ->where('merchant_type', $merchant->getMorphClass())
+                ->where('merchant_id', $merchant->getKey())
+                ->where('provider', $provider)
+                ->where('charge_reference', $reference)
+                ->update(['settlement_invoice_id' => $document->getKey()]);
+        }
     }
 
     /** What the buyer paid. */

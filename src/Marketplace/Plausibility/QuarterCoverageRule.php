@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace\Plausibility;
 
 use Pushery\Billing\Contracts\ReportingPlausibilityRule;
-use Pushery\Billing\Marketplace\MerchantChargeAnnualEarningsCounter;
 use Pushery\Billing\Marketplace\SettlementGrossInflowCounter;
+use Pushery\Billing\Marketplace\WithheldFeeCounter;
 use Pushery\Billing\ValueObjects\CountingPeriod;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlausibilityFinding;
@@ -36,7 +36,7 @@ final readonly class QuarterCoverageRule implements ReportingPlausibilityRule
 {
     public function __construct(
         private SettlementGrossInflowCounter $inflow,
-        private MerchantChargeAnnualEarningsCounter $earnings,
+        private WithheldFeeCounter $fees,
     ) {}
 
     public function key(): string
@@ -63,7 +63,7 @@ final readonly class QuarterCoverageRule implements ReportingPlausibilityRule
             }
 
             $annualGross = $this->inflow->countedIn($report->seller, $currency, $window);
-            $annualFees = $this->earnings->feesWithheldIn($report->seller, $currency, $window);
+            $annualFees = $this->fees->feesWithheldIn($report->seller, $currency, $window);
             $annualCount = $this->inflow->transactionsIn($report->seller, $currency, $window);
 
             if ($quarterlyGross->minorUnits !== $annualGross->minorUnits) {

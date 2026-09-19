@@ -83,15 +83,68 @@ final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
         // so asking the driver would answer about the wrong object. An install that binds no transfers at
         // all -- a destination-charge install, where the provider unwinds the transfer with the refund --
         // legitimately has nothing here.
-        $transfers = $container->bound(MovesMerchantShare::class)
-            ? $container->make(MovesMerchantShare::class)
+        //
+        // THE REVERSAL CONTRACT IS ASKED FOR FIRST, AND UNTIL 2026-09-19 IT WAS NEVER ASKED AT ALL. This
+        // block resolved the OUTBOUND verb and settled the question with an `instanceof` -- so a consumer
+        // who followed the contract's own docblock, implemented the reversal in its own class and bound it
+        // here, was never reached. Measured across the package on 2026-09-19: one consumer of the contract
+        // (this job), ZERO `make()` calls for it, ZERO bindings. The shipped driver satisfies the unwritten
+        // condition by accident, because `StripeMerchantTransfers` carries both verbs on one class.
+        //
+        // What it cost, reported from a consumer: their outbound driver is a wallet of their own, so every
+        // lost dispute landed in `failRefund` and the creator kept the share of a sale the network had
+        // already clawed back. No throw, no red line, nothing that looks like a defect -- and the message
+        // below read as "this driver cannot", when the truth was "yours was never asked".
+        //
+        // The fallback keeps every existing install unchanged: where nothing is bound under the reversal
+        // contract, the outbound object answers exactly as before.
+        // THE MESSAGE BELOW ASKS THE CONTAINER, NOT THE RESOLVED OBJECT, AND THAT IS NOT A DETAIL. A
+        // `$outbound === null` there reads naturally and the analyzer rejects it as always-true: this
+        // package ships ONE implementation of the outbound contract and it happens to carry both verbs, so
+        // from a type's point of view an outbound object that cannot reverse does not exist here. It exists
+        // in a consumer, which is the whole subject. `bound()` returns a bool and answers the question the
+        // message is actually about -- is a transfers driver installed at all.
+        // THE "NOTHING IS BOUND" CASE IS DECIDED BEFORE ANYTHING IS RESOLVED, and that ordering is what
+        // makes it expressible at all. Asked afterwards -- `$outbound === null`, or a ternary on the
+        // binding -- the analyzer rejects it as unreachable, and it is right about the code it can see:
+        // this package ships ONE implementation of the outbound contract and that class carries both
+        // verbs, so a bound-but-incapable driver does not exist inside these files. It exists in a
+        // consumer, which is the entire subject of this contract. Asking the CONTAINER first keeps the two
+        // states apart where the type system has nothing to say about them.
+        $outboundIsBound = $container->bound(MovesMerchantShare::class);
+
+        if (! $outboundIsBound && ! $container->bound(ReversesMerchantShare::class)) {
+            $ledger->failRefund($attempt, 'No merchant-transfer driver is bound, so there is no share to reverse.');
+
+            return;
+        }
+
+        $reversals = $container->bound(ReversesMerchantShare::class)
+            ? $container->make(ReversesMerchantShare::class)
             : null;
+
+        $outbound = $outboundIsBound ? $container->make(MovesMerchantShare::class) : null;
+
+        $transfers = match (true) {
+            $reversals instanceof ReversesMerchantShare => $reversals,
+            $outbound instanceof ReversesMerchantShare => $outbound,
+            default => null,
+        };
 
         if (! $transfers instanceof ReversesMerchantShare) {
             // Recorded as a failure rather than swallowed. A driver that cannot reverse leaves the merchant
             // holding a share of a sale the buyer took back, and an attempt with no ending is the state in
             // which nobody can later say whether it was tried.
-            $ledger->failRefund($attempt, 'The active driver cannot reverse a merchant transfer.');
+            //
+            // TWO MESSAGES, BECAUSE THE TWO STATES NEED DIFFERENT ACTIONS. "Nothing is bound" is a
+            // destination-charge install and usually correct; "bound, and it cannot reverse" is a
+            // capability gap somebody has to close. One sentence covering both is the sentence nobody
+            // acts on.
+            $ledger->failRefund(
+                $attempt,
+                'The bound merchant-transfer driver cannot reverse a share, and nothing is bound under '
+                    .ReversesMerchantShare::class.' beside it.',
+            );
 
             return;
         }

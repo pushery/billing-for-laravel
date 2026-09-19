@@ -10,6 +10,7 @@ use Pushery\Billing\Enums\CreatorTaxStatus;
 use Pushery\Billing\Enums\RoundingResidual;
 use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\TaxBaseChangeReason;
+use Pushery\Billing\Exceptions\SettlementLineNotFound;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\RefundAttempt;
@@ -87,7 +88,36 @@ final readonly class RoutedRefundCorrector
             return [null, null, null];
         }
 
-        $saleGross = $this->saleGross($settlement, $refunded->currency);
+        // WHICH line of the settlement this charge is, where the settlement carries more than one.
+        //
+        // A collective document settles a month, so its header states no commission, no rate and no fan
+        // gross — a month has one of none of those. Everything below reads exactly those off `$settlement`.
+        // The line states them, and `lineSettling()` is the one place that lookup lives, because the
+        // correcting document needs the same line for its frozen characteristics.
+        //
+        // Null for a per-transaction settlement, whose single line names no charge because there the header
+        // IS the line. That is not a special case to branch on — the header answers, as it always has.
+        $line = $settlement->lineSettling($charge->provider, $charge->charge_reference);
+
+        if ($settlement->settlement_period !== null && ! $this->lineAnswersEverything($line)) {
+            // Refused, and the condition is deliberately TOTAL rather than "no line names the charge".
+            //
+            // A line missing any ONE of the three produces a correction computed partly from zeros, and
+            // each missing field fails differently while looking equally complete. An absent commission
+            // books a reversal as if the platform kept nothing; an absent fan gross books it as 0.00
+            // outright against a real sale.
+            //
+            // So the question is not whether a line was found but whether it can answer. A line written by
+            // an older version answers no and refuses, which names the month to re-run instead of quietly
+            // booking a wrong figure.
+            throw SettlementLineNotFound::forCharge(
+                (string) $settlement->number,
+                $charge->provider,
+                $charge->charge_reference,
+            );
+        }
+
+        $saleGross = $this->saleGross($settlement, $refunded->currency, $line);
 
         $correction = $this->cascade->forRefund(
             $settlement->supply_regime ?? SupplyRegime::CommissionChain,
@@ -96,10 +126,10 @@ final readonly class RoutedRefundCorrector
             // already includes this one by the time it is applied, so the earlier state is the difference.
             $this->refundedBefore($charge, $refunded),
             $refunded,
-            $this->frozenCommission($settlement),
+            $this->frozenCommission($settlement, $line),
             $statusAtSupply,
-            $settlement->tax_rate_bps ?? 0,
-            $settlement->tax_rate_bps ?? 0,
+            $this->frozenRate($settlement, $line),
+            $this->frozenRate($settlement, $line),
             // Handed to the cascade as well, not only to the issuers below. It was reaching the documents
             // and not the arithmetic that decides WHICH documents exist, so an uncollectible loss produced
             // a creator-side correction anyway — the one thing the reason is carried to prevent.
@@ -124,8 +154,18 @@ final readonly class RoutedRefundCorrector
      * actually handed over, and reconstructing it would reintroduce the rounding the settlement already
      * resolved once.
      */
-    private function saleGross(InvoiceRecord $settlement, string $currency): Money
+    /**
+     * @param  array<array-key, mixed>|null  $line  the settlement line this charge is, where one names it
+     */
+    private function saleGross(InvoiceRecord $settlement, string $currency, ?array $line = null): Money
     {
+        // The LINE first, for the same reason as the commission and the rate: a month has no single fan
+        // gross, so a collective header states none, and reading it there answers 0.00 for every
+        // collectively settled sale.
+        if ($line !== null && is_int($line['fan_gross_minor'] ?? null)) {
+            return new Money($line['fan_gross_minor'], $currency);
+        }
+
         return new Money((int) $settlement->fan_gross_minor, $currency);
     }
 
@@ -154,8 +194,65 @@ final readonly class RoutedRefundCorrector
      * settlement that never recorded it falls back to what this installation does today, which is the
      * closest thing to the truth still available.
      */
-    private function frozenCommission(InvoiceRecord $settlement): PlatformFee
+    /**
+     * Whether a settlement line carries every input the correction reads off it.
+     *
+     * Checked as a set rather than field by field at each reader, because the readers are spread across the
+     * cascade call and two private helpers — and a field checked at one and missing at another is a
+     * correction half computed from the line and half from a header that states nothing.
+     *
+     * `commission_flat_minor` and `commission_residual` are NOT required. A fee with no fixed part is the
+     * ordinary case and a zero there is a true statement about it; the residual has a configured fallback
+     * the per-transaction path has always used for settlements written before the direction was recorded.
+     * The three below have no true default: a missing commission rate is not a zero rate, and a missing fan
+     * gross is not a sale of nothing.
+     *
+     * @param  array<array-key, mixed>|null  $line
+     */
+    private function lineAnswersEverything(?array $line): bool
     {
+        if ($line === null) {
+            return false;
+        }
+
+        return is_int($line['commission_bps'] ?? null)
+            && is_int($line['tax_rate_bps'] ?? null)
+            && is_int($line['fan_gross_minor'] ?? null);
+    }
+
+    /**
+     * The rate the supply was taxed at, from the line where one answers for this charge.
+     *
+     * A collective header carries no rate, and a zero rate turns a correction of a taxed supply into a
+     * correction of an untaxed one — arithmetically clean and wrong by the tax.
+     *
+     * @param  array<array-key, mixed>|null  $line
+     */
+    private function frozenRate(InvoiceRecord $settlement, ?array $line = null): int
+    {
+        if ($line !== null && is_int($line['tax_rate_bps'] ?? null)) {
+            return $line['tax_rate_bps'];
+        }
+
+        return $settlement->tax_rate_bps ?? 0;
+    }
+
+    /**
+     * @param  array<array-key, mixed>|null  $line  the settlement line this charge is, where one names it
+     */
+    private function frozenCommission(InvoiceRecord $settlement, ?array $line = null): PlatformFee
+    {
+        // The LINE first, where there is one. A collective document states no commission on its header, so
+        // reading the header there would treat every collectively settled sale as having carried none.
+        if ($line !== null) {
+            return new PlatformFee(
+                is_int($line['commission_bps'] ?? null) ? $line['commission_bps'] : 0,
+                is_int($line['commission_flat_minor'] ?? null) ? $line['commission_flat_minor'] : 0,
+                RoundingResidual::tryFrom(is_string($line['commission_residual'] ?? null) ? $line['commission_residual'] : '')
+                    ?? $this->configuredResidual(),
+            );
+        }
+
         return new PlatformFee(
             $settlement->commission_bps ?? 0,
             $settlement->commission_flat_minor ?? 0,

@@ -20,6 +20,7 @@ use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\ValueObjects\InboundTaxTreatment;
 use Pushery\Billing\ValueObjects\SettlementTransaction;
+use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 
 /**
  * Settles a creator's whole month into ONE self-billing document, dated to the last day of the month, with a
@@ -144,6 +145,8 @@ final readonly class CollectiveSelfBillingEngine
             // rounded by the matrix, so the document total is the payout run to the cent.
             $lineNet = $treatment->payoutAmount->minus($treatment->taxAmount);
 
+            $characteristics = $transaction->characteristics ?? SupplyTaxCharacteristics::unknown();
+
             $lines[] = [
                 'description' => $transaction->description ?? 'Platform settlement',
                 'quantity' => 1,
@@ -153,6 +156,58 @@ final readonly class CollectiveSelfBillingEngine
                 'tax_rate' => $treatment->showsTax ? $transaction->supplyRateBps / 100 : 0.0,
                 // The service time the line states — a per-line date, admissible as the supply month too.
                 'service_date' => $transaction->supplyDate->format('Y-m-d'),
+                // WHAT was sold, frozen onto the line rather than onto the header.
+                //
+                // The header cannot state these and says so a few lines below: a month has no single
+                // archetype, and "a column that is sometimes right is worse than an empty one". A LINE has
+                // exactly one, so this is where they belong — and a correction of this transaction reads
+                // them from here instead of copying nothing from the header.
+                //
+                // Null where the caller stated none. That is not the same as an empty header: the header is
+                // empty because the question has no single answer, the line is empty because nobody
+                // answered it, and a correction can tell those apart and refuse on the second.
+                'tax_archetype' => $characteristics->archetype?->value,
+                'sold_alongside_archetype' => $characteristics->soldAlongside?->value,
+                'place_of_supply_rule' => $characteristics->placeOfSupply?->value,
+                'tax_rate_category' => $characteristics->rateCategory?->value,
+                // WHICH routed charge this line settles, as the pair that identifies one.
+                //
+                // The charge-side link (`billing_merchant_charges.settlement_invoice_id`) reaches the
+                // DOCUMENT. On a per-transaction settlement that is enough, because the document is the
+                // transaction. Here it is not: one document carries a month, and a correction of one
+                // transaction has to find ITS line.
+                //
+                // Without this the only way to pick a line would be to match on the date and the amount,
+                // which is a guess — and two identically priced downloads on one day make it a wrong one.
+                // Null where the caller named no charge, which is the same absence the charge-side stamp
+                // already declines to invent.
+                'charge_provider' => $transaction->chargeProvider,
+                'charge_reference' => $transaction->chargeReference,
+                // The TERMS this transaction was priced under, and the rate its tax was computed at.
+                //
+                // These are not documentation. A correction of one transaction recomputes the commission on
+                // what REMAINS of it, and it reads the terms off the document it corrects. A collective
+                // header states none, so a correction against one would compute with a zero commission and
+                // a zero rate — and produce a document that looks complete and is wrong by both.
+                //
+                // Held per line rather than per document because a month does not have one set: the rate
+                // follows each supply, and a platform that changed its take mid-month priced the earlier
+                // transactions under the earlier terms. The header can no more state one commission than it
+                // can state one archetype.
+                'commission_bps' => $transaction->commission->bps,
+                'commission_flat_minor' => $transaction->commission->flatMinor,
+                'commission_residual' => $transaction->commission->residual->value,
+                'tax_rate_bps' => $treatment->showsTax ? $transaction->supplyRateBps : 0,
+                // What the buyer paid for THIS transaction, frozen for the same reason the header freezes it
+                // on a per-transaction settlement: a correction states what is being reversed, and
+                // recomputing the fan gross later would reintroduce the rounding this resolved once.
+                //
+                // Derived exactly as `SelfBillingEngine` derives it — fan net plus the output tax the fan
+                // paid, commercially rounded per transaction. The two expressions are deliberately
+                // identical; the alternative was a gross-up helper on `Money`, which does not exist and is
+                // not a change to make in passing on money arithmetic.
+                'fan_gross_minor' => $transaction->net->minorUnits
+                    + (int) round($transaction->net->minorUnits * $transaction->supplyRateBps / 10_000),
             ];
 
             // Collected only for transactions that actually reached a line. A hold `continue`s above and is
@@ -184,7 +239,7 @@ final readonly class CollectiveSelfBillingEngine
             // Stamped on the re-run too. The document is the same one, so this writes the same id — but a
             // caller that named its charges only on the second run would otherwise get a document with no
             // link, which reads exactly like a month that named none.
-            $this->stampSettledCharges($creator, $existing, $settledCharges);
+            MerchantCharge::linkToSettlement($creator, $existing, $settledCharges);
 
             return $existing;
         }
@@ -232,39 +287,11 @@ final readonly class CollectiveSelfBillingEngine
             'lines' => $lines,
         ]);
 
-        $this->stampSettledCharges($creator, $document, $settledCharges);
+        // Which document settled each of these charges. The writer lives on the model because the
+        // per-transaction path needs the same answer — see MerchantCharge::linkToSettlement().
+        MerchantCharge::linkToSettlement($creator, $document, $settledCharges);
 
         return $document;
-    }
-
-    /**
-     * Record on each named charge which document settled it.
-     *
-     * The link has to live here because it lives nowhere else. A per-transaction settlement carries
-     * `settled_charge_reference` on the DOCUMENT and every correction path finds its original through it; a
-     * collective document carries no reference at all, so without this a routed charge and the month that
-     * settled it were connected by nothing.
-     *
-     * Narrowed by the merchant AS WELL AS the provider and reference. The pair is unique per installation,
-     * not globally — two creators can be settled in the same month and two drivers can mint one reference —
-     * and a run that matched on the pair alone could mark a stranger's sale as settled by a document that
-     * never mentioned them.
-     *
-     * A reference with no row behind it updates nothing and is not an error. The money already moved; this
-     * is a bookkeeping input, and refusing here would strand a creator's whole month over one bad string.
-     *
-     * @param  list<array{0: string, 1: string}>  $charges
-     */
-    private function stampSettledCharges(Model $creator, InvoiceRecord $document, array $charges): void
-    {
-        foreach ($charges as [$provider, $reference]) {
-            MerchantCharge::query()
-                ->where('merchant_type', $creator->getMorphClass())
-                ->where('merchant_id', $creator->getKey())
-                ->where('provider', $provider)
-                ->where('charge_reference', $reference)
-                ->update(['settlement_invoice_id' => $document->id]);
-        }
     }
 
     /** @return array<string, ?string> */

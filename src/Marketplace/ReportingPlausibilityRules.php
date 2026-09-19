@@ -12,6 +12,7 @@ use Pushery\Billing\Marketplace\Plausibility\DuplicateSellerRule;
 use Pushery\Billing\Marketplace\Plausibility\QuarterCoverageRule;
 use Pushery\Billing\Marketplace\Plausibility\SellerRecordRule;
 use Pushery\Billing\Marketplace\Plausibility\UnclassifiedActivityRule;
+use Pushery\Billing\Marketplace\Plausibility\UndocumentedSettlementRule;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 
 /**
@@ -23,8 +24,9 @@ use Pushery\Billing\Preflight\CheckpointRegistry;
  *
  * ## What is package code and what is not
  *
- * The four shipped rules are STRUCTURAL: undecided classification, quarters that do not sum to the year, a
- * seller reported twice, an unfilable seller record. None of them names a country, a threshold or a form.
+ * The five shipped rules are STRUCTURAL: undecided classification, quarters that do not sum to the year, a
+ * seller reported twice, an unfilable seller record, and a charge no settlement document places. None of
+ * them names a country, a threshold or a form.
  * What varies by jurisdiction — which fields a record must carry, which identifiers must hold which check —
  * comes through {@see ReportingProfile}, so a consumer under another duty binds
  * another profile instead of switching a German rule off.
@@ -71,6 +73,7 @@ final class ReportingPlausibilityRules
             $this->container->make(SellerRecordRule::class),
             $this->container->make(QuarterCoverageRule::class),
             $this->container->make(DuplicateSellerRule::class),
+            $this->container->make(UndocumentedSettlementRule::class),
             ...$this->added,
         ];
 
