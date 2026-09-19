@@ -22,6 +22,7 @@ use Pushery\Billing\Exceptions\ProductNotClassified;
 use Pushery\Billing\Exceptions\SelfBillingDisabled;
 use Pushery\Billing\Invoicing\Party;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Tax\FreezeExchangeRateOnDocument;
 use Pushery\Billing\ValueObjects\InboundTaxTreatment;
@@ -387,6 +388,15 @@ final readonly class SelfBillingEngine
         // number was drawn, the row was written, and the freeze failed. Which is exactly the case the
         // guard exists to prevent, and a burnt number in a gapless series is not fixed by retrying.
         $this->freezeExchangeRate($record, $transactionNet, $supplyDate);
+
+        // And the reverse direction of the same link, so a reader coming from the charge finds this document
+        // too. The document already names the charge (`settled_charge_reference` above), which is the
+        // direction a correction uses; the DAC7 fee figure walks the other way, from a charge to the
+        // settlement whose date places it. Writing only one direction left that figure answering for
+        // collective settlements and silently not for these.
+        if ($settledChargeReference !== null && $provider !== null) {
+            MerchantCharge::linkToSettlement($creator, $record, [[$provider, $settledChargeReference]]);
+        }
 
         // The document now exists where its recipient can reach it, which is one of the two things that
         // together deliver it. The other — telling them — belongs to whatever channel the consuming

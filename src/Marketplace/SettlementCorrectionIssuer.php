@@ -15,6 +15,7 @@ use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Enums\TaxBaseChangeReason;
 use Pushery\Billing\Exceptions\InvalidInvoiceCorrection;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\RefundAttempt;
 use Pushery\Billing\Tax\FreezeExchangeRateOnDocument;
 use Pushery\Billing\ValueObjects\ChainCorrection;
@@ -123,10 +124,35 @@ final readonly class SettlementCorrectionIssuer
      * so it belongs to whichever one there was. The exclusion's cost is certain, immediate and universal;
      * this one needs a reference collision with a driver that did not exist when the row was written.
      *
+     * ## And the charge names its document, which is the only reading a collective settlement has
+     *
+     * Everything above searches the DOCUMENT side: a settlement states the charge it settled, and this
+     * finds it by that column. A collective settlement cannot state one — it carries a month, and its
+     * transactions are lines — so for a collectively settled sale this search found nothing, and a refund
+     * corrected nothing at all. Silently.
+     *
+     * The other direction exists now: a charge records which settlement document paid it out, on BOTH
+     * settlement paths. So it is asked first. It is not a fallback but the better question — a recorded
+     * fact rather than a match, and it needs none of the provider reasoning above, because the charge row
+     * is already narrowed by the pair.
+     *
+     * The series is still checked: a charge's link points at a SETTLEMENT, and a caller looking for a buyer
+     * receipt must not be handed one.
+     *
+     * No `credited_invoice_id` condition, deliberately. That column is written only by the two settlement
+     * writers and both write originals, so a correction can never be at the other end of this link. A
+     * filter for it would read as the thing keeping a correction out and would keep nothing out.
+     *
      * @param  list<DocumentSeries>  $series
      */
     private function originalFor(string $chargeReference, ?string $provider, array $series): ?InvoiceRecord
     {
+        $named = $this->documentTheChargeNames($chargeReference, $provider, $series);
+
+        if ($named instanceof InvoiceRecord) {
+            return $named;
+        }
+
         return InvoiceRecord::query()
             ->where('settled_charge_reference', $chargeReference)
             ->when(
@@ -146,6 +172,33 @@ final readonly class SettlementCorrectionIssuer
                 fn (Builder $q): Builder => $q->orderByRaw('case when provider = ? then 0 else 1 end', [$provider]),
             )
             ->orderBy('id')
+            ->first();
+    }
+
+    /**
+     * The settlement document a charge records as having paid it out.
+     *
+     * @param  list<DocumentSeries>  $series
+     */
+    private function documentTheChargeNames(string $chargeReference, ?string $provider, array $series): ?InvoiceRecord
+    {
+        $charge = MerchantCharge::query()
+            ->where('charge_reference', $chargeReference)
+            ->when(
+                $provider !== null && $provider !== '',
+                fn (Builder $q): Builder => $q->where('provider', $provider),
+            )
+            ->whereNotNull('settlement_invoice_id')
+            ->orderBy('id')
+            ->first();
+
+        if (! $charge instanceof MerchantCharge) {
+            return null;
+        }
+
+        return InvoiceRecord::query()
+            ->whereKey($charge->settlement_invoice_id)
+            ->whereIn('document_series', array_map(fn (DocumentSeries $s): string => $s->value, $series))
             ->first();
     }
 

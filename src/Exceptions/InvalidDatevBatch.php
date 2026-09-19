@@ -44,6 +44,39 @@ final class InvalidDatevBatch extends RuntimeException
         );
     }
 
+    /**
+     * A foreign-currency document that never froze a rate cannot be booked, and it is refused rather than
+     * sent.
+     *
+     * DATEV's rule is that a row whose currency differs from the batch's base must carry the rate or the
+     * base amount. Carrying neither is not a formatting lapse: the import either rejects the row outright or
+     * books it AT FACE VALUE into a base-currency account — 500,00 PLN posted as 500,00 EUR — and the second
+     * outcome overstates the revenue by the exchange rate while looking like a plausible figure the whole
+     * way through.
+     *
+     * Refused rather than dropped, and the distinction is the whole argument. Dropping the row would hide
+     * revenue, which is worse than a row an importer questions; that objection is right and it is about
+     * dropping. A refused BATCH exports nothing and says why, so nothing is hidden, nothing is posted wrong,
+     * and the missing freeze becomes the operator's next action instead of a reconciliation months later.
+     *
+     * What settled it against sending the row is that sending rests on the import QUESTIONING it, and this
+     * package's own export comment says the import either rejects it or books it at face value. Correctness
+     * that depends on somebody else's undefined behavior is not correctness.
+     *
+     * Deriving a rate here is the one option that stays off the table: that is the divergence the freeze
+     * exists to prevent, and the books and the document would disagree with only the books re-derivable.
+     */
+    public static function foreignCurrencyWithoutAFrozenRate(string $reference, string $currency, string $base): self
+    {
+        return new self(
+            'The document "'.$reference.'" is in '.$currency.' and the batch books in '.$base.', but no '
+            .'document-layer rate was ever frozen on it. The batch is refused rather than exported: a row '
+            .'carrying neither a rate nor a base amount is either rejected by the import or booked at face '
+            .'value, and the second overstates the revenue by the exchange rate. Freeze the rate on the '
+            .'document, or export a period that does not contain it.'
+        );
+    }
+
     public static function spansPostingPeriods(string $from, string $to): self
     {
         return new self(

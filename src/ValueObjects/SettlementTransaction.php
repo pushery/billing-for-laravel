@@ -51,6 +51,23 @@ final readonly class SettlementTransaction
          */
         public ?string $chargeProvider = null,
         public ?string $chargeReference = null,
+        /**
+         * WHAT was sold, frozen onto the LINE this transaction becomes.
+         *
+         * A collective document settles a month into one record, so its header cannot state an archetype: a
+         * creator who sold a download and a commissioned piece in the same month has no single one, and
+         * writing either would make the document say something false about the other half. The line does
+         * have exactly one, which is why these belong here.
+         *
+         * That the per-transaction engine keeps them on its HEADER is not a different rule — there the
+         * header IS the line, so the distinction cannot show. Collective settlement is the case that
+         * reveals them as line-level facts.
+         *
+         * Optional, because only the caller knows what was sold and a run must not invent it. Absent means
+         * the line states none, and a correction of that line refuses loudly rather than issuing a document
+         * with empty characteristics — the same reason the header leaves them empty instead of guessing.
+         */
+        public ?SupplyTaxCharacteristics $characteristics = null,
     ) {
         if (($chargeProvider === null) !== ($chargeReference === null)) {
             throw SettlementTransactionChargeIncomplete::make();

@@ -512,6 +512,52 @@ final class InvoiceRecord extends Model
     }
 
     /**
+     * The line of this document that settles a given routed charge, or null where none does.
+     *
+     * ## Why this lives on the model
+     *
+     * For the same reason {@see scopePlacedIn()} does, one paragraph down: two readers need the same
+     * answer. A refund's arithmetic needs the line's terms and rate; the correcting document needs its
+     * frozen characteristics. Two resolutions of one lookup are two chances to resolve it differently, and
+     * the one that drifted would be the one nobody re-reads.
+     *
+     * ## Why a line and not the header
+     *
+     * A collective settlement carries a month, so its header states no archetype, no commission and no
+     * rate — a month has one of none of those. The line does. A per-transaction settlement keeps them on
+     * its header because there the header IS the line, which is why that case answers null here and its
+     * readers fall back to the header without a special case.
+     *
+     * Matched on the provider AND the reference, never the reference alone: it is unique only per provider,
+     * so a second driver's identical reference would hand back a stranger's line.
+     *
+     * Typed as an arbitrary-keyed array rather than a string-keyed one, which is what a JSON column can
+     * actually promise. Claiming string keys would be a claim about data written by a caller.
+     *
+     * @return array<array-key, mixed>|null
+     */
+    public function lineSettling(string $provider, string $reference): ?array
+    {
+        $lines = $this->getAttribute('lines');
+
+        if (! is_array($lines)) {
+            return null;
+        }
+
+        foreach ($lines as $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+
+            if (($line['charge_provider'] ?? null) === $provider && ($line['charge_reference'] ?? null) === $reference) {
+                return $line;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Narrow to the documents a counting period CONTAINS — the one place that rule lives.
      *
      * A document that corrects nothing is placed by its own date. A CORRECTION is placed by the configured

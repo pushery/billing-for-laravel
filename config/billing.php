@@ -74,6 +74,22 @@ return [
     |
     */
 
+    // Adyen posts several NotificationRequestItems in one request and signs each of them
+    // separately, inside the body. There is no request-level signature, so these keys are what
+    // stands between the endpoint and anybody who can reach it.
+    'adyen' => [
+        // The HMAC key generated in the Adyen dashboard for this notification endpoint. Without
+        // it the verifier refuses everything: an endpoint that cannot check a signature must not
+        // be the one deciding a payment succeeded.
+        'hmac_key' => env('BILLING_ADYEN_HMAC_KEY'),
+
+        // Optional HTTP basic auth on the notification endpoint, on top of the HMAC. Left unset
+        // the check is skipped rather than failed -- the HMAC alone is Adyen's documented
+        // default, and requiring credentials unasked would refuse every install that follows it.
+        'notification_user' => env('BILLING_ADYEN_NOTIFICATION_USER'),
+        'notification_password' => env('BILLING_ADYEN_NOTIFICATION_PASSWORD'),
+    ],
+
     'mollie' => [
         'api_key' => env('BILLING_MOLLIE_API_KEY'),
 
@@ -231,6 +247,16 @@ return [
     | When owner is "team", the relation on the acting user that returns the team
     | which owns billing (resolved by the BillingEntityResolver). Ignored in
     | "user" mode.
+    |
+    | Point it at a relation that IS the membership. A belongs-to or belongs-to-many
+    | carries its own proof: the row exists because the user belongs to the team. A
+    | pointer the user controls -- `current_team_id` and its kind -- does not: it keeps
+    | answering after the user has been removed, and billing would follow it.
+    |
+    | If the relation here is such a pointer, implement
+    | `Pushery\Billing\Contracts\VerifiesBillingMembership` on the team model. The
+    | resolver asks any owner that can answer, and falls back to the acting user when the
+    | answer is no -- the same direction it takes when team mode yields no team at all.
     */
 
     'team_relation' => 'team',
@@ -1482,6 +1508,49 @@ return [
         ],
     ],
 
+    // WHEN the tax on a period falls due: when the service was rendered, or when the money arrived.
+    //
+    // In Germany these are Soll-Versteuerung (accrual, the default here) and Ist-Versteuerung (receipt),
+    // and those words appear nowhere else in this package. They are written down HERE because an operator
+    // who has one of them knows it by its German name and would otherwise never find this switch -- the
+    // key says "tax point", the notice from their tax office says "Ist-Versteuerung", and nothing
+    // connected the two.
+    //
+    // OFF IS THE STATUTORY DEFAULT, NOT A PREFERENCE. Accrual is the normal case (§ 16 Abs. 1 S. 1 UStG).
+    // Receipt taxation exists ONLY on application and approval by the tax office (§ 20 UStG) -- nobody
+    // has it by accident, and anybody who has it holds a notice saying so. If you are not sure, you do
+    // not have it.
+    //
+    // WHO MAY APPLY, as an orientation and not as advice -- § 20 Abs. 1 UStG, four alternatives:
+    //
+    //   1. prior-year turnover of not more than 800,000 EUR
+    //   2. exempt from bookkeeping obligations under § 148 AO
+    //   3. income from a freelance profession under § 18 Abs. 1 Nr. 1 EStG -- NO turnover ceiling,
+    //      as long as no books are kept. Keeping them voluntarily forfeits this route
+    //   4. a public-law entity without a bookkeeping obligation
+    //
+    // Which legal forms usually land where, for the same orientation:
+    //
+    //   sole trader / partnership on a cash-basis P&L, under the ceiling ... usually receipt
+    //   freelance professional ...................................... usually receipt, via alternative 3
+    //   GmbH / UG / AG ............................................. usually accrual -- but NOT always:
+    //       a corporation is a merchant by form (§ 6 HGB) and therefore keeps books, so alternative 2 is
+    //       closed to it. Alternative 1 is not. A corporation under 800,000 EUR CAN be granted receipt
+    //       taxation, and that is regularly believed to be impossible
+    //   over the ceiling AND obliged to keep books ................. accrual, with no route open
+    //
+    // The 800,000 figure was raised from 600,000 with effect from 2024-01-01. An older source names the
+    // old one, and the difference decides exactly the cases in between. Read the current § 20 UStG rather
+    // than this comment: verified against gesetze-im-internet.de on 2026-09-17, which is a date, not a
+    // guarantee.
+    //
+    // IT IS A PER-TAXPAYER ELECTION, NOT A PROPERTY OF A COUNTRY. Two operators in the same
+    // jurisdiction differ, so this cannot be derived from a locale, a currency or a tax profile -- it is
+    // declared, once, by the operator who holds the notice.
+    //
+    // AND IT IS NOT A SETTING TO TRY OUT. It moves which period a transaction is taxed in, and a
+    // document number's year is frozen the moment it is drawn. Changing it after documents exist does not
+    // adjust them.
     'tax_point_on_receipt' => (bool) env('BILLING_TAX_POINT_ON_RECEIPT', false),
 
     // Whether `billing:rates:probe` may reach the public source that publishes VAT rates.

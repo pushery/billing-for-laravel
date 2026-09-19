@@ -33,6 +33,7 @@
     },
     "require": {
         "php": "^8.4",
+        "guzzlehttp/psr7": "^2.0 || ^3.0",
         "ext-ctype": "*",
         "ext-hash": "*",
         "ext-json": "*",
@@ -54,10 +55,14 @@
         "illuminate/validation": "^13.0",
         "illuminate/view": "^13.0",
         "laravel/cashier": "^16.0",
-        "stripe/stripe-php": "^17.4|^18.0|^19.0|^20.0",
+        "nesbot/carbon": "^3.0",
+        "psr/log": "^1.0 || ^2.0 || ^3.0",
+        "stripe/stripe-php": "^17.4|^18.0|^19.0|^20.0|^21.0",
+        "symfony/http-foundation": "^7.0 || ^8.0",
         "symfony/http-kernel": "^7.4|^8.0"
     },
     "require-dev": {
+        "adyen/php-api-library": "^25.0|^26.0",
         "horstoeko/zugferd": "^1.0",
         "larastan/larastan": "3.12.1",
         "laravel/ai": "^0.11.2",
@@ -79,10 +84,11 @@
         "spaze/phpstan-disallowed-calls": "4.14.0"
     },
     "suggest": {
+        "adyen/php-api-library": "Required only for the Adyen driver -- no other driver and no local engine touches it. Deliberately not a hard dependency, the same reasoning that keeps mollie/mollie-api-php optional: an install that never selects Adyen would otherwise carry an API client it never calls. Without it the Adyen webhook verifier refuses every request rather than waving one through.",
+        "anthropic-ai/sdk": "Required only to score evals with a real judge, which is wired only when ANTHROPIC_API_KEY is set. Deliberately not a dev dependency: without it every eval still runs, the judge-backed expectations are skipped, and no install pays for a client it never calls.",
+        "horstoeko/zugferd": "Required only to embed the EN 16931 CII XML into a ZUGFeRD/Factur-X hybrid PDF/A-3 via Invoicing\\ZugferdPdfInvoice. The CII and XRechnung XML writers need none of it.",
         "laravel/ai": "Required only to score evals with a real judge. Not a dev dependency: it requires aws/aws-sdk-php for a provider this package never calls, which is 67 MB and 3512 files in every checkout and every CI lane.",
         "livewire/livewire": "Required only for the optional account-hub UI — the nine Livewire screens. The billing core (models, webhooks, invoicing, tax, contracts) needs none of it.",
-        "horstoeko/zugferd": "Required only to embed the EN 16931 CII XML into a ZUGFeRD/Factur-X hybrid PDF/A-3 via Invoicing\\ZugferdPdfInvoice. The CII and XRechnung XML writers need none of it.",
-        "anthropic-ai/sdk": "Required only to score evals with a real judge, which is wired only when ANTHROPIC_API_KEY is set. Deliberately not a dev dependency: without it every eval still runs, the judge-backed expectations are skipped, and no install pays for a client it never calls.",
         "mollie/mollie-api-php": "Required only for the Mollie driver — the local billing engine and every other driver need none of it. Deliberately not a hard dependency: an install that never selects billing.default=mollie would otherwise carry an HTTP client it never calls, the same reasoning that keeps horstoeko/zugferd optional."
     },
     "autoload": {

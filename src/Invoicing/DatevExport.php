@@ -833,17 +833,24 @@ final readonly class DatevExport
      * so a negative-total invoice books its magnitude with "H", not a minus DATEV would reject.
      */
     /**
-     * The document's frozen rate, or null where the row needs none.
+     * The document's frozen rate, or null where the row needs none — and null now means exactly that.
      *
-     * Null in two different situations, and both are correct rather than a gap:
+     * It used to mean two things, and the second one shipped a wrong booking:
      *
      * - **The row is already in the base currency.** DATEV wants fields 4-6 EMPTY there, so filling them
      *   would be the defect. This is also what keeps a single-currency install byte-identical: the branch
-     *   is never entered, and its export is the file it always was.
-     * - **A foreign-currency document with no frozen rate.** Those exist — the freeze arrived after some
-     *   rows were written — and this method does not invent one. Deriving a rate at export time would give
-     *   DATEV a number the document itself does not state, which is the divergence the freeze exists to
-     *   prevent: the books and the document would then disagree, and only the books would be re-derivable.
+     *   is never entered, and its export is the file it always was. This is the one remaining null.
+     * - **A foreign-currency document with no frozen rate** also answered null, and the docblock called it
+     *   correct. What such a row does is stated a few hundred lines up, in this same file: the import either
+     *   rejects it or books it at face value, overstating the revenue by the exchange rate. Two comments in
+     *   one file, one calling the output correct and the other describing it as a wrong booking.
+     *
+     *   It refuses the batch now, which is the answer this file already gives to four other unexportable
+     *   states. **Refusing is not dropping** — the objection that dropping hides revenue is right, and it is
+     *   an objection to dropping. A refused batch exports nothing and says why.
+     *
+     * Deriving a rate at export time stays off the table: that is the divergence the freeze exists to
+     * prevent, and the books and the document would then disagree with only the books re-derivable.
      *
      * The DOCUMENT layer specifically. A document is exported at the rate it was ISSUED at; the reporting
      * layer answers a different question (what the period is declared at) and the payout layer a third
@@ -863,7 +870,15 @@ final readonly class DatevExport
         $rate = $invoice->exchangeRates
             ->firstWhere(fn (InvoiceExchangeRate $row): bool => $row->layer === ExchangeRateLayer::Document);
 
-        return $rate?->frozen();
+        if (! $rate instanceof InvoiceExchangeRate) {
+            throw InvalidDatevBatch::foreignCurrencyWithoutAFrozenRate(
+                (string) $invoice->number,
+                strtoupper($invoice->currency),
+                $this->batchCurrency(),
+            );
+        }
+
+        return $rate->frozen();
     }
 
     /**

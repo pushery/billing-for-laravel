@@ -16,7 +16,6 @@ use Pushery\Billing\Enums\RefundAttemptStatus;
 use Pushery\Billing\Enums\ReversalAttribution;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\SettlementState;
-use Pushery\Billing\Exceptions\ReportingCounterDisabled;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\RefundAttempt;
 use Pushery\Billing\ValueObjects\CountingPeriod;
@@ -40,6 +39,17 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * The tax reaches the merchant because it is theirs to remit. That is precisely why it is not turnover of
  * theirs, and why it has to come off before this counts.
+ *
+ * ## The withheld-fee figure used to live here, and its own reason for that is why it left
+ *
+ * It argued it belonged beside this one because the two shared a window and a replay, and that a second
+ * class restating them would be two places for each. The premise was the sharing. A withheld fee is a
+ * deduction from a particular consideration, so it is placed by the settlement DOCUMENT that credits the
+ * seller — while this figure is placed by the money, because it answers what a seller actually received for
+ * a small-business threshold. Two duties with two clocks is correct; one counter with two clocks is not.
+ *
+ * It is {@see WithheldFeeCounter} now. What genuinely stayed shared was not copied: {@see ChargeReversals}
+ * loads and groups the refunds for both.
  *
  * ## Why this is a row walk and not two sums
  *
@@ -105,7 +115,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
         // over a whole marketplace on a nightly sweep, so a query per charge is a query per sale per creator
         // per night — and the previous shape was two aggregates, which makes a per-row fan-out a regression
         // rather than a neutral rewrite.
-        $reversals = $this->reversalsOf($charges);
+        $reversals = new ChargeReversals()->of($charges);
 
         // Resolved once per window rather than per row. It answers for every row that never recorded its own
         // posture, and reading configuration per row would let a change mid-sweep split one window in two.
@@ -122,7 +132,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
                 $total += $charge->smallBusinessTurnover($unrecorded)->minorUnits;
             }
 
-            $mine = $reversals[$this->keyOf($charge)] ?? [];
+            $mine = $reversals[ChargeReversals::keyOf($charge)] ?? [];
 
             // Placed by the sale: every reversal of a charge that settled here reduces THIS window, whenever
             // it happened — and a charge that settled elsewhere contributes nothing, because its reversals
@@ -302,202 +312,5 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
     private function unrecordedPosture(): SellerOfRecordPosture
     {
         return Container::getInstance()->make(MarketplaceSaleContext::class)->posture();
-    }
-
-    /**
-     * Every succeeded reversal of the given charges, grouped by the charge each belongs to.
-     *
-     * One query for the whole set. A query per charge is a query per sale per creator on a nightly sweep,
-     * and the shape this replaced was two aggregates — so fanning out per row would trade a wrong figure for
-     * a slow one rather than fixing anything.
-     *
-     * Grouped on the provider AND the reference, never the reference alone: it is unique only per provider,
-     * so a second processor issuing the same string would hand its reversals to a stranger's sale. The pair
-     * is a composite key rather than a foreign one, which is why this is a grouping rather than a relation.
-     *
-     * Every succeeded reversal is loaded, not only those inside the window: an earlier refund already moved
-     * the sale that a later one is measured against, and dropping it would measure the later one against a
-     * sale that was not there.
-     *
-     * @param  Collection<int, MerchantCharge>  $charges
-     * @return array<string, list<RefundAttempt>>
-     */
-    private function reversalsOf(Collection $charges): array
-    {
-        if ($charges->isEmpty()) {
-            return [];
-        }
-
-        $grouped = [];
-
-        $attempts = RefundAttempt::query()
-            ->whereIn('provider', $charges->pluck('provider')->unique()->all())
-            ->whereIn('charge_reference', $charges->pluck('charge_reference')->unique()->all())
-            ->where('status', RefundAttemptStatus::Succeeded->value)
-            ->orderBy('completed_at')
-            ->orderBy('id')
-            ->get();
-
-        foreach ($attempts as $attempt) {
-            // The whereIn pair is a cross product, so a row is kept only when BOTH halves belong to the same
-            // charge. Filtering here rather than trusting the query is what keeps the composite key honest.
-            $grouped[$attempt->provider.'|'.$attempt->charge_reference][] = $attempt;
-        }
-
-        return $grouped;
-    }
-
-    /**
-     * What the PLATFORM kept out of this party's sales in the window — the third reporting figure.
-     *
-     * ## Why it lives here rather than in a counter of its own
-     *
-     * It is a different QUESTION on the same machinery. Which charges can move a window, how a reversal is
-     * attributed, and how a confirmation is capped against what was actually left are one rule each, and a
-     * second class restating them would be two places for each — the shape this package keeps finding in
-     * itself, where both copies are internally consistent and only their disagreement is the defect.
-     *
-     * So the window and the replay are shared, and the BASIS is what the method name states. Asked for by
-     * NAME, exactly like {@see SettlementGrossInflowCounter}: this class's contract method answers the
-     * small-business threshold on the merchant's own supply, and this one answers what the platform withheld.
-     * The two are both plausible figures about one sale, and being unable to reach this one through a bare
-     * type-hint is the safeguard rather than an inconvenience.
-     *
-     * ## THE SECOND CLOCK — read this before putting the three figures in one return
-     *
-     * This figure and the value figure are placed by DIFFERENT events, and a DAC7 return states them for the
-     * same quarter. {@see SettlementGrossInflowCounter} places a transaction by its settlement DOCUMENT
-     * (`issued_at`); this one places it by the money — the charge's settlement, and a refund by the
-     * confirmation that moved it (`billing_refund_attempts.completed_at`). For the ordinary sale the two
-     * coincide, which is why the divergence is easy to miss.
-     *
-     * They come apart when a document and its money fall on opposite sides of a boundary: a sale settled on
-     * 31 March whose settlement document is issued on 1 April is counted here in Q1 and there in Q2. The
-     * value figure and the fee figure then describe different populations, each internally consistent.
-     *
-     * This is option B of the decision that chose it, and B was admissible only WITH this paragraph: a silent
-     * second clock is exactly the class of defect this area prevents everywhere else. So a caller assembling
-     * a return either accepts the divergence knowingly or reconciles the two on the boundary — and cannot do
-     * either without being told.
-     *
-     * ## The link now exists, and it does not close this
-     *
-     * A correcting document names the reversal it documents (`billing_invoices.refund_attempt_id`), which is
-     * the join option A was described as needing. It is NOT enough, and the reason is worth stating rather
-     * than rediscovering: the divergence above is a sale with NO REFUND IN IT. Its fee is placed by the
-     * charge's own settlement and its value by the settlement document, so no link from a correction reaches
-     * it — a correction is not involved. The link closes the REFUND half of the same question, where the fee
-     * that came back can now be read off the reversal the correcting document names.
-     *
-     * Moving the sale half would mean placing this figure by the settlement document too, and that is a
-     * reporting decision with a tax consequence rather than a refactoring: it is not well defined under
-     * collective self-billing, where one month-end document carries a whole month of transactions and is not
-     * found by a charge's reference at all. It is not made here.
-     *
-     * `ReversalAttribution` does NOT resolve this. It decides where a refund sits relative to its own sale
-     * (original period or reversal period) and is applied identically to both figures on purpose. The
-     * divergence here is between the document date and the money date, which no attribution setting reaches.
-     *
-     * ## Not derived from the other two, and that is the point
-     *
-     * Gross inflow minus payout is NOT the fee. It is right for a single unmixed sale at one rate and wrong
-     * for a basket that mixes rates, a sale with a flat fee component, or any period holding both — and it is
-     * wrong quietly, because both inputs are correct. The fee is counted as its own figure, off the amount
-     * that was actually withheld.
-     *
-     * ## What a refund does to it
-     *
-     * The fee comes back in whatever part the policy returned, and the ledger caps each confirmation against
-     * what was still refundable at that moment — so a redelivered confirmation is stamped succeeded and moves
-     * nothing. The replay reads what MOVED, never what an attempt asked for; reading the request would
-     * subtract a fee that was never given back.
-     *
-     * Floored at zero per charge, because a refund must never raise what the platform is counted as having
-     * kept — and because the shipped `retain` policy returns nothing, which is a real outcome and not a gap.
-     *
-     * @throws ReportingCounterDisabled when the installation has switched the counter off
-     */
-    public function feesWithheldIn(Model $party, string $currency, CountingPeriod $period): Money
-    {
-        if ($this->config?->get('billing.tax_counters.dac7.enabled', true) === false) {
-            throw ReportingCounterDisabled::forWithheldFees();
-        }
-
-        $code = strtoupper($currency);
-        $attribution = ReversalAttribution::configured($this->config);
-
-        $start = $period->from->toDateTimeString();
-        $end = $period->until->toDateTimeString();
-
-        $charges = $this->chargesTouching($party, $code, $start, $end, $attribution);
-        $reversals = $this->reversalsOf($charges);
-
-        $total = 0;
-        $placedByTheSale = $attribution === ReversalAttribution::OriginalPeriod;
-
-        foreach ($charges as $charge) {
-            $settledHere = $this->settledInside($charge, $start, $end);
-
-            if ($settledHere) {
-                $total += $charge->fee_minor;
-            }
-
-            $mine = $reversals[$this->keyOf($charge)] ?? [];
-
-            // The same two readings as the earnings figure above, and deliberately the same expression: a
-            // second attribution rule written beside the first is how the two answers start disagreeing about
-            // which quarter a refund belongs to, each of them internally consistent.
-            $total -= $placedByTheSale
-                ? ($settledHere ? $this->feeReturnedInside($charge, $mine, null, null) : 0)
-                : $this->feeReturnedInside($charge, $mine, $start, $end);
-        }
-
-        return Money::of($total, $code);
-    }
-
-    /**
-     * How much of a charge's fee came back, replayed the way the ledger caps it.
-     *
-     * The ceiling is the fee itself, walked down as confirmations are applied — the same shape
-     * {@see reversedInside()} uses for the merchant's share, with the other ceiling. `completeRefund()` caps
-     * each confirmation under the lock and then stamps the attempt succeeded regardless, so the row keeps the
-     * REQUESTED figure. Reading it would give back a fee that never moved.
-     *
-     * @param  list<RefundAttempt>  $reversals
-     * @param  ?string  $start  null when the window is the SALE's, in which case every succeeded
-     *                          confirmation belongs here — including one with no completion moment
-     */
-    private function feeReturnedInside(MerchantCharge $charge, array $reversals, ?string $start, ?string $end): int
-    {
-        $feeLeft = $charge->fee_minor;
-        $returned = 0;
-
-        foreach ($reversals as $reversal) {
-            $applied = min(max(0, $reversal->fee_refund_minor), max(0, $feeLeft));
-            $feeLeft -= $applied;
-
-            if ($start !== null && $end !== null) {
-                $completedAt = $reversal->completed_at?->toDateTimeString();
-                if ($completedAt === null) {
-                    continue;
-                }
-                if ($completedAt < $start) {
-                    continue;
-                }
-                if ($completedAt >= $end) {
-                    continue;
-                }
-            }
-
-            $returned += $applied;
-        }
-
-        return $returned;
-    }
-
-    /** The composite identity of a charge — provider and reference, because neither is unique alone. */
-    private function keyOf(MerchantCharge $charge): string
-    {
-        return $charge->provider.'|'.$charge->charge_reference;
     }
 }

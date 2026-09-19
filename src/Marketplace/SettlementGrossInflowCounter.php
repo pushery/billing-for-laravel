@@ -61,17 +61,21 @@ use Pushery\Billing\ValueObjects\SellerActivity;
  *
  * ## What this deliberately does NOT count
  *
- * The fees withheld. They are their own figure and they belong in the same report, and they are now counted
- * — by {@see MerchantChargeAnnualEarningsCounter::feesWithheldIn()}, not here. This paragraph used to say
- * they were waiting to be counted at all, and that stopped being true when that method shipped; the file
- * SHIPS, so a reader of the published package was being told a figure did not exist while their installation
- * produced it.
+ * The fees withheld. They are their own figure and they belong in the same report, and they are counted by
+ * {@see WithheldFeeCounter}, not here. This paragraph used to say they were waiting to be counted at all,
+ * and that stopped being true when that figure shipped; the file SHIPS, so a reader of the published package
+ * was being told a figure did not exist while their installation produced it.
  *
- * What is worth knowing instead is WHERE it is counted, because that method runs on a DIFFERENT CLOCK from
- * this one. This counter places a transaction by its settlement document (`issued_at`); that one places it
- * by the money. They agree on the ordinary sale and part company when a document and its money fall in
- * different quarters. Its docblock carries the full account, and anyone assembling a DAC7 return from all
- * three figures needs it.
+ * It then said the two run on DIFFERENT CLOCKS — this one placing a transaction by its settlement document
+ * and the fee by the money — and that they part company when a document and its money fall in different
+ * quarters. True when written, and the divergence is gone: a withheld fee is a deduction from a particular
+ * consideration, so it is placed by the same document this counter reads. That is why the figure moved out
+ * of the section-19 counter, which keeps the money clock for its own duty.
+ *
+ * One limit survives and is worth knowing before reconciling a quarter: a charge NO document claims has no
+ * consideration whose date could place it, so it keeps the money clock. {@see
+ * WithheldFeeCounter::chargesPlacedByTheirMoneyIn()} names those rows rather than leaving a reader to find
+ * them.
  *
  * ## And it does not decide WHO is reportable — that is a different question with a different owner
  *

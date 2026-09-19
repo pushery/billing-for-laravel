@@ -128,7 +128,7 @@ final class StripeServiceProvider extends ServiceProvider
      * floor the Accounts v2 API requires — under `basil` that API is not addressable at all, measured
      * against the real test API rather than read from the docs.
      */
-    public const string STRIPE_API_VERSION = '2026-06-24.dahlia';
+    public const string STRIPE_API_VERSION = '2026-08-26.dahlia';
 
     #[Override]
     public function register(): void
