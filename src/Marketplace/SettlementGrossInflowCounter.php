@@ -241,7 +241,7 @@ final readonly class SettlementGrossInflowCounter implements CountsEarnings
      */
     private function documentsIn(Model $party, string $currency, CountingPeriod $period): Builder
     {
-        return InvoiceRecord::query()
+        return InvoiceRecord::model()::query()
             ->where('owner_type', $party->getMorphClass())
             ->where('owner_id', $party->getKey())
             ->where('currency', strtoupper($currency))

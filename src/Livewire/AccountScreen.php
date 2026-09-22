@@ -92,7 +92,7 @@ abstract class AccountScreen extends Component
     {
         $owner = $this->owner();
 
-        return Subscription::query()
+        return Subscription::model()::query()
             ->forOwner($owner)
             ->forMerchant(null)
             ->ofDefaultType()

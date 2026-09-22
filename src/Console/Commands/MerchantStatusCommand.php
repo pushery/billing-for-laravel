@@ -122,7 +122,7 @@ final class MerchantStatusCommand extends Command
      */
     private function accounts(): Collection
     {
-        $query = MerchantAccount::query()->orderBy('merchant_type')->orderBy('merchant_id');
+        $query = MerchantAccount::model()::query()->orderBy('merchant_type')->orderBy('merchant_id');
 
         $type = $this->option('type');
         $id = $this->option('id');

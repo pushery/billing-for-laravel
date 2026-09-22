@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\ExchangeRateBasis;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One published rate, as its publisher stated it.
@@ -24,8 +25,10 @@ use Pushery\Billing\Enums\ExchangeRateBasis;
  * @property string $source
  * @property ?Carbon $created_at
  */
-final class ExchangeRateRecord extends Model
+class ExchangeRateRecord extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_exchange_rates';
 
     /** @var list<string> */

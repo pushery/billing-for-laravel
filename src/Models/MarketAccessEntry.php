@@ -10,6 +10,7 @@ use Override;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\MarketAccess;
 use Pushery\Billing\Models\Concerns\AppendOnly;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One change in a market's standing.
@@ -22,9 +23,10 @@ use Pushery\Billing\Models\Concerns\AppendOnly;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
-final class MarketAccessEntry extends Model
+class MarketAccessEntry extends Model
 {
     use AppendOnly;
+    use Replaceable;
 
     protected $table = 'billing_market_access_log';
 

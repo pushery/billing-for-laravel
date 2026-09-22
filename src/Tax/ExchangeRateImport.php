@@ -70,7 +70,7 @@ final readonly class ExchangeRateImport
                 // Sharing the reader's lookup shape is the point rather than a workaround: a writer that
                 // matched differently from the reader would be a slow way to discover the same thing again
                 // on an engine where the two happened to agree.
-                $existing = ExchangeRateRecord::query()
+                $existing = ExchangeRateRecord::model()::query()
                     ->where('from_currency', $rate->from)
                     ->where('to_currency', $rate->to)
                     ->where('basis', $basis->value)
@@ -80,7 +80,7 @@ final readonly class ExchangeRateImport
                 if ($existing instanceof ExchangeRateRecord) {
                     $existing->forceFill(['rate_scaled' => $rate->rateScaled, 'source' => $source])->save();
                 } else {
-                    ExchangeRateRecord::query()->create([
+                    ExchangeRateRecord::model()::query()->create([
                         'from_currency' => $rate->from,
                         'to_currency' => $rate->to,
                         'rate_date' => $rate->on->toDateString(),

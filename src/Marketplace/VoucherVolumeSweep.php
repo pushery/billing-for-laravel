@@ -86,7 +86,7 @@ final readonly class VoucherVolumeSweep
 
             // Marked after dispatching. A crash between the two announces once more, which somebody can live
             // with; the other order loses the announcement, which is what this class exists to prevent.
-            VoucherVolumeNotice::query()->create([
+            VoucherVolumeNotice::model()::query()->create([
                 'currency' => $currency,
                 'level' => $level,
                 'announced_for_year' => $now->year,
@@ -119,7 +119,7 @@ final readonly class VoucherVolumeSweep
 
     private function alreadyAnnounced(string $currency, VoucherVolumeLevel $level, int $year): bool
     {
-        return VoucherVolumeNotice::query()
+        return VoucherVolumeNotice::model()::query()
             ->where('currency', $currency)
             ->where('level', $level->value)
             ->where('announced_for_year', $year)
@@ -139,7 +139,7 @@ final readonly class VoucherVolumeSweep
     private function currencies(): array
     {
         $voucherCurrencies = array_filter(
-            Voucher::query()->distinct()->pluck('currency')->all(),
+            Voucher::model()::query()->distinct()->pluck('currency')->all(),
             is_string(...),
         );
 

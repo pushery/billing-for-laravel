@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\WebhookEventState;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * The record of one effect run against one reference: did this effect already do its work for this
@@ -22,8 +23,10 @@ use Pushery\Billing\Enums\WebhookEventState;
  * @property ?string $last_error
  * @property ?Carbon $handled_at
  */
-final class WebhookEffectRun extends Model
+class WebhookEffectRun extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_webhook_effect_runs';
 
     /** @var list<string> */

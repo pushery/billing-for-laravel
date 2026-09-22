@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * The next value of a gap-free number sequence, one row per scope.
@@ -12,8 +13,10 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $scope
  * @property int $next_number
  */
-final class NumberSequence extends Model
+class NumberSequence extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_number_sequences';
 
     /** @var list<string> */

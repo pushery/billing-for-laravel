@@ -41,7 +41,7 @@ final class AdvanceDunningCommand extends Command
         $now = Carbon::now();
         $advanced = 0;
 
-        Subscription::query()->whereNotNull('delinquent_since')->chunkById(100,
+        Subscription::model()::query()->whereNotNull('delinquent_since')->chunkById(100,
             /** @param Collection<int, Subscription> $subscriptions */
             function (Collection $subscriptions) use ($levels, $notifier, $fees, $log, $dryRun, $now, &$advanced): void {
                 foreach ($subscriptions as $subscription) {

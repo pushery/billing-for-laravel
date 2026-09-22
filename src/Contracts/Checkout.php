@@ -33,5 +33,5 @@ interface Checkout
      *                               null follows `billing.checkout.tax_id_collection`. A marketplace selling to both
      *                               consumers and businesses leaves the field out of the one and asks for it on the other
      */
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null): ClientIntent;
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null): ClientIntent;
 }

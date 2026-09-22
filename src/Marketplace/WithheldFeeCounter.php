@@ -179,7 +179,7 @@ final readonly class WithheldFeeCounter
         string $end,
         ReversalAttribution $attribution,
     ): Collection {
-        return MerchantCharge::query()
+        return MerchantCharge::model()::query()
             ->with('settlementDocument')
             ->where('merchant_type', $party->getMorphClass())
             ->where('merchant_id', $party->getKey())

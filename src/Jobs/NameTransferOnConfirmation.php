@@ -50,7 +50,7 @@ final class NameTransferOnConfirmation implements ShouldQueueAfterCommit
 
     public function handle(Container $container, RoutedChargeLedger $ledger): void
     {
-        $charge = MerchantCharge::query()->find($this->chargeId);
+        $charge = MerchantCharge::model()::query()->find($this->chargeId);
 
         if (! $charge instanceof MerchantCharge || $charge->transfer_reference !== null) {
             return;

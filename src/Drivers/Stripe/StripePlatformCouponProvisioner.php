@@ -4,11 +4,9 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
-use Illuminate\Contracts\Config\Repository;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\MerchantCouponProvisioner;
 use Pushery\Billing\Discounts\DatabaseDiscountResolver;
-use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Models\Coupon;
 use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\RateLimitException;
@@ -20,11 +18,10 @@ use Stripe\StripeClient;
  * ## The account is not a choice here, it follows the price
  *
  * A coupon is applied to a line on a session, so it has to exist on the account that session runs on — the
- * same account the price lives on. {@see StripePlatformPriceProvisioner} explains why that is the platform
- * for a marketplace under `platform_deemed_supplier`, and the price side has already paid for getting it
- * wrong once. So this refuses under a posture that mints prices on the connected account rather than minting
- * on the platform anyway: a coupon on the wrong account is not an error at the provider, it is a session
- * that silently applies no discount, which is the defect this class exists to end.
+ * same account the price lives on. Every session this package opens runs on the platform account, whatever
+ * the posture, because both charge types it offers are platform charges. {@see StripePlatformPriceProvisioner}
+ * mints the price there for the same reason. A coupon on another account is not an error at the provider; it
+ * is a session that silently applies no discount.
  *
  * ## Idempotency is the ID, not a lookup
  *
@@ -58,12 +55,10 @@ use Stripe\StripeClient;
  */
 final readonly class StripePlatformCouponProvisioner implements MerchantCouponProvisioner
 {
-    public function __construct(private StripeClient $stripe, private Repository $config) {}
+    public function __construct(private StripeClient $stripe) {}
 
     public function provision(Coupon $coupon): string
     {
-        $this->assertPlatformMintsTheSession();
-
         $payload = $this->discountOf($coupon);
         $id = $this->couponId($coupon);
 
@@ -160,34 +155,5 @@ final readonly class StripePlatformCouponProvisioner implements MerchantCouponPr
         ];
 
         return 'blc_'.substr(hash('sha256', implode('|', $parts)), 0, 24);
-    }
-
-    /**
-     * Refuse where the session this coupon would be applied on does not run on the platform account.
-     *
-     * Read at call time rather than at binding, the same way the price binding reads it: an application that
-     * sets the posture after boot still gets the answer it configured.
-     */
-    private function assertPlatformMintsTheSession(): void
-    {
-        $configured = $this->config->get(
-            'billing.marketplace.seller_of_record.default_posture',
-            SellerOfRecordPosture::PlatformDeemedSupplier->value,
-        );
-
-        $posture = is_string($configured) ? SellerOfRecordPosture::tryFrom($configured) : null;
-
-        // An unreadable posture reads as the deemed-supplier one, which is the same fail-safe direction the
-        // price binding takes: mint on the platform, which the platform can always sell from.
-        if ($posture?->mintsPriceOnPlatformAccount() ?? true) {
-            return;
-        }
-
-        throw new InvalidArgumentException(
-            'This posture sells through prices minted on the merchant’s connected account, and a coupon on '
-            .'the platform account cannot be applied to a session running on that one. Minting it anyway is '
-            .'the failure this lane exists to prevent: the provider accepts the coupon, the session ignores '
-            .'it, and the buyer pays full price with nothing thrown.'
-        );
     }
 }

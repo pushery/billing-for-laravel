@@ -20,7 +20,6 @@ use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxRateCategory;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\ReceiveEligibilityDenied;
-use Pushery\Billing\Exceptions\TaxStandingUnestablished;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\ValueObjects\ArchetypeClassification;
 use Pushery\Billing\ValueObjects\ChargeResult;
@@ -290,9 +289,11 @@ final readonly class RoutedPayment
         // state that blocks -- so it does nothing until an operator sets `enforce_from`, which is the day
         // they have chosen for it to start. That is a rollout control, not a way of leaving it off: the
         // go-live checklist reports an unset date as outstanding.
-        if ($this->taxStanding->blocksSales($merchant)) {
-            throw TaxStandingUnestablished::forMerchant();
-        }
+        //
+        // This gate and the fourth one below live on SellerSaleGate, because the hosted lanes ask them too.
+        $sellers = new SellerSaleGate($this->taxStanding);
+
+        $sellers->assertTaxStandingEstablished($merchant);
 
         // Third gate, and the only one about the SHAPE of the payment rather than about the merchant. An
         // incompatible pairing decides who carries a dispute, and the provider accepts it without complaint
@@ -303,6 +304,11 @@ final readonly class RoutedPayment
         $posture = $this->context->posture();
 
         $this->pairing->assertCompatible($routing->type, $posture);
+
+        // Fourth gate, and it pairs the posture with WHO sells WHAT: goods of a seller established outside the
+        // Union are never recorded as an intermediation, because the law treats the platform as their supplier.
+        // The reasons and the two limits are on SellerSaleGate.
+        $sellers->assertPostureCarriesTheSupply($merchant, $posture, $archetype);
 
         $routesSeparately = $routing->type === ChargeType::SeparateTransfer;
 

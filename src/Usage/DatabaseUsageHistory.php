@@ -23,7 +23,7 @@ final class DatabaseUsageHistory implements UsageHistoryProvider
 {
     public function periods(Model $owner, int $limit = 12): array
     {
-        $rows = UsageCounter::query()
+        $rows = UsageCounter::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->orderByDesc('period')
@@ -43,7 +43,7 @@ final class DatabaseUsageHistory implements UsageHistoryProvider
 
     public function topups(Model $owner, int $limit = 24): array
     {
-        $rows = AddonPurchase::query()
+        $rows = AddonPurchase::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             // Newest first, with the id as a tiebreaker so purchases in the same second still order stably.

@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Contracts\ArrearsClock;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
@@ -61,8 +62,10 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * @property ?string $provider_coupon_id
  * @property bool $active
  */
-final class Coupon extends Model
+class Coupon extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_coupons';
 
     /** @var list<string> */
@@ -103,7 +106,7 @@ final class Coupon extends Model
     /** @return HasMany<CouponRedemption, $this> */
     public function redemptions(): HasMany
     {
-        return $this->hasMany(CouponRedemption::class);
+        return $this->hasMany(CouponRedemption::model());
     }
 
     /**

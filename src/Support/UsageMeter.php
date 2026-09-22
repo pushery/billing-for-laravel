@@ -88,7 +88,7 @@ final class UsageMeter
 
             $hold = new UsageHold((string) Str::ulid(), $meterKey, $period, $amount);
 
-            UsageReservation::query()->create([
+            UsageReservation::model()::query()->create([
                 'token' => $hold->token,
                 'owner_type' => $owner->getMorphClass(),
                 'owner_id' => $owner->getKey(),
@@ -163,7 +163,7 @@ final class UsageMeter
      */
     public function expire(?CarbonInterface $now = null): int
     {
-        $expired = UsageReservation::query()
+        $expired = UsageReservation::model()::query()
             ->where('state', ReservationState::Pending)
             ->where('expires_at', '<=', $now ?? Carbon::now())
             ->get();
@@ -195,7 +195,7 @@ final class UsageMeter
      */
     public function claimWarning(Model $owner, string $meterKey, string $period): bool
     {
-        return UsageCounter::query()
+        return UsageCounter::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('meter_key', $meterKey)
@@ -240,7 +240,7 @@ final class UsageMeter
      */
     public function remaining(Model $owner, string $meterKey, string $period, ?int $included): int
     {
-        $row = PrepaidUnits::query()
+        $row = PrepaidUnits::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('meter_key', $meterKey)
@@ -273,7 +273,7 @@ final class UsageMeter
     private function settleToken(string $token, int $used, ReservationState $state): ?int
     {
         return DB::transaction(function () use ($token, $used, $state): ?int {
-            $reservation = UsageReservation::query()->where('token', $token)->lockForUpdate()->first();
+            $reservation = UsageReservation::model()::query()->where('token', $token)->lockForUpdate()->first();
 
             // Not ours to settle: no such hold, or someone settled it first (the sweep reads, then writes,
             // and a request can commit its hold in between — reclaiming it then would hand back allowance
@@ -342,7 +342,7 @@ final class UsageMeter
 
     private function counterValue(Model $owner, string $meterKey, string $period, string $column): int
     {
-        $value = UsageCounter::query()
+        $value = UsageCounter::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('meter_key', $meterKey)
@@ -372,7 +372,7 @@ final class UsageMeter
      */
     private function lockedCounterFor(string $ownerType, mixed $ownerId, string $meterKey, string $period): UsageCounter
     {
-        UsageCounter::query()->insertOrIgnore([
+        UsageCounter::model()::query()->insertOrIgnore([
             'owner_type' => $ownerType,
             'owner_id' => $ownerId,
             'meter_key' => $meterKey,
@@ -384,7 +384,7 @@ final class UsageMeter
             'updated_at' => Carbon::now(),
         ]);
 
-        return UsageCounter::query()
+        return UsageCounter::model()::query()
             ->where('owner_type', $ownerType)
             ->where('owner_id', $ownerId)
             ->where('meter_key', $meterKey)
@@ -403,7 +403,7 @@ final class UsageMeter
      */
     private function lockedPrepaid(string $ownerType, mixed $ownerId, string $meterKey): ?PrepaidUnits
     {
-        return PrepaidUnits::query()
+        return PrepaidUnits::model()::query()
             ->where('owner_type', $ownerType)
             ->where('owner_id', $ownerId)
             ->where('meter_key', $meterKey)

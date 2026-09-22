@@ -80,7 +80,7 @@ final readonly class DocumentDeliveryLog
             return null;
         }
 
-        return DocumentDelivery::query()
+        return DocumentDelivery::model()::query()
             ->where('document_number', $documentNumber)
             ->whereIn('event', [DocumentDeliveryEvent::Provided->value, DocumentDeliveryEvent::Notified->value])
             ->orderByDesc('occurred_at')
@@ -91,7 +91,7 @@ final readonly class DocumentDeliveryLog
     /** How many times it was fetched. Zero says nothing about whether it was delivered. */
     public function retrievalCount(string $documentNumber): int
     {
-        return DocumentDelivery::query()
+        return DocumentDelivery::model()::query()
             ->where('document_number', $documentNumber)
             ->where('event', DocumentDeliveryEvent::Retrieved->value)
             ->count();
@@ -105,7 +105,7 @@ final readonly class DocumentDeliveryLog
     public function trailFor(string $documentNumber): array
     {
         return array_values(
-            DocumentDelivery::query()
+            DocumentDelivery::model()::query()
                 ->where('document_number', $documentNumber)
                 ->orderBy('occurred_at')
                 ->orderBy('id')
@@ -132,7 +132,7 @@ final readonly class DocumentDeliveryLog
         ?string $detail = null,
         ?Carbon $at = null,
     ): DocumentDelivery {
-        return DocumentDelivery::query()->create([
+        return DocumentDelivery::model()::query()->create([
             'document_number' => $documentNumber,
             'merchant_type' => $merchant?->getMorphClass(),
             'merchant_id' => $merchant?->getKey(),

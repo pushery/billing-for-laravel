@@ -84,7 +84,7 @@ final readonly class FreezeReportingRates
         $frozen = 0;
 
         /** @var list<InvoiceRecord> $documents */
-        $documents = InvoiceRecord::query()
+        $documents = InvoiceRecord::model()::query()
             ->whereBetween('issued_at', [$periodStart->startOfDay(), $periodEnd->endOfDay()])
             ->whereNotNull('currency')
             ->where('currency', '!=', $reporting)
@@ -92,7 +92,7 @@ final readonly class FreezeReportingRates
             ->all();
 
         foreach ($documents as $document) {
-            $already = InvoiceExchangeRate::query()
+            $already = InvoiceExchangeRate::model()::query()
                 ->where('invoice_id', $document->getKey())
                 ->where('layer', ExchangeRateLayer::Reporting->value)
                 ->exists();

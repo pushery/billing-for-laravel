@@ -96,7 +96,7 @@ final readonly class UsageFlusher
      */
     private function coalesce(?string $ownerType = null, mixed $ownerId = null): void
     {
-        $groups = UsageEvent::query()
+        $groups = UsageEvent::model()::query()
             ->where('state', UsageEventState::Pending->value)
             ->where('is_rollup', false)
             ->whereNull('rolled_up_into')
@@ -107,7 +107,7 @@ final readonly class UsageFlusher
 
         foreach ($groups as $group) {
             DB::transaction(function () use ($group): void {
-                $sources = UsageEvent::query()
+                $sources = UsageEvent::model()::query()
                     ->where('owner_type', $group->owner_type)
                     ->where('owner_id', $group->owner_id)
                     ->where('meter_key', $group->meter_key)
@@ -122,7 +122,7 @@ final readonly class UsageFlusher
                     return; // another worker got there first
                 }
 
-                $rollup = UsageEvent::query()->create([
+                $rollup = UsageEvent::model()::query()->create([
                     'owner_type' => $group->owner_type,
                     'owner_id' => $group->owner_id,
                     'meter_key' => $group->meter_key,
@@ -141,7 +141,7 @@ final readonly class UsageFlusher
                     'attempts' => 0,
                 ]);
 
-                UsageEvent::query()
+                UsageEvent::model()::query()
                     ->whereIn('id', $sources->pluck('id'))
                     ->update(['rolled_up_into' => $rollup->getKey(), 'updated_at' => Carbon::now()]);
             });
@@ -151,7 +151,7 @@ final readonly class UsageFlusher
     /** @return Collection<int, UsageEvent> */
     private function dueRollups(): Collection
     {
-        return UsageEvent::query()
+        return UsageEvent::model()::query()
             ->where('state', UsageEventState::Pending->value)
             ->where('is_rollup', true)
             ->where(fn (Builder $query) => $query->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', Carbon::now()))
@@ -168,7 +168,7 @@ final readonly class UsageFlusher
      */
     private function pendingRollupsFor(string $ownerType, mixed $ownerId): Collection
     {
-        return UsageEvent::query()
+        return UsageEvent::model()::query()
             ->where('state', UsageEventState::Pending->value)
             ->where('is_rollup', true)
             ->where('owner_type', $ownerType)
@@ -225,7 +225,7 @@ final readonly class UsageFlusher
                 'last_error' => null,
             ])->save();
 
-            UsageEvent::query()
+            UsageEvent::model()::query()
                 ->where('rolled_up_into', $rollup->getKey())
                 ->update(['state' => UsageEventState::Reported->value, 'reported_at' => Carbon::now(), 'updated_at' => Carbon::now()]);
         });
@@ -265,7 +265,7 @@ final readonly class UsageFlusher
                 'last_error' => $error,
             ])->save();
 
-            UsageEvent::query()
+            UsageEvent::model()::query()
                 ->where('rolled_up_into', $rollup->getKey())
                 ->update(['state' => UsageEventState::Failed->value, 'updated_at' => Carbon::now()]);
         });

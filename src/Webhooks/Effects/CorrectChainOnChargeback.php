@@ -78,7 +78,7 @@ final readonly class CorrectChainOnChargeback implements DedupesOnReference
             return;
         }
 
-        $charge = MerchantCharge::query()
+        $charge = MerchantCharge::model()::query()
             ->where('charge_reference', $event->reference)
             ->first();
 

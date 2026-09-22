@@ -93,9 +93,9 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
         }
     }
 
-    public function cancelNow(Model $billable, ?MerchantScope $merchant = null): void
+    public function cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $reference = $this->subscriptionReference($billable, $merchant);
+        $reference = $this->subscriptionReference($billable, $merchant, $type);
 
         if ($reference !== null) {
             $this->ignoringDeadSubscription(fn () => $this->stripe->subscriptions->cancel($reference));
@@ -177,12 +177,12 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
      * Scoped to the merchant so a marketplace mutation addresses exactly the (fan, creator) subscription; a
      * null merchant reproduces the single-seller selection exactly (`merchant_uid = 'platform'`).
      */
-    private function subscriptionReference(Model $billable, ?MerchantScope $merchant = null): ?string
+    private function subscriptionReference(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): ?string
     {
-        $subscription = Subscription::query()
+        $subscription = Subscription::model()::query()
             ->forOwner($billable)
             ->forMerchant($merchant)
-            ->ofDefaultType()
+            ->ofType($type)
             ->latest('id')
             ->first();
 

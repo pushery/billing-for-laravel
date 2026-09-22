@@ -141,7 +141,7 @@ final readonly class SubdivisionGrossSalesCounter
      */
     private function salesIn(string $country, string $currency, CountingPeriod $period): Builder
     {
-        return InvoiceRecord::query()
+        return InvoiceRecord::model()::query()
             ->where('document_series', DocumentSeries::BuyerReceipt->value)
             ->where('currency', strtoupper($currency))
             ->where('destination_country', strtoupper($country))

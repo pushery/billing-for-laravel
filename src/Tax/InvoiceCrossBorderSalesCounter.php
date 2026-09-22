@@ -74,7 +74,7 @@ final readonly class InvoiceCrossBorderSalesCounter implements CrossBorderSalesC
     private function salesIn(int $year, string $currency): array
     {
         /** @var list<InvoiceRecord> $rows */
-        $rows = InvoiceRecord::query()
+        $rows = InvoiceRecord::model()::query()
             ->where('currency', strtoupper($currency))
             ->whereNotNull('destination_country')
             ->where('destination_country', '!=', '')

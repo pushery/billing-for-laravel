@@ -28,7 +28,7 @@ final readonly class PrepaidLedger
     /** The owner's remaining prepaid units for a meter. */
     public function balance(Model $owner, string $meterKey): int
     {
-        $balance = PrepaidUnits::query()
+        $balance = PrepaidUnits::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('meter_key', $meterKey)
@@ -89,7 +89,7 @@ final readonly class PrepaidLedger
      */
     private function locked(string $ownerType, mixed $ownerId, string $meterKey): PrepaidUnits
     {
-        PrepaidUnits::query()->insertOrIgnore([
+        PrepaidUnits::model()::query()->insertOrIgnore([
             'owner_type' => $ownerType,
             'owner_id' => is_scalar($ownerId) ? $ownerId : '',
             'meter_key' => $meterKey,
@@ -99,7 +99,7 @@ final readonly class PrepaidLedger
             'updated_at' => Carbon::now(),
         ]);
 
-        return PrepaidUnits::query()
+        return PrepaidUnits::model()::query()
             ->where('owner_type', $ownerType)
             ->where('owner_id', $ownerId)
             ->where('meter_key', $meterKey)

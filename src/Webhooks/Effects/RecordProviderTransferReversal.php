@@ -35,7 +35,7 @@ final readonly class RecordProviderTransferReversal
 {
     public function __invoke(MerchantTransferReversedByProvider $event): void
     {
-        $charge = MerchantCharge::query()
+        $charge = MerchantCharge::model()::query()
             ->where('provider', $event->provider)
             ->where('transfer_reference', $event->transferReference)
             ->first();

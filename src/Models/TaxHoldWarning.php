@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * A record that one merchant was told the tax-standing deadline is coming.
@@ -17,8 +18,10 @@ use Pushery\Billing\Casts\UtcDateTime;
  * @property Carbon $deadline
  * @property Carbon $warned_at
  */
-final class TaxHoldWarning extends Model
+class TaxHoldWarning extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_tax_hold_warnings';
 
     /** @var list<string> */

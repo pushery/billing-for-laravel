@@ -72,7 +72,7 @@ final readonly class FallbackLane
      */
     public function holdsPayout(Model $creator): bool
     {
-        return SubmittedInvoice::query()
+        return SubmittedInvoice::model()::query()
             ->where('owner_type', $creator->getMorphClass())
             ->where('owner_id', $creator->getKey())
             ->where('review_state', '!=', ReviewState::Passed->value)

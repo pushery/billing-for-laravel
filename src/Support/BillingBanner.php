@@ -66,7 +66,7 @@ final readonly class BillingBanner
 
     private function subscription(Model $owner): ?Subscription
     {
-        return Subscription::query()
+        return Subscription::model()::query()
             ->forOwner($owner)
             ->forMerchant(null)
             ->ofDefaultType()

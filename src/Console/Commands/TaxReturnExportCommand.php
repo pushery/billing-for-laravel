@@ -114,7 +114,7 @@ final class TaxReturnExportCommand extends Command
     private function salesIn(ReportingPeriod $period, string $currency): array
     {
         /** @var list<InvoiceRecord> $rows */
-        $rows = InvoiceRecord::query()
+        $rows = InvoiceRecord::model()::query()
             ->where('currency', $currency)
             ->whereBetween('issued_at', [$period->startsOn(), $period->endsOn()])
             ->orderBy('issued_at')

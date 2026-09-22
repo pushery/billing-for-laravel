@@ -33,7 +33,7 @@ interface OneTimeCharge
      * @param  ?bool  $collectTaxId  whether THIS checkout asks the buyer for a tax ID while the provider computes tax;
      *                               null follows `billing.checkout.tax_id_collection`
      */
-    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null): ClientIntent;
+    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $callerReference = null): ClientIntent;
 
     /**
      * A hosted checkout for a tip — a buyer-chosen amount with no catalog entry behind it.

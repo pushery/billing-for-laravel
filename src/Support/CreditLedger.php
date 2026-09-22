@@ -48,7 +48,7 @@ final class CreditLedger
 {
     public function balanceFor(Model $owner, string $currency): Money
     {
-        $balance = CreditBalance::query()
+        $balance = CreditBalance::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('currency', $currency)
@@ -124,7 +124,7 @@ final class CreditLedger
             // Inside the lock, so the entry and the total it produced commit together or not at all. A
             // zero movement still gets an entry: "nothing moved, and here is why we looked" is an answer,
             // and dropping it would make the entries agree with the balance only by coincidence.
-            CreditLedgerEntry::query()->create([
+            CreditLedgerEntry::model()::query()->create([
                 'owner_type' => $owner->getMorphClass(),
                 'owner_id' => $owner->getKey(),
                 'amount_minor' => $amount->minorUnits,
@@ -148,7 +148,7 @@ final class CreditLedger
      */
     private function lockedBalance(Model $owner, string $currency): CreditBalance
     {
-        CreditBalance::query()->insertOrIgnore([
+        CreditBalance::model()::query()->insertOrIgnore([
             'owner_type' => $owner->getMorphClass(),
             'owner_id' => $owner->getKey(),
             'currency' => $currency,
@@ -157,7 +157,7 @@ final class CreditLedger
             'updated_at' => Carbon::now(),
         ]);
 
-        return CreditBalance::query()
+        return CreditBalance::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('currency', $currency)

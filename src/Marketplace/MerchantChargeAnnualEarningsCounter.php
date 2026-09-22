@@ -169,7 +169,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
         string $end,
         ReversalAttribution $attribution,
     ): Collection {
-        return MerchantCharge::query()
+        return MerchantCharge::model()::query()
             ->where('merchant_type', $party->getMorphClass())
             ->where('merchant_id', $party->getKey())
             ->where('currency', $currency)

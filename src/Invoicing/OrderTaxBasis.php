@@ -210,7 +210,7 @@ final readonly class OrderTaxBasis
      */
     private function buyerOf(Order $order, string $country): TaxContext
     {
-        $verified = TaxIdVerification::query()
+        $verified = TaxIdVerification::model()::query()
             ->where('owner_type', $order->owner_type)
             ->where('owner_id', $order->owner_id)
             ->where('status', TaxIdVerificationStatus::Verified)

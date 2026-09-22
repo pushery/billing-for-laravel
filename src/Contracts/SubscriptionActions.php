@@ -30,8 +30,15 @@ interface SubscriptionActions
     /** Resume a subscription that is still within its grace period. */
     public function resume(Model $billable, ?MerchantScope $merchant = null): void;
 
-    /** Cancel immediately, stopping billing now (no grace). */
-    public function cancelNow(Model $billable, ?MerchantScope $merchant = null): void;
+    /**
+     * Cancel immediately, stopping billing now (no grace).
+     *
+     * The optional type names one contract type of that (billable, merchant) pair, because the uniqueness
+     * of a subscription is (owner, type, merchant): a sponsorship beside a subscription at the same creator
+     * is a second row, and account deletion has to end it too. Null is the default type, so every existing
+     * caller is unchanged.
+     */
+    public function cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void;
 
     /** Swap to another tier's plan in-app, prorating unless told otherwise. */
     public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null): void;

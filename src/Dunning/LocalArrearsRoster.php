@@ -36,7 +36,7 @@ final readonly class LocalArrearsRoster implements ArrearsRoster
     /** @return iterable<ArrearsEntry> */
     public function inArrearsSince(DateTimeInterface $after, string $onDay): iterable
     {
-        $due = Subscription::query()
+        $due = Subscription::model()::query()
             ->merchantScoped()
             ->whereNotNull('delinquent_since')
             ->where('delinquent_since', '>', $after)
@@ -88,6 +88,6 @@ final readonly class LocalArrearsRoster implements ArrearsRoster
 
         // The entry came from somewhere else, so fall back to its key. Reached only if somebody hands this
         // roster an entry it did not produce, which is not a normal path but is a cheap one to survive.
-        Subscription::query()->whereKey($entry->key)->update(['payment_reminded_on' => $onDay]);
+        Subscription::model()::query()->whereKey($entry->key)->update(['payment_reminded_on' => $onDay]);
     }
 }

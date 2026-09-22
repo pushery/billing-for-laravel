@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\MerchantStatus;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 
 /**
@@ -32,8 +33,10 @@ use Pushery\Billing\ValueObjects\MerchantAccountReference;
  * @property ?Carbon $deauthorized_at
  * @property ?Carbon $capabilities_refreshed_at
  */
-final class MerchantAccount extends Model
+class MerchantAccount extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_merchant_accounts';
 
     /** @var list<string> */

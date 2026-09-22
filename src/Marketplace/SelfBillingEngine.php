@@ -306,7 +306,7 @@ final readonly class SelfBillingEngine
         $fanTaxMinor = (int) round($transactionNet->minorUnits * $supplyRateBps / 10_000);
         $fanGrossMinor = $transactionNet->minorUnits + $fanTaxMinor;
 
-        $record = InvoiceRecord::query()->create([
+        $record = InvoiceRecord::model()::query()->create([
             'owner_type' => $creator->getMorphClass(),
             'owner_id' => $creator->getKey(),
             'number' => $outcome->number,

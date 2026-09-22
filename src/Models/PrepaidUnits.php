@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * An owner's PREPAID balance for one meter — units they bought outright ("+1000 emails").
@@ -18,8 +19,10 @@ use Illuminate\Database\Eloquent\Model;
  * @property int $balance
  * @property int $granted_total
  */
-final class PrepaidUnits extends Model
+class PrepaidUnits extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_prepaid_units';
 
     /** @var list<string> */

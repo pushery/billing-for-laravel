@@ -123,7 +123,7 @@ final readonly class StripeSeatBilling implements SeatBilling
     /** The provider subscription reference from the owner's local subscription row, or null. */
     private function subscriptionReference(Model $owner): ?string
     {
-        $subscription = Subscription::query()
+        $subscription = Subscription::model()::query()
             ->forOwner($owner)
             ->forMerchant(null)
             ->ofDefaultType()

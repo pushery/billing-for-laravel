@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\ReservationState;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One hold on a metered allowance. The counter's `reserved` aggregate is what the ceiling check reads;
@@ -22,8 +23,10 @@ use Pushery\Billing\Enums\ReservationState;
  * @property ReservationState $state
  * @property Carbon $expires_at
  */
-final class UsageReservation extends Model
+class UsageReservation extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_usage_reservations';
 
     /** @var list<string> */

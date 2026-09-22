@@ -70,27 +70,27 @@ final readonly class DatevPeriodBatch
      */
     public function render(CarbonInterface $from, CarbonInterface $to): array
     {
-        $invoices = InvoiceRecord::query()
+        $invoices = InvoiceRecord::model()::query()
             ->whereBetween('issued_at', [$from, $to])
             ->whereNull('reissue_of_invoice_id')
             ->orderBy('issued_at')
             ->orderBy('id')
             ->get();
 
-        $providerFees = ProviderFee::query()
+        $providerFees = ProviderFee::model()::query()
             ->whereBetween('occurred_at', [$from, $to])
             ->orderBy('occurred_at')
             ->orderBy('id')
             ->get();
 
-        $voucherMovements = VoucherMovementRecord::query()
+        $voucherMovements = VoucherMovementRecord::model()::query()
             ->whereBetween('occurred_on', [$from, $to])
             ->orderBy('occurred_on')
             ->orderBy('id')
             ->get();
 
         // The fourth source, and the docblock above says why it is added HERE rather than at a call site.
-        $creditEntries = CreditLedgerEntry::query()
+        $creditEntries = CreditLedgerEntry::model()::query()
             ->whereBetween('created_at', [$from, $to])
             ->orderBy('created_at')
             ->orderBy('id')
@@ -193,7 +193,7 @@ final readonly class DatevPeriodBatch
             return $entries->map(static fn (CreditLedgerEntry $entry): CreditMovement => $entry->toMovement());
         }
 
-        $history = CreditLedgerEntry::query()
+        $history = CreditLedgerEntry::model()::query()
             ->whereIn('owner_type', $offsets->pluck('owner_type')->unique()->values()->all())
             ->whereIn('owner_id', $offsets->pluck('owner_id')->unique()->values()->all())
             ->orderBy('id')

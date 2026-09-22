@@ -46,7 +46,7 @@ final readonly class LocalSubscriptionStateReader implements SubscriptionStateRe
 
     public function grantOn(Model $customer, ?MerchantScope $merchant = null, ?CarbonInterface $at = null): ?SubscriptionGrant
     {
-        $subscription = Subscription::query()
+        $subscription = Subscription::model()::query()
             ->forOwner($customer)
             ->forMerchant($merchant)
             ->ofDefaultType()
@@ -63,7 +63,7 @@ final readonly class LocalSubscriptionStateReader implements SubscriptionStateRe
         // One indexed read of every merchant's row — never a query or a provider call per merchant. The
         // (owner, type, merchant_uid) unique already gives exactly one row per merchant, so there is nothing
         // to dedupe: each grant is keyed by its own merchant uid.
-        $subscriptions = Subscription::query()
+        $subscriptions = Subscription::model()::query()
             ->forOwner($customer)
             ->ofDefaultType()
             ->get();

@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One redemption of a coupon by an owner — the ledger row behind a coupon's max-redemptions and per-owner
@@ -23,8 +24,10 @@ use Pushery\Billing\Casts\UtcDateTime;
  * @property ?string $last_applied_period
  * @property ?Carbon $redeemed_at
  */
-final class CouponRedemption extends Model
+class CouponRedemption extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_coupon_redemptions';
 
     /** @var list<string> */
@@ -51,6 +54,6 @@ final class CouponRedemption extends Model
     /** @return BelongsTo<Coupon, $this> */
     public function coupon(): BelongsTo
     {
-        return $this->belongsTo(Coupon::class);
+        return $this->belongsTo(Coupon::model());
     }
 }

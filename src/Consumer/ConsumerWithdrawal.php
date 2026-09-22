@@ -412,7 +412,7 @@ final readonly class ConsumerWithdrawal
 
     private function assertWindowIsOpen(string $chargeReference): void
     {
-        $window = AccessGrant::query()
+        $window = AccessGrant::model()::query()
             ->where('source_reference', $chargeReference)
             ->orderByDesc('id')
             ->first()
@@ -442,7 +442,7 @@ final readonly class ConsumerWithdrawal
      */
     private function liveSubscription(Model $owner, ?MerchantScope $merchant): Subscription
     {
-        $subscription = Subscription::query()
+        $subscription = Subscription::model()::query()
             ->forOwner($owner)
             ->ofDefaultType()
             ->forMerchant($merchant)

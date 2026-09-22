@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * What one merchant owes the platform in one currency.
@@ -25,6 +26,8 @@ use Pushery\Billing\Casts\UtcDateTime;
  */
 class MerchantBalance extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_merchant_balances';
 
     /** @var list<string> */

@@ -169,7 +169,7 @@ final readonly class FanReceiptIssuer
         // Everything below is inside the closure for one reason: `issueOnce()` may not run it at all. A cycle
         // that already has a document returns that document, and a number drawn on the way to finding that
         // out would be a number no document carries.
-        return $this->issueOnce($buyerOwner, $period, fn (): InvoiceRecord => InvoiceRecord::query()->create([
+        return $this->issueOnce($buyerOwner, $period, fn (): InvoiceRecord => InvoiceRecord::model()::query()->create([
             'owner_type' => $buyerOwner->getMorphClass(),
             'owner_id' => $buyerOwner->getKey(),
             'number' => $this->numbers->allocate(DocumentSeries::BuyerReceipt, $soldOn->year),
@@ -316,7 +316,7 @@ final readonly class FanReceiptIssuer
         return $this->issueOnce(
             $sellerOwner,
             null,
-            fn (): InvoiceRecord => InvoiceRecord::query()->create([
+            fn (): InvoiceRecord => InvoiceRecord::model()::query()->create([
                 'owner_type' => $sellerOwner->getMorphClass(),
                 'owner_id' => $sellerOwner->getKey(),
                 'number' => $this->numbers->allocate(DocumentSeries::CommissionInvoice, $soldOn->year),
@@ -541,7 +541,7 @@ final readonly class FanReceiptIssuer
      */
     private function buyerDocuments(Model $buyerOwner, DocumentSeries $series = DocumentSeries::BuyerReceipt): Builder
     {
-        return InvoiceRecord::query()
+        return InvoiceRecord::model()::query()
             ->where('owner_type', $buyerOwner->getMorphClass())
             ->where('owner_id', $buyerOwner->getKey())
             ->where('document_series', $series->value);
@@ -593,7 +593,7 @@ final readonly class FanReceiptIssuer
         return $this->issueOnce(
             $buyerOwner,
             null,
-            fn (): InvoiceRecord => InvoiceRecord::query()->create([
+            fn (): InvoiceRecord => InvoiceRecord::model()::query()->create([
                 'owner_type' => $buyerOwner->getMorphClass(),
                 'owner_id' => $buyerOwner->getKey(),
                 'number' => $this->numbers->allocate(DocumentSeries::CommissionInvoice, $soldOn->year),
@@ -693,7 +693,7 @@ final readonly class FanReceiptIssuer
             $carried[$column] = $receipt->getAttribute($column);
         }
 
-        return InvoiceRecord::query()->create([
+        return InvoiceRecord::model()::query()->create([
             ...$carried,
             'owner_type' => $receipt->owner_type,
             'owner_id' => $receipt->owner_id,

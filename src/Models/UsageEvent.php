@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\UsageEventState;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One recorded unit-of-usage on its way to the provider that bills it.
@@ -31,8 +32,10 @@ use Pushery\Billing\Enums\UsageEventState;
  * @property Carbon $created_at
  * @property Carbon $updated_at
  */
-final class UsageEvent extends Model
+class UsageEvent extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_usage_events';
 
     /** @var list<string> */

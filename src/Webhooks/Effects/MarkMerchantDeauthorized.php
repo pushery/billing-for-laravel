@@ -26,7 +26,7 @@ final readonly class MarkMerchantDeauthorized
 
     public function __invoke(MerchantAccountDeauthorized $event): void
     {
-        $account = MerchantAccount::query()
+        $account = MerchantAccount::model()::query()
             ->where('provider', $event->provider)
             ->where('account_reference', $event->accountReference)
             ->first();

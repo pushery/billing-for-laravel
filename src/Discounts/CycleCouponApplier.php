@@ -153,7 +153,7 @@ final readonly class CycleCouponApplier
 
     private function redemptionFor(Model $owner, Subscription $subscription): ?CouponRedemption
     {
-        return CouponRedemption::query()
+        return CouponRedemption::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             // Typed, because the type-coverage floor counts a closure parameter like any other — and an

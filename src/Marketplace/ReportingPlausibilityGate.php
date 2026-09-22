@@ -108,7 +108,7 @@ final readonly class ReportingPlausibilityGate
         string $by,
         string $reason,
     ): ReportingFindingAcknowledgement {
-        return ReportingFindingAcknowledgement::query()->create([
+        return ReportingFindingAcknowledgement::model()::query()->create([
             'period_year' => $year,
             'currency' => strtoupper($currency),
             'finding_key' => $finding->key(),
@@ -121,7 +121,7 @@ final readonly class ReportingPlausibilityGate
     private function acknowledgedKeys(int $year, string $currency): array
     {
         return array_values(
-            ReportingFindingAcknowledgement::query()
+            ReportingFindingAcknowledgement::model()::query()
                 ->where('period_year', $year)
                 ->where('currency', strtoupper($currency))
                 ->get()

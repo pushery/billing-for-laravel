@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\OrderStatus;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -37,8 +38,10 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at when this row last moved — how a charge that has been in flight too long is spotted
  */
-final class Order extends Model
+class Order extends Model
 {
+    use Replaceable;
+
     /**
      * How long a claim may sit unanswered before it counts as abandoned.
      *
@@ -84,13 +87,13 @@ final class Order extends Model
     /** @return HasMany<OrderItem, $this> */
     public function items(): HasMany
     {
-        return $this->hasMany(OrderItem::class, 'order_id');
+        return $this->hasMany(OrderItem::model(), 'order_id');
     }
 
     /** @return BelongsTo<Subscription, $this> */
     public function subscription(): BelongsTo
     {
-        return $this->belongsTo(Subscription::class, 'subscription_id');
+        return $this->belongsTo(Subscription::model(), 'subscription_id');
     }
 
     /** The order total as Money. */

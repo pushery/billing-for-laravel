@@ -67,7 +67,7 @@ final readonly class VoucherLedger
 
         $expiresAfter = $this->config->get('billing.marketplace.vouchers.expire_after_days');
 
-        $voucher = Voucher::query()->create([
+        $voucher = Voucher::model()::query()->create([
             'code' => $code,
             'owner_type' => $owner?->getMorphClass(),
             'owner_id' => $this->ownerKey($owner),
@@ -148,7 +148,7 @@ final readonly class VoucherLedger
      */
     private function record(VoucherMovement $movement): VoucherMovement
     {
-        VoucherMovementRecord::query()->create([
+        VoucherMovementRecord::model()::query()->create([
             'event' => $movement->event,
             'reference' => $movement->reference,
             'amount_minor' => $movement->amount->minorUnits,
@@ -168,7 +168,7 @@ final readonly class VoucherLedger
      */
     public function issuedVolumeSince(CarbonInterface $since, string $currency): Money
     {
-        $total = Voucher::query()
+        $total = Voucher::model()::query()
             ->where('currency', $currency)
             ->where('issued_at', '>=', $since)
             ->sum('face_value_minor');

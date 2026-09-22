@@ -88,7 +88,7 @@ final readonly class CreditTopUpVolume
         }
 
         return array_values(array_filter(
-            AddonPurchase::query()->whereIn('addon_key', $keys)->distinct()->pluck('currency')->all(),
+            AddonPurchase::model()::query()->whereIn('addon_key', $keys)->distinct()->pluck('currency')->all(),
             is_string(...),
         ));
     }
@@ -118,7 +118,7 @@ final readonly class CreditTopUpVolume
             return Money::of(0, $currency);
         }
 
-        $total = AddonPurchase::query()
+        $total = AddonPurchase::model()::query()
             ->where('currency', $currency)
             ->whereIn('addon_key', $keys)
             ->where('created_at', '>=', $since)

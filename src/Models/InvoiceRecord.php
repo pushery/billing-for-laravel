@@ -39,6 +39,7 @@ use Pushery\Billing\Invoicing\Guards\RegimePostureGuard;
 use Pushery\Billing\Invoicing\Guards\SellerMatchesPostureGuard;
 use Pushery\Billing\Invoicing\Guards\TaxWithoutBasisGuard;
 use Pushery\Billing\Marketplace\DocumentRoleGuard;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\CountingPeriod;
 use Pushery\Billing\ValueObjects\Invoice;
 use Pushery\Billing\ValueObjects\Money;
@@ -116,8 +117,10 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?int $fan_gross_minor
  * @property ?array<int,array<string,mixed>> $lines
  */
-final class InvoiceRecord extends Model
+class InvoiceRecord extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_invoices';
 
     /** @var list<string> */
@@ -282,7 +285,7 @@ final class InvoiceRecord extends Model
      */
     public function exchangeRates(): HasMany
     {
-        return $this->hasMany(InvoiceExchangeRate::class, 'invoice_id');
+        return $this->hasMany(InvoiceExchangeRate::model(), 'invoice_id');
     }
 
     /**
@@ -297,7 +300,7 @@ final class InvoiceRecord extends Model
      */
     public function refundAttempt(): BelongsTo
     {
-        return $this->belongsTo(RefundAttempt::class, 'refund_attempt_id');
+        return $this->belongsTo(RefundAttempt::model(), 'refund_attempt_id');
     }
 
     #[Override]

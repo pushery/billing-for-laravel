@@ -168,7 +168,7 @@ final readonly class MolliePaymentMethods implements PaymentMethods
     /** Whether anything is still being charged, which is what makes the last method load-bearing. */
     private function isBeingCharged(Model $billable): bool
     {
-        return Subscription::query()
+        return Subscription::model()::query()
             ->where('owner_type', $billable->getMorphClass())
             ->where('owner_id', $billable->getKey())
             ->where('provider', 'mollie')
@@ -191,7 +191,7 @@ final readonly class MolliePaymentMethods implements PaymentMethods
      */
     private function chargeable(Model $billable): Builder
     {
-        return PaymentMandate::query()
+        return PaymentMandate::model()::query()
             ->where('owner_type', $billable->getMorphClass())
             ->where('owner_id', $billable->getKey())
             ->where('provider', 'mollie')

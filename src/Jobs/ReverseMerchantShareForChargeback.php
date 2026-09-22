@@ -63,7 +63,7 @@ final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
 
     public function handle(Container $container, RoutedChargeLedger $ledger): void
     {
-        $attempt = RefundAttempt::query()->find($this->attemptId);
+        $attempt = RefundAttempt::model()::query()->find($this->attemptId);
 
         // Gone means somebody removed it deliberately, and a reversal for an intent that no longer exists is
         // money moved on nobody's authority. Nothing to do and nothing to record.

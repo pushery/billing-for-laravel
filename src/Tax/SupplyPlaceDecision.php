@@ -79,6 +79,6 @@ final readonly class SupplyPlaceDecision
     /** Whether a sale has an established country at all. Nothing may be issued for one that does not. */
     public function isEstablished(string $reference): bool
     {
-        return PlaceEvidence::query()->where('reference', $reference)->exists();
+        return PlaceEvidence::model()::query()->where('reference', $reference)->exists();
     }
 }

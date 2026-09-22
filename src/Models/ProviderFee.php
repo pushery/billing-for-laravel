@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\ReversalCause;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -27,6 +28,8 @@ use Pushery\Billing\ValueObjects\Money;
  */
 class ProviderFee extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_provider_fees';
 
     /** @var list<string> */

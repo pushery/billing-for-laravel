@@ -66,7 +66,7 @@ final class MoveMerchantShareOnConfirmation implements ShouldQueueAfterCommit
 
     public function handle(UnmovedMerchantShares $shares, BuyerProtectionClock $protection, Repository $config): void
     {
-        $charge = MerchantCharge::query()->find($this->chargeId);
+        $charge = MerchantCharge::model()::query()->find($this->chargeId);
 
         if (! $charge instanceof MerchantCharge
             || $charge->charge_type !== ChargeType::SeparateTransfer
@@ -89,7 +89,7 @@ final class MoveMerchantShareOnConfirmation implements ShouldQueueAfterCommit
     /** Open the hold the synchronous path opens, once, however often the confirmation is delivered. */
     private function hold(MerchantCharge $charge, UnmovedMerchantShares $shares, BuyerProtectionClock $protection): void
     {
-        if (BuyerProtectionHold::query()->where('charge_reference', $charge->charge_reference)->exists()) {
+        if (BuyerProtectionHold::model()::query()->where('charge_reference', $charge->charge_reference)->exists()) {
             return;
         }
 

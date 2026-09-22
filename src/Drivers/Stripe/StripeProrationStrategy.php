@@ -123,7 +123,7 @@ final readonly class StripeProrationStrategy implements ProrationStrategy
     /** The provider subscription reference from the billable's local subscription row, or null. */
     private function subscriptionReference(Model $billable): ?string
     {
-        $subscription = Subscription::query()
+        $subscription = Subscription::model()::query()
             ->forOwner($billable)
             ->forMerchant(null)
             ->ofDefaultType()

@@ -11,6 +11,7 @@ use Override;
 use Pushery\Billing\Enums\ExchangeRateBasis;
 use Pushery\Billing\Enums\ExchangeRateLayer;
 use Pushery\Billing\Models\Concerns\AppendOnly;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\Tax\FrozenExchangeRate;
 
 /**
@@ -25,9 +26,10 @@ use Pushery\Billing\Tax\FrozenExchangeRate;
  * @property ExchangeRateBasis $basis
  * @property string $source
  */
-final class InvoiceExchangeRate extends Model
+class InvoiceExchangeRate extends Model
 {
     use AppendOnly;
+    use Replaceable;
 
     protected $table = 'billing_invoice_exchange_rates';
 

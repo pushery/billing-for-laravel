@@ -64,7 +64,7 @@ final class ReleaseAbandonedClaimCommand extends Command
             return self::FAILURE;
         }
 
-        $order = Order::query()->find($this->argument('order'));
+        $order = Order::model()::query()->find($this->argument('order'));
 
         if (! $order instanceof Order) {
             $this->components->error('No such billing order.');

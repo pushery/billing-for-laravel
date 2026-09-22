@@ -30,7 +30,7 @@ final class WebhookEffectLedger
      */
     public function claim(string $provider, string $reference, string $effect, ?int $deliveryId = null): bool
     {
-        $inserted = WebhookEffectRun::query()->insertOrIgnore([
+        $inserted = WebhookEffectRun::model()::query()->insertOrIgnore([
             'provider' => $provider,
             'reference' => $reference,
             'effect' => $effect,
@@ -66,7 +66,7 @@ final class WebhookEffectLedger
     /** Mark the claimed run done. Called inside the same transaction as the effect, never before it. */
     public function markHandled(string $provider, string $reference, string $effect): void
     {
-        WebhookEffectRun::query()
+        WebhookEffectRun::model()::query()
             ->where('provider', $provider)
             ->where('reference', $reference)
             ->where('effect', $effect)
@@ -85,7 +85,7 @@ final class WebhookEffectLedger
     public function markFailed(string $provider, string $reference, string $effect, string $error, ?int $deliveryId = null): void
     {
         DB::transaction(function () use ($provider, $reference, $effect, $error, $deliveryId): void {
-            WebhookEffectRun::query()->insertOrIgnore([
+            WebhookEffectRun::model()::query()->insertOrIgnore([
                 'provider' => $provider,
                 'reference' => $reference,
                 'effect' => $effect,
@@ -109,7 +109,7 @@ final class WebhookEffectLedger
 
     private function locked(string $provider, string $reference, string $effect): ?WebhookEffectRun
     {
-        return WebhookEffectRun::query()
+        return WebhookEffectRun::model()::query()
             ->where('provider', $provider)
             ->where('reference', $reference)
             ->where('effect', $effect)

@@ -154,7 +154,7 @@ final class WarnEndingTrialsCommand extends Command
     ): int {
         $warned = 0;
 
-        Subscription::query()
+        Subscription::model()::query()
             ->where('status', SubscriptionState::Trialing->value)
             ->whereNotNull('trial_ends_at')
             ->whereBetween('trial_ends_at', [$now, $now->copy()->addDays($days)])
@@ -258,7 +258,7 @@ final class WarnEndingTrialsCommand extends Command
      */
     private function hasSubscription(Model $owner): bool
     {
-        return Subscription::query()
+        return Subscription::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->get()
@@ -280,7 +280,7 @@ final class WarnEndingTrialsCommand extends Command
         // failure would appear only in production, on whichever engine the operator happens to run.
         $date = $endsAt->format('Y-m-d');
 
-        return BillingEvent::query()
+        return BillingEvent::model()::query()
             ->where('type', 'trial.ending_notice_sent')
             ->where('subject_type', $owner->getMorphClass())
             ->where('subject_id', $owner->getKey())

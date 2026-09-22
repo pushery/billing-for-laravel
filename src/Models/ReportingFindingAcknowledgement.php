@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Override;
 use Pushery\Billing\Models\Concerns\AppendOnly;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One person's answer to one finding, for one period.
@@ -42,9 +43,10 @@ use Pushery\Billing\Models\Concerns\AppendOnly;
  * @property CarbonImmutable $acknowledged_at
  * @property string $reason
  */
-final class ReportingFindingAcknowledgement extends Model
+class ReportingFindingAcknowledgement extends Model
 {
     use AppendOnly;
+    use Replaceable;
 
     protected $table = 'billing_reporting_acknowledgements';
 

@@ -88,7 +88,7 @@ final readonly class UnestablishedStandingSweep
             // Marked after dispatching, for the same reason the sibling sweep gives: a crash between the
             // two warns once more, which somebody can live with, while the other order loses the warning
             // entirely, which is what this class exists to prevent.
-            TaxHoldWarning::query()->create([
+            TaxHoldWarning::model()::query()->create([
                 'merchant_type' => $merchant->getMorphClass(),
                 'merchant_id' => $merchant->getKey(),
                 'deadline' => $deadline->toDateString(),
@@ -113,7 +113,7 @@ final readonly class UnestablishedStandingSweep
     {
         $atRisk = [];
 
-        $charges = MerchantCharge::query()
+        $charges = MerchantCharge::model()::query()
             ->whereNull('merchant_erased_at')
             ->orderBy('id')
             ->get(['merchant_type', 'merchant_id'])
@@ -138,7 +138,7 @@ final readonly class UnestablishedStandingSweep
 
     private function alreadyWarned(Model $merchant, CarbonImmutable $deadline): bool
     {
-        return TaxHoldWarning::query()
+        return TaxHoldWarning::model()::query()
             ->where('merchant_type', $merchant->getMorphClass())
             ->where('merchant_id', $merchant->getKey())
             ->whereDate('deadline', $deadline->toDateString())

@@ -107,7 +107,7 @@ final readonly class BuyerProtectionClock
     ): BuyerProtectionHold {
         $this->assertOperable();
 
-        return BuyerProtectionHold::query()->create([
+        return BuyerProtectionHold::model()::query()->create([
             'charge_reference' => $chargeReference,
             'merchant_type' => $merchant?->getMorphClass(),
             'merchant_id' => $this->merchantKey($merchant),
@@ -137,7 +137,7 @@ final readonly class BuyerProtectionClock
      */
     private function commissionOn(string $chargeReference): int
     {
-        $charge = MerchantCharge::query()->where('charge_reference', $chargeReference)->first();
+        $charge = MerchantCharge::model()::query()->where('charge_reference', $chargeReference)->first();
 
         return $charge instanceof MerchantCharge ? (int) $charge->fee_minor : 0;
     }
@@ -223,7 +223,7 @@ final readonly class BuyerProtectionClock
     private function dueForAutoRelease(CarbonInterface $now): array
     {
         /** @var list<BuyerProtectionHold> $rows */
-        $rows = BuyerProtectionHold::query()
+        $rows = BuyerProtectionHold::model()::query()
             // Asked of the enum rather than named here, so a state that starts running the clock is picked up
             // instead of being silently left out of the one query that would have moved it.
             ->whereIn('state', $this->statesWhoseClockRuns())
@@ -256,7 +256,7 @@ final readonly class BuyerProtectionClock
     private function dueForDecision(CarbonInterface $now): array
     {
         /** @var list<BuyerProtectionHold> $rows */
-        $rows = BuyerProtectionHold::query()
+        $rows = BuyerProtectionHold::model()::query()
             ->whereIn('state', [
                 BuyerProtectionState::AwaitingConfirmation->value,
                 BuyerProtectionState::Disputed->value,
@@ -361,7 +361,7 @@ final readonly class BuyerProtectionClock
             return true;
         }
 
-        $charge = MerchantCharge::query()->where('charge_reference', $hold->charge_reference)->first();
+        $charge = MerchantCharge::model()::query()->where('charge_reference', $hold->charge_reference)->first();
 
         try {
             $moved = $this->transfers->transferShare(

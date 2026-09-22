@@ -152,7 +152,7 @@ final readonly class SellerReportingPeriod
     {
         $period = CountingPeriod::year($year);
 
-        $pairs = InvoiceRecord::query()
+        $pairs = InvoiceRecord::model()::query()
             ->whereNotNull('settlement_document_type')
             ->where('currency', strtoupper($currency))
             ->whereNotNull('owner_type')

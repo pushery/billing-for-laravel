@@ -54,7 +54,7 @@ final readonly class SettleRoutedChargeOnConfirmation
         // which refuses to settle or fail anything that is not pending — one place owning the state machine
         // rather than two agreeing. Removing this line would change no outcome, only load a row to be told
         // no. It stays for the reader and the index; it is not a second guard, and it is not tested as one.
-        $charge = MerchantCharge::query()
+        $charge = MerchantCharge::model()::query()
             ->where('provider', $event->provider)
             ->where('charge_reference', $event->paymentReference)
             ->where('settlement_state', SettlementState::Pending->value)

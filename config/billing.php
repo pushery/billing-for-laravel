@@ -937,6 +937,12 @@ return [
         'ability' => env('BILLING_ADMIN_ABILITY', 'billing-admin'),
         'prefix' => env('BILLING_ADMIN_PREFIX', 'admin/billing'),
         'middleware' => ['web', 'auth'],
+
+        // The Blade layout the console renders in. The default is a page of its own, which is right for
+        // an application without a back office; one with a back office names its own layout here and the
+        // console takes its place in that shell, beside the rest of the admin navigation, instead of a
+        // published copy of the package's layout. The account hub has the same lever in `account.layout`.
+        'layout' => env('BILLING_ADMIN_LAYOUT', 'billing::layouts.admin'),
     ],
 
     /*
@@ -2508,6 +2514,33 @@ return [
             // in this list, so an entry naming one is reported as a failure rather than ignored.
             'waived' => [],
         ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Replacing the package's own models
+    |--------------------------------------------------------------------------
+    |
+    | Not to be confused with `customer.model` above, which names YOUR billable model. This
+    | replaces one of the package's OWN models — an order, a subscription, an invoice record —
+    | with your subclass, keyed by the package class, for your own relations, scopes or casts on
+    | that row. The package then uses the subclass on every path: every query, every row it
+    | writes, and the relations between its models.
+    |
+    | Your subclass inherits the package's table and its guards, and it has to keep both: several
+    | of these rows are append-only records of money and tax, and the package writes them only
+    | through its own paths. A class that does not exist, or does not extend the package class,
+    | is ignored and the package class is used instead.
+    |
+    | Mapping a model that other rows point at polymorphically changes the type new rows record,
+    | unless you register a morph map for it. The package reads both names wherever it compares
+    | them, so older rows keep matching.
+    |
+    */
+
+    'models' => [
+        // \Pushery\Billing\Models\Subscription::class => \App\Models\Subscription::class,
+        // \Pushery\Billing\Models\Order::class => \App\Models\Order::class,
     ],
 
 ];

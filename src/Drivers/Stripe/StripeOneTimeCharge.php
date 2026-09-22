@@ -15,6 +15,7 @@ use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
+use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\MerchantChargePurpose;
 use Pushery\Billing\Enums\TaxArchetype;
@@ -26,6 +27,7 @@ use Pushery\Billing\Marketplace\ChargedBuyerFee;
 use Pushery\Billing\Marketplace\CreditTopUpVolume;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
+use Pushery\Billing\Marketplace\SellerSaleGate;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
@@ -84,6 +86,25 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
     }
 
     /**
+     * The seller-side gates a sale has to pass, resolved rather than injected.
+     *
+     * Every other collaborator of this class arrives through the constructor, and this one deliberately does
+     * not. The parameter list is held by a ratchet -- a test asserts it does not grow -- and the gates are the
+     * same object for every caller, so a parameter would buy nothing but a slot. A caller that needs different
+     * gates binds them, which is what the arms for this behavior do.
+     */
+    private function sellers(): SellerSaleGate
+    {
+        return Container::getInstance()->make(SellerSaleGate::class);
+    }
+
+    /** What the add-on is, where its catalog says; null where the catalog classifies nothing. */
+    private function archetypeOf(string $addonKey): ?TaxArchetype
+    {
+        return $this->addons instanceof SuppliesProductArchetypes ? $this->addons->archetypeFor($addonKey) : null;
+    }
+
+    /**
      * The line the buyer fee rides on, priced INCLUSIVE of tax.
      *
      * Inclusive is not a preference, it follows from what the number means: a buyer fee is quoted GROSS —
@@ -108,7 +129,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         ];
     }
 
-    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null): ClientIntent
+    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $callerReference = null): ClientIntent
     {
         // Defense in depth: refuse to open a paid checkout for an ineligible owner even if a caller
         // bypassed the UI eligibility guard.
@@ -134,7 +155,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // Resolved ONCE, and that is what makes the ledger row and the payment describe the same sale. The
         // amounts below used to be computed, handed to Stripe and thrown away; recomputing them after the
         // session exists would mean a second provider call and a second chance for the two to disagree.
-        $routed = $merchant instanceof Model ? $this->routing($merchant, $price) : null;
+        $routed = $merchant instanceof Model ? $this->routing($merchant, $price, $this->archetypeOf($addonKey)) : null;
 
         // The buyer fee, if this installation charges one AND this sale's regime has one. Resolved from the
         // ITEM's price, never from a total: the fee is charged on top, so computing it from a figure that
@@ -184,12 +205,16 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
                 ? [['price' => $price, 'quantity' => 1], $this->buyerFeeLine($buyerFee)]
                 : [['price' => $price, 'quantity' => 1]],
             // The webhook mapper reads this on checkout.session.completed to credit the owner -- and, when
-            // the buyer made pre-purchase declarations, to find them again. The declaration key is appended
-            // only when there is one, so a session opened without a consumer-rights profile carries the same
-            // single-entry bag it always did.
-            'metadata' => $declarationReference === null
-                ? ['addon_key' => $addonKey]
-                : ['addon_key' => $addonKey, 'withdrawal_declaration' => $declarationReference],
+            // the buyer made pre-purchase declarations or named a key of their own, to find them again.
+            //
+            // Assembled by filtering rather than by nesting conditions: with two optional keys a ternary is
+            // four branches, and three of them exist only to spell out which keys are absent. A session that
+            // names neither carries the same single-entry bag it always did.
+            'metadata' => array_filter([
+                'addon_key' => $addonKey,
+                'withdrawal_declaration' => $declarationReference,
+                'caller_reference' => $callerReference,
+            ], static fn (?string $value): bool => $value !== null && $value !== ''),
             'success_url' => $this->returnUrl('success_url'),
             'cancel_url' => $this->returnUrl('cancel_url'),
             // Absent for a single-seller install, so the session it opens is byte-identical to before.
@@ -436,6 +461,10 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             throw ReceiveEligibilityDenied::forMerchant();
         }
 
+        // The tax standing, as on the direct payment. The Union gate has nothing to ask: a tip is its own
+        // archetype and never goods.
+        $this->sellers()->assertTaxStandingEstablished($merchant);
+
         $policy = $this->context->tipFee($this->fees->feeFor($merchant));
 
         [$platformFee] = $policy->splitOf($chosen);
@@ -515,7 +544,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *     policy: PlatformFee,
      * }
      */
-    private function routing(Model $merchant, string $priceId): array
+    private function routing(Model $merchant, string $priceId, ?TaxArchetype $archetype = null): array
     {
         $chargeType = $this->context->chargeType();
 
@@ -532,6 +561,11 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         if (! $account instanceof MerchantAccountReference) {
             throw ReceiveEligibilityDenied::forMerchant();
         }
+
+        // The seller-side gates the direct payment asks, before the provider is: nobody sells for a merchant
+        // whose taxation is unknown, and goods of a seller outside the Union are never intermediated.
+        $this->sellers()->assertTaxStandingEstablished($merchant);
+        $this->sellers()->assertPostureCarriesTheSupply($merchant, $this->context->posture(), $archetype);
 
         $price = $this->stripe->prices->retrieve($priceId);
         $unitAmount = $price->unit_amount;

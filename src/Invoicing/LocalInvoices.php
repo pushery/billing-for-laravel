@@ -101,7 +101,7 @@ final readonly class LocalInvoices implements Invoices
      */
     private function ownedBy(Model $billable): Builder
     {
-        return InvoiceRecord::query()
+        return InvoiceRecord::model()::query()
             ->where('owner_type', $billable->getMorphClass())
             ->where('owner_id', $billable->getKey());
     }

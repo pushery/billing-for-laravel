@@ -72,5 +72,33 @@ final readonly class SubscriptionStateChanged implements BillingDomainEvent, Ide
          * that requires of a hosted consumer.
          */
         public ?string $couponCode = null,
+        /**
+         * WHICH contract of this owner at this merchant the event is about, or null for the default one.
+         *
+         * A local subscription row is unique per (owner, TYPE, merchant), and until this existed every
+         * writer hard-coded `default` — so a second contract with the same merchant could not have a row
+         * of its own. The measured consequence was not a refused insert: the sync locked the FIRST row,
+         * found it, and wrote the second contract's provider id and state onto it. One row held the
+         * identity of one contract and the state of the other, and the webhook reported success.
+         *
+         * Null keeps every existing producer and every existing row on `default`, which is what they mean.
+         */
+        public ?string $subscriptionType = null,
+        /**
+         * The caller's own correlation key, carried through the purchase and never interpreted.
+         *
+         * A consumer that writes its row BEFORE opening the checkout has to find that row again here. Until
+         * this existed the only key that traveled was `declarationReference`, which a BUSINESS buyer never
+         * has — a business has no right of withdrawal to declare — so exactly the purchases without a
+         * declaration arrived with no key at all.
+         *
+         * IT IS NOT A SECOND DECLARATION REFERENCE, AND THE DIFFERENCE IS A LEGAL ONE. A correlation id
+         * sent as `withdrawal_declaration` would come back meaning "this buyer declared", which is the one
+         * statement a business checkout must not make. This package attaches no meaning to the value at all:
+         * it goes out as its own provider key and comes back unchanged.
+         *
+         * Null on every purchase that named none, which is every existing one.
+         */
+        public ?string $callerReference = null,
     ) {}
 }

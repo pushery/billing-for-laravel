@@ -27,7 +27,7 @@ final readonly class MerchantCapabilities
 {
     public function apply(MerchantAccountReference $reported, ?Carbon $at = null): ?MerchantAccount
     {
-        $account = MerchantAccount::query()
+        $account = MerchantAccount::model()::query()
             ->where('provider', $reported->provider)
             ->where('account_reference', $reported->accountId)
             ->first();

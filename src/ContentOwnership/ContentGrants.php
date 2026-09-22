@@ -176,7 +176,7 @@ final readonly class ContentGrants
         // Whether this buyer already holds part of THIS bundle is the only thing that tells a first purchase
         // apart from a top-up, and the two must behave differently. Counting what this call has written so
         // far would not do it: on a first purchase everything after the first work would look like a top-up.
-        $topUp = AccessGrant::query()
+        $topUp = AccessGrant::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('bundle_ref', $bundleReference)
@@ -226,7 +226,7 @@ final readonly class ContentGrants
      */
     public function expireLapsedGrants(?CarbonInterface $at = null): int
     {
-        return AccessGrant::query()
+        return AccessGrant::model()::query()
             ->where('status', GrantStatus::Active->value)
             ->whereNotNull('expires_at')
             ->where('expires_at', '<=', $at ?? Carbon::now())
@@ -334,7 +334,7 @@ final readonly class ContentGrants
         ];
 
         try {
-            return AccessGrant::query()->create($attributes);
+            return AccessGrant::model()::query()->create($attributes);
         } catch (UniqueConstraintViolationException $collision) {
             $raced = $this->existingGrant($owner, $content, $merchant);
 
@@ -351,7 +351,7 @@ final readonly class ContentGrants
 
     private function existingGrant(Model $owner, ContentReference $content, ?MerchantScope $merchant): ?AccessGrant
     {
-        return AccessGrant::query()
+        return AccessGrant::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('content_type', $content->type)

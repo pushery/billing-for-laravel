@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\MandateReference;
 
 /**
@@ -26,8 +27,10 @@ use Pushery\Billing\ValueObjects\MandateReference;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
-final class PaymentMandate extends Model
+class PaymentMandate extends Model
 {
+    use Replaceable;
+
     /**
      * The one status a mandate may be charged under. Stated as what IS chargeable rather than what is not,
      * so a status a provider introduces tomorrow is refused until somebody decides it may be charged —

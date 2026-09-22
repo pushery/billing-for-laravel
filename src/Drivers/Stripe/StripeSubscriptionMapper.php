@@ -60,7 +60,51 @@ final readonly class StripeSubscriptionMapper
             declarationReference: $this->declaration($subscription),
             startedAt: $this->int($subscription, 'start_date'),
             couponCode: $this->mintedCouponCode($subscription),
+            subscriptionType: $this->subscriptionType($subscription),
+            callerReference: $this->callerReference($subscription),
         );
+    }
+
+    /**
+     * WHICH contract of this owner at this merchant the subscription is, or null for the default one.
+     *
+     * Read off the same `metadata` the withdrawal key travels in, and for the same reason: it is the only
+     * field that lands on the subscription object and stays there for every later event about it. Without it
+     * a second contract with one merchant has no way home — the sync would lock the first contract's row and
+     * write this one's state onto it, which is the defect this field exists to close.
+     *
+     * An empty value is no type rather than a type named "": a row keyed on the empty string would be a
+     * third contract nobody asked for, and it would not be the default one either.
+     *
+     * @param  array<array-key, mixed>  $subscription
+     */
+    private function subscriptionType(array $subscription): ?string
+    {
+        $metadata = $subscription['metadata'] ?? null;
+        $value = is_array($metadata) ? $this->string($metadata, 'subscription_type') : null;
+
+        return $value === '' ? null : $value;
+    }
+
+    /**
+     * The caller's own correlation key, stamped onto the subscription at checkout, or null.
+     *
+     * Read off the same `metadata` the other two travel in, for the same reason: it is the only field that
+     * lands on the subscription object and stays there for every later event about it. That property is what
+     * makes this usable for a SUBSCRIPTION at all — the subscription reference does not exist yet when the
+     * session is opened, so a consumer opening a checkout has nothing else to correlate on.
+     *
+     * An empty value is no key rather than a key named "": a lookup on the empty string finds nothing and
+     * would read as "this purchase named no row" when the caller did name one.
+     *
+     * @param  array<array-key, mixed>  $subscription
+     */
+    private function callerReference(array $subscription): ?string
+    {
+        $metadata = $subscription['metadata'] ?? null;
+        $value = is_array($metadata) ? $this->string($metadata, 'caller_reference') : null;
+
+        return $value === '' ? null : $value;
     }
 
     /**

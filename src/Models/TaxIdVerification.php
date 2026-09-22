@@ -11,6 +11,7 @@ use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\AppendOnlyDeletion;
 use Pushery\Billing\Enums\TaxIdVerificationStatus;
 use Pushery\Billing\Models\Concerns\AppendOnly;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One answer the provider reported about a buyer's tax ID.
@@ -32,9 +33,10 @@ use Pushery\Billing\Models\Concerns\AppendOnly;
  * @property Carbon $reported_at
  * @property Carbon|null $owner_erased_at
  */
-final class TaxIdVerification extends Model
+class TaxIdVerification extends Model
 {
     use AppendOnly;
+    use Replaceable;
 
     protected $table = 'billing_tax_id_verifications';
 

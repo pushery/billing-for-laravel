@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\FilingObligation;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * A record that one filing obligation, for one due date, has been announced.
@@ -17,8 +18,10 @@ use Pushery\Billing\Enums\FilingObligation;
  * @property Carbon $due_on
  * @property Carbon $announced_at
  */
-final class FilingReminder extends Model
+class FilingReminder extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_filing_reminders';
 
     /** @var list<string> */

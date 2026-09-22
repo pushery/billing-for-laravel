@@ -34,7 +34,7 @@ final class WebhookEventLedger
         array $payload,
         string $accountReference = '',
     ): BillingWebhookEvent {
-        $delivery = BillingWebhookEvent::query()->firstOrCreate(
+        $delivery = BillingWebhookEvent::model()::query()->firstOrCreate(
             ['provider' => $provider, 'account_reference' => $accountReference, 'event_id' => $eventId],
             ['type' => $type, 'payload' => $payload, 'status' => WebhookEventState::Pending],
         );

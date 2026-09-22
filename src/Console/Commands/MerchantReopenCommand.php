@@ -48,7 +48,7 @@ final class MerchantReopenCommand extends Command
             return self::FAILURE;
         }
 
-        $account = MerchantAccount::query()
+        $account = MerchantAccount::model()::query()
             ->where('merchant_type', $merchant->getMorphClass())
             ->where('merchant_id', $merchant->getKey())
             ->first();

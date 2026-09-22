@@ -71,7 +71,7 @@ final readonly class DebitCreditAppliedByProvider
             return; // a customer this app does not own — the same silence PersistInvoice keeps
         }
 
-        $record = InvoiceRecord::query()
+        $record = InvoiceRecord::model()::query()
             ->where('provider', $snapshot->provider)
             ->where('provider_id', $snapshot->providerId)
             ->first();
@@ -95,7 +95,7 @@ final readonly class DebitCreditAppliedByProvider
     /** Whether this invoice already took its offset off the ledger. */
     private function alreadyDebited(InvoiceRecord $record): bool
     {
-        return CreditLedgerEntry::query()
+        return CreditLedgerEntry::model()::query()
             ->where('source_type', $record->getMorphClass())
             ->where('source_id', $record->getKey())
             ->where('reason', CreditReason::ProviderInvoiceOffset)

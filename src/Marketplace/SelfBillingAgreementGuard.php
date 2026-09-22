@@ -38,7 +38,7 @@ final readonly class SelfBillingAgreementGuard
             return;
         }
 
-        $authorized = SelfBillingAgreement::query()
+        $authorized = SelfBillingAgreement::model()::query()
             ->where('merchant_type', $creator->getMorphClass())
             ->where('merchant_id', $creator->getKey())
             ->get()

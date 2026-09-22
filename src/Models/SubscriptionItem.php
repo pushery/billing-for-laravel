@@ -6,6 +6,7 @@ namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -31,8 +32,10 @@ use Pushery\Billing\ValueObjects\Money;
  * @property string $currency
  * @property ?string $preprocessor
  */
-final class SubscriptionItem extends Model
+class SubscriptionItem extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_subscription_items';
 
     /** @var list<string> */
@@ -64,7 +67,7 @@ final class SubscriptionItem extends Model
     /** @return BelongsTo<Subscription, $this> */
     public function subscription(): BelongsTo
     {
-        return $this->belongsTo(Subscription::class, 'billing_subscription_id');
+        return $this->belongsTo(Subscription::model(), 'billing_subscription_id');
     }
 
     /**

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One accepted (and possibly later revoked) self-billing agreement with a creator.
@@ -33,8 +34,10 @@ use Pushery\Billing\Casts\UtcDateTime;
  * @property ?Carbon $revoked_at
  * @property ?Carbon $created_at
  */
-final class SelfBillingAgreement extends Model
+class SelfBillingAgreement extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_self_billing_agreements';
 
     /** @var list<string> */

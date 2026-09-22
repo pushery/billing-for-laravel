@@ -22,6 +22,11 @@ use Stripe\StripeClient;
  * one, so re-provisioning an unchanged tier returns the price it already has rather than a second identical
  * one. Because the amount is part of the key, a real price change resolves to no existing match and mints a
  * new price, which is the only correct move — a Stripe price is immutable and cannot be edited in place.
+ *
+ * The Stripe driver does not bind it. Every checkout this package opens runs on the platform account, where
+ * {@see StripePlatformPriceProvisioner} mints, and a price on the connected account is one those sessions
+ * cannot use. This class serves an application that runs direct charges on the merchant's account itself and
+ * binds it for that.
  */
 final readonly class StripeMerchantPriceProvisioner implements MerchantPriceProvisioner
 {

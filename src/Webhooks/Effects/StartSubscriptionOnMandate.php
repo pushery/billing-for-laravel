@@ -58,7 +58,7 @@ final readonly class StartSubscriptionOnMandate
         DB::transaction(function () use ($event): void {
             // The conditional update IS the claim. Reading first and writing after would let two
             // simultaneous deliveries both pass the read.
-            $claimed = SubscriptionIntent::query()
+            $claimed = SubscriptionIntent::model()::query()
                 ->where('payment_reference', $event->paymentReference)
                 ->where('provider', $event->provider)
                 ->whereNull('claimed_at')
@@ -72,7 +72,7 @@ final readonly class StartSubscriptionOnMandate
             // this transaction, so it is there — a null would mean something impossible happened, and
             // returning quietly on it would leave a customer who has PAID with no subscription and nothing
             // anywhere saying so. Failing puts it where a failed job is looked at.
-            $intent = SubscriptionIntent::query()
+            $intent = SubscriptionIntent::model()::query()
                 ->where('payment_reference', $event->paymentReference)
                 ->where('provider', $event->provider)
                 ->firstOrFail();
@@ -113,7 +113,7 @@ final readonly class StartSubscriptionOnMandate
         // So the slot is reused only when the row standing in it is one the starter itself would let a
         // customer subscribe over. That list lives there; it is read here through the model so the two
         // cannot drift apart.
-        $existing = Subscription::query()
+        $existing = Subscription::model()::query()
             ->where('owner_type', $intent->owner_type)
             ->where('owner_id', $intent->owner_id)
             ->where('type', Subscription::TYPE_DEFAULT)
@@ -145,7 +145,7 @@ final readonly class StartSubscriptionOnMandate
         //
         // Reusing the row rather than inserting a second one is also the right answer on its own terms: the
         // id survives, and so does everything joined to it.
-        $subscription = Subscription::query()->updateOrCreate(
+        $subscription = Subscription::model()::query()->updateOrCreate(
             [
                 'owner_type' => $intent->owner_type,
                 'owner_id' => $intent->owner_id,
@@ -224,7 +224,7 @@ final readonly class StartSubscriptionOnMandate
 
         // Scoped to the issuer, matching the merchant this effect writes its subscription row for — which
         // is the platform on this lane (see the merchant_uid it upserts with).
-        $coupon = Coupon::query()->issuedBy(MerchantScope::platform())->where('code', $code)->first();
+        $coupon = Coupon::model()::query()->issuedBy(MerchantScope::platform())->where('code', $code)->first();
         $owner = $this->ownerOf($intent);
 
         if (! $coupon instanceof Coupon || ! $owner instanceof Model) {

@@ -158,7 +158,7 @@ final readonly class BillingMetricsReporter
      */
     private function scoped(?MerchantScope $merchant): Builder
     {
-        $query = Subscription::query();
+        $query = Subscription::model()::query();
 
         return $merchant instanceof MerchantScope ? $query->forMerchant($merchant) : $query;
     }

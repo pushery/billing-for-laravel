@@ -6,6 +6,7 @@ namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * An owner's usage of one meter in one period.
@@ -19,8 +20,10 @@ use Illuminate\Support\Carbon;
  * @property int $prepaid_used
  * @property ?Carbon $warned_at when the owner was warned this meter is running out, for this period
  */
-final class UsageCounter extends Model
+class UsageCounter extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_usage_counters';
 
     /** @var list<string> */

@@ -53,7 +53,7 @@ final readonly class MerchantSubLedger
     /** What the merchant owes, as a signed amount. Negative is a debt; zero is the ordinary state. */
     public function balanceFor(Model $merchant, string $currency): Money
     {
-        $balance = MerchantBalance::query()
+        $balance = MerchantBalance::model()::query()
             ->where('merchant_type', $merchant->getMorphClass())
             ->where('merchant_id', $merchant->getKey())
             ->where('currency', $currency)
@@ -77,7 +77,7 @@ final readonly class MerchantSubLedger
      */
     public function inDebtSince(Model $merchant, string $currency): ?Carbon
     {
-        return MerchantBalance::query()
+        return MerchantBalance::model()::query()
             ->where('merchant_type', $merchant->getMorphClass())
             ->where('merchant_id', $merchant->getKey())
             ->where('currency', $currency)
@@ -96,7 +96,7 @@ final readonly class MerchantSubLedger
     public function debtors(?string $currency = null): array
     {
         return array_values(
-            MerchantBalance::query()
+            MerchantBalance::model()::query()
                 ->where('balance_minor', '<', 0)
                 ->whereNotNull('merchant_id')
                 ->when($currency !== null, fn (Builder $query): Builder => $query->where('currency', $currency))
@@ -202,7 +202,7 @@ final readonly class MerchantSubLedger
      */
     private function lockedBalance(Model $merchant, string $currency): Money
     {
-        MerchantBalance::query()->insertOrIgnore([
+        MerchantBalance::model()::query()->insertOrIgnore([
             'merchant_type' => $merchant->getMorphClass(),
             'merchant_id' => $merchant->getKey(),
             'currency' => $currency,
@@ -211,7 +211,7 @@ final readonly class MerchantSubLedger
             'updated_at' => Carbon::now(),
         ]);
 
-        $row = MerchantBalance::query()
+        $row = MerchantBalance::model()::query()
             ->where('merchant_type', $merchant->getMorphClass())
             ->where('merchant_id', $merchant->getKey())
             ->where('currency', $currency)
@@ -229,7 +229,7 @@ final readonly class MerchantSubLedger
      */
     private function write(Model $merchant, Money $balance): Money
     {
-        $row = MerchantBalance::query()
+        $row = MerchantBalance::model()::query()
             ->where('merchant_type', $merchant->getMorphClass())
             ->where('merchant_id', $merchant->getKey())
             ->where('currency', $balance->currency);

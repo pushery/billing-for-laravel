@@ -90,7 +90,7 @@ final readonly class BillingEraser
             // Audit rows are append-only; an erasure is one of the two authorized ways they may be deleted.
             // Both the subject (what happened to the owner) and the actor (what the owner did) are theirs.
             BillingEvent::purging(function () use ($owner): void {
-                BillingEvent::query()
+                BillingEvent::model()::query()
                     ->where(fn (EloquentBuilder $q): EloquentBuilder => $q
                         ->where('subject_type', $owner->getMorphClass())->where('subject_id', $owner->getKey()))
                     ->orWhere(fn (EloquentBuilder $q): EloquentBuilder => $q
@@ -121,7 +121,7 @@ final readonly class BillingEraser
      */
     private function outstandingCredit(Model $owner): array
     {
-        $balances = CreditBalance::query()
+        $balances = CreditBalance::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('balance_minor', '!=', 0)

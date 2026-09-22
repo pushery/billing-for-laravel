@@ -101,7 +101,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
             ],
         ], ['idempotency_key' => $this->creationKey($merchant)]);
 
-        $row = MerchantAccount::query()->create([
+        $row = MerchantAccount::model()::query()->create([
             'merchant_type' => $merchant->getMorphClass(),
             'merchant_id' => $key,
             'provider' => 'stripe',
@@ -272,7 +272,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
 
     private function row(Model $merchant): ?MerchantAccount
     {
-        return MerchantAccount::query()
+        return MerchantAccount::model()::query()
             ->where('provider', 'stripe')
             ->where('merchant_type', $merchant->getMorphClass())
             ->where('merchant_id', $merchant->getKey())

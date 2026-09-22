@@ -108,7 +108,7 @@ final readonly class ReopenWriteOffOnLateReceipt implements DedupesOnReference
     private function reopenableFor(Model $owner, PaymentSucceeded $event): array
     {
         /** @var list<InvoiceRecord> $corrections */
-        $corrections = InvoiceRecord::query()
+        $corrections = InvoiceRecord::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->whereNotNull('credited_invoice_id')

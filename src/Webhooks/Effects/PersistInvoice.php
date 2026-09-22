@@ -37,7 +37,7 @@ final readonly class PersistInvoice
             return; // a customer this app does not own (another app on the same account) — nothing to store
         }
 
-        $record = InvoiceRecord::query()->firstOrNew([
+        $record = InvoiceRecord::model()::query()->firstOrNew([
             'provider' => $snapshot->provider,
             'provider_id' => $snapshot->providerId,
         ]);

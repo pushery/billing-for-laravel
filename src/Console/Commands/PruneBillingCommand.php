@@ -122,7 +122,7 @@ final class PruneBillingCommand extends Command
         // The audit/book window keeps its ten-year default and its raw age cutoff — a different record class
         // (book-keeping, not invoices) with a different statute (§257 HGB / §147 AO).
         $auditCutoff = Carbon::now()->subDays($this->days($config, 'audit_days', 3650));
-        $expiredAudit = BillingEvent::query()->where('created_at', '<=', $auditCutoff);
+        $expiredAudit = BillingEvent::model()::query()->where('created_at', '<=', $auditCutoff);
 
         $auditCount = $this->guarded(
             'billing_events',

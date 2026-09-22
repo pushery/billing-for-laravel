@@ -22,7 +22,7 @@ final readonly class DatabaseMerchantAccountDirectory implements MerchantAccount
 
     public function merchantForReference(string $accountReference): ?Model
     {
-        $account = MerchantAccount::query()
+        $account = MerchantAccount::model()::query()
             ->where('provider', $this->provider)
             ->where('account_reference', $accountReference)
             ->first();
@@ -34,7 +34,7 @@ final readonly class DatabaseMerchantAccountDirectory implements MerchantAccount
 
     public function accountFor(Model $merchant): ?MerchantAccountReference
     {
-        return MerchantAccount::query()
+        return MerchantAccount::model()::query()
             ->where('provider', $this->provider)
             ->where('merchant_type', $merchant->getMorphClass())
             ->where('merchant_id', $merchant->getKey())

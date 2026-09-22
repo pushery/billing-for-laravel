@@ -39,13 +39,13 @@ final readonly class CouponRedeemer
         ?MerchantScope $merchant = null,
     ): CouponRedemption {
         return $coupon->getConnection()->transaction(function () use ($coupon, $owner, $subscriptionId, $merchant): CouponRedemption {
-            $locked = Coupon::query()->whereKey($coupon->getKey())->lockForUpdate()->first() ?? $coupon;
+            $locked = Coupon::model()::query()->whereKey($coupon->getKey())->lockForUpdate()->first() ?? $coupon;
 
             $this->assertIssuedBy($locked, $merchant);
             $this->assertRedeemable($locked);
 
             try {
-                $redemption = CouponRedemption::query()->create([
+                $redemption = CouponRedemption::model()::query()->create([
                     'owner_type' => $owner->getMorphClass(),
                     'owner_id' => $owner->getKey(),
                     'coupon_id' => $locked->getKey(),

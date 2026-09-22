@@ -111,11 +111,15 @@ final class BillingAdminConsole extends Component
         /** @var ConcreteView $rendered */
         $rendered = ViewFacade::make('billing::livewire.billing-admin-console', [
             'metrics' => Container::getInstance()->make(BillingMetricsReporter::class)->compute(),
-            'events' => BillingEvent::query()->latest('id')->limit(50)->get(),
+            'events' => BillingEvent::model()::query()->latest('id')->limit(50)->get(),
         ]);
 
+        // The host's shell when it named one, the package's own page otherwise -- the lever the account
+        // hub has in `account.layout`, so a back office does not have to publish and freeze this layout.
+        $layout = Config::get('billing.admin.layout', 'billing::layouts.admin');
+
         /** @var View $view */
-        $view = $rendered->layout('billing::layouts.admin');
+        $view = $rendered->layout(is_string($layout) && $layout !== '' ? $layout : 'billing::layouts.admin');
 
         return $view;
     }
