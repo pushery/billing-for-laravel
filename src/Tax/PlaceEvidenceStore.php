@@ -57,7 +57,7 @@ final readonly class PlaceEvidenceStore
             );
         }
 
-        return PlaceEvidence::query()->create([
+        return PlaceEvidence::model()::query()->create([
             'owner_type' => $owner?->getMorphClass(),
             'owner_id' => $this->ownerKey($owner),
             'reference' => $reference,
@@ -86,7 +86,7 @@ final readonly class PlaceEvidenceStore
     /** The country a sale was taxed in, or null where none was recorded. */
     public function countryFor(string $reference): ?string
     {
-        $country = PlaceEvidence::query()->where('reference', $reference)->value('resolved_country');
+        $country = PlaceEvidence::model()::query()->where('reference', $reference)->value('resolved_country');
 
         return is_string($country) ? $country : null;
     }
@@ -102,7 +102,7 @@ final readonly class PlaceEvidenceStore
      */
     public function subdivisionFor(string $reference): ?string
     {
-        $subdivision = PlaceEvidence::query()->where('reference', $reference)->value('resolved_subdivision');
+        $subdivision = PlaceEvidence::model()::query()->where('reference', $reference)->value('resolved_subdivision');
 
         return is_string($subdivision) && $subdivision !== '' ? $subdivision : null;
     }

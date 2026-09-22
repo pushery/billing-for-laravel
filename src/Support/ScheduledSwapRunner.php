@@ -49,7 +49,7 @@ final readonly class ScheduledSwapRunner
         // a real, past effective moment come through. A well-formed schedule always has a tier alongside the
         // date, but a malformed one (a legacy or partial write) is caught in apply() rather than silently
         // skipped by a tier filter here.
-        $due = Subscription::query()
+        $due = Subscription::model()::query()
             ->whereNotNull('scheduled_swap_at')
             ->where('scheduled_swap_at', '<=', $now)
             ->get();

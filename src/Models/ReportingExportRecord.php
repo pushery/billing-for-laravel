@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Override;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Models\Concerns\AppendOnly;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One produced seller-reporting record: what was reported, when, and the exact bytes it was reported as.
@@ -30,9 +31,10 @@ use Pushery\Billing\Models\Concerns\AppendOnly;
  * @property ?string $written_to where a copy was placed, or null when configuration points nowhere
  * @property-read ?ReportingFiling $filing
  */
-final class ReportingExportRecord extends Model
+class ReportingExportRecord extends Model
 {
     use AppendOnly;
+    use Replaceable;
 
     protected $table = 'billing_reporting_exports';
 
@@ -60,7 +62,7 @@ final class ReportingExportRecord extends Model
      */
     public function filing(): HasOne
     {
-        return $this->hasOne(ReportingFiling::class, 'export_id');
+        return $this->hasOne(ReportingFiling::model(), 'export_id');
     }
 
     /**

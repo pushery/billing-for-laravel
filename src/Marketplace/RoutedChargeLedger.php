@@ -138,14 +138,23 @@ final readonly class RoutedChargeLedger
          * as the frozen columns above use null. It is deliberately not backfilled: see the migration.
          */
         ?MerchantChargePurpose $purpose = null,
+        /**
+         * The payment behind the sale, where the reference it is recorded under is something else.
+         *
+         * A subscription cycle is recorded under its invoice, while a dispute names only the payment. This is
+         * the link between the two, read by {@see self::findByPayment()}. Null on a one-off sale, whose
+         * reference already is the payment.
+         */
+        ?string $paymentReference = null,
     ): MerchantCharge {
-        return MerchantCharge::query()->firstOrCreate(
+        return MerchantCharge::model()::query()->firstOrCreate(
             ['provider' => $provider, 'charge_reference' => $chargeReference],
             [
                 'merchant_type' => $merchant->getMorphClass(),
                 'merchant_id' => $merchant->getKey(),
                 'gross_minor' => $gross->minorUnits,
                 'fee_minor' => $fee->minorUnits,
+                'payment_reference' => $paymentReference,
                 'charge_type' => $chargeType,
                 'purpose' => $purpose,
                 'seller_posture' => $sellerPosture,
@@ -213,7 +222,7 @@ final readonly class RoutedChargeLedger
      */
     public function nameTransfer(MerchantCharge $charge, string $transferReference): bool
     {
-        $named = MerchantCharge::query()
+        $named = MerchantCharge::model()::query()
             ->whereKey($charge->getKey())
             ->whereNull('transfer_reference')
             ->update(['transfer_reference' => $transferReference]) === 1;
@@ -289,7 +298,7 @@ final readonly class RoutedChargeLedger
     private function changeWhilePending(MerchantCharge $charge, callable $changes): bool
     {
         return (bool) DB::transaction(function () use ($charge, $changes): bool {
-            $locked = MerchantCharge::query()
+            $locked = MerchantCharge::model()::query()
                 ->whereKey($charge->getKey())
                 ->lockForUpdate()
                 ->first();
@@ -333,7 +342,7 @@ final readonly class RoutedChargeLedger
         $fee = $feeRefund ?? new Money(0, $amount->currency);
 
         return DB::transaction(function () use ($charge, $amount, $transferReversal, $fee, $cause, $disputeFee): RefundAttempt {
-            $attempt = RefundAttempt::query()->create([
+            $attempt = RefundAttempt::model()::query()->create([
                 'provider' => $charge->provider,
                 'charge_reference' => $charge->charge_reference,
                 'amount_minor' => $amount->minorUnits,
@@ -382,7 +391,7 @@ final readonly class RoutedChargeLedger
         $result = DB::transaction(function () use ($attempt, $actuallyReversed): array {
             $nothing = ['refunded' => 0, 'reversed' => 0, 'fee' => 0];
 
-            $charge = MerchantCharge::query()
+            $charge = MerchantCharge::model()::query()
                 ->where('provider', $attempt->provider)
                 ->where('charge_reference', $attempt->charge_reference)
                 ->lockForUpdate()
@@ -545,7 +554,7 @@ final readonly class RoutedChargeLedger
     {
         /** @var int $applied */
         $applied = DB::transaction(function () use ($charge, $amount): int {
-            $fresh = MerchantCharge::query()
+            $fresh = MerchantCharge::model()::query()
                 ->whereKey($charge->getKey())
                 ->lockForUpdate()
                 ->first();
@@ -591,9 +600,26 @@ final readonly class RoutedChargeLedger
     /** The routed charge behind a provider reference, or null when the payment was never routed. */
     public function find(string $provider, string $chargeReference): ?MerchantCharge
     {
-        return MerchantCharge::query()
+        return MerchantCharge::model()::query()
             ->where('provider', $provider)
             ->where('charge_reference', $chargeReference)
+            ->first();
+    }
+
+    /**
+     * The charge whose PAYMENT this is, for a charge recorded under something other than its payment.
+     *
+     * A subscription cycle is recorded under its invoice, and a dispute names only the payment, so this is the
+     * way from the one to the other. It is a separate lookup rather than a second condition in {@see self::find()}
+     * on purpose: `find()` answers for the reference a sale is recorded under, and its callers (a refund, a
+     * withdrawal, the clawback) hand it exactly that. Widened, each of them would start resolving a cycle by its
+     * payment, which none of them was written for.
+     */
+    public function findByPayment(string $provider, string $paymentReference): ?MerchantCharge
+    {
+        return MerchantCharge::model()::query()
+            ->where('provider', $provider)
+            ->where('payment_reference', $paymentReference)
             ->first();
     }
 }

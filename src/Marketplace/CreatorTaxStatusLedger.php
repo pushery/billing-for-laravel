@@ -100,7 +100,7 @@ final readonly class CreatorTaxStatusLedger implements CreatorTaxStatusResolver
                 ->orderBy('effective_from')
                 ->first();
 
-            return CreatorTaxStatusRecord::query()->create([
+            return CreatorTaxStatusRecord::model()::query()->create([
                 'merchant_type' => $merchant->getMorphClass(),
                 'merchant_id' => $merchant->getKey(),
                 'status' => $status,
@@ -151,7 +151,7 @@ final readonly class CreatorTaxStatusLedger implements CreatorTaxStatusResolver
     /** @return Builder<CreatorTaxStatusRecord> */
     private function seriesFor(Model $merchant): Builder
     {
-        return CreatorTaxStatusRecord::query()
+        return CreatorTaxStatusRecord::model()::query()
             ->where('merchant_type', $merchant->getMorphClass())
             ->where('merchant_id', $merchant->getKey());
     }

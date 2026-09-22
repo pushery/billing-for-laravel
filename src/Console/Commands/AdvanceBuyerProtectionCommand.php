@@ -32,7 +32,7 @@ final class AdvanceBuyerProtectionCommand extends Command
         $now = Carbon::now();
 
         if ($this->option('dry-run') === true) {
-            $due = BuyerProtectionHold::query()
+            $due = BuyerProtectionHold::model()::query()
                 ->whereIn('state', ['awaiting_confirmation', 'disputed'])
                 ->where(function (Builder $query) use ($now): void {
                     $query->where('confirm_by', '<=', $now)->orWhere('decide_by', '<=', $now);

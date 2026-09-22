@@ -32,7 +32,7 @@ final readonly class LocalArrearsClock implements ArrearsClock
 {
     public function delinquentSince(Model $owner, ?MerchantScope $merchant = null): ?DateTimeInterface
     {
-        $since = Subscription::query()
+        $since = Subscription::model()::query()
             ->forOwner($owner)
             ->ofDefaultType()
             ->forMerchant($merchant)

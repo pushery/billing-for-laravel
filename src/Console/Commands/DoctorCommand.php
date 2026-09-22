@@ -549,7 +549,7 @@ final class DoctorCommand extends Command
     {
         // The model's own scope, which `billing:release-claim` refuses to act outside of. Inlining the three
         // conditions here again is how the diagnostic and the action drift apart while both look right.
-        $stranded = Order::query()->abandonedClaims()->count();
+        $stranded = Order::model()::query()->abandonedClaims()->count();
 
         if ($stranded === 0) {
             return $this->reportHeldOrders();
@@ -586,7 +586,7 @@ final class DoctorCommand extends Command
      */
     private function reportHeldOrders(): bool
     {
-        $held = Order::query()
+        $held = Order::model()::query()
             ->where('status', OrderStatus::Processing)
             ->whereNotNull('payment_reference')
             ->where('updated_at', '<', Carbon::now()->subDays(self::HELD_ORDER_DAYS))
@@ -761,7 +761,7 @@ final class DoctorCommand extends Command
             // Matched on the TO side, which is the direction the config documents: the key lists the
             // currencies money is received in, and rates are stored as the publisher writes them — euro to
             // each of these — never turned around.
-            $newest = ExchangeRateRecord::query()->where('to_currency', $currency)->max('rate_date');
+            $newest = ExchangeRateRecord::model()::query()->where('to_currency', $currency)->max('rate_date');
 
             if (! is_string($newest) && ! $newest instanceof DateTimeInterface) {
                 $this->components->error(

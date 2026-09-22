@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\CancellationReason;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 
 /**
@@ -22,8 +23,10 @@ use Pushery\Billing\ValueObjects\CancellationSurvey;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
-final class CancellationSurveyRecord extends Model
+class CancellationSurveyRecord extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_cancellation_surveys';
 
     /** @var list<string> */

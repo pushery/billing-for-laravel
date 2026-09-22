@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\UsTaxFormStatus;
 use Pushery\Billing\Enums\UsTaxFormType;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One declaration a seller gave, and when it stops counting.
@@ -25,8 +26,10 @@ use Pushery\Billing\Enums\UsTaxFormType;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
-final class UsTaxForm extends Model
+class UsTaxForm extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_us_tax_forms';
 
     /** @var list<string> */

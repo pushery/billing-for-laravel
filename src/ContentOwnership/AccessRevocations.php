@@ -95,7 +95,7 @@ final readonly class AccessRevocations
     public function revokePurchase(string $sourceReference, RevokeReason $reason, ?CarbonInterface $at = null): array
     {
         /** @var list<AccessGrant> $grants */
-        $grants = AccessGrant::query()
+        $grants = AccessGrant::model()::query()
             ->where('source_reference', $sourceReference)
             ->where('status', GrantStatus::Active->value)
             ->orderBy('id')
@@ -137,7 +137,7 @@ final readonly class AccessRevocations
         ?MerchantScope $merchant = null,
         ?CarbonInterface $at = null,
     ): array {
-        $query = AccessGrant::query()
+        $query = AccessGrant::model()::query()
             // Column order matching `billing_access_grants_content_index` (content_type, content_ref,
             // status), which the migration created for exactly this read and which nothing had ever used.
             ->where('content_type', $content->type)
@@ -166,7 +166,7 @@ final readonly class AccessRevocations
      */
     public function revokeForMerchant(MerchantScope $merchant, RevokeReason $reason, ?CarbonInterface $at = null): array
     {
-        $query = AccessGrant::query()
+        $query = AccessGrant::model()::query()
             // Matching `billing_access_grants_merchant_index` (merchant_type, merchant_id, status).
             ->where('merchant_type', $merchant->type)
             ->where('merchant_id', $merchant->id)
@@ -211,7 +211,7 @@ final readonly class AccessRevocations
      */
     public function revokeForPayment(string $paymentReference, RevokeReason $reason, ?CarbonInterface $at = null): array
     {
-        $purchase = AddonPurchase::query()->where('payment_reference', $paymentReference)->first();
+        $purchase = AddonPurchase::model()::query()->where('payment_reference', $paymentReference)->first();
 
         if (! $purchase instanceof AddonPurchase) {
             return [];

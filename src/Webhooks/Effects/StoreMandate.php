@@ -42,14 +42,14 @@ final readonly class StoreMandate
             return;
         }
 
-        $holdsDefault = PaymentMandate::query()
+        $holdsDefault = PaymentMandate::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('provider', $event->provider)
             ->where('is_default', true)
             ->exists();
 
-        PaymentMandate::query()->firstOrCreate(
+        PaymentMandate::model()::query()->firstOrCreate(
             ['provider' => $event->provider, 'mandate_reference' => $event->mandateId],
             [
                 'owner_type' => $owner->getMorphClass(),

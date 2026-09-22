@@ -68,7 +68,7 @@ final readonly class SubscriptionExpirySweep
         // days ago has run out.
         $cutoff = $this->window->cutoff($now);
 
-        $due = Subscription::query()
+        $due = Subscription::model()::query()
             ->merchantScoped()
             ->whereNotNull('delinquent_since')
             ->where('delinquent_since', '<=', $cutoff)

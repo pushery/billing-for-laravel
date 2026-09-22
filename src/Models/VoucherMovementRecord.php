@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\VoucherEvent;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\VoucherMovement;
 
@@ -26,8 +27,10 @@ use Pushery\Billing\ValueObjects\VoucherMovement;
  * @property ?int $sale_gross_minor
  * @property Carbon $occurred_on
  */
-final class VoucherMovementRecord extends Model
+class VoucherMovementRecord extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_voucher_movements';
 
     protected $fillable = ['event', 'reference', 'amount_minor', 'currency', 'sale_gross_minor', 'occurred_on'];

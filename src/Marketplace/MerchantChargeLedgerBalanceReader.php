@@ -71,7 +71,7 @@ final readonly class MerchantChargeLedgerBalanceReader implements LedgerBalanceR
         // take the commission out a second time and, where the whole settled turnover sits under one open
         // hold, drive the balance below zero. The contract says the quantity out loud: "settled EARNINGS
         // withheld under buyer protection".
-        $held = BuyerProtectionHold::query()
+        $held = BuyerProtectionHold::model()::query()
             ->where('merchant_type', $party->getMorphClass())
             ->where('merchant_id', $this->key($party))
             ->where('currency', $this->code($currency))
@@ -96,7 +96,7 @@ final readonly class MerchantChargeLedgerBalanceReader implements LedgerBalanceR
      */
     private function base(Model $party, string $currency): Builder
     {
-        return MerchantCharge::query()
+        return MerchantCharge::model()::query()
             ->where('merchant_type', $party->getMorphClass())
             ->where('merchant_id', $party->getKey())
             ->where('currency', $this->code($currency));
@@ -121,7 +121,7 @@ final readonly class MerchantChargeLedgerBalanceReader implements LedgerBalanceR
      */
     public function currenciesFor(Model $party): array
     {
-        $currencies = MerchantCharge::query()
+        $currencies = MerchantCharge::model()::query()
             ->where('merchant_type', $party->getMorphClass())
             ->where('merchant_id', $party->getKey())
             ->where('settlement_state', '!=', SettlementState::Failed->value)

@@ -70,6 +70,25 @@ final class RegimeNotPermitted extends RuntimeException
         );
     }
 
+    /**
+     * Goods of a seller established outside the Union, about to be recorded as a sale the platform only
+     * arranged.
+     *
+     * The rule this refuses on is the one that makes a marketplace the deemed supplier of those goods
+     * (Art. 14a(2) of the VAT Directive). The message names what to do instead, because the operator
+     * reading it chose the posture and has to change a configuration, not retry a payment.
+     */
+    public static function intermediatedGoodsOfASellerOutsideTheUnion(): self
+    {
+        return new self(
+            'Goods sold by a seller established outside the Union cannot be recorded as an intermediated sale: '
+            .'the platform facilitating their sale to a consumer in the Union is treated as having supplied them '
+            .'itself (Art. 14a(2) VAT Directive), so its turnover is the whole sale, not a fee. This package has '
+            .'no document chain for that deemed supply yet. Do not route goods of sellers outside the Union under '
+            .'the intermediary posture.'
+        );
+    }
+
     public static function intermediationHasNoInboundTaxMatrix(SupplyRegime $regime): self
     {
         return new self(

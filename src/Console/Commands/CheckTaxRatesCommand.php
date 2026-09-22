@@ -171,7 +171,7 @@ final class CheckTaxRatesCommand extends Command
     {
         $countries = [];
 
-        foreach (InvoiceRecord::query()->whereNotNull('destination_country')->distinct()->pluck('destination_country') as $country) {
+        foreach (InvoiceRecord::model()::query()->whereNotNull('destination_country')->distinct()->pluck('destination_country') as $country) {
             if (is_string($country) && $country !== '') {
                 $countries[] = $country;
             }

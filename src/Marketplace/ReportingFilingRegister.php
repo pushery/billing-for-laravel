@@ -98,7 +98,7 @@ final readonly class ReportingFilingRegister
     /** The period's most recent filing — a correction if any were filed, otherwise the first one. */
     public function latestFilingFor(int $year, string $currency): ?ReportingFiling
     {
-        return ReportingFiling::query()
+        return ReportingFiling::model()::query()
             ->where('period_year', $year)
             ->where('currency', strtoupper($currency))
             ->orderByDesc('correction_sequence')
@@ -112,7 +112,7 @@ final readonly class ReportingFilingRegister
      */
     public function filingsFor(int $year, string $currency): Collection
     {
-        return ReportingFiling::query()
+        return ReportingFiling::model()::query()
             ->where('period_year', $year)
             ->where('currency', strtoupper($currency))
             ->orderBy('correction_sequence')
@@ -149,7 +149,7 @@ final readonly class ReportingFilingRegister
         ?ReportingFiling $corrects,
         ?CarbonInterface $at,
     ): ReportingFiling {
-        return ReportingFiling::query()->create([
+        return ReportingFiling::model()::query()->create([
             'export_id' => $export->getKey(),
             'period_year' => $export->period_year,
             'currency' => $export->currency,

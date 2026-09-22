@@ -14,6 +14,7 @@ use Pushery\Billing\Enums\GrantStatus;
 use Pushery\Billing\Enums\RevokeReason;
 use Pushery\Billing\Enums\UpdatePolicy;
 use Pushery\Billing\Enums\WithdrawalType;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
@@ -62,8 +63,10 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * @property ?string $merchant_type
  * @property ?int $merchant_id
  */
-final class AccessGrant extends Model
+class AccessGrant extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_access_grants';
 
     /** @var list<string> */

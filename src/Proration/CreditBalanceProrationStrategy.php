@@ -149,7 +149,7 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
      */
     private function invoiceForPeriod(Model $billable, BillingPeriod $period, string $currency): ?InvoiceRecord
     {
-        $matches = InvoiceRecord::query()
+        $matches = InvoiceRecord::model()::query()
             ->where('owner_type', $billable->getMorphClass())
             ->where('owner_id', $billable->getKey())
             ->where('status', InvoiceStatus::Paid)

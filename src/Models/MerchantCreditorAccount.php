@@ -6,6 +6,7 @@ namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * A merchant's own ledger account, for the installation that books individual creditors.
@@ -18,8 +19,10 @@ use Illuminate\Support\Carbon;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
-final class MerchantCreditorAccount extends Model
+class MerchantCreditorAccount extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_merchant_creditor_accounts';
 
     /** @var list<string> */

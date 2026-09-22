@@ -39,13 +39,14 @@ final readonly class StopBillingForDeletedAccount
 
     public function handle(BillableAccountDeleting $event): void
     {
-        foreach ($this->scopesOf($event->owner) as $merchant) {
+        foreach ($this->runningOf($event->owner) as [$merchant, $type]) {
             try {
-                $this->actions->cancelNow($event->owner, $merchant);
+                $this->actions->cancelNow($event->owner, $merchant, $type);
             } catch (Throwable $e) {
                 Log::warning('Could not stop live billing for a deleting account; the deletion continues.', [
                     'exception' => $e::class,
                     'merchant' => $merchant->uid(),
+                    'type' => $type ?? Subscription::TYPE_DEFAULT,
                 ]);
 
                 // The log line reached nobody who could end the subscription by hand, so the application's
@@ -71,27 +72,35 @@ final readonly class StopBillingForDeletedAccount
     }
 
     /**
-     * The platform, and every merchant scope in which the owner still has a subscription that is not over.
+     * Every (scope, type) pair in which the owner still has a subscription that is not over, and the
+     * platform's default subscription on top.
      *
-     * A terminal row is left out: canceling it again would rewrite when a finished subscription ended.
+     * No type filter, because the question is "where does this account still have something running" and
+     * there is no type in it. The uniqueness of a row is (owner, type, merchant), so a sponsorship beside a
+     * subscription at the same creator is a row of its own, and where it is the account's only live row it
+     * was the one a default-type read never reached.
      *
-     * @return list<MerchantScope>
+     * A terminal row is left out: canceling it again would rewrite when a finished subscription ended. The
+     * platform's default type is always asked, as it always was, because a provider can hold a subscription
+     * the local mirror has not recorded yet.
+     *
+     * @return list<array{0: MerchantScope, 1: ?string}>
      */
-    private function scopesOf(Model $owner): array
+    private function runningOf(Model $owner): array
     {
-        $scopes = [MerchantScope::platform()->uid() => MerchantScope::platform()];
+        $running = [MerchantScope::platform()->uid().'|'.Subscription::TYPE_DEFAULT => [MerchantScope::platform(), null]];
 
-        $subscriptions = Subscription::query()
+        $subscriptions = Subscription::model()::query()
             ->forOwner($owner)
-            ->ofDefaultType()
-            ->merchantScoped()
             ->whereNotIn('status', [SubscriptionState::Ended->value, SubscriptionState::IncompleteExpired->value])
-            ->get(['merchant_uid']);
+            ->get(['merchant_uid', 'type']);
 
         foreach ($subscriptions as $subscription) {
-            $scopes[$subscription->merchant_uid] = MerchantScope::fromUid($subscription->merchant_uid);
+            $type = $subscription->type === Subscription::TYPE_DEFAULT ? null : $subscription->type;
+
+            $running[$subscription->merchant_uid.'|'.$subscription->type] = [MerchantScope::fromUid($subscription->merchant_uid), $type];
         }
 
-        return array_values($scopes);
+        return array_values($running);
     }
 }

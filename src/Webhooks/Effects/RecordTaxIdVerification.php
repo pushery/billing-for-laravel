@@ -39,7 +39,7 @@ final readonly class RecordTaxIdVerification implements DedupesOnReference
             return; // a customer this app does not own
         }
 
-        TaxIdVerification::query()->firstOrCreate(
+        TaxIdVerification::model()::query()->firstOrCreate(
             ['provider' => $event->provider, 'tax_id_reference' => $event->taxIdReference, 'status' => $event->status],
             [
                 'owner_type' => $owner->getMorphClass(),
@@ -91,7 +91,7 @@ final readonly class RecordTaxIdVerification implements DedupesOnReference
         $wanted = $this->normalized($event->value);
         $references = [];
 
-        $invoices = InvoiceRecord::query()
+        $invoices = InvoiceRecord::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('provider', $event->provider)

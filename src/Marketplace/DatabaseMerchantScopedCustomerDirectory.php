@@ -21,7 +21,7 @@ final readonly class DatabaseMerchantScopedCustomerDirectory implements Merchant
 
     public function ownerForReference(string $accountReference, string $customerReference): ?Model
     {
-        return MerchantCustomer::query()
+        return MerchantCustomer::model()::query()
             ->where('provider', $this->provider)
             ->where('account_reference', $accountReference)
             ->where('customer_reference', $customerReference)

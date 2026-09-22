@@ -54,7 +54,7 @@ final readonly class SmallBusinessThresholdMonitor
         $start = sprintf('%04d-01-01 00:00:00', $year);
         $end = sprintf('%04d-01-01 00:00:00', $year + 1);
 
-        $charges = MerchantCharge::query()
+        $charges = MerchantCharge::model()::query()
             ->where('merchant_type', $creator->getMorphClass())
             ->where('merchant_id', $creator->getKey())
             ->where('currency', strtoupper($currency))
@@ -114,7 +114,7 @@ final readonly class SmallBusinessThresholdMonitor
      */
     public function hasObservedEarnings(Model $creator, string $currency, int $year): bool
     {
-        return MerchantCharge::query()
+        return MerchantCharge::model()::query()
             ->where('merchant_type', $creator->getMorphClass())
             ->where('merchant_id', $creator->getKey())
             ->where('currency', strtoupper($currency))

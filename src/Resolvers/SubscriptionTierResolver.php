@@ -37,7 +37,7 @@ final readonly class SubscriptionTierResolver implements TierResolver
 
     public function resolve(Model $billable, ?MerchantScope $merchant = null): TierIdentity
     {
-        $subscription = Subscription::query()
+        $subscription = Subscription::model()::query()
             ->forOwner($billable)
             ->forMerchant($merchant)
             ->ofDefaultType()

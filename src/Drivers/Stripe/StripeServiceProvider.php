@@ -40,7 +40,6 @@ use Pushery\Billing\Contracts\UsageReporter;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Contracts\WebhookVerifier;
 use Pushery\Billing\Drivers\NullCustomerRegistry;
-use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\ChargebackReceived;
@@ -175,37 +174,17 @@ final class StripeServiceProvider extends ServiceProvider
         // privileges and a driver may honestly have one without the other — a provider that routes the
         // share as part of the payment makes no transfer and has nothing to audit.
         $this->app->bind(ReportsMovedShares::class, StripeMerchantTransfers::class);
-        // WHICH provisioner is not a setting of its own: it follows from who the buyer transacts with.
-        // Under `platform_deemed_supplier` the checkout session runs on the platform account, so a price
-        // minted on the merchant's connected account is one that session cannot use; under the other two
-        // postures the merchant is the seller and the price belongs with them. Two postures, two
-        // provisioners, ONE decision -- a second switch could be set to contradict the first, and the
-        // contradiction would surface as a checkout that cannot find its price.
+        // A merchant's tier price is minted on the platform account under every posture. A price has to live
+        // on the account the checkout session runs on, and every session this package opens runs there: both
+        // charge types it offers are platform charges, and the provider requires the price of a destination
+        // charge to be defined on the platform. The posture decides who the buyer transacts with and which
+        // documents exist, not which account holds a provider object.
         //
-        // Read as a closure so the posture is resolved when the provisioner is, not when this provider
-        // booted: an application that sets the posture after boot still gets the one it configured.
-        $this->app->bind(MerchantPriceProvisioner::class, static function (Application $app): MerchantPriceProvisioner {
-            $configured = $app->make(Repository::class)->get(
-                'billing.marketplace.seller_of_record.default_posture',
-                SellerOfRecordPosture::PlatformDeemedSupplier->value,
-            );
-
-            $posture = is_string($configured)
-                ? SellerOfRecordPosture::tryFrom($configured)
-                : null;
-
-            // An unreadable posture falls to the deemed-supplier reading rather than to the merchant one.
-            // That is the fail-safe direction here: it mints on the platform, which the platform can always
-            // sell, instead of on an account that may not exist yet.
-            return $posture?->mintsPriceOnPlatformAccount() ?? true
-                ? $app->make(StripePlatformPriceProvisioner::class)
-                : $app->make(StripeMerchantPriceProvisioner::class);
-        });
-        // ONE implementation, not the pair the price side has, and the difference is where the refusal
-        // lives rather than a gap. A coupon has to exist on the account its session runs on, so the same
-        // posture decides it — but a coupon minted on the wrong account does not fail at the provider, it
-        // fails as a session that quietly applies no discount. So the platform one is bound and refuses
-        // under the other posture, instead of a second class minting somewhere a session cannot reach.
+        // StripeMerchantPriceProvisioner remains for an application that runs direct charges on the merchant's
+        // own account; such an application binds it itself.
+        $this->app->bind(MerchantPriceProvisioner::class, StripePlatformPriceProvisioner::class);
+        // The coupon follows the price: it has to exist on the account its session runs on, which is the
+        // platform account for every session this package opens.
         $this->app->bind(MerchantCouponProvisioner::class, StripePlatformCouponProvisioner::class);
         $this->app->bind(MarketplaceWebhookVerifier::class, StripeMarketplaceWebhookVerifier::class);
         $this->app->bind(MarketplaceWebhookEventMapper::class, StripeMarketplaceWebhookEventMapper::class);

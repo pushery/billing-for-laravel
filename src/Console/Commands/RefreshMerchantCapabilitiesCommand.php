@@ -116,7 +116,7 @@ final class RefreshMerchantCapabilitiesCommand extends Command
     /** @return list<MerchantAccount> */
     private function accounts(): array
     {
-        $query = MerchantAccount::query();
+        $query = MerchantAccount::model()::query();
 
         $type = $this->option('type');
         $id = $this->option('id');

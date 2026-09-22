@@ -78,7 +78,7 @@ final readonly class FreezeExchangeRateOnDocument
         CarbonImmutable $on,
         ExchangeRateBasis $basis,
     ): InvoiceExchangeRate {
-        $existing = InvoiceExchangeRate::query()
+        $existing = InvoiceExchangeRate::model()::query()
             ->where('invoice_id', $invoice->getKey())
             ->where('layer', $layer->value)
             ->first();
@@ -89,7 +89,7 @@ final readonly class FreezeExchangeRateOnDocument
 
         $rate = $this->rates->rateFor($from, $to, $on, $basis);
 
-        return InvoiceExchangeRate::query()->create([
+        return InvoiceExchangeRate::model()::query()->create([
             'invoice_id' => $invoice->getKey(),
             'layer' => $layer->value,
             'from_currency' => $rate->fromCurrency,
@@ -133,13 +133,13 @@ final readonly class FreezeExchangeRateOnDocument
         $carried = 0;
 
         /** @var list<InvoiceExchangeRate> $frozen */
-        $frozen = InvoiceExchangeRate::query()
+        $frozen = InvoiceExchangeRate::model()::query()
             ->where('invoice_id', $original->getKey())
             ->get()
             ->all();
 
         foreach ($frozen as $rate) {
-            $already = InvoiceExchangeRate::query()
+            $already = InvoiceExchangeRate::model()::query()
                 ->where('invoice_id', $correction->getKey())
                 ->where('layer', $rate->layer->value)
                 ->exists();
@@ -148,7 +148,7 @@ final readonly class FreezeExchangeRateOnDocument
                 continue;
             }
 
-            InvoiceExchangeRate::query()->create([
+            InvoiceExchangeRate::model()::query()->create([
                 'invoice_id' => $correction->getKey(),
                 'layer' => $rate->layer->value,
                 'from_currency' => $rate->from_currency,

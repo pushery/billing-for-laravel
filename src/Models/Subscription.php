@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SubscriptionState;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
 
@@ -50,8 +51,10 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
-final class Subscription extends Model
+class Subscription extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_subscriptions';
 
     /** @var list<string> */
@@ -197,7 +200,7 @@ final class Subscription extends Model
      */
     public function items(): HasMany
     {
-        return $this->hasMany(SubscriptionItem::class, 'billing_subscription_id');
+        return $this->hasMany(SubscriptionItem::model(), 'billing_subscription_id');
     }
 
     /**
@@ -264,7 +267,24 @@ final class Subscription extends Model
      */
     public function scopeOfDefaultType(Builder $query): void
     {
-        $query->where('type', self::TYPE_DEFAULT);
+        $query->ofType(null);
+    }
+
+    /**
+     * Narrow a query to ONE contract type — the default one when none is named.
+     *
+     * The uniqueness of a row is (owner, type, merchant), and `ofDefaultType()` answers only about the
+     * first of those contracts. A second one with the same merchant — a sponsorship beside a subscription,
+     * measured in a consumer — is a different row that the default scope cannot see, and a reader that
+     * cannot see it does not report a gap: it reports the other contract's row as if it were the one asked
+     * for. So the default is expressed THROUGH this scope rather than beside it, and the thirteen callers
+     * of `ofDefaultType()` keep their exact meaning while gaining a way to say which one they mean.
+     *
+     * @param  Builder<self>  $query
+     */
+    public function scopeOfType(Builder $query, ?string $type = null): void
+    {
+        $query->where('type', $type ?? self::TYPE_DEFAULT);
     }
 
     /**

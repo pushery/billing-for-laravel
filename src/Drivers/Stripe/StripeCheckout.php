@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
@@ -20,6 +21,7 @@ use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\ReceiveEligibilityDenied;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
+use Pushery\Billing\Marketplace\SellerSaleGate;
 use Pushery\Billing\Models\Coupon;
 use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\Trials\TrialPolicy;
@@ -63,7 +65,20 @@ final readonly class StripeCheckout implements Checkout
         private CanReceiveMoney $receiving,
     ) {}
 
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null): ClientIntent
+    /**
+     * The seller-side gates a sale has to pass, resolved rather than injected.
+     *
+     * Every other collaborator of this class arrives through the constructor, and this one deliberately does
+     * not. The parameter list is held by a ratchet -- a test asserts it does not grow -- and the gates are the
+     * same object for every caller, so a parameter would buy nothing but a slot. A caller that needs different
+     * gates binds them, which is what the arms for this behavior do.
+     */
+    private function sellers(): SellerSaleGate
+    {
+        return Container::getInstance()->make(SellerSaleGate::class);
+    }
+
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null): ClientIntent
     {
         // Defense in depth: refuse to open a paid checkout for an ineligible owner even if a caller
         // bypassed the UI eligibility guard (mirrors StripeOneTimeCharge).
@@ -92,7 +107,7 @@ final readonly class StripeCheckout implements Checkout
         // trial/tax/promo/discount groups, a variable line-item list). The payload IS a valid
         // subscription-mode Checkout Session request; its shape is asserted field-by-field in StripeCheckoutTest.
         // @phpstan-ignore argument.type
-        $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant, $declarationReference, $collectTaxId));
+        $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant, $declarationReference, $collectTaxId, $type, $callerReference));
 
         $url = $session->url ?? null;
 
@@ -109,7 +124,7 @@ final readonly class StripeCheckout implements Checkout
      *
      * @return array<string, mixed>
      */
-    private function payload(Model $billable, string $tierKey, string $price, string $customerId, ?string $couponCode, ?Model $merchant, ?string $declarationReference = null, ?bool $collectTaxId = null): array
+    private function payload(Model $billable, string $tierKey, string $price, string $customerId, ?string $couponCode, ?Model $merchant, ?string $declarationReference = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null): array
     {
         $payload = [
             'mode' => 'subscription',
@@ -166,15 +181,49 @@ final readonly class StripeCheckout implements Checkout
             $payload['customer_update'] = ['address' => 'auto'];
         }
 
-        // The declaration key rides on the SUBSCRIPTION, not on the session. Session metadata stays behind on
-        // the session, while `subscription_data.metadata` is copied onto the subscription object, which is what
-        // every later webhook reports and the local row mirrors. MERGED like the routing below, so a trial block
-        // already in `subscription_data` survives. A null adds nothing: a checkout without declarations sends
-        // the payload it sent before the key existed.
+        // WHAT RIDES ON THE SUBSCRIPTION, assembled in ONE place before it is attached.
+        //
+        // Both of these have to reach the subscription object rather than the session: session metadata stays
+        // behind on the session, while `subscription_data.metadata` is copied onto the subscription and
+        // repeated on every later webhook about it — which is what the local row mirrors.
+        //
+        // Collected first and attached once, because the alternative is an ORDER DEPENDENCY nobody can see.
+        // Written as two blocks that each assign `metadata`, whichever ran last erases the other, and both
+        // losses are silent: a dropped declaration reads as a buyer who declared nothing, and a dropped type
+        // sends a second contract into the first contract's row. One assembly cannot have that bug.
+        //
+        // An empty map attaches nothing at all, so a checkout that names neither sends exactly the payload it
+        // sent before either key existed.
+        $metadata = [];
+
         if ($declarationReference !== null) {
+            $metadata['withdrawal_declaration'] = $declarationReference;
+        }
+
+        // WHICH contract of this owner at this merchant the subscription is — the field that lets a second
+        // contract with ONE merchant find its own local row instead of overwriting the first one's.
+        if ($type !== null) {
+            $metadata['subscription_type'] = $type;
+        }
+
+        // THE CALLER'S OWN KEY, carried and never interpreted. A consumer that writes its row BEFORE opening
+        // the checkout needs to find that row again on the webhook, and until now the only key that traveled
+        // was the withdrawal declaration — which a business buyer does not have, because a business has no
+        // right of withdrawal to declare. So exactly the purchases with no declaration had no key at all, and
+        // for a subscription there was not even a workaround: the subscription reference does not exist yet
+        // when the session is opened.
+        //
+        // ITS OWN KEY, NEVER `withdrawal_declaration`. Reusing that one would send a correlation id to
+        // the provider and read it back with the meaning "this buyer declared", which is the one statement a
+        // business checkout must not make. Two keys, two meanings.
+        if ($callerReference !== null) {
+            $metadata['caller_reference'] = $callerReference;
+        }
+
+        if ($metadata !== []) {
             $payload['subscription_data'] = [
                 ...($payload['subscription_data'] ?? []),
-                'metadata' => ['withdrawal_declaration' => $declarationReference],
+                'metadata' => $metadata,
             ];
         }
 
@@ -275,7 +324,7 @@ final readonly class StripeCheckout implements Checkout
         // And only a LIVE row. A deactivated or expired one is a coupon that was withdrawn, and a config entry of the
         // same code passes the check above on its own account, so a row read without asking would put the withdrawn
         // coupon's discount on the invoice anyway.
-        $row = Coupon::query()->issuedBy($merchant)->where('code', $couponCode)->first();
+        $row = Coupon::model()::query()->issuedBy($merchant)->where('code', $couponCode)->first();
         $onTheRow = $row instanceof Coupon && $row->isLive() ? $row->provider_coupon_id : null;
 
         if (is_string($onTheRow) && $onTheRow !== '') {
@@ -368,6 +417,10 @@ final readonly class StripeCheckout implements Checkout
         if (! $account instanceof MerchantAccountReference) {
             throw ReceiveEligibilityDenied::forMerchant();
         }
+
+        // The tax standing, as on the direct payment. The Union gate has nothing to ask: a subscription is its
+        // own archetype and never goods.
+        $this->sellers()->assertTaxStandingEstablished($merchant);
 
         $fee = $this->fees->feeFor($merchant);
 

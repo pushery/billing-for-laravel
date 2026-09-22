@@ -15,6 +15,7 @@ use Pushery\Billing\Enums\MerchantChargePurpose;
 use Pushery\Billing\Enums\RoundingResidual;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\SettlementState;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
@@ -27,6 +28,8 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property int $merchant_id
  * @property string $provider
  * @property string $charge_reference
+ * @property ?string $payment_reference the payment behind a subscription cycle, whose row is recorded under its
+ *                                      invoice; null on a one-off sale and on rows written before it was recorded
  * @property ?string $transfer_reference
  * @property ?ChargeType $charge_type
  * @property ?MerchantChargePurpose $purpose what was sold, null on rows written before it was recorded
@@ -57,13 +60,15 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property int $buyer_fee_refunded_minor
  * @property ?Carbon $merchant_erased_at
  */
-final class MerchantCharge extends Model
+class MerchantCharge extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_merchant_charges';
 
     /** @var list<string> */
     protected $fillable = [
-        'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'transfer_reference', 'transfer_moved_minor', 'charge_type', 'purpose', 'seller_posture',
+        'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'payment_reference', 'transfer_reference', 'transfer_moved_minor', 'charge_type', 'purpose', 'seller_posture',
         'gross_minor', 'fee_minor', 'fee_bps', 'fee_flat_minor', 'fee_residual', 'commission_tax_bps', 'net_minor', 'currency', 'settlement_state', 'settled_at',
         'settlement_invoice_id',
         'refunded_minor', 'transfer_reversed_minor', 'fee_refunded_minor', 'merchant_erased_at',
@@ -150,7 +155,7 @@ final class MerchantCharge extends Model
      */
     public function settlementDocument(): BelongsTo
     {
-        return $this->belongsTo(InvoiceRecord::class, 'settlement_invoice_id');
+        return $this->belongsTo(InvoiceRecord::model(), 'settlement_invoice_id');
     }
 
     /**

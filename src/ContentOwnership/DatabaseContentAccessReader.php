@@ -66,7 +66,7 @@ final readonly class DatabaseContentAccessReader implements ContentAccessReader
         $moment = Carbon::parse($on ?? Carbon::now());
 
         /** @var list<AccessGrant> $rows */
-        $rows = AccessGrant::query()
+        $rows = AccessGrant::model()::query()
             ->where('owner_type', $principal->getMorphClass())
             ->where('owner_id', $principal->getKey())
             ->orderBy('id')
@@ -154,7 +154,7 @@ final readonly class DatabaseContentAccessReader implements ContentAccessReader
     private function grantRowsFor(Model $principal, ContentReference $content): array
     {
         /** @var list<AccessGrant> $rows */
-        $rows = AccessGrant::query()
+        $rows = AccessGrant::model()::query()
             ->where('owner_type', $principal->getMorphClass())
             ->where('owner_id', $principal->getKey())
             ->where('content_type', $content->type)

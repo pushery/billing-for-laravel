@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\WebhookEventState;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One verified provider webhook delivery, unique per (provider, ACCOUNT REFERENCE, event_id) so a
@@ -31,8 +32,10 @@ use Pushery\Billing\Enums\WebhookEventState;
  * @property ?int $owner_id
  * @property ?Carbon $created_at
  */
-final class BillingWebhookEvent extends Model
+class BillingWebhookEvent extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_webhook_events';
 
     /** @var list<string> */

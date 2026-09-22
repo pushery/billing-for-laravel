@@ -299,7 +299,7 @@ final readonly class BillingAdmin
      */
     public function events(Model $owner, int $limit = 50): array
     {
-        return BillingEvent::query()
+        return BillingEvent::model()::query()
             ->where('subject_type', $owner->getMorphClass())
             ->where('subject_id', $owner->getKey())
             ->latest('id')

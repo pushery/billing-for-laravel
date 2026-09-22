@@ -52,7 +52,7 @@ final readonly class ChargeReversals
 
         $grouped = [];
 
-        $attempts = RefundAttempt::query()
+        $attempts = RefundAttempt::model()::query()
             ->whereIn('provider', $charges->pluck('provider')->unique()->all())
             ->whereIn('charge_reference', $charges->pluck('charge_reference')->unique()->all())
             ->where('status', RefundAttemptStatus::Succeeded->value)

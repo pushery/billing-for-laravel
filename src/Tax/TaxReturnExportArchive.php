@@ -53,7 +53,7 @@ final readonly class TaxReturnExportArchive
         $contents = $this->export->render($period, $lines);
         $moment = $at ?? Carbon::now();
 
-        return TaxReturnExportRecord::query()->create([
+        return TaxReturnExportRecord::model()::query()->create([
             'year' => $period->year,
             'quarter' => $period->quarter,
             'period_label' => $period->label(),
@@ -86,7 +86,7 @@ final readonly class TaxReturnExportArchive
     /** @return Collection<int, TaxReturnExportRecord> */
     public function runsFor(ReportingPeriod $period, string $currency): Collection
     {
-        return TaxReturnExportRecord::query()
+        return TaxReturnExportRecord::model()::query()
             ->where('year', $period->year)
             ->where('quarter', $period->quarter)
             ->where('currency', strtoupper($currency))

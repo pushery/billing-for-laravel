@@ -79,7 +79,7 @@ final readonly class UsageReconciler
      */
     public function checkBacklog(): ?UsageBacklogStalled
     {
-        $pending = UsageEvent::query()
+        $pending = UsageEvent::model()::query()
             ->where('is_rollup', true)
             ->where('state', UsageEventState::Pending->value)
             ->orderBy('created_at')
@@ -155,7 +155,7 @@ final readonly class UsageReconciler
     /** @return EloquentCollection<int, UsageEvent> the reported rollups for this owner+meter+period. */
     private function reportedRollups(UsageEvent $group): EloquentCollection
     {
-        return UsageEvent::query()
+        return UsageEvent::model()::query()
             ->where('is_rollup', true)
             ->where('state', UsageEventState::Reported->value)
             ->where('owner_type', $group->owner_type)
@@ -173,7 +173,7 @@ final readonly class UsageReconciler
      */
     private function reportedGroups(): EloquentCollection
     {
-        return UsageEvent::query()
+        return UsageEvent::model()::query()
             ->where('is_rollup', true)
             ->where('state', UsageEventState::Reported->value)
             ->select(['owner_type', 'owner_id', 'meter_key', 'period'])

@@ -6,6 +6,7 @@ namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * A buyer's customer reference inside one merchant account.
@@ -16,8 +17,10 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * @property string $account_reference
  * @property string $customer_reference
  */
-final class MerchantCustomer extends Model
+class MerchantCustomer extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_merchant_customers';
 
     /** @var list<string> */

@@ -28,7 +28,7 @@ final readonly class PeriodResolver
     {
         $moment = ($at ?? Carbon::now())->utc();
 
-        $subscription = Subscription::query()
+        $subscription = Subscription::model()::query()
             ->forOwner($owner)
             ->forMerchant(null)
             ->ofDefaultType()

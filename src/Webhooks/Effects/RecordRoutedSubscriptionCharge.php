@@ -76,7 +76,7 @@ final readonly class RecordRoutedSubscriptionCharge
 
     public function __invoke(RoutedSubscriptionInvoicePaid $event): void
     {
-        $subscription = Subscription::query()
+        $subscription = Subscription::model()::query()
             ->where('provider_id', $event->subscriptionReference)
             ->first();
 
@@ -132,6 +132,9 @@ final readonly class RecordRoutedSubscriptionCharge
             // this row is the invoice, and reaching the subscription from it takes two more hops through an
             // order that only exists where this package writes it.
             purpose: MerchantChargePurpose::Subscription,
+            // The payment the cycle was paid with. The row is keyed by the invoice, and a dispute over this cycle
+            // will name only the payment, so without it the chargeback could not find the sale it belongs to.
+            paymentReference: $commission->paymentReference,
         );
 
         // SETTLED AS IT IS WRITTEN, because nothing is left to happen to this money. The paid invoice is the

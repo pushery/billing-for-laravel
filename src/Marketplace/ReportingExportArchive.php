@@ -67,7 +67,7 @@ final readonly class ReportingExportArchive
         int $sellerCount,
         ?CarbonInterface $at = null,
     ): ReportingExportRecord {
-        return ReportingExportRecord::query()->create([
+        return ReportingExportRecord::model()::query()->create([
             'period_year' => $year,
             'currency' => strtoupper($currency),
             'format' => $format,
@@ -102,7 +102,7 @@ final readonly class ReportingExportArchive
      */
     public function runsFor(int $year, string $currency, ?string $format = null): Collection
     {
-        return ReportingExportRecord::query()
+        return ReportingExportRecord::model()::query()
             ->where('period_year', $year)
             ->where('currency', strtoupper($currency))
             ->when($format !== null, fn (Builder $query): Builder => $query->where('format', $format))

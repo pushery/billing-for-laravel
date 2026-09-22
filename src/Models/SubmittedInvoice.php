@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\ReviewState;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * A creator's own invoice, submitted through the fallback lane and awaiting (or having passed) reconciliation.
@@ -29,6 +30,8 @@ use Pushery\Billing\Enums\ReviewState;
  */
 class SubmittedInvoice extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_submitted_invoices';
 
     protected $fillable = [

@@ -4,6 +4,46 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.34.0] - 2026-09-22
+
+### Added
+
+- **A purchase can carry your own key, so a business sale can be matched to the row you wrote before it.** `subscribe()` and `purchase()` take a `$callerReference` — a cart id, an order number, anything that identifies your row. It travels to the provider as its own metadata key and comes back on `SubscriptionStateChanged` and `AddonPurchased` untouched; this package attaches no meaning to it. Until now the only key that traveled was the withdrawal declaration, and that one is minted while a consent is recorded: **a business buyer has no right of withdrawal**, so exactly the purchases without a declaration arrived with nothing to correlate on. A one-off could fall back on the session id, a subscription could not — the subscription reference does not exist yet when the session is opened. A checkout may carry the declaration and your key at once, and a checkout that names neither sends the payload it sent before either argument existed.
+- **`Billing::fake()` can be asked which contract a checkout opened and which key it carried.** `assertSubscribeStartedWithType()` and `assertSubscribeStartedWithCallerReference()`, with the same null semantics as the declaration assertion: `null` asserts that nothing was passed. Both values were already recorded and neither was askable, which made the recording a claim rather than a capability -- a screen that dropped either one would have passed its tests while sending the sale to the default row, or off with no key at all.
+
+- **The admin console renders in the layout you name.** `billing.admin.layout` (env `BILLING_ADMIN_LAYOUT`) is the Blade layout the console renders in, `billing::layouts.admin` by default. An application with a back office names its own layout and the console takes its place in that shell, with the navigation around it, instead of a published copy of the package's layout that no longer follows the package. The account hub has had the same lever in `account.layout`; an empty value falls back to the package's page.
+
+- **The package's own models are replaceable.** Map any of them to your own subclass in the new `billing.models` config key, and the package uses that class on every path: every query, every row it writes, and the relations between its models. It is separate from `customer.model`, which names your billable model. A class that does not exist, or does not extend the package class, is ignored in favor of the package class. `Subscription::model()` and `Subscription::resolve()` give your own code the same answer.
+
+- **A purchase can name WHICH contract it opens, so an owner can hold two subscriptions with one merchant.** `subscribe()` takes a `$type`, it rides to the provider on `subscription_data.metadata`, and it comes back on every webhook about that subscription — which is what lets the second contract find its own local row. A caller that names no type sends exactly the payload it sent before the argument existed, and its row is the default contract as always. The case a consumer reported: a fan subscribes to a creator and sponsors that creator's club monthly, both paid into the same merchant account.
+
+### Changed
+
+- **BREAKING (pre-1.0) — `Checkout::subscribe()` and `OneTimeCharge::purchase()` take new trailing parameters.** `subscribe()` takes `?string $type` and `?string $callerReference`, `purchase()` takes `?string $callerReference`, all defaulting to null. A caller is unaffected. **An implementation of your own has to declare them**, or PHP refuses the class when it is loaded; the shipped drivers and `BillingFake` already do.
+
+- **BREAKING (pre-1.0) — `SubscriptionActions::cancelNow()` takes an optional contract type.** The signature is now `cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null)`. A caller is unaffected, because a null type is the default contract as before. **A driver of your own that implements the contract has to add the parameter**, or PHP refuses the class when it is loaded; the built-in drivers and `BillingFake` already have it.
+
+- **46 models are no longer `final`,** so a host can extend them.
+- **The proration correction matches a source invoice under both names it can carry.** A credit recorded against an invoice names the class the invoice was written with. Once a host maps its own invoice class, newer credits carry that name and older ones the package's, and the correction now finds both instead of skipping the older ones.
+
+### Fixed
+
+- **A deleted account stops paying for every contract it holds, not only the default one.** Deleting an account ends its live subscriptions, and the list of where to end them was read from default-type rows only. An account whose only running contract with a merchant was of a second type, a sponsorship beside nothing else, was never asked about there, and it kept paying after the account was gone. The deletion now ends every subscription that is not over, in every scope and of every type, and the platform's default subscription is still asked as well in case the provider holds one the local mirror has not recorded.
+
+- **A lost dispute over a routed subscription cycle raises `ChargebackReceived` instead of an add-on reversal.** A cycle is recorded under its invoice, and a dispute names only the payment, so the dispute found no routed sale and fell back to `AddonRefunded`: no provider fee was booked, no chain was corrected, and the merchant kept their share of money the platform had already returned. Each new cycle now keeps the payment it was paid with in `billing_merchant_charges.payment_reference`, and a dispute over it reaches all four chargeback effects on both charge types. Cycles recorded before this release carry no payment reference and are not reached; the migration only adds the column.
+
+- **Goods of a seller established outside the Union can no longer be sold as an intermediated sale.** The platform facilitating such a sale to a consumer in the Union is treated as having supplied the goods itself (Art. 14a(2) VAT Directive; § 3 Abs. 3a UStG), so recording it as an intermediation would declare a fee where the whole supply is taxed. Nothing in the code prevented it; only onboarding configuration did. `RoutedPayment::charge()` now refuses the intermediary posture, a `ConsumerGoods` archetype and a merchant whose current status is `NonUnionBusiness` before the provider is called, with `RegimeNotPermitted`. A sale to a business is refused too, because the buyer's status is not known at that point.
+
+- **A merchant's tier price and coupon are minted on the platform account under every seller posture.** Under `seller_of_record` and `platform_intermediary` the price was minted on the merchant's connected account, while the checkout opened its session on the platform account, where that price does not exist: both charge types this package offers are platform charges, and Stripe requires the price of a destination charge to be defined on the platform. The coupon provisioner refused under the same two postures for the same mistaken reason. Both now use the platform account, and the posture decides only who the buyer transacts with. A tier provisioned under those postures before this release keeps its old price id; provision it again to mint the platform price. An application that runs direct charges on the merchant's account itself can still bind `StripeMerchantPriceProvisioner`. `SellerOfRecordPosture::mintsPriceOnPlatformAccount()` is deprecated and answers true for every posture.
+
+- **The tax-standing hold and the intermediated-goods refusal apply to the hosted lanes as well.** Both were asked only by `RoutedPayment::charge()`. The hosted subscription checkout, the hosted one-off purchase and the hosted tip opened a session for a merchant whose taxation nobody had established, even after `billing.marketplace.tax_status_hold.enforce_from`, although the documentation said such a merchant cannot be sold for. They now refuse with `TaxStandingUnestablished` before the session is opened. The hosted one-off purchase also refuses goods of a seller established outside the Union under the intermediary posture, reading the item's archetype from `billing.addons.<key>.archetype`, as the direct payment already did with the archetype its caller passes.
+
+- **Two subscriptions with the same merchant shared one local row, and the last webhook won it.** A row is unique per owner, type and merchant, and every writer put `default` in that column — so a second contract had nowhere of its own to live. **The failure was not a refused insert:** the plan sync locked the FIRST contract's row, found it, and wrote the second contract's provider id and state onto it. The webhook reported success, the payment went through, and one row ended up carrying the identity of one contract and the state of the other — swapped again at every later event of either, so canceling one could revoke access granted by the other. The sync now keys on the contract the event is about, and an owner with two contracts at one merchant has two rows. Nothing moves for a single contract: the type is read as the default one wherever none is named.
+
+- **A checkout that carried both a withdrawal declaration and a contract type would have sent only one of them.** The two keys travel in the same metadata map, and each was written by assigning that map rather than merging into it — so whichever ran last erased the other, silently. A dropped declaration reads as a buyer who declared nothing; a dropped type sends a contract into the wrong row. The map is assembled once now, and an empty one is not sent at all.
+
+- **The `Billing` facade declares all of the fake's assertions.** Seven were callable as `Billing::assert…()` without a declaration, so a host's static analysis reported a test written the way the documentation shows as calling an undefined method: the contract-type and caller-reference assertions, the two tip assertions and the three onboarding and receive-gate assertions.
+
 ## [0.33.0] - 2026-09-19
 
 ### Added
@@ -6900,7 +6940,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.33.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.34.0...HEAD
+[0.34.0]: https://github.com/pushery/billing-for-laravel/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/pushery/billing-for-laravel/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/pushery/billing-for-laravel/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/pushery/billing-for-laravel/compare/v0.30.0...v0.31.0

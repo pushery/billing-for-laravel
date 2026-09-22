@@ -15,9 +15,11 @@ use Pushery\Billing\Contracts\MerchantOnboarding;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubscriptionActions;
+use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Testing\BillingFake;
 use Pushery\Billing\Testing\FakeMarketplaceRails;
 use Pushery\Billing\ValueObjects\MerchantScope;
+use Pushery\Billing\ValueObjects\Money;
 
 /**
  * A testing facade for the money-mutating billing seams. Call {@see Billing::fake()} in a test to bind a
@@ -28,6 +30,8 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * @method static void assertSubscribeStarted(Model $owner, string $tierKey)
  * @method static void assertSubscribeStartedWithCoupon(Model $owner, string $tierKey, ?string $couponCode)
  * @method static void assertSubscribeStartedWithDeclaration(Model $owner, string $tierKey, ?string $declarationReference)
+ * @method static void assertSubscribeStartedWithType(Model $owner, string $tierKey, ?string $type)
+ * @method static void assertSubscribeStartedWithCallerReference(Model $owner, string $tierKey, ?string $callerReference)
  * @method static void assertNothingSubscribed()
  * @method static void assertSwapped(Model $owner, string $tierKey)
  * @method static void assertCanceled(Model $owner, ?MerchantScope $merchant = null)
@@ -39,6 +43,11 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * @method static void assertPurchased(Model $owner, string $addonKey)
  * @method static void assertPurchasedWithDeclaration(Model $owner, string $addonKey, ?string $declarationReference)
  * @method static void assertNothingCharged()
+ * @method static void assertTipped(Model $owner, Money $chosen, TaxArchetype $soldAlongside)
+ * @method static void assertNothingTipped()
+ * @method static void assertOnboardingStarted(Model $merchant)
+ * @method static void assertNothingOnboarded()
+ * @method static void assertReceiveGateDenied(Model $merchant)
  *
  * @see BillingFake
  */

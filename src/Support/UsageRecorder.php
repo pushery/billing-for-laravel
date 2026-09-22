@@ -157,7 +157,7 @@ final readonly class UsageRecorder
         $identifier = (string) Str::ulid();
 
         return DB::transaction(function () use ($owner, $meterKey, $providerMeter, $quantity, $sourceKey, $moment, $period, $reportable, $hold, $included, $identifier): bool {
-            $recorded = UsageEvent::query()->insertOrIgnore([
+            $recorded = UsageEvent::model()::query()->insertOrIgnore([
                 'owner_type' => $owner->getMorphClass(),
                 'owner_id' => $owner->getKey(),
                 'meter_key' => $meterKey,
@@ -197,7 +197,7 @@ final readonly class UsageRecorder
             // rollup, and a rollup only covers the events folded into it — deriving it from the period
             // would subtract the same units again on the next flush of the same cycle.
             if ($drawn > 0) {
-                UsageEvent::query()
+                UsageEvent::model()::query()
                     ->where('identifier', $identifier)
                     ->update(['prepaid_units' => $drawn, 'updated_at' => Carbon::now()]);
             }

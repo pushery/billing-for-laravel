@@ -12,6 +12,7 @@ use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\AppendOnlyDeletion;
 use Pushery\Billing\Enums\CreditReason;
 use Pushery\Billing\Models\Concerns\AppendOnly;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\Support\OwnerScopedTables;
 use Pushery\Billing\ValueObjects\CreditMovement;
 use Pushery\Billing\ValueObjects\Money;
@@ -41,9 +42,10 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?int $source_id
  * @property ?Carbon $created_at
  */
-final class CreditLedgerEntry extends Model
+class CreditLedgerEntry extends Model
 {
     use AppendOnly;
+    use Replaceable;
 
     protected $table = 'billing_credit_ledger_entries';
 

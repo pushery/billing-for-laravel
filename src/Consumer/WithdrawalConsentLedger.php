@@ -35,7 +35,7 @@ final readonly class WithdrawalConsentLedger
      */
     public function record(Model $owner, string $reference, WithdrawalConsent $consent): WithdrawalConsent
     {
-        $record = WithdrawalConsentRecord::query()->firstOrCreate(
+        $record = WithdrawalConsentRecord::model()::query()->firstOrCreate(
             [
                 'owner_type' => $owner->getMorphClass(),
                 'owner_id' => $owner->getKey(),
@@ -65,7 +65,7 @@ final readonly class WithdrawalConsentLedger
      */
     public function for(Model $owner, string $reference): ?WithdrawalConsent
     {
-        return WithdrawalConsentRecord::query()
+        return WithdrawalConsentRecord::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('reference', $reference)
@@ -91,7 +91,7 @@ final readonly class WithdrawalConsentLedger
      */
     public function forPayment(Model $owner, string $paymentReference): ?WithdrawalConsent
     {
-        $purchase = AddonPurchase::query()
+        $purchase = AddonPurchase::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('payment_reference', $paymentReference)
@@ -129,7 +129,7 @@ final readonly class WithdrawalConsentLedger
             return null;
         }
 
-        return WithdrawalConsentRecord::query()
+        return WithdrawalConsentRecord::model()::query()
             ->where('owner_type', $subscription->owner_type)
             ->where('owner_id', $subscription->owner_id)
             ->where('reference', $subscription->declaration_reference)

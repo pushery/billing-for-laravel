@@ -127,7 +127,7 @@ final readonly class UnmovedMerchantShares
     /** @return Builder<MerchantCharge> */
     private function unmoved(): Builder
     {
-        return MerchantCharge::query()
+        return MerchantCharge::model()::query()
             ->where('settlement_state', SettlementState::Pending->value)
             ->whereNotNull('transfer_failed_at');
     }

@@ -64,6 +64,13 @@ final readonly class RoutedInvoiceCommission
          * clawback on a fee with a fixed part is wrong by that part if the row keeps only the rate.
          */
         public ?PlatformFee $terms = null,
+        /**
+         * The payment the cycle was paid with, as the provider names it.
+         *
+         * The row is recorded under the invoice, and a dispute names only the payment. Kept so the one can be
+         * found from the other without asking the provider again. Null where the reader could not name it.
+         */
+        public ?string $paymentReference = null,
     ) {}
 
     /** What is left for the merchant. Derived, because net is what remains by definition. */

@@ -131,7 +131,7 @@ final readonly class ReverseSaleIntoClosedMarket implements DedupesOnReference
      */
     private function scopeOf(string $subscriptionReference): ?MerchantScope
     {
-        $subscription = Subscription::query()->where('provider_id', $subscriptionReference)->first();
+        $subscription = Subscription::model()::query()->where('provider_id', $subscriptionReference)->first();
 
         if (! $subscription instanceof Subscription) {
             throw new RuntimeException("Subscription [{$subscriptionReference}] has no local row yet, so the scope to end it in is unknown. The job retries.");

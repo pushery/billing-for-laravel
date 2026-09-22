@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\VoucherVolumeLevel;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * A record that one voucher-volume level, for one currency, in one year, has been announced.
@@ -23,8 +24,10 @@ use Pushery\Billing\Enums\VoucherVolumeLevel;
  * @property int $volume_minor
  * @property Carbon $announced_at
  */
-final class VoucherVolumeNotice extends Model
+class VoucherVolumeNotice extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_voucher_volume_notices';
 
     /** @var list<string> */

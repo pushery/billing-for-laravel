@@ -108,7 +108,10 @@
         "test": "pest",
         "test:coverage": "@php vendor/bin/pest --coverage-clover=build/clover.xml",
         "test:type-coverage": "@php vendor/bin/pest --type-coverage --type-coverage-json=build/types.json --min=100",
-        "demo-css": "npx @tailwindcss/cli -i workbench/resources/css/account.src.css -o workbench/resources/css/account.css --minify",
+        "demo-css": [
+            "npx @tailwindcss/cli -i workbench/resources/css/account.src.css -o workbench/resources/css/account.css --minify",
+            "@php -r \"touch('workbench/resources/css/account.css');\""
+        ],
         "test:browser": "composer demo-css && pest tests/Browser",
         "test:stripe-live": "pest tests/LiveStripe",
         "test:evals": "pest tests/Evals --evals",

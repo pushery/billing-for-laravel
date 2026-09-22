@@ -56,7 +56,7 @@ final readonly class RecordFailedMerchantPayout
         // three engines, and a `payload->payout` predicate is written differently on each — the kind of
         // clause that passes the fast SQLite suite and behaves differently on the server a consumer runs.
         // The set is small by construction: it is one merchant's failed payouts, not the whole log.
-        $recorded = BillingEvent::query()
+        $recorded = BillingEvent::model()::query()
             ->where('type', 'merchant.payout_failed')
             ->where('subject_type', $merchant->getMorphClass())
             ->where('subject_id', $merchant->getKey())

@@ -195,7 +195,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
             $intentTrialEndsAt = CarbonImmutable::createFromInterface($trialEndsAt);
         }
 
-        SubscriptionIntent::query()->create([
+        SubscriptionIntent::model()::query()->create([
             'owner_type' => $billable->getMorphClass(),
             'owner_id' => $ownerKey,
             'provider' => $this->provider,
@@ -263,7 +263,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         // platform sentinel), so the explicit scope is the same query it always ran — written out rather
         // than implied, because an unscoped read is what lets one seller's code discount another's sale the
         // day this lane learns about merchants.
-        $coupon = Coupon::query()->issuedBy(MerchantScope::platform())->where('code', $code)->first();
+        $coupon = Coupon::model()::query()->issuedBy(MerchantScope::platform())->where('code', $code)->first();
 
         return $coupon instanceof Coupon && $coupon->isLive() ? $coupon : null;
     }
@@ -309,7 +309,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
      */
     private function alreadySubscribed(Model $billable): bool
     {
-        $existing = Subscription::query()
+        $existing = Subscription::model()::query()
             ->forOwner($billable)
             ->ofDefaultType()
             ->forMerchant(null)
@@ -394,7 +394,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         // reached only after `alreadySubscribed()` deliberately let such an owner through, so a plain
         // insert would meet the constraint every time somebody came back — and arrive at them as a raw
         // database error on the subscribe button rather than one of the refusals this flow states.
-        return Subscription::query()->updateOrCreate(
+        return Subscription::model()::query()->updateOrCreate(
             [
                 'owner_type' => $billable->getMorphClass(),
                 'owner_id' => $ownerKey,

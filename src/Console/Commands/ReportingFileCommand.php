@@ -48,7 +48,7 @@ final class ReportingFileCommand extends Command
         $year = (int) $this->argument('year');
         $currency = $this->currency($config);
 
-        $export = ReportingExportRecord::query()
+        $export = ReportingExportRecord::model()::query()
             ->where('period_year', $year)
             ->where('currency', $currency)
             ->latest('id')

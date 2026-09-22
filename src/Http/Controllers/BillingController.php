@@ -148,7 +148,7 @@ final class BillingController
      */
     private function renderLocalInvoice(Model $owner, string $invoiceId): ?InvoiceDownload
     {
-        $invoice = InvoiceRecord::query()->find($invoiceId);
+        $invoice = InvoiceRecord::model()::query()->find($invoiceId);
 
         if ($invoice === null) {
             return null; // absent → 404

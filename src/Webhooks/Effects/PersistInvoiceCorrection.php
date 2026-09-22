@@ -44,7 +44,7 @@ final readonly class PersistInvoiceCorrection
 
         $original = $this->correctedInvoice($snapshot);
 
-        InvoiceRecord::query()->updateOrCreate(
+        InvoiceRecord::model()::query()->updateOrCreate(
             ['provider' => $snapshot->provider, 'provider_id' => $snapshot->providerId],
             $this->attributes($owner, $snapshot, $original),
         );
@@ -53,7 +53,7 @@ final readonly class PersistInvoiceCorrection
     /** The local invoice this correction corrects, when it was persisted; null otherwise. */
     private function correctedInvoice(InvoiceCorrectionSnapshot $snapshot): ?InvoiceRecord
     {
-        return InvoiceRecord::query()
+        return InvoiceRecord::model()::query()
             ->where('provider', $snapshot->provider)
             ->where('provider_id', $snapshot->creditsProviderId)
             ->first();

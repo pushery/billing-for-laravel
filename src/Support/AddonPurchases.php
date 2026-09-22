@@ -32,7 +32,7 @@ final class AddonPurchases
      */
     public function recordOnce(Model $owner, string $reference, string $addonKey, Money $amount, ?string $paymentReference = null, ?string $declarationReference = null): bool
     {
-        return AddonPurchase::query()->firstOrCreate(
+        return AddonPurchase::model()::query()->firstOrCreate(
             ['reference' => $reference],
             [
                 'owner_type' => $owner->getMorphClass(),
@@ -56,7 +56,7 @@ final class AddonPurchases
     public function reverse(string $paymentReference, Money $reversedTotal, ?string $reason = null): ?AddonReversal
     {
         return DB::transaction(function () use ($paymentReference, $reversedTotal, $reason): ?AddonReversal {
-            $purchase = AddonPurchase::query()
+            $purchase = AddonPurchase::model()::query()
                 ->where('payment_reference', $paymentReference)
                 ->lockForUpdate()
                 ->first();

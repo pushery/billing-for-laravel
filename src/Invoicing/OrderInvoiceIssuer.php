@@ -103,7 +103,7 @@ final readonly class OrderInvoiceIssuer
 
     private function raise(Order $order): ?InvoiceRecord
     {
-        if (InvoiceRecord::query()->where('order_id', $order->getKey())->exists()) {
+        if (InvoiceRecord::model()::query()->where('order_id', $order->getKey())->exists()) {
             return null;
         }
 
@@ -115,7 +115,7 @@ final readonly class OrderInvoiceIssuer
         // and spreading a computed array into it erases that for every key at once. Two fills keep the
         // document's fixed columns under that check while the tax columns stay a computed set — one
         // insert either way, so the unique constraint on `order_id` still decides a concurrent second run.
-        $invoice = new InvoiceRecord;
+        $invoice = InvoiceRecord::resolve();
 
         $invoice->fill([
             'owner_type' => $order->owner_type,

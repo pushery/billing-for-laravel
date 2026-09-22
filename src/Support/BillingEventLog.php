@@ -61,7 +61,7 @@ final readonly class BillingEventLog
             return null;
         }
 
-        return BillingEvent::query()->create([
+        return BillingEvent::model()::query()->create([
             'type' => $type,
             'source' => $source,
             'subject_type' => $subject?->getMorphClass(),

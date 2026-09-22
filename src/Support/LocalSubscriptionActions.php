@@ -103,9 +103,9 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
      * must not be able to fail. Whether the unused remainder is owed back is a separate decision with its
      * own document.
      */
-    public function cancelNow(Model $billable, ?MerchantScope $merchant = null): void
+    public function cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $subscription = $this->subscriptionFor($billable, $merchant);
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
 
         if (! $subscription instanceof Subscription) {
             return;
@@ -177,11 +177,11 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
         return $plan->amount->minorUnits < $current->amount->minorUnits;
     }
 
-    private function subscriptionFor(Model $billable, ?MerchantScope $merchant): ?Subscription
+    private function subscriptionFor(Model $billable, ?MerchantScope $merchant, ?string $type = null): ?Subscription
     {
-        return Subscription::query()
+        return Subscription::model()::query()
             ->forOwner($billable)
-            ->ofDefaultType()
+            ->ofType($type)
             ->forMerchant($merchant)
             ->latest('id')
             ->first();

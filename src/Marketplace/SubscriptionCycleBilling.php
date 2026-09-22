@@ -187,7 +187,7 @@ final readonly class SubscriptionCycleBilling
     /** The buyer's document for this cycle, or null where none has been issued. */
     private function documentFor(Model $buyer, ServicePeriod $period): ?InvoiceRecord
     {
-        return InvoiceRecord::query()
+        return InvoiceRecord::model()::query()
             ->where('owner_type', $buyer->getMorphClass())
             ->where('owner_id', $buyer->getKey())
             ->where('settlement_period', $period->key())

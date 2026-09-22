@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\BuyerProtectionState;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One sale whose payout is waiting.
@@ -29,8 +30,10 @@ use Pushery\Billing\Enums\BuyerProtectionState;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
-final class BuyerProtectionHold extends Model
+class BuyerProtectionHold extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_buyer_protection_holds';
 
     /** @var list<string> */

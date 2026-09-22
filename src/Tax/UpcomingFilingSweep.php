@@ -74,7 +74,7 @@ final readonly class UpcomingFilingSweep
                 // Marked after dispatching. A crash between the two announces once more, which somebody can
                 // live with; the other order loses the announcement, which is what this class exists to
                 // prevent.
-                FilingReminder::query()->create([
+                FilingReminder::model()::query()->create([
                     'obligation' => $obligation['obligation'],
                     'due_on' => $obligation['due_on']->toDateString(),
                     'announced_at' => $now,
@@ -89,7 +89,7 @@ final readonly class UpcomingFilingSweep
 
     private function alreadyAnnounced(FilingObligation $obligation, CarbonImmutable $dueOn): bool
     {
-        return FilingReminder::query()
+        return FilingReminder::model()::query()
             ->where('obligation', $obligation->value)
             ->whereDate('due_on', $dueOn->toDateString())
             ->exists();

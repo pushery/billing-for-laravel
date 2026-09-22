@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\CreatorTaxStatus;
 use Pushery\Billing\Enums\CreatorTaxStatusSource;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One interval of a creator's tax standing.
@@ -27,8 +28,10 @@ use Pushery\Billing\Enums\CreatorTaxStatusSource;
  * @property ?Carbon $hold_announced_at
  * @property ?Carbon $created_at
  */
-final class CreatorTaxStatusRecord extends Model
+class CreatorTaxStatusRecord extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_creator_tax_statuses';
 
     /** @var list<string> */

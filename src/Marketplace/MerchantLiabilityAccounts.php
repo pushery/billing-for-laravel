@@ -81,7 +81,7 @@ final readonly class MerchantLiabilityAccounts
         }
 
         /** @var list<string> $numbers */
-        $numbers = MerchantCreditorAccount::query()->pluck('number')->all();
+        $numbers = MerchantCreditorAccount::model()::query()->pluck('number')->all();
 
         return $numbers;
     }
@@ -96,7 +96,7 @@ final readonly class MerchantLiabilityAccounts
      */
     private function allocate(string $merchantType, string $merchantId): string
     {
-        $existing = MerchantCreditorAccount::query()
+        $existing = MerchantCreditorAccount::model()::query()
             ->where('merchant_type', $merchantType)
             ->where('merchant_id', $merchantId)
             ->value('number');
@@ -106,16 +106,16 @@ final readonly class MerchantLiabilityAccounts
         }
 
         $start = $this->config->get('billing.datev.person_accounts.range_start');
-        $next = (is_int($start) ? $start : self::DEFAULT_RANGE_START) + MerchantCreditorAccount::query()->count();
+        $next = (is_int($start) ? $start : self::DEFAULT_RANGE_START) + MerchantCreditorAccount::model()::query()->count();
 
         while (true) {
-            MerchantCreditorAccount::query()->insertOrIgnore([
+            MerchantCreditorAccount::model()::query()->insertOrIgnore([
                 'merchant_type' => $merchantType,
                 'merchant_id' => $merchantId,
                 'number' => (string) $next,
             ]);
 
-            $number = MerchantCreditorAccount::query()
+            $number = MerchantCreditorAccount::model()::query()
                 ->where('merchant_type', $merchantType)
                 ->where('merchant_id', $merchantId)
                 ->value('number');

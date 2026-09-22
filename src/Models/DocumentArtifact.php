@@ -10,6 +10,7 @@ use Override;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\AppendOnlyDeletion;
 use Pushery\Billing\Models\Concerns\AppendOnly;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * The bytes of an electronic document, as issued.
@@ -26,9 +27,10 @@ use Pushery\Billing\Models\Concerns\AppendOnly;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
-final class DocumentArtifact extends Model
+class DocumentArtifact extends Model
 {
     use AppendOnly;
+    use Replaceable;
 
     protected $table = 'billing_document_artifacts';
 

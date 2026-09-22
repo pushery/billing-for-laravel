@@ -268,7 +268,10 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         }
 
         $amount = Money::of($this->int($object, 'amount') ?? 0, strtoupper($currency));
-        $charge = $this->routed->find('stripe', $paymentReference);
+        // A one-off sale is recorded under its payment and is found directly. A subscription cycle is recorded
+        // under its invoice, which a dispute never names, so it is found through the payment kept beside it.
+        $charge = $this->routed->find('stripe', $paymentReference)
+            ?? $this->routed->findByPayment('stripe', $paymentReference);
 
         if ($charge instanceof MerchantCharge) {
             return [$this->routedChargeback($object, $charge, $amount, strtoupper($currency))];
@@ -284,7 +287,8 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
      * second call, so the charge lives on the platform account and its dispute is a platform event. Nothing
      * about the payload says the sale was routed — the connected account is not in it, because no connected
      * account was involved — and the only thing that knows is the row this package wrote when the sale was
-     * made. So the lookup is the routed ledger, keyed on the payment reference the row was recorded under.
+     * made. So the lookup is the routed ledger, keyed on the payment: the reference a one-off sale is recorded
+     * under, or the payment kept beside the invoice a subscription cycle is recorded under.
      *
      * `AddonRefunded` is the wrong event for such a sale and was the only one it could produce. It ends
      * access and issues a LOCAL credit note, and it reaches none of the four things a chargeback owes on a
@@ -594,6 +598,10 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             // package could not read into a statement about the sale.
             $this->taxOf($object),
             'stripe',
+            // The caller's own key, out of the same metadata bag as the add-on key and the declaration. It
+            // means nothing to this package; it exists so a consumer that wrote its row before the redirect
+            // can find that row here, including on a purchase that carried no declaration at all.
+            $this->string($metadata, 'caller_reference'),
         ), new SaleCountryReported(
             $customer,
             $id,

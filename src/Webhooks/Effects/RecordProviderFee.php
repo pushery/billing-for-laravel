@@ -55,7 +55,7 @@ final readonly class RecordProviderFee
         // uniqueness it is under holds either way.
         $claim = $event->disputeReference ?? $event->reference;
 
-        ProviderFee::query()->firstOrCreate(
+        ProviderFee::model()::query()->firstOrCreate(
             ['provider' => 'stripe', 'reference' => $claim],
             [
                 'merchant_type' => $merchant?->getMorphClass(),

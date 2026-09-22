@@ -95,7 +95,7 @@ final class ReconcileUsageCommand extends Command
      */
     private function reportFailed(): bool
     {
-        $failed = UsageEvent::query()->where('is_rollup', true)->where('state', UsageEventState::Failed->value);
+        $failed = UsageEvent::model()::query()->where('is_rollup', true)->where('state', UsageEventState::Failed->value);
 
         $count = (clone $failed)->count();
 

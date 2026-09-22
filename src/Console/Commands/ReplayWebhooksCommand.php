@@ -121,7 +121,7 @@ final class ReplayWebhooksCommand extends Command
      */
     private function deliveries(array $ids, bool $failedOnly): array
     {
-        $query = BillingWebhookEvent::query();
+        $query = BillingWebhookEvent::model()::query();
 
         if ($ids !== []) {
             $query->whereIn('event_id', $ids);
@@ -132,7 +132,7 @@ final class ReplayWebhooksCommand extends Command
             // finished (the request died mid-dispatch, so some effects may never have been queued at all).
             $query->where(fn (Builder $delivery): Builder => $delivery
                 ->whereIn('status', [WebhookEventState::Failed, WebhookEventState::Pending])
-                ->orWhereIn('id', WebhookEffectRun::query()
+                ->orWhereIn('id', WebhookEffectRun::model()::query()
                     ->select('delivery_id')
                     ->where('status', WebhookEventState::Failed)
                     ->whereNotNull('delivery_id')));

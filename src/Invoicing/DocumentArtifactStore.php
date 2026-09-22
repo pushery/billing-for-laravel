@@ -42,7 +42,7 @@ final readonly class DocumentArtifactStore
     /** Store one syntax. Returns the stored artifact; refuses a second store of the same document form. */
     public function store(InvoiceRecord $invoice, string $syntax, string $contents, CarbonInterface $issuedAt): DocumentArtifact
     {
-        return DocumentArtifact::query()->create([
+        return DocumentArtifact::model()::query()->create([
             'owner_type' => $invoice->owner_type,
             'owner_id' => $invoice->owner_id,
             'document_number' => $invoice->number ?? '',
@@ -56,7 +56,7 @@ final readonly class DocumentArtifactStore
     /** What was issued, byte for byte, or null where nothing was kept. */
     public function issued(string $documentNumber, string $syntax): ?string
     {
-        $artifact = DocumentArtifact::query()
+        $artifact = DocumentArtifact::model()::query()
             ->where('document_number', $documentNumber)
             ->where('syntax', $syntax)
             ->first();

@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Override;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Models\Concerns\AppendOnly;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use RuntimeException;
 
 /**
@@ -55,9 +56,10 @@ use RuntimeException;
  * @property-read ReportingExportRecord $export
  * @property-read ?ReportingFiling $corrects
  */
-final class ReportingFiling extends Model
+class ReportingFiling extends Model
 {
     use AppendOnly;
+    use Replaceable;
 
     protected $table = 'billing_reporting_filings';
 
@@ -83,7 +85,7 @@ final class ReportingFiling extends Model
      */
     public function export(): BelongsTo
     {
-        return $this->belongsTo(ReportingExportRecord::class, 'export_id');
+        return $this->belongsTo(ReportingExportRecord::model(), 'export_id');
     }
 
     /**

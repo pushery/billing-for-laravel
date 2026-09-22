@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Invoicing;
 
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\InvoiceCorrectionKind;
 use Pushery\Billing\Enums\InvoiceStatus;
@@ -72,7 +73,7 @@ final readonly class ProrationCreditCorrectionIssuer
      */
     public function issueFor(CreditLedgerEntry $offset): array
     {
-        $history = CreditLedgerEntry::query()
+        $history = CreditLedgerEntry::model()::query()
             ->where('owner_type', $offset->owner_type)
             ->where('owner_id', $offset->owner_id)
             ->where('currency', $offset->currency)
@@ -83,7 +84,7 @@ final readonly class ProrationCreditCorrectionIssuer
         $issued = [];
 
         foreach ($this->owedPerInvoice($offset, array_values($history)) as $invoiceId => $minor) {
-            $original = InvoiceRecord::query()->whereKey($invoiceId)->first();
+            $original = InvoiceRecord::model()::query()->whereKey($invoiceId)->first();
 
             if (! $original instanceof InvoiceRecord) {
                 // The invoice the credit named is gone. Same answer as a credit with no source at all: the
@@ -114,7 +115,15 @@ final readonly class ProrationCreditCorrectionIssuer
     private function owedPerInvoice(CreditLedgerEntry $offset, array $history): array
     {
         $owed = [];
-        $invoiceClass = new InvoiceRecord()->getMorphClass();
+
+        // BOTH names a source invoice can carry. A row written before a host mapped its own subclass in
+        // `billing.models` names the package class; one written through that subclass names the subclass,
+        // unless a morph map says otherwise. Asking only for the configured class would skip the credit of
+        // every older invoice, and the correction it owes would silently never be issued.
+        $invoiceTypes = array_values(array_unique([
+            Relation::getMorphAlias(InvoiceRecord::class),
+            InvoiceRecord::resolve()->getMorphClass(),
+        ]));
 
         foreach (CreditConsumption::of($offset, $history) as $lot) {
             if ($lot->reason->booksAgainstMoney()) {
@@ -125,7 +134,7 @@ final readonly class ProrationCreditCorrectionIssuer
 
             $source = $lot->source;
 
-            if ($source === null || $source->type !== $invoiceClass) {
+            if ($source === null || ! in_array($source->type, $invoiceTypes, true)) {
                 continue;
             }
 
@@ -152,13 +161,13 @@ final readonly class ProrationCreditCorrectionIssuer
         // so the check would silently stop firing on exactly those invoices and a second call would issue a
         // second numbered document. The value here embeds the ledger entry id, which is unique on its own;
         // the index on the pair stays the backstop wherever a provider IS set.
-        if (InvoiceRecord::query()->where('provider_id', $key['provider_id'])->exists()) {
+        if (InvoiceRecord::model()::query()->where('provider_id', $key['provider_id'])->exists()) {
             return null;
         }
 
         $issuedAt = Carbon::now();
 
-        return InvoiceRecord::query()->create([
+        return InvoiceRecord::model()::query()->create([
             ...$key,
             ...[
                 'owner_type' => $original->owner_type,

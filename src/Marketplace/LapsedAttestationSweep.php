@@ -48,7 +48,7 @@ final readonly class LapsedAttestationSweep
         $at = Carbon::instance($now);
         $announced = 0;
 
-        $lapsed = CreatorTaxStatusRecord::query()
+        $lapsed = CreatorTaxStatusRecord::model()::query()
             ->whereNotNull('attested_until')
             ->where('attested_until', '<=', $at)
             ->whereNull('hold_announced_at')
@@ -94,7 +94,7 @@ final readonly class LapsedAttestationSweep
      */
     private function stillGoverns(CreatorTaxStatusRecord $record, Carbon $at): bool
     {
-        return ! CreatorTaxStatusRecord::query()
+        return ! CreatorTaxStatusRecord::model()::query()
             ->where('merchant_type', $record->merchant_type)
             ->where('merchant_id', $record->merchant_id)
             ->where('effective_from', '>', $record->effective_from)

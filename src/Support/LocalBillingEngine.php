@@ -155,7 +155,7 @@ final readonly class LocalBillingEngine implements BillingEngine
         // `cursor()` rather than `get()`: the run is a scheduled sweep over the whole table, and holding
         // every due subscription in memory is the shape that works in development and dies on the install
         // that most needs it to work.
-        $due = Subscription::query()
+        $due = Subscription::model()::query()
             ->where('provider', $this->provider)
             ->dueForProcessing($moment)
             ->orderBy('id')
@@ -344,7 +344,7 @@ final readonly class LocalBillingEngine implements BillingEngine
      */
     public function settle(string $paymentReference, ?string $currency = null): void
     {
-        $order = Order::query()
+        $order = Order::model()::query()
             ->where('provider', $this->provider)
             ->where('payment_reference', $paymentReference)
             ->where('status', OrderStatus::Processing)
@@ -355,7 +355,7 @@ final readonly class LocalBillingEngine implements BillingEngine
             return;
         }
 
-        $subscription = Subscription::query()->find($order->subscription_id);
+        $subscription = Subscription::model()::query()->find($order->subscription_id);
 
         if (! $subscription instanceof Subscription) {
             // The subscription was erased while its charge was in flight. Nothing to advance, and leaving
@@ -419,7 +419,7 @@ final readonly class LocalBillingEngine implements BillingEngine
      */
     public function fail(string $paymentReference, string $reason = 'charge_refused'): void
     {
-        $order = Order::query()
+        $order = Order::model()::query()
             ->where('provider', $this->provider)
             ->where('payment_reference', $paymentReference)
             ->where('status', OrderStatus::Processing)
@@ -430,7 +430,7 @@ final readonly class LocalBillingEngine implements BillingEngine
             return;
         }
 
-        $subscription = Subscription::query()->find($order->subscription_id);
+        $subscription = Subscription::model()::query()->find($order->subscription_id);
 
         if (! $subscription instanceof Subscription) {
             $order->update(['status' => OrderStatus::Failed, 'processed_at' => Carbon::now()]);
@@ -485,13 +485,13 @@ final readonly class LocalBillingEngine implements BillingEngine
             // reads a confirmation, thinks, and answers, and in that gap a webhook can land or a second
             // operator can act on the same row. Checking the caller's copy would decide from the row as it
             // looked before the pause.
-            $locked = Order::query()->lockForUpdate()->find($order->getKey());
+            $locked = Order::model()::query()->lockForUpdate()->find($order->getKey());
 
             if (! $locked instanceof Order || ! $locked->isAbandonedClaim($now)) {
                 return false;
             }
 
-            $subscription = Subscription::query()->find($locked->subscription_id);
+            $subscription = Subscription::model()::query()->find($locked->subscription_id);
 
             // A cycle can outlive its subscription. There is then nothing to bill again — but the credit is
             // still the customer's, and giving it back is most of the reason this exists. The owner comes
@@ -704,7 +704,7 @@ final readonly class LocalBillingEngine implements BillingEngine
     private function claimCycle(Subscription $subscription, Money $amount, array $drafts, Carbon $moment): ?Order
     {
         return DB::transaction(function () use ($subscription, $amount, $drafts, $moment): ?Order {
-            $existing = Order::query()
+            $existing = Order::model()::query()
                 ->where('subscription_id', $subscription->getKey())
                 ->where('period_start', $subscription->current_period_start)
                 ->first();
@@ -743,7 +743,7 @@ final readonly class LocalBillingEngine implements BillingEngine
                 return $existing;
             }
 
-            $order = Order::query()->create([
+            $order = Order::model()::query()->create([
                 'owner_type' => $subscription->owner_type,
                 'owner_id' => $subscription->owner_id,
                 'provider' => $this->provider,
@@ -842,7 +842,7 @@ final readonly class LocalBillingEngine implements BillingEngine
             // about refunds: a provider that issues its own documents also announces its own corrections,
             // while an invoice this package raised has nobody to announce anything. A ProviderInvoiceOffset
             // spends the same kind of balance and is the provider's document to correct.
-            $offset = CreditLedgerEntry::query()
+            $offset = CreditLedgerEntry::model()::query()
                 ->where('owner_type', $owner->getMorphClass())
                 ->where('owner_id', $owner->getKey())
                 ->where('currency', $spend->currency)
@@ -911,7 +911,7 @@ final readonly class LocalBillingEngine implements BillingEngine
      */
     private function neverCollected(Subscription $subscription): bool
     {
-        return ! Order::query()
+        return ! Order::model()::query()
             ->where('subscription_id', $subscription->getKey())
             ->where('status', OrderStatus::Paid)
             ->exists();

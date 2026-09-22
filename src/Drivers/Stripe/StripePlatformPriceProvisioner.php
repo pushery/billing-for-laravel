@@ -11,16 +11,15 @@ use Pushery\Billing\ValueObjects\Money;
 use Stripe\StripeClient;
 
 /**
- * Mints a Stripe price for a merchant-defined tier, on the PLATFORM account.
+ * Mints a Stripe price for a merchant-defined tier, on the platform account.
  *
- * The twin of {@see StripeMerchantPriceProvisioner}, and which of the two applies is not a separate choice:
- * it follows from the seller-of-record posture. Under `platform_deemed_supplier` the platform is the seller
- * to the buyer and the checkout session runs on the platform account, so a price minted on the merchant's
- * connected account is one that session cannot use. That posture is not a preference for an electronic
- * supply either -- Art. 9a of the VAT Implementing Regulation makes it irrebuttable for a platform that sets
- * the terms -- so a content marketplace needs exactly this combination: per-merchant tiers, platform prices.
+ * This is the provisioner the Stripe driver binds, under every seller posture. A price has to live on the
+ * account the checkout session runs on, and every session this package opens runs on the platform account:
+ * both charge types it offers are platform charges, and Stripe requires the price of a destination charge to
+ * be defined on the platform. Its twin, {@see StripeMerchantPriceProvisioner}, mints on the merchant's
+ * connected account and serves an application that runs direct charges there itself.
  *
- * THE LOOKUP KEY CARRIES THE MERCHANT, AND THAT IS THE WHOLE DIFFERENCE FROM THE TWIN.
+ * The lookup key carries the merchant, and that is the whole difference from the twin.
  *
  * On separate connected accounts, `tier + amount + interval` is unique by construction: two creators each
  * have their own account and cannot collide. On ONE shared platform account they can, and the failure would

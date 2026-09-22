@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Override;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Models\Concerns\AppendOnly;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One row of the billing audit ledger.
@@ -23,9 +24,10 @@ use Pushery\Billing\Models\Concerns\AppendOnly;
  * @property array<string,mixed> $payload
  * @property ?Carbon $created_at
  */
-final class BillingEvent extends Model
+class BillingEvent extends Model
 {
     use AppendOnly;
+    use Replaceable;
 
     protected $table = 'billing_events';
 

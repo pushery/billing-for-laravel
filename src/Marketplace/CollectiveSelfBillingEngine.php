@@ -229,7 +229,7 @@ final readonly class CollectiveSelfBillingEngine
 
         // Idempotency: one document per creator and period. A second run for the same month returns the first
         // rather than drawing a second number.
-        $existing = InvoiceRecord::query()
+        $existing = InvoiceRecord::model()::query()
             ->where('owner_type', $creator->getMorphClass())
             ->where('owner_id', $creator->getKey())
             ->where('settlement_period', $period)
@@ -248,7 +248,7 @@ final readonly class CollectiveSelfBillingEngine
         // month-end at day start is the Ultimo the whole document dates to.
         $ultimo = new CarbonImmutable($period.'-01')->endOfMonth()->startOfDay();
 
-        $document = InvoiceRecord::query()->create([
+        $document = InvoiceRecord::model()::query()->create([
             'owner_type' => $creator->getMorphClass(),
             'owner_id' => $creator->getKey(),
             'number' => $this->numbers->allocate($series, $year),

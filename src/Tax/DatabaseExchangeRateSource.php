@@ -110,7 +110,7 @@ final readonly class DatabaseExchangeRateSource implements ExchangeRateSource
     /** @return Builder<ExchangeRateRecord> */
     private function pair(string $from, string $to, ExchangeRateBasis $basis): Builder
     {
-        return ExchangeRateRecord::query()
+        return ExchangeRateRecord::model()::query()
             ->where('from_currency', $from)
             ->where('to_currency', $to)
             ->where('basis', $basis->value);

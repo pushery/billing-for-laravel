@@ -153,7 +153,7 @@ final readonly class SettlementCorrectionIssuer
             return $named;
         }
 
-        return InvoiceRecord::query()
+        return InvoiceRecord::model()::query()
             ->where('settled_charge_reference', $chargeReference)
             ->when(
                 $provider !== null && $provider !== '',
@@ -182,7 +182,7 @@ final readonly class SettlementCorrectionIssuer
      */
     private function documentTheChargeNames(string $chargeReference, ?string $provider, array $series): ?InvoiceRecord
     {
-        $charge = MerchantCharge::query()
+        $charge = MerchantCharge::model()::query()
             ->where('charge_reference', $chargeReference)
             ->when(
                 $provider !== null && $provider !== '',
@@ -196,7 +196,7 @@ final readonly class SettlementCorrectionIssuer
             return null;
         }
 
-        return InvoiceRecord::query()
+        return InvoiceRecord::model()::query()
             ->whereKey($charge->settlement_invoice_id)
             ->whereIn('document_series', array_map(fn (DocumentSeries $s): string => $s->value, $series))
             ->first();
@@ -293,7 +293,7 @@ final readonly class SettlementCorrectionIssuer
 
         $series = $this->correctionSeriesFor($original);
 
-        $correction = InvoiceRecord::query()->create([
+        $correction = InvoiceRecord::model()::query()->create([
             'subtotal_minor' => $netMinor,
             'tax_minor' => $taxMinor,
             'total_minor' => $totalMinor,

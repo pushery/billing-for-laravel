@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Override;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Models\Concerns\AppendOnly;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * A return file that was produced, as the evidence it is.
@@ -28,9 +29,10 @@ use Pushery\Billing\Models\Concerns\AppendOnly;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
-final class TaxReturnExportRecord extends Model
+class TaxReturnExportRecord extends Model
 {
     use AppendOnly;
+    use Replaceable;
 
     protected $table = 'billing_tax_return_exports';
 

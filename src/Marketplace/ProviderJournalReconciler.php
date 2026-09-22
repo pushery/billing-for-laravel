@@ -67,7 +67,7 @@ final readonly class ProviderJournalReconciler
      */
     public function sweep(string $provider, int $limit = 500): array
     {
-        $rows = MerchantCharge::query()
+        $rows = MerchantCharge::model()::query()
             ->where('provider', $provider)
             ->whereNotNull('transfer_reference')
             // An erased merchant's figures are gone by design; asking the provider about them would both

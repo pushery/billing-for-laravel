@@ -64,5 +64,21 @@ final readonly class AddonPurchased implements BillingDomainEvent, IdentifiesCus
          * null as "cannot tell" rather than as a default provider.
          */
         public ?string $provider = null,
+        /**
+         * The caller's own correlation key, carried through the purchase and never interpreted.
+         *
+         * A consumer that writes its row BEFORE opening the checkout has to find that row again here. Until
+         * this existed the only key that traveled was `declarationReference`, which a BUSINESS buyer never
+         * has — a business has no right of withdrawal to declare — so exactly the purchases without a
+         * declaration arrived with no key at all.
+         *
+         * IT IS NOT A SECOND DECLARATION REFERENCE, AND THE DIFFERENCE IS A LEGAL ONE. A correlation id
+         * sent as `withdrawal_declaration` would come back meaning "this buyer declared", which is the one
+         * statement a business checkout must not make. This package attaches no meaning to the value at all:
+         * it goes out as its own provider key and comes back unchanged.
+         *
+         * Null on every purchase that named none, which is every existing one.
+         */
+        public ?string $callerReference = null,
     ) {}
 }

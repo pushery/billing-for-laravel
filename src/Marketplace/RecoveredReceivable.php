@@ -43,7 +43,7 @@ final readonly class RecoveredReceivable
     public function provisionalWriteOffs(string $ownerType, int|string $ownerId): array
     {
         /** @var list<InvoiceRecord> $rows */
-        $rows = InvoiceRecord::query()
+        $rows = InvoiceRecord::model()::query()
             ->where('owner_type', $ownerType)
             ->where('owner_id', $ownerId)
             ->where('tax_base_change_reason', TaxBaseChangeReason::Uncollectible->value)
@@ -62,7 +62,7 @@ final readonly class RecoveredReceivable
     public function allProvisionalWriteOffs(): array
     {
         /** @var list<InvoiceRecord> $rows */
-        $rows = InvoiceRecord::query()
+        $rows = InvoiceRecord::model()::query()
             ->where(function (Builder $query): void {
                 $query->where('tax_base_change_reason', TaxBaseChangeReason::Uncollectible->value);
             })

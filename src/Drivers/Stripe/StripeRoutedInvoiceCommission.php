@@ -87,7 +87,7 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
             // Not routed with a destination. A plain platform subscription has neither, and so has one on the
             // separate-transfer lane, which names its merchant and terms in its own metadata instead.
             if (! is_string($account) || $account === '' || ! is_int($fee) || ! is_string($currency)) {
-                return $this->separateTransferCycle($invoice->toArray());
+                return $this->separateTransferCycle($invoice->toArray(), $intentId);
             }
 
             $gross = $invoice->toArray()['amount_paid'] ?? null;
@@ -101,6 +101,7 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
                 gross: Money::of($gross, strtoupper($currency)),
                 fee: Money::of($fee, strtoupper($currency)),
                 feeBps: $this->feeBpsOf($invoice->toArray()),
+                paymentReference: $intentId,
             );
         } catch (RateLimitException $exception) {
             // A 429 is "ask again", never "not routed".
@@ -127,7 +128,7 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
      *
      * @param  array<array-key, mixed>  $invoice
      */
-    private function separateTransferCycle(array $invoice): ?RoutedInvoiceCommission
+    private function separateTransferCycle(array $invoice, string $intentId): ?RoutedInvoiceCommission
     {
         $subscriptionId = StripeInvoiceSubscription::idOf($invoice);
         $paid = $invoice['amount_paid'] ?? null;
@@ -155,6 +156,7 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
             feeBps: $terms->bps,
             chargeType: ChargeType::SeparateTransfer,
             terms: $terms,
+            paymentReference: $intentId,
         );
     }
 

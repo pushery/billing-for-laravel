@@ -203,7 +203,7 @@ final readonly class IssueDocumentForRoutedHostedPurchase
             return null;
         }
 
-        return MerchantCharge::query()
+        return MerchantCharge::model()::query()
             ->where('provider', $event->provider)
             ->where('charge_reference', $event->paymentReference)
             ->first();

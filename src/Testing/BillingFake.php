@@ -33,16 +33,16 @@ use Pushery\Billing\ValueObjects\SubscriptionStart;
  */
 final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding, OneTimeCharge, StartsSubscriptions, SubscriptionActions
 {
-    /** @var list<array{owner: Model, tier: string, coupon: ?string, declaration: ?string, country: ?string}> */
+    /** @var list<array{owner: Model, tier: string, coupon: ?string, declaration: ?string, country: ?string, collectTaxId: ?bool, type: ?string, callerReference: ?string}> */
     private array $subscribes = [];
 
     /** @var list<array{owner: Model, tier: string, prorate: bool, merchant: ?MerchantScope}> */
     private array $swaps = [];
 
-    /** @var list<array{owner: Model, action: string, survey?: ?CancellationSurvey, merchant: ?MerchantScope}> */
+    /** @var list<array{owner: Model, action: string, survey?: ?CancellationSurvey, merchant: ?MerchantScope, type?: ?string}> */
     private array $lifecycle = [];
 
-    /** @var list<array{owner: Model, addon: string, declaration: ?string, country: ?string}> */
+    /** @var list<array{owner: Model, addon: string, declaration: ?string, country: ?string, collectTaxId: ?bool, callerReference: ?string}> */
     private array $purchases = [];
 
     /** @var list<array{owner: Model, amount: Money, soldAlongside: TaxArchetype, declaration: ?string, country: ?string}> */
@@ -68,9 +68,16 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      */
     private bool $couponsAreHonored = false;
 
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null): ClientIntent
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null): ClientIntent
     {
-        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => $buyerCountry, 'collectTaxId' => $collectTaxId];
+        // The type is recorded too, because it is the one argument a consumer cannot verify any other way:
+        // it decides WHICH local row the sale will end up in, and a fake that dropped it would let a screen
+        // pass its tests while sending every contract to the default row.
+        //
+        // The caller's own key for the same reason, one step further out: it decides whether the CONSUMER'S
+        // row can be found again at all, and a fake that dropped it would let a screen pass while sending
+        // a business purchase off with no key — which is the case that has no fallback.
+        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => $buyerCountry, 'collectTaxId' => $collectTaxId, 'type' => $type, 'callerReference' => $callerReference];
 
         return $this->intent();
     }
@@ -85,7 +92,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      */
     public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): SubscriptionStart
     {
-        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => null, 'collectTaxId' => null];
+        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => null, 'collectTaxId' => null, 'type' => null, 'callerReference' => null];
 
         return new SubscriptionStart(SubscriptionState::Activating, 'https://checkout.test/session');
     }
@@ -103,12 +110,12 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         return $this;
     }
 
-    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null): ClientIntent
+    public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $callerReference = null): ClientIntent
     {
         // Recorded, not dropped. A consumer asserting that their checkout collected the declarations has
         // nothing else to assert against -- the key is the only observable the package produces before the
         // buyer leaves, and a fake that swallowed it would make the round trip untestable from outside.
-        $this->purchases[] = ['owner' => $billable, 'addon' => $addonKey, 'declaration' => $declarationReference, 'country' => $buyerCountry, 'collectTaxId' => $collectTaxId];
+        $this->purchases[] = ['owner' => $billable, 'addon' => $addonKey, 'declaration' => $declarationReference, 'country' => $buyerCountry, 'collectTaxId' => $collectTaxId, 'callerReference' => $callerReference];
 
         return $this->intent();
     }
@@ -140,9 +147,9 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         $this->lifecycle[] = ['owner' => $billable, 'action' => 'resume', 'merchant' => $merchant];
     }
 
-    public function cancelNow(Model $billable, ?MerchantScope $merchant = null): void
+    public function cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $this->lifecycle[] = ['owner' => $billable, 'action' => 'cancelNow', 'merchant' => $merchant];
+        $this->lifecycle[] = ['owner' => $billable, 'action' => 'cancelNow', 'merchant' => $merchant, 'type' => $type];
     }
 
     public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null): void
@@ -241,6 +248,80 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
             $seen === []
                 ? 'no checkout for that owner and tier was started at all'
                 : 'the declarations seen were ['.implode(', ', $seen).']',
+        ));
+    }
+
+    /**
+     * The subscription start, with WHICH contract it opens.
+     *
+     * Recorded since the type existed and not askable until now, which made the recording a claim rather than
+     * a capability: a consumer whose screen dropped the type had no way to notice, and the argument decides
+     * which local row the sale lands in. Same null semantics as the others -- `null` asserts the default
+     * contract, the state every caller that names nothing is in.
+     */
+    public function assertSubscribeStartedWithType(Model $owner, string $tierKey, ?string $type): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->subscribes as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['tier'] !== $tierKey) {
+                continue;
+            }
+
+            if (($call['type'] ?? null) === $type) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['type'] ?? 'none';
+        }
+
+        PHPUnit::assertTrue($found, sprintf(
+            'Expected a checkout for tier [%s] with contract type [%s], but %s.',
+            $tierKey,
+            $type ?? 'none (the default contract)',
+            $seen === []
+                ? 'no checkout for that owner and tier was started at all'
+                : 'the types seen were ['.implode(', ', $seen).']',
+        ));
+    }
+
+    /**
+     * The subscription start, with the caller's own correlation key.
+     *
+     * This is the one a BUSINESS checkout has to be asserted on, because it is the only key such a purchase
+     * carries: there is no declaration reference on a sale to a buyer who has no right of withdrawal. A screen
+     * that forgets to pass it sends the sale off with nothing to match the consumer's own row against, and
+     * nothing else in a test would notice.
+     */
+    public function assertSubscribeStartedWithCallerReference(Model $owner, string $tierKey, ?string $callerReference): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->subscribes as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['tier'] !== $tierKey) {
+                continue;
+            }
+
+            if (($call['callerReference'] ?? null) === $callerReference) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['callerReference'] ?? 'none';
+        }
+
+        PHPUnit::assertTrue($found, sprintf(
+            'Expected a checkout for tier [%s] with caller reference [%s], but %s.',
+            $tierKey,
+            $callerReference ?? 'none',
+            $seen === []
+                ? 'no checkout for that owner and tier was started at all'
+                : 'the caller references seen were ['.implode(', ', $seen).']',
         ));
     }
 

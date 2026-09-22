@@ -53,7 +53,7 @@ final readonly class UsTaxFormRegistry
         ?string $documentReference = null,
         UsTaxFormStatus $status = UsTaxFormStatus::OnFile,
     ): UsTaxForm {
-        return UsTaxForm::query()->create([
+        return UsTaxForm::model()::query()->create([
             'merchant_type' => $merchant->getMorphClass(),
             'merchant_id' => $this->key($merchant),
             'form_type' => $type,
@@ -67,7 +67,7 @@ final readonly class UsTaxFormRegistry
     /** The declaration that describes this seller today, or null where none does. */
     public function currentFor(Model $merchant, CarbonInterface $asOf): ?UsTaxForm
     {
-        $form = UsTaxForm::query()
+        $form = UsTaxForm::model()::query()
             ->where('merchant_type', $merchant->getMorphClass())
             ->where('merchant_id', $this->key($merchant))
             ->where('signed_on', '<=', $asOf)

@@ -76,7 +76,7 @@ final readonly class IssueLocalCreditNote
         // savepoint — the OUTER transaction then owns the lock and releases it when the note commits, which
         // is exactly what is wanted. Written here so it holds when the effect is invoked directly too.
         DB::transaction(function () use ($event, $invoice): void {
-            InvoiceRecord::query()->whereKey($invoice->getKey())->lockForUpdate()->first();
+            InvoiceRecord::model()::query()->whereKey($invoice->getKey())->lockForUpdate()->first();
 
             $this->issueAgainst($event, $invoice);
         });
@@ -121,7 +121,7 @@ final readonly class IssueLocalCreditNote
         // numbered document. What is gained is that a branch no run can enter stops looking like a guard.
         $issuedAt = Carbon::now();
 
-        InvoiceRecord::query()->create([
+        InvoiceRecord::model()::query()->create([
             ...$key,
             ...[
                 'owner_type' => $invoice->owner_type,
@@ -176,7 +176,7 @@ final readonly class IssueLocalCreditNote
      */
     private function alreadyCredited(InvoiceRecord $invoice): int
     {
-        return (int) InvoiceRecord::query()
+        return (int) InvoiceRecord::model()::query()
             ->where('credited_invoice_id', $invoice->id)
             ->sum('total_minor');
     }
@@ -189,13 +189,13 @@ final readonly class IssueLocalCreditNote
      */
     private function locallyRaisedInvoiceFor(string $paymentReference): ?InvoiceRecord
     {
-        $order = Order::query()->where('payment_reference', $paymentReference)->first();
+        $order = Order::model()::query()->where('payment_reference', $paymentReference)->first();
 
         if (! $order instanceof Order) {
             return null;
         }
 
-        return InvoiceRecord::query()
+        return InvoiceRecord::model()::query()
             ->where('order_id', $order->getKey())
             ->whereNull('credited_invoice_id')
             ->first();

@@ -45,19 +45,19 @@ enum SellerOfRecordPosture: string
     }
 
     /**
-     * Whether a merchant-defined tier's price is minted on the PLATFORM account rather than the merchant's.
+     * Whether a merchant-defined tier's price is minted on the platform account rather than the merchant's.
      *
-     * It follows from who the buyer transacts with, which is what this enum already names, so it belongs here
-     * rather than in a second setting somebody could set inconsistently. Under `PlatformDeemedSupplier` the
-     * platform is the seller and charges on its own account, so a price living on the merchant's account is
-     * one the checkout cannot use. Under the other two the merchant is the seller in their own name, and the
-     * price belongs with them.
+     * It is, under every posture. A price has to live on the account the checkout session runs on, and every
+     * session this package opens runs on the platform account: both charge types it offers are platform
+     * charges, and the provider requires the price of a destination charge to be defined on the platform. The
+     * posture decides who the buyer transacts with and which documents exist, not where a provider object lives.
      *
-     * The consequence for the price KEY is not cosmetic: on the platform account every merchant's tiers share
-     * one namespace, so the key has to carry the merchant. On separate accounts it does not.
+     * @deprecated The answer does not depend on the posture, so the package no longer asks. It answers true for
+     *             every case so that a caller asking still gets the right answer. An application that runs
+     *             direct charges on the merchant's own account binds `StripeMerchantPriceProvisioner` itself.
      */
     public function mintsPriceOnPlatformAccount(): bool
     {
-        return $this === self::PlatformDeemedSupplier;
+        return true;
     }
 }

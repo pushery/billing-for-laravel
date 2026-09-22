@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\RefundAttemptStatus;
 use Pushery\Billing\Enums\ReversalCause;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One intent to reverse money, recorded before the provider hears about it.
@@ -27,8 +28,10 @@ use Pushery\Billing\Enums\ReversalCause;
  * @property ?ReversalCause $cause
  * @property ?int $dispute_fee_minor
  */
-final class RefundAttempt extends Model
+class RefundAttempt extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_refund_attempts';
 
     /** @var list<string> */

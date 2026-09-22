@@ -69,7 +69,7 @@ final readonly class MeteredCycleAmountResolver implements CycleAmountResolver
     {
         $subscription = $item->subscription;
 
-        $counter = UsageCounter::query()
+        $counter = UsageCounter::model()::query()
             ->where('owner_type', $subscription?->owner_type)
             ->where('owner_id', $subscription?->owner_id)
             ->where('meter_key', $item->plan_key)

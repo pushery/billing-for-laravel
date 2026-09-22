@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * A subscription somebody asked for, waiting for the mandate that makes it possible.
@@ -34,8 +35,10 @@ use Pushery\Billing\Casts\UtcDateTime;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
-final class SubscriptionIntent extends Model
+class SubscriptionIntent extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_subscription_intents';
 
     /** @var list<string> */

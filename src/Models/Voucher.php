@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\VoucherInstrumentType;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * One voucher and what is left of it.
@@ -33,8 +34,10 @@ use Pushery\Billing\Enums\VoucherInstrumentType;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
-final class Voucher extends Model
+class Voucher extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_vouchers';
 
     /** @var list<string> */

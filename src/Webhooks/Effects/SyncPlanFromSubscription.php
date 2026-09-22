@@ -112,7 +112,7 @@ final readonly class SyncPlanFromSubscription
     /** @return bool whether this event actually moved anything — the row, or the owner's tier column. */
     private function applyLocked(Model $owner, SubscriptionStateChanged $event): bool
     {
-        $subscription = $this->lockRow($owner, $event->merchant);
+        $subscription = $this->lockRow($owner, $event->merchant, $event->subscriptionType);
 
         // A row that did not exist is itself a change, and `wasChanged()` below cannot see it: the insert
         // already wrote the event's values, so the save that follows finds nothing left to move.
@@ -125,7 +125,7 @@ final readonly class SyncPlanFromSubscription
             // This is the codebase's create-race idiom (see UsageRecorder). We then re-read under lock:
             // whoever we find is the row to order against — ourselves if we won, the winner if we lost.
             $this->insertRow($owner, $event);
-            $subscription = $this->lockRow($owner, $event->merchant);
+            $subscription = $this->lockRow($owner, $event->merchant, $event->subscriptionType);
         }
 
         // The row is guaranteed to exist now. Order this event against it: an out-of-order or retried
@@ -279,16 +279,24 @@ final readonly class SyncPlanFromSubscription
     }
 
     /**
-     * The billable's locked subscription-state row for one merchant scope, or null when none exists yet.
-     * The scope is part of the identity: a fan holds one row per creator plus the platform row, so the
-     * lock must name which one this event is about or a creator's webhook would order against the platform
-     * row. A null merchant is the platform scope, unchanged for a single-seller install.
+     * The billable's locked subscription-state row for one merchant scope AND one contract type, or null
+     * when none exists yet.
+     *
+     * Both are part of the identity: a fan holds one row per creator plus the platform row, so the lock must
+     * name which merchant this event is about or a creator's webhook would order against the platform row.
+     * And the same fan may hold two contracts with ONE creator — a subscription and a sponsorship, measured
+     * in a consumer — which is why the type is named too.
+     *
+     * NAMING THE MERCHANT WAS NOT ENOUGH, and the failure was silent rather than refused. With the type
+     * fixed at `default`, the second contract's event locked the FIRST contract's row, found it, and was
+     * written onto it: the row ended up carrying one contract's provider id and the other's state, and the
+     * webhook reported success. A null type is the default contract, unchanged for every existing row.
      */
-    private function lockRow(Model $owner, ?MerchantScope $merchant): ?Subscription
+    private function lockRow(Model $owner, ?MerchantScope $merchant, ?string $type = null): ?Subscription
     {
-        return Subscription::query()
+        return Subscription::model()::query()
             ->forOwner($owner)
-            ->ofDefaultType()
+            ->ofType($type)
             ->forMerchant($merchant)
             ->lockForUpdate()
             ->latest('id')
@@ -302,10 +310,10 @@ final readonly class SyncPlanFromSubscription
      */
     private function insertRow(Model $owner, SubscriptionStateChanged $event): void
     {
-        Subscription::query()->insertOrIgnore([
+        Subscription::model()::query()->insertOrIgnore([
             'owner_type' => $owner->getMorphClass(),
             'owner_id' => $owner->getKey(),
-            'type' => Subscription::TYPE_DEFAULT,
+            'type' => $event->subscriptionType ?? Subscription::TYPE_DEFAULT,
             ...$this->merchantColumns($this->scope($event)),
             ...$this->attributes(null, $event),
             'created_at' => Carbon::now(),

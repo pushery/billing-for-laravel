@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * An owner's credit balance in one currency (minor units; may be spent down toward zero).
@@ -14,8 +15,10 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $currency
  * @property int $balance_minor
  */
-final class CreditBalance extends Model
+class CreditBalance extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_credit_balances';
 
     /** @var list<string> */

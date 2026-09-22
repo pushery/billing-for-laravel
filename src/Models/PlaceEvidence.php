@@ -10,6 +10,7 @@ use Override;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\AppendOnlyDeletion;
 use Pushery\Billing\Models\Concerns\AppendOnly;
+use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
  * What decided a sale's country, kept as country codes.
@@ -30,9 +31,10 @@ use Pushery\Billing\Models\Concerns\AppendOnly;
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
-final class PlaceEvidence extends Model
+class PlaceEvidence extends Model
 {
     use AppendOnly;
+    use Replaceable;
 
     protected $table = 'billing_place_evidence';
 

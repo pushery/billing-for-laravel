@@ -45,7 +45,7 @@ final readonly class MarketAccessJournal
                 continue;
             }
 
-            MarketAccessEntry::query()->create([
+            MarketAccessEntry::model()::query()->create([
                 'country' => $country,
                 'state' => $state,
                 'actor' => $actor,
@@ -61,7 +61,7 @@ final readonly class MarketAccessJournal
     /** What the log says about a market today, or null where it has never been recorded. */
     public function currentState(string $country): ?MarketAccess
     {
-        $entry = MarketAccessEntry::query()
+        $entry = MarketAccessEntry::model()::query()
             ->where('country', strtoupper($country))
             ->orderByDesc('recorded_at')
             ->orderByDesc('id')
@@ -73,7 +73,7 @@ final readonly class MarketAccessJournal
     /** When a market last became open, or null where it never has. */
     public function openSince(string $country): ?CarbonInterface
     {
-        $entry = MarketAccessEntry::query()
+        $entry = MarketAccessEntry::model()::query()
             ->where('country', strtoupper($country))
             ->where('state', MarketAccess::Open)
             ->orderByDesc('recorded_at')

@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Pushery\Billing\Enums\OrderItemType;
+use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -27,8 +28,10 @@ use Pushery\Billing\ValueObjects\Money;
  * @property OrderItemType $type
  * @property ?array<array-key, mixed> $metadata
  */
-final class OrderItem extends Model
+class OrderItem extends Model
 {
+    use Replaceable;
+
     protected $table = 'billing_order_items';
 
     /** @var list<string> */
@@ -63,7 +66,7 @@ final class OrderItem extends Model
     /** @return BelongsTo<Order, $this> */
     public function order(): BelongsTo
     {
-        return $this->belongsTo(Order::class, 'order_id');
+        return $this->belongsTo(Order::model(), 'order_id');
     }
 
     /** The unit price as Money. */
