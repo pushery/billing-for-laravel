@@ -1785,7 +1785,7 @@ return [
         // afterwards regardless.
         //
         // Ships EMPTY, and empty is not an oversight. The obligation runs for as long as a buyer may
-        // reasonably expect, "reasonably" is a judgement about a kind of product, and no statute states a
+        // reasonably expect, "reasonably" is a judgment about a kind of product, and no statute states a
         // number — so a package that shipped one would be inventing a legal answer and hiding it in a
         // library. Empty means no end has been established, and updates keep flowing: the direction that
         // cannot harm a buyer. Set it once you have taken advice for your product class.
@@ -1877,7 +1877,7 @@ return [
         // Whether a work added to a bundle later reaches people who bought the bundle earlier.
         //
         // Off, because a bundle is normally what it was on the day it was bought. Bundle grants are
-        // materialised at purchase, so off costs nothing to enforce -- a work added next month simply has no
+        // materialized at purchase, so off costs nothing to enforce -- a work added next month simply has no
         // row for an earlier buyer, and there is nothing to remember to switch off. On, a repeat call for the
         // same buyer tops up what has since been added.
         'bundle_additive_default' => env('BILLING_BUNDLE_ADDITIVE_DEFAULT', false) === true,

@@ -29,6 +29,9 @@ use Pushery\Billing\ValueObjects\Money;
  * the SubscriptionPresenter from the local state row) and a best-effort next-invoice preview, and lets
  * the owner cancel into the grace period or resume from it. Every provider read is null-tolerant, so
  * the screen degrades gracefully rather than erroring when the provider cannot answer.
+ *
+ * It acts on one contract, the default type at the platform. A contract of another type is canceled or
+ * resumed through SubscriptionActions with its type, from a screen the host provides.
  */
 final class SubscriptionOverview extends AccountScreen
 {

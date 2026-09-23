@@ -61,9 +61,9 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
      * from it. Canceling is not the same as losing access, and a customer who cancels on day two of a
      * month they paid for keeps the month.
      */
-    public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null): void
+    public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $subscription = $this->subscriptionFor($billable, $merchant);
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
 
         if (! $subscription instanceof Subscription) {
             return;
@@ -82,9 +82,9 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
      * ended there is nothing to resume, and pretending otherwise would silently restore a subscription
      * nobody is paying for.
      */
-    public function resume(Model $billable, ?MerchantScope $merchant = null): void
+    public function resume(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $subscription = $this->subscriptionFor($billable, $merchant);
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
 
         if (! $subscription instanceof Subscription || ! $subscription->onGracePeriod()) {
             return;
@@ -120,7 +120,15 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
         ]);
     }
 
-    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null): void
+    /**
+     * Move the contract to another tier: now for an upgrade, at the period end for a downgrade.
+     *
+     * A contract of a type other than the default is swapped without proration or not at all. The proration
+     * strategy prices the owner, not a row: it reads the tier and the period the owner resolves to, which
+     * are the default contract's. Prorating a sponsorship against them would credit the unused remainder of
+     * a different contract, so that combination is refused before anything changes.
+     */
+    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void
     {
         if (! $this->eligibility->check($billable)) {
             throw EligibilityDenied::forMoneyMovement();
@@ -132,13 +140,20 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
             throw new InvalidArgumentException("Tier '{$tierKey}' is not in the catalog.");
         }
 
-        $subscription = $this->subscriptionFor($billable, $merchant);
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
 
         if (! $subscription instanceof Subscription) {
             throw new InvalidArgumentException('Cannot swap: the billable has no subscription.');
         }
 
-        if ($this->landsAtPeriodEnd($subscription, $plan)) {
+        if ($prorate && ($type ?? Subscription::TYPE_DEFAULT) !== Subscription::TYPE_DEFAULT) {
+            throw new InvalidArgumentException(
+                "Cannot prorate a swap of the [{$type}] contract: the local engine prices proration against the "
+                .'default contract. Swap it with prorate: false.'
+            );
+        }
+
+        if (! $this->isDueSchedule($subscription, $tierKey) && $this->landsAtPeriodEnd($subscription, $plan)) {
             $subscription->scheduleSwap($tierKey, $subscription->current_period_end ?? CarbonImmutable::now());
 
             return;
@@ -153,6 +168,21 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
 
         $subscription->update(['tier_key' => $tierKey]);
         $subscription->cancelScheduledSwap();
+    }
+
+    /**
+     * Whether this swap IS the row's own schedule coming due: the tier it scheduled, at or after its moment.
+     *
+     * The scheduled-swap runner applies a due downgrade through this same method. Without this answer the
+     * downgrade was a downgrade again, so it was scheduled again for the end of the period that had just
+     * begun, and the runner then cleared that schedule too: the tier never moved, and the audit ledger said
+     * it had.
+     */
+    private function isDueSchedule(Subscription $subscription, string $tierKey): bool
+    {
+        return $subscription->scheduled_tier_key === $tierKey
+            && $subscription->scheduled_swap_at !== null
+            && ! $subscription->scheduled_swap_at->isFuture();
     }
 
     /**

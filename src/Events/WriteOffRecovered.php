@@ -18,8 +18,8 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * ## What it means, and what it does not
  *
- * A correction issued because the consideration would not be received is a judgement about the future. The
- * money turning up says the judgement was wrong, so the tax goes back. That is the ONLY case this event is
+ * A correction issued because the consideration would not be received is a judgment about the future. The
+ * money turning up says the judgment was wrong, so the tax goes back. That is the ONLY case this event is
  * raised for — a correction issued because the consideration was handed back can never be reopened, and a
  * payment afterwards is a new transaction with its own document. Nothing in the amounts distinguishes the
  * two afterwards, which is why the reason is read off the document rather than inferred.

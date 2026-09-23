@@ -19,6 +19,7 @@ return [
         'grace' => 'Dein Abo ist gekündigt und endet bald. Setze es fort, um deinen Zugang zu behalten.',
         'paused' => 'Deine Abrechnung ist pausiert, deine bezahlten Funktionen ruhen so lange. Du kannst jederzeit fortsetzen.',
         'trial_ending' => 'Deine Testphase endet bald. Wähle einen Tarif, um deinen Zugang zu behalten.',
+        'with_merchant' => ':merchant: :message',
         'cta' => [
             'recover' => 'Zahlung beheben',
             'confirm' => 'Zahlung bestätigen',

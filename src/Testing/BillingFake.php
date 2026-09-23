@@ -15,6 +15,7 @@ use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Facades\Billing;
+use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
@@ -36,10 +37,10 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     /** @var list<array{owner: Model, tier: string, coupon: ?string, declaration: ?string, country: ?string, collectTaxId: ?bool, type: ?string, callerReference: ?string}> */
     private array $subscribes = [];
 
-    /** @var list<array{owner: Model, tier: string, prorate: bool, merchant: ?MerchantScope}> */
+    /** @var list<array{owner: Model, tier: string, prorate: bool, merchant: ?MerchantScope, type: ?string}> */
     private array $swaps = [];
 
-    /** @var list<array{owner: Model, action: string, survey?: ?CancellationSurvey, merchant: ?MerchantScope, type?: ?string}> */
+    /** @var list<array{owner: Model, action: string, survey?: ?CancellationSurvey, merchant: ?MerchantScope, type: ?string}> */
     private array $lifecycle = [];
 
     /** @var list<array{owner: Model, addon: string, declaration: ?string, country: ?string, collectTaxId: ?bool, callerReference: ?string}> */
@@ -137,14 +138,14 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         return $this->intent();
     }
 
-    public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null): void
+    public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $this->lifecycle[] = ['owner' => $billable, 'action' => 'cancel', 'survey' => $survey, 'merchant' => $merchant];
+        $this->lifecycle[] = ['owner' => $billable, 'action' => 'cancel', 'survey' => $survey, 'merchant' => $merchant, 'type' => $type];
     }
 
-    public function resume(Model $billable, ?MerchantScope $merchant = null): void
+    public function resume(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $this->lifecycle[] = ['owner' => $billable, 'action' => 'resume', 'merchant' => $merchant];
+        $this->lifecycle[] = ['owner' => $billable, 'action' => 'resume', 'merchant' => $merchant, 'type' => $type];
     }
 
     public function cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
@@ -152,9 +153,9 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         $this->lifecycle[] = ['owner' => $billable, 'action' => 'cancelNow', 'merchant' => $merchant, 'type' => $type];
     }
 
-    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null): void
+    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $this->swaps[] = ['owner' => $billable, 'tier' => $tierKey, 'prorate' => $prorate, 'merchant' => $merchant];
+        $this->swaps[] = ['owner' => $billable, 'tier' => $tierKey, 'prorate' => $prorate, 'merchant' => $merchant, 'type' => $type];
     }
 
     // ── Assertions ──────────────────────────────────────────────────────────────────────────────────────
@@ -330,29 +331,52 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         PHPUnit::assertSame([], $this->subscribes, 'Expected no checkout to have started, but at least one did.');
     }
 
-    public function assertSwapped(Model $owner, string $tierKey): void
+    /**
+     * The owner's subscription was swapped to this tier.
+     *
+     * A contract type narrows it to that contract, the way a merchant does in the lifecycle assertions below:
+     * null leaves the type out of the question, and `Subscription::TYPE_DEFAULT` names the default contract,
+     * which is what a swap without a type addresses.
+     */
+    public function assertSwapped(Model $owner, string $tierKey, ?string $type = null): void
     {
         $found = false;
+        $seen = [];
 
         foreach ($this->swaps as $call) {
-            if ($this->sameOwner($call['owner'], $owner) && $call['tier'] === $tierKey) {
-                $found = true;
+            if (! $this->sameOwner($call['owner'], $owner) || $call['tier'] !== $tierKey) {
+                continue;
             }
+
+            $recorded = $call['type'] ?? Subscription::TYPE_DEFAULT;
+
+            if ($type === null || $recorded === $type) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $recorded;
         }
 
-        PHPUnit::assertTrue($found, "Expected a swap to tier [{$tierKey}], but it did not happen.");
+        PHPUnit::assertTrue($found, $type === null || $seen === []
+            ? "Expected a swap to tier [{$tierKey}], but it did not happen."
+            : "Expected a swap to tier [{$tierKey}] of the [{$type}] contract, but it happened on [".implode(', ', $seen).'].');
     }
 
-    /** The owner's subscription was canceled, under the given merchant when one is named. */
-    public function assertCanceled(Model $owner, ?MerchantScope $merchant = null): void
+    /**
+     * The owner's subscription was canceled, under the given merchant and of the given contract type when one
+     * is named. A type of `Subscription::TYPE_DEFAULT` is the default contract; null leaves the type open.
+     */
+    public function assertCanceled(Model $owner, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $this->assertLifecycle($owner, 'cancel', $merchant);
+        $this->assertLifecycle($owner, 'cancel', $merchant, $type);
     }
 
-    /** The owner's cancellation was taken back, under the given merchant when one is named. */
-    public function assertResumed(Model $owner, ?MerchantScope $merchant = null): void
+    /** The owner's cancellation was taken back, under the given merchant and of the given type when named. */
+    public function assertResumed(Model $owner, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $this->assertLifecycle($owner, 'resume', $merchant);
+        $this->assertLifecycle($owner, 'resume', $merchant, $type);
     }
 
     /**
@@ -360,27 +384,27 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      * none is. A failure lists every action the owner did see, because that is what the reader of a failing negative
      * assertion goes looking for.
      */
-    public function assertNotCanceled(Model $owner, ?MerchantScope $merchant = null): void
+    public function assertNotCanceled(Model $owner, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $this->assertNoLifecycle($owner, 'cancel', $merchant);
+        $this->assertNoLifecycle($owner, 'cancel', $merchant, $type);
     }
 
-    /** The owner's subscription did NOT end immediately, under the given merchant when one is named. */
-    public function assertNotCanceledNow(Model $owner, ?MerchantScope $merchant = null): void
+    /** The owner's subscription did NOT end immediately, under the given merchant and of the given type when named. */
+    public function assertNotCanceledNow(Model $owner, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $this->assertNoLifecycle($owner, 'cancelNow', $merchant);
+        $this->assertNoLifecycle($owner, 'cancelNow', $merchant, $type);
     }
 
-    /** The owner's cancellation was NOT taken back, under the given merchant when one is named. */
-    public function assertNotResumed(Model $owner, ?MerchantScope $merchant = null): void
+    /** The owner's cancellation was NOT taken back, under the given merchant and of the given type when named. */
+    public function assertNotResumed(Model $owner, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $this->assertNoLifecycle($owner, 'resume', $merchant);
+        $this->assertNoLifecycle($owner, 'resume', $merchant, $type);
     }
 
-    /** The owner's subscription ended immediately, under the given merchant when one is named. */
-    public function assertCanceledNow(Model $owner, ?MerchantScope $merchant = null): void
+    /** The owner's subscription ended immediately, under the given merchant and of the given type when named. */
+    public function assertCanceledNow(Model $owner, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $this->assertLifecycle($owner, 'cancelNow', $merchant);
+        $this->assertLifecycle($owner, 'cancelNow', $merchant, $type);
     }
 
     /**
@@ -513,17 +537,41 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         ]);
     }
 
-    public function assertOnboardingStarted(Model $merchant): void
+    /**
+     * Onboarding started for this merchant, and, where they are given, with these two addresses.
+     *
+     * They answer different questions. The return address is where the merchant lands after onboarding, so
+     * a mistake there is seen at once. The refresh address is reached only when the hosted link has expired,
+     * and a page there instead of the route that mints a fresh link leaves the merchant on a button offering
+     * the same dead link, which nothing reports. A null address is left out of the question.
+     */
+    public function assertOnboardingStarted(Model $merchant, ?string $refreshUrl = null, ?string $returnUrl = null): void
     {
         $found = false;
+        $seen = [];
 
         foreach ($this->onboardings as $call) {
-            if ($this->sameOwner($call['merchant'], $merchant)) {
-                $found = true;
+            if (! $this->sameOwner($call['merchant'], $merchant)) {
+                continue;
             }
+
+            if (($refreshUrl === null || $call['refresh'] === $refreshUrl) && ($returnUrl === null || $call['return'] === $returnUrl)) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = sprintf('refresh [%s], return [%s]', $call['refresh'], $call['return']);
         }
 
-        PHPUnit::assertTrue($found, 'Expected merchant onboarding to have started, but it did not.');
+        PHPUnit::assertTrue($found, $seen === []
+            ? 'Expected merchant onboarding to have started, but it did not.'
+            : sprintf(
+                'Expected merchant onboarding with refresh [%s], return [%s], but it started with %s.',
+                $refreshUrl ?? 'any',
+                $returnUrl ?? 'any',
+                implode('; ', $seen),
+            ));
     }
 
     public function assertNothingOnboarded(): void
@@ -560,7 +608,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      * not check", because the platform's own subscription is spelled MerchantScope::platform(). A recorded
      * null counts as that platform, the scope a null merchant collapses to everywhere else in the package.
      */
-    private function assertLifecycle(Model $owner, string $action, ?MerchantScope $merchant = null): void
+    private function assertLifecycle(Model $owner, string $action, ?MerchantScope $merchant = null, ?string $type = null): void
     {
         $found = false;
         $seen = [];
@@ -571,17 +619,18 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
             }
 
             $recorded = ($call['merchant'] ?? MerchantScope::platform())->uid();
+            $recordedType = $call['type'] ?? Subscription::TYPE_DEFAULT;
 
-            if (! $merchant instanceof MerchantScope || $recorded === $merchant->uid()) {
+            if ((! $merchant instanceof MerchantScope || $recorded === $merchant->uid()) && ($type === null || $recordedType === $type)) {
                 $found = true;
 
                 continue;
             }
 
-            $seen[] = $recorded;
+            $seen[] = $recorded.($type === null ? '' : ' on '.$recordedType);
         }
 
-        if (! $merchant instanceof MerchantScope) {
+        if (! $merchant instanceof MerchantScope && $type === null) {
             PHPUnit::assertTrue($found, "Expected the subscription action [{$action}] for the owner, but it did not happen.");
 
             return;
@@ -590,16 +639,17 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         // The scopes it DID run under go in the message, for the reason the coupon assertion gives: the fake
         // is holding the answer, and a bare "it did not happen" sends the reader off to add a dump.
         PHPUnit::assertTrue($found, sprintf(
-            'Expected the subscription action [%s] for the owner under merchant [%s], but %s.',
+            'Expected the subscription action [%s] for the owner%s%s, but %s.',
             $action,
-            $merchant->uid(),
+            $merchant instanceof MerchantScope ? ' under merchant ['.$merchant->uid().']' : '',
+            $type === null ? '' : ' on the ['.$type.'] contract',
             $seen === []
                 ? 'that action did not happen for the owner at all'
                 : 'it happened under ['.implode(', ', $seen).']',
         ));
     }
 
-    private function assertNoLifecycle(Model $owner, string $action, ?MerchantScope $merchant = null): void
+    private function assertNoLifecycle(Model $owner, string $action, ?MerchantScope $merchant = null, ?string $type = null): void
     {
         $matching = [];
         $seen = [];
@@ -610,14 +660,18 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
             }
 
             $recorded = ($call['merchant'] ?? MerchantScope::platform())->uid();
-            $seen[] = $call['action'].' under ['.$recorded.']';
+            $recordedType = $call['type'] ?? Subscription::TYPE_DEFAULT;
+            $seen[] = $call['action'].' under ['.$recorded.']'.($type === null ? '' : ' on ['.$recordedType.']');
 
-            if ($call['action'] === $action && (! $merchant instanceof MerchantScope || $recorded === $merchant->uid())) {
+            if ($call['action'] === $action
+                && (! $merchant instanceof MerchantScope || $recorded === $merchant->uid())
+                && ($type === null || $recordedType === $type)) {
                 $matching[] = $recorded;
             }
         }
 
-        $where = $merchant instanceof MerchantScope ? ' under merchant ['.$merchant->uid().']' : '';
+        $where = ($merchant instanceof MerchantScope ? ' under merchant ['.$merchant->uid().']' : '')
+            .($type === null ? '' : ' on the ['.$type.'] contract');
 
         PHPUnit::assertSame([], $matching, "Expected no subscription action [{$action}] for the owner{$where}, but the owner saw: ".implode(', ', $seen).'.');
     }

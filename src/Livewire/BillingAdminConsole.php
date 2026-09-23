@@ -36,6 +36,9 @@ use Throwable;
  * It is framework-agnostic plain Blade, exactly like the account hub, so the core needs no UI-kit dependency;
  * publish `billing-views` to reskin it (e.g. with your own design system's components). It registers only when
  * Livewire is installed.
+ *
+ * Its cancel action ends the owner's default contract at the platform at once, the one the account hub
+ * manages. A contract of another type is ended through `SubscriptionActions::cancelNow()` with its type.
  */
 final class BillingAdminConsole extends Component
 {

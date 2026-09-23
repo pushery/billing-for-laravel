@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\Money;
  * Counting is separate from judging it, the same split the small-business monitor uses and for the same
  * reason: what counts as a cross-border consumer sale is a property of the data, while what the number means
  * is a property of a jurisdiction. A consumer whose sales live somewhere this package cannot see binds their
- * own counter and keeps the judgement.
+ * own counter and keeps the judgment.
  */
 interface CrossBorderSalesCounter
 {

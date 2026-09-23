@@ -22,7 +22,7 @@ use RuntimeException;
  *
  * ## The distinction this exists to make
  *
- * A correction issued because the consideration would not be received is a judgement about the future, and
+ * A correction issued because the consideration would not be received is a judgment about the future, and
  * the future is allowed to disagree: when the money turns up, the write-off was wrong and the tax goes back.
  * A correction issued because the consideration was HANDED BACK can never be reopened — a payment afterwards
  * is a new transaction with its own document.
@@ -99,7 +99,7 @@ final readonly class ReopenWriteOffOnLateReceipt implements DedupesOnReference
      * in the query.
      *
      * The query narrows to what CANNOT match (another owner, another currency, another amount, a document
-     * that corrects nothing); the judgement about whether a reason reopens is left to the one class that
+     * that corrects nothing); the judgment about whether a reason reopens is left to the one class that
      * owns it. A `where` on the reason column here would be the same rule spelled twice, and the second
      * spelling is the one that stops being updated.
      *

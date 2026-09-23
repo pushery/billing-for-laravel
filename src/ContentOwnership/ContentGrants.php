@@ -148,7 +148,7 @@ final readonly class ContentGrants
     /**
      * Every work the bundle holds AT THIS MOMENT, one row each.
      *
-     * Materialised rather than expanded on read, and that is what makes the non-additive default true by
+     * Materialized rather than expanded on read, and that is what makes the non-additive default true by
      * construction: a work added to the bundle next month has no row for anybody who bought before, because
      * nobody wrote one. There is nothing to remember to switch off.
      *

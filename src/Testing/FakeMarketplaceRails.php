@@ -94,17 +94,41 @@ final class FakeMarketplaceRails implements MarketplaceRails, MerchantAccountDir
         return $this->accounts[$this->key($merchant)] ?? null;
     }
 
-    public function assertOnboardingStarted(Model $merchant): void
+    /**
+     * Onboarding started for this merchant, and, where they are given, with these two addresses.
+     *
+     * They answer different questions. The return address is where the merchant lands after onboarding, so
+     * a mistake there is seen at once. The refresh address is reached only when the hosted link has expired,
+     * and a page there instead of the route that mints a fresh link leaves the merchant on a button offering
+     * the same dead link, which nothing reports. A null address is left out of the question.
+     */
+    public function assertOnboardingStarted(Model $merchant, ?string $refreshUrl = null, ?string $returnUrl = null): void
     {
         $found = false;
+        $seen = [];
 
         foreach ($this->onboardings as $call) {
-            if ($this->key($call['merchant']) === $this->key($merchant)) {
-                $found = true;
+            if ($this->key($call['merchant']) !== $this->key($merchant)) {
+                continue;
             }
+
+            if (($refreshUrl === null || $call['refresh'] === $refreshUrl) && ($returnUrl === null || $call['return'] === $returnUrl)) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = sprintf('refresh [%s], return [%s]', $call['refresh'], $call['return']);
         }
 
-        PHPUnit::assertTrue($found, 'Expected merchant onboarding to have started, but it did not.');
+        PHPUnit::assertTrue($found, $seen === []
+            ? 'Expected merchant onboarding to have started, but it did not.'
+            : sprintf(
+                'Expected merchant onboarding with refresh [%s], return [%s], but it started with %s.',
+                $refreshUrl ?? 'any',
+                $returnUrl ?? 'any',
+                implode('; ', $seen),
+            ));
     }
 
     private function remember(Model $merchant, MerchantAccountReference $account): self

@@ -19,6 +19,7 @@ return [
         'grace' => 'Je abonnement is opgezegd en eindigt binnenkort. Hervat het om je toegang te behouden.',
         'paused' => 'Je facturering staat op pauze, dus je betaalde functies liggen stil. Je kunt hem hervatten wanneer je wilt.',
         'trial_ending' => 'Je proefperiode eindigt binnenkort. Kies een plan om je toegang te behouden.',
+        'with_merchant' => ':merchant: :message',
         'cta' => [
             'recover' => 'Betaling herstellen',
             'confirm' => 'Betaling bevestigen',

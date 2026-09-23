@@ -11,7 +11,7 @@ use Pushery\Billing\Models\InvoiceRecord;
 /**
  * Which write-offs a later payment could still reopen.
  *
- * A correction issued because the consideration would not be received is a judgement about the future, and
+ * A correction issued because the consideration would not be received is a judgment about the future, and
  * the future is allowed to disagree. When the money turns up anyway, the write-off was wrong and the tax has
  * to go back. A correction issued because the consideration was HANDED BACK can never be reopened — a
  * payment afterwards is a new transaction with its own document.
@@ -33,7 +33,7 @@ final readonly class RecoveredReceivable
     }
 
     /**
-     * Every correction still standing on the judgement that the money will not arrive.
+     * Every correction still standing on the judgment that the money will not arrive.
      *
      * Ordered oldest first, because age is what the review turns on: a write-off nobody has revisited in a
      * year is either right and settled or wrong and overdue, and both need somebody to look.

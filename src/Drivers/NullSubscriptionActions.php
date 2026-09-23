@@ -17,11 +17,11 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  */
 final class NullSubscriptionActions implements SubscriptionActions
 {
-    public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null): void {}
+    public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null, ?string $type = null): void {}
 
-    public function resume(Model $billable, ?MerchantScope $merchant = null): void {}
+    public function resume(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void {}
 
     public function cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void {}
 
-    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null): void {}
+    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void {}
 }

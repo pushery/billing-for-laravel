@@ -24,7 +24,7 @@ enum TaxBaseChangeReason: string
     /**
      * The consideration will not be received — a lost dispute, a debt written off.
      *
-     * It is a judgement about the future, and the future can disagree: if the money does arrive after all,
+     * It is a judgment about the future, and the future can disagree: if the money does arrive after all,
      * the tax and the input tax are corrected a second time, back to where they were.
      */
     case Uncollectible = 'uncollectible';

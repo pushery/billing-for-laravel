@@ -4,6 +4,28 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.35.0] - 2026-09-23
+
+### Added
+
+- **Both onboarding fakes assert the refresh and the return address.** `assertOnboardingStarted()` on `BillingFake` and on `FakeMarketplaceRails` takes both as optional arguments. The two answer different questions: the return address is where the merchant lands, and the refresh address is reached only when the hosted link has expired, where a page instead of the route that mints a fresh link leaves the merchant on the same dead link.
+
+- **`BillingFake` holds the lifecycle assertions and `assertSwapped()` to a contract type.** Each takes the type as its last, optional argument. A null type leaves it out of the question, as a null merchant does, and `Subscription::TYPE_DEFAULT` names the default contract. The fake records the type for every cancellation, resumption and swap.
+
+### Changed
+
+- **BREAKING (pre-1.0) — `BannerNotice::$ctaKey` and `BannerNotice::$ctaRoute` are nullable, and a new `$merchant` names the merchant a notice is about.** Both are null on a notice about a contract the account screens do not manage: a merchant's subscription, or a platform contract of a type other than the default. A host that renders its own banner from a `BannerNotice` checks them before it builds a link; `<x-billing::banner />` does. The new translation key `billing::account.banner.with_merchant` puts the merchant's name in front of the message.
+
+- **BREAKING (pre-1.0) — `SubscriptionActions::cancel()`, `resume()` and `swap()` take an optional contract type, last.** Two contracts at one merchant, a sponsorship beside a subscription for example, are two rows, and without the type an orderly cancellation of the sponsorship reached the default contract: it ended the subscription instead, or nothing at all where the sponsorship stood alone. A caller is unaffected, because a null type is the default contract as before. **A driver of your own that implements the contract has to add the parameter**, or PHP refuses the class when it is loaded; the built-in drivers and `BillingFake` already have it. Under a driver this package bills itself, a contract of another type is swapped with `prorate: false`: the proration is priced against the default contract, so a prorated swap of any other type is refused. The account screens still manage the default contract only, and the account hub page says so.
+
+- **Two exception messages spell `judgment` the US way.** `RoutedCycleUnreadable` and the message that refuses to rewrite a reporting acknowledgement said `judgement`; a host that matches either text should match the new spelling. Comments and the documentation follow the same rule now, and a test holds the whole package to it.
+
+### Fixed
+
+- **A downgrade scheduled for the period end takes effect under a driver this package bills itself.** When it came due, the scheduled-swap runner handed it to the local driver, which read it as a new downgrade and scheduled it again for the end of the period that had just begun; the runner then cleared that schedule too. The tier never moved, the customer went on paying the higher price, and the audit ledger recorded the swap as applied. The driver now applies a swap that is the row's own due schedule, and the proration is booked once, by the swap. A scheduled swap also reaches the row that scheduled it, with its merchant and its contract type, rather than the default contract at the platform.
+
+- **The billing banner reads every subscription the owner holds, not only the platform's own.** In a marketplace the paid subscriptions are the merchants' sales, and a failed payment there withdraws access through the dunning ladder while `<x-billing::banner />` stayed empty. The banner now ranks the notices of all the owner's contracts: a failed payment first, a trial about to end last, and at equal rank the platform's own subscription, whose notice keeps its call to action. A notice about a merchant's subscription names the merchant through your `MerchantPartyResolver` and carries no call to action, because the account screens act on the platform's subscription only. Where no resolver can name the merchant, the notice shows without the name.
+
 ## [0.34.0] - 2026-09-22
 
 ### Added
@@ -6940,7 +6962,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.34.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.35.0...HEAD
+[0.35.0]: https://github.com/pushery/billing-for-laravel/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/pushery/billing-for-laravel/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/pushery/billing-for-laravel/compare/v0.32.0...v0.33.0
 [0.32.0]: https://github.com/pushery/billing-for-laravel/compare/v0.31.0...v0.32.0

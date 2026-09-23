@@ -27,7 +27,7 @@ use Pushery\Billing\ValueObjects\PlausibilityFinding;
  * ## What an acknowledgement is and is not
  *
  * It clears ONE finding, in ONE period, with a reason and a name attached. It does not switch a rule off:
- * the same finding next year has a different key, so nobody inherits last year's judgement. That is the
+ * the same finding next year has a different key, so nobody inherits last year's judgment. That is the
  * property {@see ReportingFindingAcknowledgement} exists to hold, and the reason the period is in its
  * unique key rather than merely stored beside it.
  */
