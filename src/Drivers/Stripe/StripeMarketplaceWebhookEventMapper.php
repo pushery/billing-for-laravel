@@ -12,6 +12,7 @@ use Pushery\Billing\Enums\DisputeReason;
 use Pushery\Billing\Enums\ReversalCause;
 use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Events\ChargebackReceived;
+use Pushery\Billing\Events\DisputeOpened;
 use Pushery\Billing\Events\MerchantAccountDeauthorized;
 use Pushery\Billing\Events\MerchantAccountUpdated;
 use Pushery\Billing\Events\MerchantPayoutFailed;
@@ -75,6 +76,7 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
             'customer.subscription.created',
             'customer.subscription.updated',
             'customer.subscription.deleted' => $this->subscriptionEvents($object, $this->strictAccount($payload), $this->int($payload, 'created')),
+            'charge.dispute.created' => $this->disputeOpenedEvents($object, $account),
             'charge.dispute.closed' => $this->disputeClosedEvents($object, $account),
             // A reversal the PROVIDER performed. Only here, never on the platform mapper: a single-seller
             // installation receives no connected transfers, and teaching the shipped mapper this event would
@@ -197,6 +199,34 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
         $event = $this->subscriptions->toEvent($object, $occurredAt, MerchantScope::forMerchant($merchant), $account);
 
         return $event instanceof SubscriptionStateChanged ? [$event] : [];
+    }
+
+    /**
+     * A dispute Stripe just opened on a merchant's own charge, which lives on the merchant's account and is
+     * answered there. It moves no money; the event exists so the host hears about the case in time.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function disputeOpenedEvents(array $object, string $account): array
+    {
+        // Same rule as the outcome below: an account with no local merchant is nobody's case to answer here.
+        if (! $this->accounts->merchantForReference($account) instanceof Model) {
+            return [];
+        }
+
+        $opening = StripeDisputeOpening::from($object);
+
+        return $opening instanceof StripeDisputeOpening ? [new DisputeOpened(
+            disputeReference: $opening->dispute,
+            paymentReference: $opening->payment,
+            amount: $opening->amount,
+            reason: $opening->reason,
+            reasonCode: $opening->reasonCode,
+            evidenceDueBy: $opening->evidenceDueBy,
+            accountReference: $account,
+            merchantReference: $account,
+        )] : [];
     }
 
     /**

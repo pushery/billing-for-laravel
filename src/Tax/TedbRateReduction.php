@@ -21,7 +21,10 @@ use Carbon\CarbonImmutable;
  *
  * - **Grouping naively puts Spain at 7.0%.** A Canary Islands row wins a `keyBy(memberState)` because it
  *   arrives last. The territory is outside the EU VAT area entirely, so the figure is not merely the wrong
- *   band — it is a different tax regime's number wearing Spain's country code.
+ *   band — it is a different tax regime's number wearing Spain's country code. The service used to mark
+ *   that row with its own rate type; today it reports it as `STANDARD`/`DEFAULT` like Spain's own, with the
+ *   territory named in `comment`, so the row is recognized by the territory it names (see
+ *   TERRITORIES_OUTSIDE_THE_VAT_AREA).
  * - **Discarding rows that carry a comment throws away six correct standard rates.** BE, CZ, FR, IE, LV and
  *   LU state their legal basis in `comment`. "Has a comment" looks like a tidy proxy for "is a footnote" and
  *   is nothing of the kind.
@@ -31,6 +34,20 @@ use Carbon\CarbonImmutable;
  */
 final readonly class TedbRateReduction
 {
+    /**
+     * The territories of member states that lie outside the EU VAT area (Article 6 of Directive
+     * 2006/112/EC, and Article 349 TFEU for the French ones). A standard-rate row whose comment names one
+     * is that territory's rate, not the member state's.
+     *
+     * Matched on the name rather than on "has a comment": six member states state their legal basis in the
+     * comment of their ordinary standard row, and dropping commented rows would delete six correct rates.
+     */
+    private const array TERRITORIES_OUTSIDE_THE_VAT_AREA = [
+        'Canary Islands', 'Ceuta', 'Melilla', 'Mount Athos', 'Åland', 'Aland', 'Heligoland', 'Helgoland',
+        'Büsingen', 'Busingen', 'Livigno', 'Campione', 'Lugano', 'Guadeloupe', 'French Guiana', 'Guyane',
+        'Martinique', 'Réunion', 'Reunion', 'Mayotte', 'Saint-Martin',
+    ];
+
     /**
      * The standard rate per member state, in basis points.
      *
@@ -51,8 +68,12 @@ final readonly class TedbRateReduction
             if ($row['rateType'] !== 'DEFAULT') {
                 continue;
             }
-            // NOT filtered on `comment`. Six member states state their legal basis there, and dropping
-            // commented rows deletes six correct standard rates while looking like tidying.
+            // NOT filtered on having a comment. Six member states state their legal basis there, and
+            // dropping commented rows deletes six correct standard rates while looking like tidying. A
+            // comment that NAMES a territory outside the VAT area is different: that row is the territory's.
+            if (self::namesATerritoryOutsideTheVatArea($row['comment'] ?? '')) {
+                continue;
+            }
             $state = self::isoCodeFor($row['memberState']);
 
             if ($state === null) {
@@ -103,22 +124,34 @@ final readonly class TedbRateReduction
         };
     }
 
+    /** Whether a row's comment names a territory that lies outside the EU VAT area. */
+    private static function namesATerritoryOutsideTheVatArea(string $comment): bool
+    {
+        return array_any(self::TERRITORIES_OUTSIDE_THE_VAT_AREA, fn (string $territory): bool => mb_stripos($comment, $territory) !== false);
+    }
+
     /**
-     * Whether a response's `situationOn` actually falls inside the window that was asked for.
+     * Whether a response can hold for the window that was asked about.
      *
-     * **The single most important check in this class.** A request outside TEDB's data window is answered
-     * SILENTLY WITH CURRENT DATA: `from=2027-01-01` came back HTTP 200 carrying `situationOn=2026-07-01`, no
-     * fault, no warning. A client that does not verify this answers "what rate applies in 2027" with today's
-     * rate — convincingly, and with an official source behind it.
+     * `$situationOn` is the day the NEWEST rate situation in the response began (the service states it on
+     * every row). The response holds for the window when that situation was already in force on its first
+     * day, and when the window has already begun.
+     *
+     * **Both halves are traps that were measured, one per direction.** A day beyond the service's data is
+     * answered SILENTLY WITH CURRENT DATA: `from=2027-01-01` came back HTTP 200, no fault, no warning, and
+     * every row's situation began before 2027. So a window that has not begun cannot be confirmed, and the
+     * check says so instead of answering "what rate applies in 2027" with today's rate. In the other
+     * direction, a response whose newest situation began after the window's first day describes a change
+     * that the window does not cover from its start, so it is not one answer for the whole window.
      *
      * The parsing has its own trap, and it bites in both directions. `situationOn` arrives as
-     * `2026-07-01+02:00` — a date carrying a timezone offset. `createFromFormat('Y-m-d', …)` reads that
+     * `2026-07-01+02:00`, a date carrying a timezone offset. `createFromFormat('Y-m-d', …)` reads that
      * wrong. But so does parsing it as an INSTANT: `+02:00` makes midnight on the 1st land at 22:00 on the
-     * previous day in UTC, so the answer silently moves back one calendar day. That day is a quarter
+     * previous day in UTC, so the situation silently begins one calendar day earlier. That day is a quarter
      * boundary, which is exactly where rate changes happen.
      *
      * `situationOn` is a calendar date the service states, not a moment in time. So the date part is taken
-     * as written and the offset is discarded — deliberately, not accidentally.
+     * as written and the offset is discarded, deliberately.
      */
     public static function answersFor(string $situationOn, CarbonImmutable $from, CarbonImmutable $to): bool
     {
@@ -129,9 +162,10 @@ final readonly class TedbRateReduction
             return false;
         }
 
-        $answered = CarbonImmutable::parse($matches[1])->startOfDay();
+        if ($to->startOfDay()->greaterThan(CarbonImmutable::today())) {
+            return false;
+        }
 
-        return $answered->greaterThanOrEqualTo($from->startOfDay())
-            && $answered->lessThanOrEqualTo($to->startOfDay());
+        return CarbonImmutable::parse($matches[1])->startOfDay()->lessThanOrEqualTo($from->startOfDay());
     }
 }

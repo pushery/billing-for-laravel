@@ -36,11 +36,31 @@ use Throwable;
  */
 final readonly class TedbRateSource
 {
-    private const string ENDPOINT = 'https://ec.europa.eu/taxation_customs/tedb/ws/VatRetrievalService';
+    /**
+     * The service address and the SOAP action, both as the service's own WSDL names them
+     * (`…/tedb/ws/VatRetrievalService.wsdl`).
+     *
+     * The action is not decoration. Without the header the service answers HTTP 404, which is how the
+     * weekly conformity lane reported this source unreachable for five weeks in a row while it was up.
+     */
+    private const string ENDPOINT = 'https://ec.europa.eu/taxation_customs/tedb/ws/';
+
+    private const string ACTION = 'urn:ec.europa.eu:taxud:tedb:services:v1:VatRetrievalService/RetrieveVatRates';
 
     /**
-     * @param  list<array{memberState: string, type: string, rateType: string, value: float}>  $rows
-     * @param  string  $situationOn  the date the source says it answered for, '' when it said nothing
+     * The member states asked about, in the service's own spelling: `EL` is Greece.
+     *
+     * Named rather than left empty. The request schema requires at least one code, and an empty list,
+     * which is what this client used to send, is refused as "The XSD validation failed".
+     */
+    private const array MEMBER_STATES = [
+        'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'EL', 'ES', 'FI', 'FR', 'HR', 'HU',
+        'IE', 'IT', 'LT', 'LU', 'LV', 'MT', 'NL', 'PL', 'PT', 'RO', 'SE', 'SI', 'SK',
+    ];
+
+    /**
+     * @param  list<array{memberState: string, type: string, rateType: string, value: float, comment: string}>  $rows
+     * @param  string  $situationOn  the day the newest situation in the answer began, '' when it said nothing
      * @param  ?string  $failure  why the ask produced nothing, or null when it succeeded
      */
     private function __construct(
@@ -54,7 +74,7 @@ final readonly class TedbRateSource
     {
         try {
             $response = Http::timeout(30)
-                ->withHeaders(['Content-Type' => 'text/xml; charset=utf-8'])
+                ->withHeaders(['Content-Type' => 'text/xml; charset=utf-8', 'SOAPAction' => '"'.self::ACTION.'"'])
                 ->send('POST', self::ENDPOINT, ['body' => self::envelope($day)]);
         } catch (Throwable $e) {
             // A transport failure is not a rate finding. Reported as a failure so whatever the caller
@@ -73,23 +93,32 @@ final readonly class TedbRateSource
         return new self(self::rowsIn($response->body()), self::situationIn($response->body()));
     }
 
-    /** The SOAP envelope TEDB expects, built by hand so the package needs no ext-soap. */
+    /**
+     * The SOAP envelope TEDB expects, built by hand so the package needs no ext-soap.
+     *
+     * The shape follows the service's schema (`VatRetrievalServiceMessage.xsd` and `…Type.xsd`): the
+     * request element is `retrieveVatRatesReqMsg`, and its children live in the `:types` namespace. The
+     * former `retrieveVatRates` with its children in the message namespace is refused by the schema check.
+     */
     private static function envelope(CarbonImmutable $on): string
     {
         $date = $on->toDateString();
+        $states = implode('', array_map(static fn (string $code): string => "<t:isoCode>{$code}</t:isoCode>", self::MEMBER_STATES));
 
         return '<?xml version="1.0" encoding="UTF-8"?>'
             .'<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" '
-            .'xmlns:urn="urn:ec.europa.eu:taxud:tedb:services:v1:IVatRetrievalService">'
-            .'<soap:Body><urn:retrieveVatRates><urn:memberStates/>'
-            ."<urn:from>{$date}</urn:from><urn:to>{$date}</urn:to>"
-            .'</urn:retrieveVatRates></soap:Body></soap:Envelope>';
+            .'xmlns:m="urn:ec.europa.eu:taxud:tedb:services:v1:IVatRetrievalService" '
+            .'xmlns:t="urn:ec.europa.eu:taxud:tedb:services:v1:IVatRetrievalService:types">'
+            .'<soap:Body><m:retrieveVatRatesReqMsg>'
+            ."<t:memberStates>{$states}</t:memberStates>"
+            ."<t:from>{$date}</t:from><t:to>{$date}</t:to>"
+            .'</m:retrieveVatRatesReqMsg></soap:Body></soap:Envelope>';
     }
 
     /**
      * The rate rows in a response.
      *
-     * @return list<array{memberState: string, type: string, rateType: string, value: float}>
+     * @return list<array{memberState: string, type: string, rateType: string, value: float, comment: string}>
      */
     private static function rowsIn(string $body): array
     {
@@ -110,16 +139,30 @@ final readonly class TedbRateSource
                 // fallback below unreachable — a branch that cannot run is a branch nobody can trust.
                 'rateType' => self::rateTypeIn($node),
                 'value' => (float) self::textIn($node, 'value'),
+                // Read so the reduction can recognize a row about a territory outside the VAT area, which
+                // the service now reports as an ordinary standard rate with the territory named here.
+                'comment' => self::textIn($node, 'comment'),
             ];
         }
 
         return $rows;
     }
 
-    /** The date the response says it is answering for — verified against the window by the caller. */
+    /**
+     * The day the newest rate situation in the response began, or '' when the response names none.
+     *
+     * The service states `situationOn` on EVERY row now, as the day that row's situation began: one
+     * answer for today carries 2026-07-01, 2026-01-01 and 2025-01-01 side by side. Reading the first of
+     * them, as this did when the service stated one date for the whole answer, handed the window check an
+     * arbitrary row's date. The newest is the one that decides whether the answer can hold for a day: no
+     * situation in it may begin after that day. Returned as the date part, since the offset the service
+     * appends (`+02:00`) is not part of a calendar date.
+     */
     private static function situationIn(string $body): string
     {
-        return preg_match('/<situationOn>([^<]+)<\/situationOn>/', $body, $m) === 1 ? $m[1] : '';
+        preg_match_all('/<(?:\w+:)?situationOn>(\d{4}-\d{2}-\d{2})/', $body, $matches);
+
+        return $matches[1] === [] ? '' : max($matches[1]);
     }
 
     private static function rateTypeIn(DOMElement $node): string
