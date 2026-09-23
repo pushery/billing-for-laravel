@@ -18,7 +18,7 @@ use Pushery\Billing\Enums\ChargeType;
  * The package could compute it instead, and that was the road not taken. Two derivations of one fact agree
  * until one of them changes: a rate edited between the second cycle and the third, a proration line, a
  * rounding rule. When they part, the ledger holds a **plausible wrong number** — and the ledger is what the
- * reversal caps, the earnings counter and the small-business judgement all read. A figure that is merely
+ * reversal caps, the earnings counter and the small-business judgment all read. A figure that is merely
  * plausible is the worst possible content for it, because nothing goes red.
  *
  * ## The terms travel WITH the amounts, and that is not redundancy

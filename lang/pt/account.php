@@ -19,6 +19,7 @@ return [
         'grace' => 'A tua subscrição foi cancelada e termina em breve. Retoma-a para manteres o teu acesso.',
         'paused' => 'A tua faturação está em pausa, por isso as funcionalidades pagas estão suspensas. Podes retomá-la quando quiseres.',
         'trial_ending' => 'O teu período de teste termina em breve. Escolhe um plano para manteres o teu acesso.',
+        'with_merchant' => ':merchant: :message',
         'cta' => [
             'recover' => 'Corrigir pagamento',
             'confirm' => 'Confirmar pagamento',

@@ -19,6 +19,7 @@ return [
         'grace' => 'Il tuo abbonamento è stato annullato e termina a breve. Riprendilo per mantenere l’accesso.',
         'paused' => 'La tua fatturazione è in pausa, quindi le funzioni a pagamento sono sospese. Puoi riprenderla quando vuoi.',
         'trial_ending' => 'La tua prova termina a breve. Scegli un piano per mantenere l’accesso.',
+        'with_merchant' => ':merchant: :message',
         'cta' => [
             'recover' => 'Risolvi il pagamento',
             'confirm' => 'Conferma il pagamento',

@@ -29,7 +29,7 @@ use Pushery\Billing\Contracts\IpCountryResolver;
  * the header shape, the timestamp or the digest was wrong learns how to get closer.
  *
  * **Not the caller's network address**, and this one is a promise the package makes structurally rather
- * than a judgement call made here. An address reaches exactly one place in this package — the argument of
+ * than a judgment call made here. An address reaches exactly one place in this package — the argument of
  * the {@see IpCountryResolver} a consumer bound — and nothing else may read one, because a second path is
  * where it leaks. An event is the worst of those paths: it travels into queued payloads, audit tables and
  * exception context, which is precisely the journey the guarantee exists to prevent.

@@ -15,9 +15,9 @@ use Pushery\Billing\Marketplace\SmallBusinessThresholdMonitor;
  *
  * ## The declaration wins, and that is not a convenience
  *
- * Whether somebody is trading is a qualitative judgement: what they sell, how they source it, how they
- * present themselves. A count of sales and a sum of proceeds is a **proxy** for that judgement, and a good
- * one — it is how a platform notices somebody who has quietly become a business. It is not the judgement.
+ * Whether somebody is trading is a qualitative judgment: what they sell, how they source it, how they
+ * present themselves. A count of sales and a sum of proceeds is a **proxy** for that judgment, and a good
+ * one — it is how a platform notices somebody who has quietly become a business. It is not the judgment.
  *
  * Treating the proxy as the answer produces two failures with different victims. Somebody genuinely trading
  * below the counts is treated as private and issues nothing they owe. Somebody who cleared out an

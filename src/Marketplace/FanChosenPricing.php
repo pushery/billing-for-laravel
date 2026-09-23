@@ -162,7 +162,7 @@ final readonly class FanChosenPricing
      * said "a buyer-chosen amount below this is not worth a transaction" has said something that is true of
      * both entries — the provider's fee does not care which one the buyer used — and the tip key exists for
      * the installation that wants a voluntary payment to be allowed lower than a purchase, which is a
-     * different judgement rather than the absence of one.
+     * different judgment rather than the absence of one.
      *
      * Null and zero are therefore different answers, and that is the whole reason the key is nullable: null
      * says nothing about tips and inherits, zero says tips carry no floor even where a sale does.

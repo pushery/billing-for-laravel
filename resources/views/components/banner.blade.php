@@ -7,8 +7,12 @@
 @endphp
 
 <div role="alert" class="flex items-center justify-between gap-4 rounded-xl border px-4 py-3 text-sm {{ $tone }}">
-    <span>{{ __($notice->messageKey) }}</span>
-    @if (Route::has($notice->ctaRoute))
+    @if ($notice->merchant !== null)
+        <span>{{ __('billing::account.banner.with_merchant', ['merchant' => $notice->merchant, 'message' => __($notice->messageKey)]) }}</span>
+    @else
+        <span>{{ __($notice->messageKey) }}</span>
+    @endif
+    @if ($notice->ctaRoute !== null && $notice->ctaKey !== null && Route::has($notice->ctaRoute))
         <a href="{{ route($notice->ctaRoute) }}" class="shrink-0 font-medium underline underline-offset-2">
             {{ __($notice->ctaKey) }}
         </a>

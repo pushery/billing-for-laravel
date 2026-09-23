@@ -26,14 +26,14 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * ## Why the reason is required rather than encouraged
  *
  * A finding waved through without one is indistinguishable from a finding nobody read. The reason is what a
- * later reader — an auditor, or the same operator in twelve months — uses to decide whether the judgement
+ * later reader — an auditor, or the same operator in twelve months — uses to decide whether the judgment
  * still holds, and it is the only part of this row that cannot be reconstructed.
  *
  * ## Immutable once written
  *
  * An acknowledgement is a record of what somebody decided, when. Editing it afterwards would let the reason
- * be rewritten to fit an outcome, which is the one thing a record of a judgement must not allow. Withdraw
- * it — delete the row — and answer again if the judgement changed.
+ * be rewritten to fit an outcome, which is the one thing a record of a judgment must not allow. Withdraw
+ * it — delete the row — and answer again if the judgment changed.
  *
  * @property int $id
  * @property int $period_year
@@ -74,7 +74,7 @@ class ReportingFindingAcknowledgement extends Model
     protected static function appendOnlyUpdateRefusal(array $columns): string
     {
         return 'An acknowledgement records what somebody decided and when; it cannot be edited '
-            .'afterwards. Withdraw it and acknowledge again if the judgement changed.';
+            .'afterwards. Withdraw it and acknowledge again if the judgment changed.';
     }
 
     #[Override]

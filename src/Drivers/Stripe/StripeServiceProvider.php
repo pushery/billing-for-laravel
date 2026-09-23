@@ -291,7 +291,7 @@ final class StripeServiceProvider extends ServiceProvider
         $registry->on(PaymentSucceeded::class, SendPaymentReceipt::class);
         // And the case where the money was not expected at all: a payment against a receivable somebody had
         // already written off as uncollectible. Its own effect rather than a branch in the receipt, because
-        // it decides something the receipt has no opinion on -- whether a tax correction was a judgement the
+        // it decides something the receipt has no opinion on -- whether a tax correction was a judgment the
         // future just disagreed with. Inert until an install actually writes something off.
         $registry->on(PaymentSucceeded::class, ReopenWriteOffOnLateReceipt::class);
         $registry->on(InvoiceFinalized::class, PersistInvoice::class);

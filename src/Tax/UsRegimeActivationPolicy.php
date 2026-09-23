@@ -16,7 +16,7 @@ use Pushery\Billing\Enums\UsRegimeActivationTrigger;
  *
  * The platform-wide counter is a separate piece of work, and building a second one here would be worse than
  * having none: two counters over the same money disagree eventually, and the one that disagrees quietly is
- * the one an alarm is wired to. So this takes readings as arguments. What it owns is the judgement — which
+ * the one an alarm is wired to. So this takes readings as arguments. What it owns is the judgment — which
  * limits those readings are approaching, and how close is close enough to act.
  *
  * ## Close enough is a share, and the share is configurable

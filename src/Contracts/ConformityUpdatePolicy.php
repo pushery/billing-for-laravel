@@ -31,7 +31,7 @@ interface ConformityUpdatePolicy
      * When the obligation ends for a sale made at this moment, or null when no end can be stated.
      *
      * Null is the ordinary answer, not a missing one. The obligation runs for as long as a buyer may
-     * reasonably expect, and "reasonably" is a judgement about a kind of product rather than a number a
+     * reasonably expect, and "reasonably" is a judgment about a kind of product rather than a number a
      * package can hold. An operator who has taken advice configures the period; until then the honest answer
      * is that no end has been established — and an unstated end means updates keep flowing, which is the
      * direction that cannot harm a buyer.

@@ -44,7 +44,7 @@ use Pushery\Billing\Support\CreditConsumption;
  * rather than a listener — the package cannot tell which cancellations owe anything back, and has no good
  * idempotency key for the ones that do.
  *
- * Neither holds here. What is owed is not a judgement: the FIFO replay names exactly which lots a spend
+ * Neither holds here. What is owed is not a judgment: the FIFO replay names exactly which lots a spend
  * consumed and in what amounts. And the key is already in the schema — a credit ledger entry is
  * append-only, so its id identifies this redemption for as long as the books exist.
  *

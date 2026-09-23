@@ -19,6 +19,7 @@ return [
         'grace' => 'Your subscription is canceled and ends soon. Resume it to keep your access.',
         'paused' => 'Your billing is paused, so your paid features are on hold. Resume it whenever you like.',
         'trial_ending' => 'Your trial ends soon. Pick a plan to keep your access.',
+        'with_merchant' => ':merchant: :message',
         'cta' => [
             'recover' => 'Fix payment',
             'confirm' => 'Confirm payment',

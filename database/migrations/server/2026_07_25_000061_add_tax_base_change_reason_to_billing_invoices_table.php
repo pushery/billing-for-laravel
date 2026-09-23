@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
  * Why the taxable amount changed — money given back, or money that will not arrive.
  *
  * The two produce identical figures in identical periods, so nothing in the numbers can tell them apart
- * afterwards. What separates them is the future: repaid is final, uncollectible is a judgement that a later
+ * afterwards. What separates them is the future: repaid is final, uncollectible is a judgment that a later
  * payment overturns, and the correction then has to be corrected back. Without the reason on the document
  * there is no way to know which corrections are still open, and a receipt against a written-off sale looks
  * like ordinary income instead of the reversal it is.

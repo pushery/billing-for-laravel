@@ -18,7 +18,7 @@ use Pushery\Billing\Contracts\ConformityUpdatePolicy;
  *
  * ## The period is not in this file, and that is deliberate
  *
- * "As long as the buyer may reasonably expect" is a judgement about a kind of product — a game, a font, an
+ * "As long as the buyer may reasonably expect" is a judgment about a kind of product — a game, a font, an
  * ebook — and the law states no number. Hard-coding one would be inventing a legal answer and then hiding it
  * in a library. So the period is configuration, it ships EMPTY, and empty means no end has been established:
  * the updates keep flowing. That direction is chosen because it is the one that cannot harm a buyer, and

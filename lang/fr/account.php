@@ -19,6 +19,7 @@ return [
         'grace' => 'Ton abonnement est annulé et se termine bientôt. Reprends-le pour conserver ton accès.',
         'paused' => 'Ta facturation est en pause, tes fonctionnalités payantes sont donc suspendues. Tu peux la reprendre quand tu veux.',
         'trial_ending' => 'Ton essai se termine bientôt. Choisis un forfait pour conserver ton accès.',
+        'with_merchant' => ':merchant : :message',
         'cta' => [
             'recover' => 'Corriger le paiement',
             'confirm' => 'Confirmer le paiement',

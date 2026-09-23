@@ -40,9 +40,9 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
         private CanTransactMoney $eligibility,
     ) {}
 
-    public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null): void
+    public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $reference = $this->subscriptionReference($billable, $merchant);
+        $reference = $this->subscriptionReference($billable, $merchant, $type);
 
         if ($reference === null) {
             return;
@@ -84,9 +84,9 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
         };
     }
 
-    public function resume(Model $billable, ?MerchantScope $merchant = null): void
+    public function resume(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $reference = $this->subscriptionReference($billable, $merchant);
+        $reference = $this->subscriptionReference($billable, $merchant, $type);
 
         if ($reference !== null) {
             $this->ignoringDeadSubscription(fn () => $this->stripe->subscriptions->update($reference, ['cancel_at_period_end' => false]));
@@ -102,7 +102,7 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
         }
     }
 
-    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null): void
+    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void
     {
         // Defense in depth: a swap reprices the subscription and books a proration — a money movement — so
         // refuse it for an ineligible owner even if a caller bypassed the UI eligibility guard (mirrors
@@ -121,7 +121,7 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
             throw new InvalidArgumentException("Tier '{$tierKey}' has no provider price to swap to.");
         }
 
-        $reference = $this->subscriptionReference($billable, $merchant);
+        $reference = $this->subscriptionReference($billable, $merchant, $type);
 
         if ($reference === null) {
             throw new InvalidArgumentException('Cannot swap: the billable has no active subscription.');
@@ -175,7 +175,9 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
      * The provider subscription reference from the billable's local subscription row, or null.
      *
      * Scoped to the merchant so a marketplace mutation addresses exactly the (fan, creator) subscription; a
-     * null merchant reproduces the single-seller selection exactly (`merchant_uid = 'platform'`).
+     * null merchant reproduces the single-seller selection exactly (`merchant_uid = 'platform'`). Scoped to
+     * the contract type as well, so a sponsorship and a subscription at the same creator are told apart; a
+     * null type is the default contract.
      */
     private function subscriptionReference(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): ?string
     {

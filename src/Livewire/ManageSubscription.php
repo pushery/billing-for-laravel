@@ -37,6 +37,9 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * price. Before committing, the customer can preview what the mid-cycle change will cost: the proration
  * strategy asks the provider for the net amount due (null when it cannot be previewed — the UI degrades
  * rather than showing a wrong figure). Stripe books the proration itself when the swap executes.
+ *
+ * It swaps one contract, the default type at the platform. A contract of another type is swapped through
+ * SubscriptionActions with its type, from a screen the host provides.
  */
 final class ManageSubscription extends AccountScreen
 {

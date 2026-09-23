@@ -7,12 +7,10 @@ namespace Pushery\Billing\Support;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
-use Pushery\Billing\Contracts\PlanCatalog;
-use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Models\Subscription;
-use Pushery\Billing\ValueObjects\Plan;
+use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
  * Executes the plan changes that were scheduled for later — a downgrade waiting for the period it was
@@ -29,8 +27,6 @@ final readonly class ScheduledSwapRunner
     public function __construct(
         private SubscriptionActions $actions,
         private BillingEventLog $log,
-        private PlanCatalog $plans,
-        private ProrationStrategy $proration,
     ) {}
 
     /**
@@ -77,19 +73,30 @@ final readonly class ScheduledSwapRunner
             return false;
         }
 
-        // The proration runs first, for the same reason as on the in-app path: it prices the unused
-        // remainder against the tier resolved AT THAT MOMENT, and after the swap that is already the new
-        // one. A scheduled downgrade lands at the period end, where the remainder is normally zero and the
-        // strategy writes nothing — but "normally" is doing work in that sentence. The runner fires from the
-        // cycle tick, so it can arrive minutes early on a busy schedule, and a genuine remainder there is
-        // owed just the same. Calling it unconditionally costs a no-op and removes the assumption.
-        $plan = $this->plans->planFor($targetTier);
+        // The swap prorates, as it does on the in-app path: the driver prices the unused remainder against the
+        // tier being LEFT and only then moves the row, and a provider that prorates itself does it there. A
+        // scheduled downgrade lands at the period end, where the remainder is normally zero, but the runner
+        // fires from the cycle tick and can arrive early, and a genuine remainder is owed just the same.
+        //
+        // This runner used to book the proration itself and then call the swap. That was one credit only
+        // because the local driver scheduled the due downgrade again instead of applying it, so the tier never
+        // moved; with the swap applying, it would be two.
+        //
+        // Only the default contract is prorated. The local strategy prices the owner, not a row: it reads the
+        // tier and period the owner resolves to, which are the default contract's, so for any other type it
+        // would credit the remainder of a different contract.
+        //
+        // And the swap addresses the row that carries the schedule, with its merchant and its contract type.
+        // Without them a sponsorship's downgrade would land on the owner's default subscription at the platform.
+        $type = $subscription->type;
 
-        if ($plan instanceof Plan) {
-            $this->proration->applySwap($owner, $plan);
-        }
-
-        $this->actions->swap($owner, $targetTier);
+        $this->actions->swap(
+            $owner,
+            $targetTier,
+            prorate: $type === Subscription::TYPE_DEFAULT,
+            merchant: MerchantScope::fromUid($subscription->merchant_uid),
+            type: $type,
+        );
         $subscription->cancelScheduledSwap();
 
         $this->log->record('billing.scheduled_swap_applied', $owner, [

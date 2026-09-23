@@ -12,6 +12,11 @@ use Pushery\Billing\Enums\SubscriptionState;
  * raised it, a WireKit intent so the callout conveys severity by color AND text, the message and
  * call-to-action translation keys, and the hub route the action points at. Resolving to no banner is
  * the common case — a healthy account shows nothing.
+ *
+ * A notice about a contract the account screens do not manage — a merchant's subscription in a
+ * marketplace, or the platform's own contract of another type — carries no call to action, so both
+ * `$ctaKey` and `$ctaRoute` are null. `$merchant` names the merchant such a notice is about, when the
+ * install can resolve the name; it is null for the platform's own contracts.
  */
 final readonly class BannerNotice
 {
@@ -19,7 +24,8 @@ final readonly class BannerNotice
         public SubscriptionState $state,
         public string $intent,
         public string $messageKey,
-        public string $ctaKey,
-        public string $ctaRoute,
+        public ?string $ctaKey,
+        public ?string $ctaRoute,
+        public ?string $merchant = null,
     ) {}
 }

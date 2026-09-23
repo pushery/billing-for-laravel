@@ -27,7 +27,7 @@ use Pushery\Billing\ValueObjects\RoutedInvoiceCommission;
  *
  * `RoutedChargeLedger::record()` had a single caller in the package: the one-time hosted lane. A routed
  * SUBSCRIPTION moved real money every cycle and left no row at all, so the sale was invisible to the three
- * things that read that table — the reversal caps, the earnings counter, and the small-business judgement.
+ * things that read that table — the reversal caps, the earnings counter, and the small-business judgment.
  * Each of them answered as though the cycle had not happened, and each answer looked perfectly ordinary.
  *
  * ## Why a subscription cannot be recorded the way a one-time sale is
@@ -53,7 +53,7 @@ use Pushery\Billing\ValueObjects\RoutedInvoiceCommission;
  *
  * The alternative to reading was computing the commission ourselves from the rate. It is cheaper and it is
  * the wrong trade: two derivations of one fact agree until one of them changes, and when they part the
- * ledger holds a plausible wrong number that flows into a clawback cap and a tax judgement with nothing
+ * ledger holds a plausible wrong number that flows into a clawback cap and a tax judgment with nothing
  * going red. A failed read, by contrast, throws — the queue retries it, and a permanent failure surfaces as
  * a failed job rather than as a missing row nobody is looking for.
  *

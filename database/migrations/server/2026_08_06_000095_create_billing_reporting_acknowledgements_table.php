@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * The unique key carries the PERIOD. That is not a scoping detail — it is what stops an acknowledgement
  * from becoming a permanently disabled rule: the same finding in the next period has a different key, so
- * nothing clears it and somebody answers again. A key without the period would let one operator's judgement
+ * nothing clears it and somebody answers again. A key without the period would let one operator's judgment
  * in one January silence a check forever, with the report continuing to list it as passing.
  *
  * The currency is in the key for the same reason the run is scoped by it: a period is reported in one
