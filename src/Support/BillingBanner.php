@@ -30,10 +30,13 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * ladder withdraws access over exactly those, so a banner that read the platform row alone could never
  * show in an install where every paid subscription belongs to a merchant.
  *
- * The precedence runs across all of them, and at equal rank the platform's own subscription wins,
- * because the account screens act on that one and so it is the only notice that carries a call to
- * action. A notice about any other contract names its merchant where one can be resolved and comes
- * without a call to action: pointing it at a screen that would report nothing to recover is a dead end.
+ * The precedence runs across all of them, and at equal rank the platform's own subscription wins. A
+ * notice about any other contract names its merchant where one can be resolved. Whether it carries a
+ * call to action depends on the screen it would point at: the recovery screen reads every contract and
+ * its card page repairs each of them, so a failed or unconfirmed payment on any contract links there.
+ * The subscription and plan screens act on the platform's own subscription alone, so another
+ * contract's grace period, pause or ending trial comes without a link rather than with one to a screen
+ * that would report nothing for it.
  */
 final readonly class BillingBanner
 {
@@ -52,6 +55,14 @@ final readonly class BillingBanner
         'paused' => ['warning', 'resume', 'billing.account.subscription'],
         'trial_ending' => ['info', 'upgrade', 'billing.account.plan'],
     ];
+
+    /**
+     * The notices whose screen acts on every contract the owner holds, so a notice about any of them may
+     * link there: the recovery screen, for a payment that failed or awaits confirmation.
+     *
+     * @var list<key-of<self::NOTICES>>
+     */
+    private const array FOR_EVERY_CONTRACT = ['past_due', 'incomplete'];
 
     public function __construct(
         private SubscriptionPresenter $presenter,
@@ -89,12 +100,13 @@ final readonly class BillingBanner
 
             if ($otherKind !== null && ($bestKind === null || $this->outranks($otherKind, $bestKind))) {
                 $bestKind = $otherKind;
+                $linked = in_array($otherKind, self::FOR_EVERY_CONTRACT, true);
                 $best = new BannerNotice(
                     state: $otherState,
                     intent: self::NOTICES[$otherKind][0],
                     messageKey: 'billing::account.banner.'.$otherKind,
-                    ctaKey: null,
-                    ctaRoute: null,
+                    ctaKey: $linked ? 'billing::account.banner.cta.'.self::NOTICES[$otherKind][1] : null,
+                    ctaRoute: $linked ? self::NOTICES[$otherKind][2] : null,
                     merchant: $this->merchantName($subscription),
                 );
             }

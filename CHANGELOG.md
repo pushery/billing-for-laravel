@@ -4,6 +4,32 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.36.0] - 2026-09-23
+
+### Added
+
+- **The dispute rate can be read.** `DisputeRates` gives the rate of the routed sales for one merchant or across the platform, over a window you choose, and names both counts: the disputes opened in the window, whatever their outcome, and the payments that settled in it. The card networks count a dispute when it is raised, so every opened case is now kept in `billing_disputes`, once per dispute, by `RecordOpenedDispute` on `DisputeOpened`. The table is retained on a merchant's erasure, unlinked rather than deleted. Run the migrations to add it.
+
+- **A dispute can be answered while it is open.** `charge.dispute.created` now raises `DisputeOpened`, with the dispute and the payment it was raised against, the amount, the reason as the package reads it and as Stripe stated it, and the moment Stripe stops accepting evidence. On a marketplace it also names the account the dispute lives on and the merchant whose sale it was. `SubmitsDisputeEvidence` sends your statements and documents to Stripe and submits the case, uploading each document on the account the dispute lives on. The same evidence submitted again is answered by Stripe as the first submission, so a retried job cannot answer a case twice, and evidence that says nothing is refused because it would give the case up. Nothing reaches Stripe unless you submit. Your Stripe endpoint has to send `charge.dispute.created`, the Connect endpoint as well where merchants take their own charges. Mollie takes no evidence through its API and binds nothing.
+
+- **`PaymentMethodCollected` and the `AdoptsCollectedPaymentMethod` contract.** The event is raised when a customer finishes the package's hosted page for adding a payment method. It names the provider's handle for the collection, because the notification that the page was completed does not name the method. The Stripe driver binds the contract and registers `AdoptCollectedPaymentMethod` against the event. A driver without such a page, Mollie for instance, binds neither.
+
+### Changed
+
+- **The shipped VAT rate table is confirmed as of 2026-09-23.** All 27 standard rates agree with the source on that day, so the table keeps its rates and its `situation_on` moves to the check date. `billing:doctor` and the age check count from there.
+
+- **A card added on the payment-methods screen becomes the default.** The hosted page attached it and left the owner to promote it by hand. It is now the card the account is charged with, for the reason under Fixed. The page is recognized by a mark on the session the package opens, so a setup session your application opens itself changes no default.
+
+- **`PaymentMethods::setDefault()` under Stripe also moves each subscription that names a card of its own.** It used to set the customer's invoice default only. Stripe charges a subscription's own card before it reads that default, so the choice had no effect on a subscription opened through Checkout.
+
+### Fixed
+
+- **The payment-recovery screen reads every contract the owner holds.** It read the platform's own subscription alone, so an owner whose only failed payment was on a merchant's subscription, or on a platform subscription of another type, was told there was nothing to recover, and the banner raised that notice without a link. The screen now offers recovery or confirmation when any contract is past due or incomplete, and the banner links such a notice there whichever contract it is on. Under Stripe the card the screen's hosted page collects already becomes the default for every subscription that names a card of its own, a merchant's included, so the same action repairs it. A grace period, a pause or an ending trial on another contract still comes without a link.
+
+- **`billing:rates:probe` and `billing:tax-rates:check` reach the rate source again.** Since at least 2026-08-22 the source answered every request with HTTP 404, and both commands reported it as unreachable, which is not a finding by design. The service now routes on the `SOAPAction` header and validates the request against its current schema. The request carries both, along with the member states it asks about. The source also states on every rate the day that rate took effect, so an answer holds for a date when none of its rates took effect after it, and a date that has not come yet is not confirmed. The source now reports the Canary Islands rate as an ordinary standard rate of Spain with the territory named in a comment, and a row that names a territory outside the EU VAT area is left out.
+
+- **A card added on the payment-recovery screen is the one the next retry charges.** The banner asks a past-due owner to update their payment method, and the recovery screen sends them to Stripe's hosted page, which attached the new card to the customer and set nothing. A subscription opened through Checkout keeps charging the card it was paid with, so the next retry took the card that had failed, however many new cards the owner added. When the page completes, the new card now becomes the default for the customer and for every subscription that names a card of its own. The retry still comes on Stripe's schedule, not the moment the card is added. Your webhook endpoint has to deliver `checkout.session.completed`, which the package already reads for one-time purchases.
+
 ## [0.35.0] - 2026-09-23
 
 ### Added
@@ -6962,7 +6988,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.35.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.36.0...HEAD
+[0.36.0]: https://github.com/pushery/billing-for-laravel/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/pushery/billing-for-laravel/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/pushery/billing-for-laravel/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/pushery/billing-for-laravel/compare/v0.32.0...v0.33.0

@@ -8,6 +8,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 use Override;
+use Pushery\Billing\Contracts\AdoptsCollectedPaymentMethod;
 use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\CreditSync;
 use Pushery\Billing\Contracts\CustomerDirectory;
@@ -32,6 +33,7 @@ use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
 use Pushery\Billing\Contracts\ReportsMovedShares;
 use Pushery\Billing\Contracts\SeatBilling;
 use Pushery\Billing\Contracts\StartsSubscriptions;
+use Pushery\Billing\Contracts\SubmitsDisputeEvidence;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\SubscriptionSync;
 use Pushery\Billing\Contracts\SupplyRegimeResolver;
@@ -43,6 +45,7 @@ use Pushery\Billing\Drivers\NullCustomerRegistry;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\ChargebackReceived;
+use Pushery\Billing\Events\DisputeOpened;
 use Pushery\Billing\Events\InvoiceCorrected;
 use Pushery\Billing\Events\InvoiceFinalized;
 use Pushery\Billing\Events\InvoiceUpcoming;
@@ -54,6 +57,7 @@ use Pushery\Billing\Events\MerchantPayoutFailed;
 use Pushery\Billing\Events\MerchantTransferReversedByProvider;
 use Pushery\Billing\Events\PaymentActionRequired;
 use Pushery\Billing\Events\PaymentFailed;
+use Pushery\Billing\Events\PaymentMethodCollected;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Events\RoutedChargeAbandoned;
 use Pushery\Billing\Events\RoutedChargeConfirmed;
@@ -64,6 +68,7 @@ use Pushery\Billing\Events\TaxIdVerificationReported;
 use Pushery\Billing\Events\TrialEnding;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\WebhookSecretGuard;
+use Pushery\Billing\Webhooks\Effects\AdoptCollectedPaymentMethod;
 use Pushery\Billing\Webhooks\Effects\ClaimChargebackClawback;
 use Pushery\Billing\Webhooks\Effects\CorrectChainOnChargeback;
 use Pushery\Billing\Webhooks\Effects\CreditAddonPurchase;
@@ -76,6 +81,7 @@ use Pushery\Billing\Webhooks\Effects\MarkMerchantDeauthorized;
 use Pushery\Billing\Webhooks\Effects\PersistInvoice;
 use Pushery\Billing\Webhooks\Effects\PersistInvoiceCorrection;
 use Pushery\Billing\Webhooks\Effects\RecordFailedMerchantPayout;
+use Pushery\Billing\Webhooks\Effects\RecordOpenedDispute;
 use Pushery\Billing\Webhooks\Effects\RecordProviderFee;
 use Pushery\Billing\Webhooks\Effects\RecordProviderTransferReversal;
 use Pushery\Billing\Webhooks\Effects\RecordRoutedSubscriptionCharge;
@@ -149,6 +155,12 @@ final class StripeServiceProvider extends ServiceProvider
         $this->app->bind(CustomerDirectory::class, StripeCustomerDirectory::class);
         $this->app->bind(HostedPortal::class, StripeHostedPortal::class);
         $this->app->bind(PaymentMethods::class, StripePaymentMethods::class);
+        // A card added on the hosted page becomes the one the next charge reads. Bound here only: the seam
+        // exists because this provider's setup session attaches a method and sets nothing.
+        $this->app->bind(AdoptsCollectedPaymentMethod::class, StripePaymentMethods::class);
+        // Answering a dispute is a capability of the provider, not of every driver: Mollie takes no evidence
+        // through its API, so it binds nothing and a host can ask the container whether the step exists.
+        $this->app->bind(SubmitsDisputeEvidence::class, StripeDisputeEvidence::class);
         $this->app->bind(Invoices::class, StripeInvoices::class);
         $this->app->bind(UpcomingInvoice::class, StripeUpcomingInvoice::class);
         $this->app->bind(SubscriptionActions::class, StripeSubscriptionActions::class);
@@ -309,6 +321,9 @@ final class StripeServiceProvider extends ServiceProvider
         $registry->on(TaxIdVerificationReported::class, RecordTaxIdVerification::class);
         $registry->on(InvoiceCorrected::class, PersistInvoiceCorrection::class);
         $registry->on(MandateRevoked::class, RevokeMandate::class);
+        // The hosted page for adding a card only attaches it. This is what makes it the default, for the
+        // customer and for every subscription that names a card of its own, so the next retry takes it.
+        $registry->on(PaymentMethodCollected::class, AdoptCollectedPaymentMethod::class);
         // Its counterpart, and the reason the pair matters: without this the package could watch charging
         // capability disappear and never watch it arrive, so a mandate would only ever be written by
         // whichever code path happened to be looking at the time.
@@ -345,6 +360,9 @@ final class StripeServiceProvider extends ServiceProvider
         $registry->on(MerchantTransferReversedByProvider::class, RecordProviderTransferReversal::class);
         $registry->on(MerchantPayoutFailed::class, RecordFailedMerchantPayout::class);
         $registry->on(ChargebackReceived::class, RecordProviderFee::class);
+        // Every opened case is kept, because the networks count a dispute when it is raised and the package
+        // otherwise holds only the lost ones. DisputeRates reads the record against the payments it arose over.
+        $registry->on(DisputeOpened::class, RecordOpenedDispute::class);
         // A lost dispute ends access too. Its own effect rather than a branch in the fee one, for the same
         // reason ownership is separate from crediting: different facts, and a failure in one must not undo
         // the other.

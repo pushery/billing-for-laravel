@@ -205,6 +205,11 @@ final class OwnerScopedTables
         // outlives the merchant it arose over, unlinked rather than deleted.
         'billing_provider_fees',
 
+        // Every dispute opened over a merchant's sale. It is what the card networks measured the platform by,
+        // and a count that loses its cases on an erasure would report a lower rate than the one the network
+        // acted on — so the row outlives the merchant, unlinked rather than deleted.
+        'billing_disputes',
+
         // What a merchant came to owe the platform when a clawback could not take it back. A debt is a
         // financial record in the same sense as the charge that created it, and deleting it would forgive
         // it silently — the one outcome an erasure must not quietly decide. Unlinked, never deleted.

@@ -18,6 +18,7 @@ use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Events\ChargebackReceived;
+use Pushery\Billing\Events\DisputeOpened;
 use Pushery\Billing\Events\FanTipPaid;
 use Pushery\Billing\Events\InvoiceCorrected;
 use Pushery\Billing\Events\InvoiceFinalized;
@@ -25,6 +26,7 @@ use Pushery\Billing\Events\InvoiceUpcoming;
 use Pushery\Billing\Events\MandateRevoked;
 use Pushery\Billing\Events\PaymentActionRequired;
 use Pushery\Billing\Events\PaymentFailed;
+use Pushery\Billing\Events\PaymentMethodCollected;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Events\RoutedChargeAbandoned;
 use Pushery\Billing\Events\RoutedChargeConfirmed;
@@ -53,9 +55,10 @@ use Pushery\Billing\ValueObjects\Money;
  * the document that credits a finalized invoice, with the lines and tax a raw refund event does not
  * carry. The two are deliberately separate concerns, not a duplicate mapping of the same money.
  *
- * `@partially-mapped:` `charge.dispute.closed` IS answered, and books the dispute — what it does not do is
- * resolve an OWNER from it. The qualifier below carries the whole difference, so it is stated here where a
- * reader looking for the exclusion will find it.
+ * `@partially-mapped:` `charge.dispute.created` and `charge.dispute.closed` ARE answered — the first opens the
+ * case for the host, the second books its outcome — and what neither does is resolve an OWNER from it. The
+ * qualifier below carries the whole difference, so it is stated here where a reader looking for the exclusion
+ * will find it.
  *
  * A lost dispute over a sale this package ROUTED yields `ChargebackReceived` rather than `AddonRefunded`,
  * and the branch turns on the routed-charge row rather than on anything in the payload. Under
@@ -69,7 +72,8 @@ use Pushery\Billing\ValueObjects\Money;
  * webhooks (charge.dispute.*, mandate/payment-method events) are not mapped for owner resolution either —
  * the provider dispute and mandate objects carry no customer, so that needs a dedicated design. That
  * exclusion is about the OWNER and nothing else: a lost dispute over a routed sale does produce
- * `ChargebackReceived` here, identified by the charge, because the routed row says whose sale it was.
+ * `ChargebackReceived` here, identified by the charge, because the routed row says whose sale it was, and
+ * every opened dispute produces `DisputeOpened`, which names the dispute and the payment and needs no owner.
  *
  * `@partially-mapped:` `payment_intent.succeeded`, `payment_intent.payment_failed` and
  * `payment_intent.canceled` ARE answered — but only for a ROUTED marketplace charge, and every one of them
@@ -176,6 +180,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             'payment_intent.payment_failed',
             'payment_intent.canceled' => $this->routedChargeEvents($object, confirmed: false),
             'charge.refunded' => $this->refundEvents($object),
+            'charge.dispute.created' => $this->disputeOpenedEvents($object),
             'charge.dispute.closed' => $this->disputeClosedEvents($object),
             'credit_note.created' => $this->correctionEvents($object),
             'payment_method.detached' => $this->paymentMethodDetachedEvents($object, $data),
@@ -242,6 +247,37 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             $paymentReference,
             Money::of($this->int($object, 'amount_refunded') ?? 0, strtoupper($currency)),
         )];
+    }
+
+    /**
+     * A dispute Stripe just opened on a charge the platform took. It moves no money and books nothing; the
+     * event exists so the host hears about the case while evidence is still accepted.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function disputeOpenedEvents(array $object): array
+    {
+        // A routed sale's dispute lives with the platform, which took the payment whole, so there is no account
+        // to answer it on. The merchant is still named, from the row written when the sale was made, because
+        // the evidence that wins the case is usually the merchant's.
+        $payment = $this->string($object, 'payment_intent') ?? $this->string($object, 'charge');
+        $charge = $payment === null ? null : ($this->routed->find('stripe', $payment) ?? $this->routed->findByPayment('stripe', $payment));
+        $merchant = $charge instanceof MerchantCharge && $charge->merchant !== null
+            ? $this->accounts->accountFor($charge->merchant)?->accountId
+            : null;
+
+        $opening = StripeDisputeOpening::from($object);
+
+        return $opening instanceof StripeDisputeOpening ? [new DisputeOpened(
+            disputeReference: $opening->dispute,
+            paymentReference: $opening->payment,
+            amount: $opening->amount,
+            reason: $opening->reason,
+            reasonCode: $opening->reasonCode,
+            evidenceDueBy: $opening->evidenceDueBy,
+            merchantReference: $merchant,
+        )] : [];
     }
 
     /**
@@ -490,11 +526,45 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     }
 
     /**
+     * A completed setup-mode session: a customer finished the hosted page for adding a payment method.
+     *
+     * Only a session this package opened for that purpose counts, recognized by the mark
+     * {@see StripePaymentMethods::addMethodUrl()} puts on it. An app that opens setup sessions of its own
+     * gets no default changed behind its back. The payload names the setup intent, not the method, so the
+     * event carries the intent and the effect reads the method from the provider.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function collectedMethodEvents(array $object): array
+    {
+        $bag = $object['metadata'] ?? null;
+        $metadata = is_array($bag) ? $bag : [];
+
+        if ($this->string($metadata, StripePaymentMethods::PURPOSE_KEY) !== StripePaymentMethods::PURPOSE_ADOPT) {
+            return [];
+        }
+
+        $customer = $this->string($object, 'customer');
+        $intent = $this->string($object, 'setup_intent');
+
+        if ($customer === null || $intent === null) {
+            return [];
+        }
+
+        return [new PaymentMethodCollected($customer, $intent, 'stripe')];
+    }
+
+    /**
      * @param  array<array-key, mixed>  $object
      * @return list<BillingDomainEvent>
      */
     private function checkoutEvents(array $object): array
     {
+        if ($this->string($object, 'mode') === 'setup') {
+            return $this->collectedMethodEvents($object);
+        }
+
         if ($this->string($object, 'mode') !== 'payment') {
             return [];
         }

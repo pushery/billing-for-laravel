@@ -24,6 +24,10 @@ interface PaymentMethods
      * billable has no provider customer yet). This is the package's shipped path: the card is entered on
      * the provider's own page, so no card data touches the app and no front-end JavaScript is needed. A
      * full-page redirect here is symmetric with how a subscription checkout already works.
+     *
+     * "Replaces" is a promise about what is charged next. Where the provider's page only attaches the
+     * card, the driver also binds {@see AdoptsCollectedPaymentMethod}, and the completed page makes the
+     * card the default for the customer and for every subscription that names a card of its own.
      */
     public function addMethodUrl(Model $billable): ?string;
 
@@ -40,7 +44,11 @@ interface PaymentMethods
 
     public function default(Model $billable): ?PaymentMethod;
 
-    /** Set the billable's default method. Implementations MUST verify the method belongs to the billable. */
+    /**
+     * Set the billable's default method: the one the provider charges next, which for a subscription that
+     * names a method of its own means that subscription's method too. Implementations MUST verify the
+     * method belongs to the billable.
+     */
     public function setDefault(Model $billable, string $methodId): void;
 
     /** Remove a stored method. Implementations MUST verify the method belongs to the billable. */

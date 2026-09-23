@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers\Stripe;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
+use Pushery\Billing\Contracts\AdoptsCollectedPaymentMethod;
 use Pushery\Billing\Contracts\PaymentMethods as PaymentMethodsContract;
 use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\ValueObjects\ClientIntent;
@@ -16,6 +17,7 @@ use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\RateLimitException;
 use Stripe\PaymentMethod as StripePaymentMethod;
 use Stripe\StripeClient;
+use Stripe\Subscription as StripeSubscription;
 
 /**
  * In-app payment-method management for the Stripe driver. It talks to Stripe's PaymentMethod / Customer
@@ -30,8 +32,24 @@ use Stripe\StripeClient;
  * card. A consequence of the check: removing an already-detached or unknown method now throws rather than
  * silently no-opping, because an id nobody owns is not one this billable may act on.
  */
-final readonly class StripePaymentMethods implements PaymentMethodsContract
+final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMethod, PaymentMethodsContract
 {
+    /**
+     * The mark this driver puts on the hosted page it opens for adding a method, and the one thing the
+     * webhook mapper checks before it hands a completed setup session to {@see adopt()}. A setup-mode
+     * session an app opens for its own reasons carries no mark, so it changes no default behind the app's
+     * back.
+     */
+    public const string PURPOSE_KEY = 'billing_purpose';
+
+    public const string PURPOSE_ADOPT = 'payment_method';
+
+    /**
+     * The subscription states a charge can still come from. A subscription in any of them that names its
+     * own method is charged with that method, whatever the customer's default says.
+     */
+    private const array CHARGEABLE_STATES = ['active', 'trialing', 'past_due', 'unpaid', 'incomplete', 'paused'];
+
     public function __construct(
         private StripeClient $stripe,
         private StripeCustomerRegistry $customers,
@@ -63,6 +81,10 @@ final readonly class StripePaymentMethods implements PaymentMethodsContract
             // ("Missing required param: currency"). A faked client accepts the payload without it, which is
             // how the shipped card-capture path was refused on every real request while the suite was green.
             'currency' => strtolower(is_string($currency) ? $currency : 'EUR'),
+            // What turns the collected card into the one the next charge reads. The session itself sets
+            // nothing: the provider attaches the method to the customer and leaves every default as it was.
+            // The completion webhook carries this mark, and the mapper hands only a marked session on.
+            'metadata' => [self::PURPOSE_KEY => self::PURPOSE_ADOPT],
         ]);
 
         return is_string($session->url) ? $session->url : null;
@@ -139,9 +161,37 @@ final readonly class StripePaymentMethods implements PaymentMethodsContract
             throw new InvalidArgumentException('Cannot set a default payment method that does not belong to this billable.');
         }
 
-        $this->stripe->customers->update($customerId, [
-            'invoice_settings' => ['default_payment_method' => $methodId],
-        ]);
+        $this->makeDefault($customerId, $methodId);
+    }
+
+    /**
+     * The method a completed hosted page collected becomes the default, for the customer and for every
+     * subscription that would otherwise go on charging a method of its own.
+     *
+     * The collection is read back from the provider rather than trusted from the notification, which names
+     * the setup intent and not the method. It has to belong to the customer the notification names and it
+     * has to have succeeded: an intent for another customer moves nothing between accounts, and one still
+     * processing has no method a charge could use yet.
+     */
+    public function adopt(string $customerReference, string $collectionReference): void
+    {
+        $intent = $this->stripe->setupIntents->retrieve($collectionReference);
+
+        $owner = $intent->customer ?? null;
+        $ownerId = $owner instanceof Customer ? $owner->id : $owner;
+
+        if ($ownerId !== $customerReference || $intent->status !== 'succeeded') {
+            return;
+        }
+
+        $method = $intent->payment_method ?? null;
+        $methodId = $method instanceof StripePaymentMethod ? $method->id : $method;
+
+        if (! is_string($methodId) || $methodId === '') {
+            return;
+        }
+
+        $this->makeDefault($customerReference, $methodId);
     }
 
     public function remove(Model $billable, string $methodId): void
@@ -156,6 +206,51 @@ final readonly class StripePaymentMethods implements PaymentMethodsContract
         }
 
         $this->stripe->paymentMethods->detach($methodId);
+    }
+
+    /**
+     * Make the method the one the provider charges next: the customer's invoice default, and the default of
+     * each chargeable subscription that names a method of its own.
+     *
+     * The second half is the one that decides. A subscription opened through Checkout carries the card it
+     * was paid with as its own default, and Stripe charges a subscription's own default before the
+     * customer's (the order is subscription `default_payment_method`, then its `default_source`, then the
+     * customer's `invoice_settings.default_payment_method`). Setting only the customer's default leaves
+     * every such subscription on the old card, including the past-due one whose retry the owner is trying
+     * to rescue. A subscription with no method of its own already reads the customer's default and is left
+     * alone.
+     */
+    private function makeDefault(string $customerId, string $methodId): void
+    {
+        $this->stripe->customers->update($customerId, [
+            'invoice_settings' => ['default_payment_method' => $methodId],
+        ]);
+
+        // One page of 100, for the reason `all()` gives: a customer with more subscriptions than that is not
+        // a real case. Stripe leaves canceled subscriptions out of this list unless asked for them.
+        foreach ($this->stripe->subscriptions->all(['customer' => $customerId, 'limit' => 100])->data as $subscription) {
+            if ($this->chargesAnotherMethod($subscription, $methodId)) {
+                $this->stripe->subscriptions->update($subscription->id, ['default_payment_method' => $methodId]);
+            }
+        }
+    }
+
+    /** Whether a chargeable subscription names a method of its own that is not this one. */
+    private function chargesAnotherMethod(StripeSubscription $subscription, string $methodId): bool
+    {
+        if (! in_array($subscription->status, self::CHARGEABLE_STATES, true)) {
+            return false;
+        }
+
+        $own = $subscription->default_payment_method ?? null;
+        $ownId = $own instanceof StripePaymentMethod ? $own->id : $own;
+
+        if (is_string($ownId)) {
+            return $ownId !== $methodId;
+        }
+
+        // A legacy source on the subscription outranks the customer's default in the same way.
+        return ($subscription->default_source ?? null) !== null;
     }
 
     /** Whether the payment method is attached to this customer. An unknown or detached id is not owned. */

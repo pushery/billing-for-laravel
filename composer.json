@@ -121,8 +121,8 @@
         "format:test": "pint --test",
         "rector": "rector process",
         "rector:test": "rector process --dry-run",
-        "mutate": "pest --mutate --everything --covered-only --min=85 --testsuite=Unit,Feature,Stripe",
-        "mutate:detect": "pest --mutate --everything --covered-only --parallel --processes=4 --min=85 --testsuite=Unit,Feature,Stripe",
+        "mutate": "@php -d pcov.directory=src vendor/bin/pest --mutate --everything --covered-only --min=85 --testsuite=Unit,Feature,Stripe",
+        "mutate:detect": "@php -d pcov.directory=src vendor/bin/pest --mutate --everything --covered-only --parallel --processes=4 --min=85 --testsuite=Unit,Feature,Stripe",
         "qa": [
             "@format:test",
             "@rector:test",

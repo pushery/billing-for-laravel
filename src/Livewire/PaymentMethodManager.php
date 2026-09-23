@@ -41,7 +41,8 @@ final class PaymentMethodManager extends AccountScreen
 
         // A full-page redirect to the provider's hosted card page — no card data touches this app, and no
         // front-end element is shipped. The card is captured on the provider's side and attached to the
-        // customer; the customer returns here. A driver with no hosted page yields null and nothing happens.
+        // customer; the customer returns here, and the completed page makes the card the default
+        // (AdoptCollectedPaymentMethod). A driver with no hosted page yields null and nothing happens.
         $url = SafeExternalUrl::orNull(Container::getInstance()->make(PaymentMethods::class)->addMethodUrl($this->owner()));
 
         if ($url !== null) {
