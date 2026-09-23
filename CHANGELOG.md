@@ -4,6 +4,16 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.0] - 2026-09-23
+
+### Added
+
+- **A creator's EU small-business exemption can be checked with the union's register.** `SmeOnTheWebExemptionValidator` asks SME-on-the-web whether an exemption number is in force and granted in the member state you name, and `SmallBusinessRegistrationCheck::check()` takes that member state and records it with the answer. The register answers for one member state at a time, so the question has a contract of its own, `SmallBusinessExemptionValidator`. Its default asks the validator bound to `SmallBusinessIdValidator` and leaves the member state out, so an implementation of yours keeps answering, and nothing is contacted until you bind the register. A question the register refuses, such as one about the member state the creator is established in, is thrown rather than recorded, because it says nothing about the creator.
+
+### Changed
+
+- **Seven numeric settings take a value from the environment only when it is a number.** The three small-business thresholds, the two de minimis limits of the platform reporting, the buyer-protection provider window and the metering retry ceiling cast whatever the environment held, so a value that is not a number became 0: a threshold of zero, or no retry at all. They now fall back to their shipped default. `billing.metering.max_attempts` also reads `BILLING_METERING_MAX_ATTEMPTS`, so you can tune it without publishing the config.
+
 ## [0.36.0] - 2026-09-23
 
 ### Added
@@ -6988,7 +6998,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.36.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.37.0...HEAD
+[0.37.0]: https://github.com/pushery/billing-for-laravel/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/pushery/billing-for-laravel/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/pushery/billing-for-laravel/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/pushery/billing-for-laravel/compare/v0.33.0...v0.34.0

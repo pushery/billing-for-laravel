@@ -541,7 +541,9 @@ return [
     |
     | max_attempts is a deadline, not a limit: past it the usage is marked failed
     | and logged as an error, because it is revenue that will not be collected
-    | unless someone acts. Do not raise it to hide a persistent failure.
+    | unless someone acts. Do not raise it to hide a persistent failure. It reads
+    | BILLING_METERING_MAX_ATTEMPTS, tested before it is trusted: a value that is
+    | not a number lands on 8, never on zero.
     |
     | stall_hours is the other deadline: how long usage may sit unreported in the
     | outbox before billing:usage:reconcile calls it a stall (a UsageBacklogStalled
@@ -551,7 +553,7 @@ return [
     */
 
     'metering' => [
-        'max_attempts' => 8,
+        'max_attempts' => is_numeric($maxAttempts = env('BILLING_METERING_MAX_ATTEMPTS')) ? (int) $maxAttempts : 8,
         'backoff_seconds' => 60,
         'stall_hours' => 6,
     ],
@@ -1187,9 +1189,9 @@ return [
         // Read ONLY behind the German jurisdiction profile (billing.tax_profile = 'de'). Defaults are the
         // German § 19 UStG figures as of 2025: 25.000 € prior-year, 100.000 € current-year, and a 25.000 €
         // immediate limit in the founding year (no pro-rata twelfths — abolished in 2025).
-        'previous_year_limit' => (int) env('BILLING_TAX_SB_PREVIOUS_YEAR_LIMIT', 2_500_000),
-        'current_year_limit' => (int) env('BILLING_TAX_SB_CURRENT_YEAR_LIMIT', 10_000_000),
-        'founding_year_limit' => (int) env('BILLING_TAX_SB_FOUNDING_YEAR_LIMIT', 2_500_000),
+        'previous_year_limit' => is_numeric($previousYearLimit = env('BILLING_TAX_SB_PREVIOUS_YEAR_LIMIT')) ? (int) $previousYearLimit : 2_500_000,
+        'current_year_limit' => is_numeric($currentYearLimit = env('BILLING_TAX_SB_CURRENT_YEAR_LIMIT')) ? (int) $currentYearLimit : 10_000_000,
+        'founding_year_limit' => is_numeric($foundingYearLimit = env('BILLING_TAX_SB_FOUNDING_YEAR_LIMIT')) ? (int) $foundingYearLimit : 2_500_000,
 
         // A consumer that runs the small-business status by hand may turn OFF the automatic flip from KU to
         // standard rating. There is deliberately NO switch for the opposite direction: a platform count under
@@ -1330,9 +1332,9 @@ return [
         'filing_notice_days' => (int) env('BILLING_FILING_NOTICE_DAYS', 14),
 
         'goods_de_minimis' => [
-            'max_sales' => (int) env('BILLING_REPORTING_MAX_GOODS_SALES', 30),
+            'max_sales' => is_numeric($maxGoodsSales = env('BILLING_REPORTING_MAX_GOODS_SALES')) ? (int) $maxGoodsSales : 30,
             'sales_operator' => env('BILLING_REPORTING_SALES_OPERATOR', '<'),
-            'max_compensation_minor' => (int) env('BILLING_REPORTING_MAX_GOODS_COMPENSATION_MINOR', 200000),
+            'max_compensation_minor' => is_numeric($maxGoodsCompensation = env('BILLING_REPORTING_MAX_GOODS_COMPENSATION_MINOR')) ? (int) $maxGoodsCompensation : 200000,
             'compensation_operator' => env('BILLING_REPORTING_COMPENSATION_OPERATOR', '<='),
         ],
     ],
@@ -1993,7 +1995,7 @@ return [
             'account_type' => env('BILLING_BUYER_PROTECTION_ACCOUNT_TYPE', 'express'),
             'confirm_after_days' => (int) env('BILLING_BUYER_PROTECTION_CONFIRM_AFTER_DAYS', 14),
             'decide_after_days' => (int) env('BILLING_BUYER_PROTECTION_DECIDE_AFTER_DAYS', 60),
-            'provider_limit_days' => (int) env('BILLING_BUYER_PROTECTION_PROVIDER_LIMIT_DAYS', 90),
+            'provider_limit_days' => is_numeric($providerLimitDays = env('BILLING_BUYER_PROTECTION_PROVIDER_LIMIT_DAYS')) ? (int) $providerLimitDays : 90,
             'margin_days' => (int) env('BILLING_BUYER_PROTECTION_MARGIN_DAYS', 20),
         ],
 
