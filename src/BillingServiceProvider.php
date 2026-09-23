@@ -133,6 +133,7 @@ use Pushery\Billing\Contracts\ScheduleHeartbeat;
 use Pushery\Billing\Contracts\SeatBilling;
 use Pushery\Billing\Contracts\SellerOfRecordResolver;
 use Pushery\Billing\Contracts\SellerPartyResolver;
+use Pushery\Billing\Contracts\SmallBusinessExemptionValidator;
 use Pushery\Billing\Contracts\SmallBusinessIdValidator;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\SubscriptionContentScope;
@@ -248,6 +249,7 @@ use Pushery\Billing\Support\RetentionFloorGuard;
 use Pushery\Billing\Support\RetentionMatrix;
 use Pushery\Billing\Support\TaxSupportGuard;
 use Pushery\Billing\Tax\DatabaseExchangeRateSource;
+use Pushery\Billing\Tax\DelegatingSmallBusinessExemptionValidator;
 use Pushery\Billing\Tax\EcbRatePublisher;
 use Pushery\Billing\Tax\EuOssTaxCalculator;
 use Pushery\Billing\Tax\FreezeExchangeRateOnDocument;
@@ -575,6 +577,11 @@ final class BillingServiceProvider extends ServiceProvider
         // different consequences, and one class answering both would blur the distinction that decides
         // which of them happens. The default contacts nothing, so a bare checkout works offline.
         $this->app->bind(SmallBusinessIdValidator::class, NullSmallBusinessIdValidator::class);
+
+        // The same question for one member state, which is the only form the union's register answers. The
+        // default asks the binding above and leaves the member state out, so an implementation bound there keeps
+        // answering; binding SmeOnTheWebExemptionValidator here is what reaches the register.
+        $this->app->bind(SmallBusinessExemptionValidator::class, DelegatingSmallBusinessExemptionValidator::class);
 
         // The country-from-address signal. The package ships no geolocation data, so the default answers
         // "nothing to say" — a missing input rather than a failure, since other signals answer the same

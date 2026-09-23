@@ -74,6 +74,7 @@
         "mollie/mollie-api-php": "^3.13",
         "nikic/php-parser": "^5.8",
         "orchestra/testbench": "^11.0",
+        "orchestra/testbench-core": "^11.0",
         "pestphp/pest": "^5.0",
         "pestphp/pest-plugin-browser": "^5.0",
         "pestphp/pest-plugin-evals": "^5.0",

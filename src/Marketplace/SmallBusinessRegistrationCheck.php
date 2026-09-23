@@ -7,11 +7,13 @@ namespace Pushery\Billing\Marketplace;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\Contracts\SmallBusinessExemptionValidator;
 use Pushery\Billing\Contracts\SmallBusinessIdValidator;
 use Pushery\Billing\Enums\CreatorTaxStatus;
 use Pushery\Billing\Enums\CreatorTaxStatusSource;
 use Pushery\Billing\Enums\VatIdValidation;
 use Pushery\Billing\Models\CreatorTaxStatusRecord;
+use Pushery\Billing\Tax\DelegatingSmallBusinessExemptionValidator;
 
 /**
  * Records what a register said about a merchant's small-business registration, and lets only a confirmed
@@ -25,6 +27,10 @@ use Pushery\Billing\Models\CreatorTaxStatusRecord;
  *
  * The check expires. A registration confirmed once is not confirmed forever — registers change, and a
  * standing that rested on a two-year-old lookup rests on nothing.
+ *
+ * The union's register answers for one member state at a time, so a check that names the member state the
+ * exemption has to hold in asks {@see SmallBusinessExemptionValidator}, and the record says which state it
+ * asked about. A check without one asks {@see SmallBusinessIdValidator}, as it always has.
  */
 final readonly class SmallBusinessRegistrationCheck
 {
@@ -32,6 +38,7 @@ final readonly class SmallBusinessRegistrationCheck
         private Repository $config,
         private SmallBusinessIdValidator $validator,
         private CreatorTaxStatusLedger $ledger,
+        private ?SmallBusinessExemptionValidator $exemptions = null,
     ) {}
 
     /**
@@ -39,15 +46,22 @@ final readonly class SmallBusinessRegistrationCheck
      *
      * @param  string  $checkReference  the register's own answer id, so a document resting on this standing
      *                                  can be traced back to the lookup that established it
+     * @param  string|null  $memberState  the member state the exemption has to hold in, which is where the
+     *                                    supply is taxed; never the one the business is established in
      */
     public function check(
         Model $merchant,
         ?string $registrationId,
         string $checkReference,
         ?CarbonImmutable $now = null,
+        ?string $memberState = null,
     ): CreatorTaxStatusRecord {
         $at = $now ?? CarbonImmutable::now();
-        $outcome = $this->validator->validate($registrationId);
+        $outcome = $memberState === null
+            ? $this->validator->validate($registrationId)
+            : ($this->exemptions ?? new DelegatingSmallBusinessExemptionValidator($this->validator))
+                ->validate($registrationId, $memberState);
+        $asked = $memberState === null ? '' : ' for '.strtoupper(trim($memberState));
 
         return $this->ledger->record(
             merchant: $merchant,
@@ -60,7 +74,7 @@ final readonly class SmallBusinessRegistrationCheck
             source: CreatorTaxStatusSource::RegistryCheck,
             // The proof, not a log line: when, what was asked, what came back, and the register's own
             // reference for it.
-            evidenceRef: sprintf('%s at %s: %s', $checkReference, $at->toIso8601String(), $outcome->value),
+            evidenceRef: sprintf('%s at %s%s: %s', $checkReference, $at->toIso8601String(), $asked, $outcome->value),
             // Only a confirmation gets a clock. An unestablished standing does not expire — there is
             // nothing to expire.
             attestedUntil: $outcome === VatIdValidation::Valid ? $at->addDays($this->validityDays()) : null,
