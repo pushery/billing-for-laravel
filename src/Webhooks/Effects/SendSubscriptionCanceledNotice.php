@@ -18,12 +18,12 @@ use RuntimeException;
 
 /**
  * Tells the owner their subscription was canceled and — the part that actually matters — WHEN their access
- * ends. It fires on the GRACE state only: canceled but paid through the period end, which is the moment the
+ * ends. It fires on the GRACE state only: canceled but paid through the moment it ends, which is when the
  * customer needs the date. A subscription that has already lapsed (Ended) is past the point of a useful
  * "your access ends on…", and every other state is not a cancellation at all.
  *
- * Without a period end there is no date to give, so nothing is sent rather than a notice whose whole point
- * is missing. Like its siblings the effect is pure — resolve the owner, notify, record — with the
+ * The date is the one the cancellation named, or the period end when it named none. Without either there is
+ * no date to give, so nothing is sent rather than a notice whose whole point is missing. Like its siblings the effect is pure — resolve the owner, notify, record — with the
  * once-per-cancellation guarantee in the delivery machinery (claim, run and mark in one transaction).
  *
  * It dedups on the SUBSCRIPTION and its access-end moment, not the delivery: a provider redelivering the
@@ -40,7 +40,9 @@ final readonly class SendSubscriptionCanceledNotice implements DedupesOnReferenc
 
     public function __invoke(SubscriptionStateChanged $event): void
     {
-        if ($event->state !== SubscriptionState::Grace || $event->periodEnd === null) {
+        $endsAt = $this->endsAt($event);
+
+        if ($event->state !== SubscriptionState::Grace || $endsAt === null) {
             return; // not a cancellation with a date to announce
         }
 
@@ -50,7 +52,7 @@ final readonly class SendSubscriptionCanceledNotice implements DedupesOnReferenc
             return; // a customer this app does not own
         }
 
-        $accessEndsAt = Carbon::createFromTimestamp($event->periodEnd);
+        $accessEndsAt = Carbon::createFromTimestamp($endsAt);
 
         $this->notifier->subscriptionCanceled($owner, $accessEndsAt);
 
@@ -67,6 +69,17 @@ final readonly class SendSubscriptionCanceledNotice implements DedupesOnReferenc
             throw new RuntimeException('SendSubscriptionCanceledNotice only handles SubscriptionStateChanged events.');
         }
 
-        return ($event->subscriptionReference ?? $event->customerReference).':canceled:'.($event->periodEnd ?? 0);
+        return ($event->subscriptionReference ?? $event->customerReference).':canceled:'.($this->endsAt($event) ?? 0);
+    }
+
+    /**
+     * The moment access ends: the date the cancellation named, or the period end when it named none.
+     *
+     * The named date first, because a cancellation to a date inside the period ends there, and announcing the
+     * period end would promise the owner weeks they no longer have.
+     */
+    private function endsAt(SubscriptionStateChanged $event): ?int
+    {
+        return $event->endsAt ?? $event->periodEnd;
     }
 }

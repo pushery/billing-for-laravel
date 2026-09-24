@@ -24,6 +24,7 @@ use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Invoicing\OrderInvoiceIssuer;
+use Pushery\Billing\Invoicing\ProratedTermRefund;
 use Pushery\Billing\Invoicing\ProrationCreditCorrectionIssuer;
 use Pushery\Billing\Models\CreditLedgerEntry;
 use Pushery\Billing\Models\Order;
@@ -175,6 +176,77 @@ final readonly class LocalBillingEngine implements BillingEngine
                 ]);
             }
         }
+
+        $this->endLapsedCancellations($moment);
+    }
+
+    /**
+     * End the subscriptions an earlier cancellation left running, without billing the period it left open.
+     *
+     * Canceling used to clear the schedule outright. No cycle ever closed the period, and nothing ended the
+     * row either: it stayed `active` past its end, read as a live subscription, and was never billed again.
+     * A cancellation now keeps its last cycle on the schedule, and the rows canceled before that are ended
+     * here, once, when the run meets them.
+     *
+     * Without collecting their last period, and deliberately. That money is late by weeks or months, the
+     * customer was never told it would come, and a debit nobody announced is the worse of the two outcomes.
+     * Each one is logged, so an operator who wants to bill it can.
+     */
+    private function endLapsedCancellations(Carbon $moment): void
+    {
+        $lapsed = Subscription::model()::query()
+            ->where('provider', $this->provider)
+            ->whereNull('scheduled_processing_at')
+            ->whereNotNull('ends_at')
+            ->where('ends_at', '<=', $moment->utc())
+            ->whereIn('status', [
+                SubscriptionState::Active->value,
+                SubscriptionState::Grace->value,
+                SubscriptionState::Trialing->value,
+            ])
+            ->orderBy('id')
+            ->cursor();
+
+        foreach ($lapsed as $subscription) {
+            $subscription->update(['status' => SubscriptionState::Ended->value]);
+
+            Log::warning('billing: a canceled subscription had run past its end; ended without collecting its last period', [
+                'subscription' => $subscription->getKey(),
+                'provider' => $this->provider,
+                'ends_at' => $subscription->ends_at?->toIso8601String(),
+            ]);
+        }
+    }
+
+    /**
+     * The plan price for the days of the period the subscription runs, which is all of them unless it was
+     * canceled to a moment inside the period.
+     *
+     * The engine bills in arrears, so the order is the bill for the days the customer had: up to that moment,
+     * counted in whole days, with the minor unit that does not divide staying with the days that were
+     * provided. That is the split a prorated cancellation refunds against on a driver that collects in
+     * advance, from the other side, so the two drivers charge a customer the same amount for the same days.
+     *
+     * A subscription whose lines a `CycleItemPricer` builds is billed from those lines, and the pricer reads
+     * the end off the row itself: this reprices the plan line the engine builds, and nothing else.
+     */
+    private function planForTheDaysProvided(Subscription $subscription, Money $plan): Money
+    {
+        $start = $subscription->current_period_start;
+        $periodEnd = $subscription->current_period_end;
+        $endsAt = $subscription->endInsideItsPeriod();
+
+        if (! $endsAt instanceof Carbon || ! $start instanceof Carbon || ! $periodEnd instanceof Carbon) {
+            return $plan;
+        }
+
+        $days = (int) round($start->diffInDays($periodEnd));
+
+        if ($days < 1) {
+            return $plan;
+        }
+
+        return $plan->minus(ProratedTermRefund::unusedPortion($plan, (int) floor($start->diffInDays($endsAt)), $days));
     }
 
     /**
@@ -200,7 +272,7 @@ final readonly class LocalBillingEngine implements BillingEngine
             return;
         }
 
-        $drafts = $this->assembleDrafts($subscription, $plan);
+        $drafts = $this->assembleDrafts($subscription, $this->planForTheDaysProvided($subscription, $plan));
         $total = $this->totalOf($drafts, $plan->currency);
 
         $order = $this->claimCycle($subscription, $total, $drafts, $moment);
@@ -752,7 +824,9 @@ final readonly class LocalBillingEngine implements BillingEngine
                 'currency' => $amount->currency,
                 'status' => OrderStatus::Processing,
                 'period_start' => $subscription->current_period_start,
-                'period_end' => $subscription->current_period_end,
+                // The period the order closes, which ends early when the subscription was canceled to a
+                // moment inside it: the document names the days it bills and no others.
+                'period_end' => $subscription->endInsideItsPeriod() ?? $subscription->current_period_end,
             ]);
 
             foreach ($drafts as $draft) {
@@ -935,6 +1009,20 @@ final readonly class LocalBillingEngine implements BillingEngine
             // FIRST period asks the same question. Two readings of one fact do not fail loudly when
             // they drift — the first cycle and every cycle after it simply describe different
             // subscriptions, which reads on an invoice as a period somebody mistyped.
+            // The LAST cycle closes the subscription instead of opening another period. A cancellation made
+            // it the last one: the period is collected now, and there is nothing after it to bill. Without
+            // this the cycle moved on as if nothing had been canceled, and before that the cancellation
+            // cleared the schedule outright, so the period was never collected and the row never ended.
+            if ($subscription->endsWithThisPeriod()) {
+                $subscription->update([
+                    'status' => SubscriptionState::Ended->value,
+                    'scheduled_processing_at' => null,
+                    'dunning_level' => 0,
+                ]);
+
+                return;
+            }
+
             $subscription->advanceCycle(new TierInterval($this->config)->for($subscription->tier_key));
 
             if ($subscription->status === SubscriptionState::PastDue->value) {

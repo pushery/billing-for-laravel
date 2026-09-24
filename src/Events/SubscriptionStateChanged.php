@@ -100,5 +100,14 @@ final readonly class SubscriptionStateChanged implements BillingDomainEvent, Ide
          * Null on every purchase that named none, which is every existing one.
          */
         public ?string $callerReference = null,
+        /**
+         * When a canceled subscription ends (Unix seconds), or null while nothing ends it.
+         *
+         * Not the period end, and that is the reason it exists. An ordinary cancellation ends at the period end
+         * and would need nothing new; a cancellation to a date ends somewhere inside the period, and reading
+         * the period end instead would tell the owner they keep access weeks longer than they do. On a
+         * subscription that has ended it is the moment it ended.
+         */
+        public ?int $endsAt = null,
     ) {}
 }

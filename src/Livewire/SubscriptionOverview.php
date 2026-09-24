@@ -7,6 +7,7 @@ namespace Pushery\Billing\Livewire;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\View\View;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -92,6 +93,9 @@ final class SubscriptionOverview extends AccountScreen
             'trial' => Container::getInstance()->make(TrialCallouts::class)->for($this->owner(), $state, $this->subscription()?->trial_ends_at),
             // When access ends (grace) or ended, from the LOCAL subscription column — never a provider call.
             'endsAt' => $this->subscription()?->ends_at,
+            // Whether the grace period can be taken back. A cancellation to a date inside the period cannot: the
+            // rest of the period may have been refunded, so the screen shows the date and no resume button.
+            'resumable' => ! $this->subscription()?->endInsideItsPeriod() instanceof Carbon,
             // Only offer the hosted-portal link when the active driver actually has one — a driver without a
             // portal (e.g. a local-engine provider) would otherwise show a link that only 404s.
             'supportsHostedPortal' => $this->supportsHostedPortal(),
@@ -202,6 +206,12 @@ final class SubscriptionOverview extends AccountScreen
 
     public function resume(): void
     {
+        // The button is not offered for a cancellation to a date inside the period, which is final. A request
+        // that asks anyway changes nothing and records nothing, rather than failing with the driver's refusal.
+        if ($this->subscription()?->endInsideItsPeriod() instanceof Carbon) {
+            return;
+        }
+
         Container::getInstance()->make(SubscriptionActions::class)->resume($this->owner());
 
         $this->audit('subscription.resumed');

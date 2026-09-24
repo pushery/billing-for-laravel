@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers\Stripe;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use InvalidArgumentException;
 use Pushery\Billing\Contracts\MerchantOnboarding;
 use Pushery\Billing\Contracts\ReportsMerchantCapabilities;
 use Pushery\Billing\Contracts\ReportsOnboardingRequirements;
@@ -93,13 +94,23 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
 
         $key = $merchant->getKey();
 
+        // A merchant that was never stored has no key, and every such merchant would derive the SAME creation
+        // key below: the provider would hand the second one the account it made for the first, and every
+        // payout meant for it would go there. Refused before the provider is asked anything.
+        if (! is_int($key) && ! is_string($key)) {
+            throw new InvalidArgumentException(
+                'The merchant has no key, so it cannot be onboarded: store it first. Its key is what keeps two '
+                .'merchants from being handed the same provider account.'
+            );
+        }
+
         $account = $this->stripe->accounts->create([
             'type' => $this->accountType(),
             'metadata' => [
                 'billing_merchant_type' => $merchant->getMorphClass(),
-                'billing_merchant_id' => is_scalar($key) ? (string) $key : '',
+                'billing_merchant_id' => (string) $key,
             ],
-        ], ['idempotency_key' => $this->creationKey($merchant)]);
+        ], ['idempotency_key' => $this->creationKey($merchant->getMorphClass(), $key)]);
 
         $row = MerchantAccount::model()::query()->create([
             'merchant_type' => $merchant->getMorphClass(),
@@ -144,14 +155,9 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
      * The provider replays a key for a limited window, so this is a retry guard, not a permanent lock. Past
      * that window the row from the first attempt is what stops a duplicate, which is the check above.
      */
-    private function creationKey(Model $merchant): string
+    private function creationKey(string $merchantType, int|string $key): string
     {
-        $key = $merchant->getKey();
-
-        return 'billing-merchant-account:'.hash(
-            'sha256',
-            $merchant->getMorphClass().'|'.(is_scalar($key) ? (string) $key : '')
-        );
+        return 'billing-merchant-account:'.hash('sha256', $merchantType.'|'.$key);
     }
 
     public function onboardingLink(Model $merchant, string $refreshUrl, string $returnUrl): ClientIntent

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Facades;
 
+use Carbon\CarbonInterface;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Facade;
@@ -35,9 +36,11 @@ use Pushery\Billing\ValueObjects\Money;
  * @method static void assertNothingSubscribed()
  * @method static void assertSwapped(Model $owner, string $tierKey, ?string $type = null)
  * @method static void assertCanceled(Model $owner, ?MerchantScope $merchant = null, ?string $type = null)
+ * @method static void assertCanceledAt(Model $owner, ?CarbonInterface $endsAt = null, ?MerchantScope $merchant = null, ?string $type = null)
  * @method static void assertResumed(Model $owner, ?MerchantScope $merchant = null, ?string $type = null)
  * @method static void assertCanceledNow(Model $owner, ?MerchantScope $merchant = null, ?string $type = null)
  * @method static void assertNotCanceled(Model $owner, ?MerchantScope $merchant = null, ?string $type = null)
+ * @method static void assertNotCanceledAt(Model $owner, ?MerchantScope $merchant = null, ?string $type = null)
  * @method static void assertNotResumed(Model $owner, ?MerchantScope $merchant = null, ?string $type = null)
  * @method static void assertNotCanceledNow(Model $owner, ?MerchantScope $merchant = null, ?string $type = null)
  * @method static void assertPurchased(Model $owner, string $addonKey)

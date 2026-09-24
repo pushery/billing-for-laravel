@@ -70,13 +70,23 @@ enum RefundKind: string
     case ClosedMarket = 'closed_market';
 
     /**
+     * The part of a prepaid period after a cancellation to a date inside it, paid back.
+     *
+     * Its own kind because the buyer did not withdraw and the platform did not decide: the contract ended
+     * before the period it was paid for ran out (a renewed consumer contract canceled at a month's notice, for
+     * example) and what comes after the end is owed back. Counted as goodwill it would hide how much revenue
+     * such endings return; counted as a withdrawal it would claim a right nobody exercised.
+     */
+    case UnusedPrepaidPeriod = 'unused_prepaid_period';
+
+    /**
      * Whether the amount was decided by a rule rather than by whoever pressed the button.
      *
      * The distinction a reader needs before asking "is this figure right?": for a goodwill refund there is
-     * nothing to check it against, and for a withdrawal there is.
+     * nothing to check it against, and for a withdrawal or an unused prepaid period there is.
      */
     public function amountIsDerived(): bool
     {
-        return $this === self::StatutoryWithdrawal;
+        return $this === self::StatutoryWithdrawal || $this === self::UnusedPrepaidPeriod;
     }
 }

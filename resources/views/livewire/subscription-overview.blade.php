@@ -126,7 +126,7 @@
                         </button>
                     @endif
                 </div>
-            @elseif ($state === \Pushery\Billing\Enums\SubscriptionState::Grace)
+            @elseif ($state === \Pushery\Billing\Enums\SubscriptionState::Grace && $resumable)
                 <button type="button" wire:click="resume" wire:loading.attr="disabled"
                     class="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50">
                     {{ __('billing::account.subscription.resume') }}

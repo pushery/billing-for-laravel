@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
+use InvalidArgumentException;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SubscriptionState;
@@ -124,6 +125,66 @@ class Subscription extends Model
         }
 
         return $this->status === 'grace';
+    }
+
+    /**
+     * The moment the subscription was canceled to, when that moment lies before the end of its period.
+     *
+     * An ordinary cancellation ends at the period end; this one ends earlier, and the rest of the period is
+     * what a prorated cancellation pays back. So it is final: resuming it would hand back time the owner was
+     * refunded for, and canceling it again at the period end would move the end past the refund. Both
+     * refuse or leave it alone, and the account screen reads this to offer neither.
+     *
+     * Read from the two columns, never from a provider call. A row that does not know its period end cannot
+     * say, and answers null, as does a row that ends at its period end or has no end at all.
+     */
+    public function endInsideItsPeriod(): ?Carbon
+    {
+        if ($this->ends_at === null || $this->current_period_end === null) {
+            return null;
+        }
+
+        return $this->ends_at->lessThan($this->current_period_end) ? $this->ends_at : null;
+    }
+
+    /**
+     * Whether the period in progress is the subscription's last: it was canceled to a moment at or before the
+     * period's end.
+     *
+     * A driver that collects a period at its end reads this when it does: the cycle then closes the
+     * subscription instead of opening the next period.
+     */
+    public function endsWithThisPeriod(): bool
+    {
+        return $this->ends_at !== null
+            && $this->current_period_end !== null
+            && $this->ends_at->lessThanOrEqualTo($this->current_period_end);
+    }
+
+    /**
+     * Refuse a cancellation to a moment this subscription cannot end at, naming the method that does it instead.
+     *
+     * A moment that has passed is `cancelNow()`, and ending at it would date the end before the request was
+     * made. A moment after the period end is `cancel()`: a driver that bills a period at its end cannot bill
+     * part of the next one. The period end itself is allowed, and is the same end `cancel()` sets. A row
+     * that does not know its period end is refused only for the past.
+     *
+     * @throws InvalidArgumentException
+     */
+    public function assertCanEndAt(CarbonInterface $endsAt): void
+    {
+        if (! $endsAt->isFuture()) {
+            throw new InvalidArgumentException(
+                "Cannot cancel to {$endsAt->toIso8601String()}: that moment has passed. End the subscription now with cancelNow()."
+            );
+        }
+
+        if ($this->current_period_end !== null && $endsAt->greaterThan($this->current_period_end)) {
+            throw new InvalidArgumentException(
+                "Cannot cancel to {$endsAt->toIso8601String()}: the period in progress ends at "
+                ."{$this->current_period_end->toIso8601String()}. Cancel at the period end with cancel()."
+            );
+        }
     }
 
     public function pastDue(): bool
