@@ -87,18 +87,20 @@ final readonly class ProductClassifier
             rateCategory: $own->rateCategory->isDelegated() ? $reference->rateCategory : $own->rateCategory,
             reportable: $own->reportable->isDelegated() ? $reference->reportable : $own->reportable,
             withdrawal: $own->withdrawal->isDelegated() ? $reference->withdrawal : $own->withdrawal,
+            placeOfSupplyInPerson: $own->placeOfSupplyInPerson?->isDelegated() === true ? $reference->placeOfSupplyInPerson : $own->placeOfSupplyInPerson,
         );
     }
 
     /** @return list<TaxonomyCell> */
     private function cells(ArchetypeClassification $classification): array
     {
-        return [
+        return array_filter([
             $classification->regime,
             $classification->placeOfSupply,
             $classification->rateCategory,
             $classification->reportable,
             $classification->withdrawal,
-        ];
+            $classification->placeOfSupplyInPerson,
+        ]);
     }
 }

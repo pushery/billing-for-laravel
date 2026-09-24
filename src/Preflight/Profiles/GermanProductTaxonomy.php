@@ -58,6 +58,7 @@ final readonly class GermanProductTaxonomy implements ProductTaxonomy
                 // The one answer that does not delegate: it is provided the instant it is paid, so there is
                 // never anything to change one's mind about.
                 withdrawal: TaxonomyCell::fixed(WithdrawalType::NotApplicable),
+                placeOfSupplyInPerson: TaxonomyCell::delegated(),
             ),
             // Nothing has been bought yet, so nothing is taxable yet — not even in principle.
             TaxArchetype::Voucher => new ArchetypeClassification(
@@ -76,6 +77,9 @@ final readonly class GermanProductTaxonomy implements ProductTaxonomy
                 reportable: TaxonomyCell::fixed(true),
                 // Between two private people there is no such right at all.
                 withdrawal: TaxonomyCell::fixed(WithdrawalType::NotApplicable),
+                // Handed over at a point of sale, goods are supplied there (§ 3 (6) and (7) UStG), and no
+                // registration of the buyer moves that place.
+                placeOfSupplyInPerson: TaxonomyCell::fixed(PlaceOfSupplyRule::PointOfSale),
             ),
         };
     }

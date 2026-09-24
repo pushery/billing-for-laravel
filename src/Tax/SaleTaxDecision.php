@@ -9,13 +9,16 @@ use Pushery\Billing\Contracts\TaxCalculator;
 use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxExemptionReason;
+use Pushery\Billing\Enums\TaxRateCategory;
 use Pushery\Billing\Exceptions\GrossPriceNotSplittable;
+use Pushery\Billing\Exceptions\PointOfSaleUnknown;
 use Pushery\Billing\Exceptions\ProductNotClassified;
 use Pushery\Billing\Marketplace\ProductClassifier;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\ServicePeriod;
 use Pushery\Billing\ValueObjects\SupplyPlacement;
 use Pushery\Billing\ValueObjects\TaxContext;
+use Pushery\Billing\ValueObjects\TaxonomyCell;
 
 /**
  * The one place a sale's tax is decided, returning every fact a document must freeze.
@@ -64,6 +67,8 @@ final readonly class SaleTaxDecision
      * @param  CarbonImmutable|null  $paidOn  when the money arrived, which decides the point under a receipt basis
      * @param  TaxArchetype|null  $soldAlongside  for an archetype that takes its treatment from something
      *                                            else — a tip, a fan-chosen top-up — what it was paid ON
+     * @param  string|null  $soldAt  the country a sale made in person is made in, as a two-letter code; null
+     *                               for a sale that is not made at a point of sale
      */
     public function decide(
         TaxArchetype $archetype,
@@ -72,6 +77,7 @@ final readonly class SaleTaxDecision
         ?ServicePeriod $period = null,
         ?CarbonImmutable $paidOn = null,
         ?TaxArchetype $soldAlongside = null,
+        ?string $soldAt = null,
     ): SaleTaxFacts {
         // The product's own rule first — a download is placed differently from a live one-to-one session —
         // and then the buyer's status has its say over it. The order matters: reading the product last would
@@ -82,7 +88,17 @@ final readonly class SaleTaxDecision
         // a second copy of "take the delegated cells from the reference" is the one quantity, two derivations
         // that this package keeps paying for. The classifier also raises the same refusal this method used to
         // raise itself when a delegating archetype arrives without its reference.
-        $placeCell = $this->classifier->classify($archetype, $soldAlongside)->placeOfSupply;
+        $classification = $this->classifier->classify($archetype, $soldAlongside);
+        $placeCell = $classification->placeOfSupply;
+
+        // Sold in person, a product whose taxonomy names an in-person place takes it. One that names none is
+        // placed as it would be online, because the channel does not move every supply: a session paid at
+        // the counter is still a service to whoever receives it.
+        $soldAt = $soldAt === null ? null : $this->pointOfSale($soldAt);
+
+        if ($soldAt !== null && $classification->placeOfSupplyInPerson instanceof TaxonomyCell) {
+            $placeCell = $classification->placeOfSupplyInPerson;
+        }
 
         // ONE archetype is refused here, and it used to be two. That change is the point of this block.
         //
@@ -111,8 +127,20 @@ final readonly class SaleTaxDecision
             throw ProductNotClassified::forPlaceOfSupply($archetype->value);
         }
 
+        // The band follows from what was sold, exactly as the place does, so it comes from the same
+        // classification and replaces whatever band the buyer's context carried. That band could not say
+        // whether anybody chose it: its default is the standard band, and read as an answer it charged a
+        // reduced-band product the standard rate while the document beside it stated the reduced band.
+        $band = $classification->rateCategory->fixedAnswerOf(TaxRateCategory::class);
+
+        if (! $band instanceof TaxRateCategory) {
+            throw ProductNotClassified::forRateCategory($archetype->value);
+        }
+
+        $buyer = $buyer->withRateCategory($band);
+
         $placement = $this->places->place($productRule, $buyer);
-        $context = $this->places->taxContextFor($productRule, $buyer);
+        $context = $this->places->taxContextFor($productRule, $buyer, $soldAt);
 
         // Decided BEFORE the rate is asked for, which is the whole change. The tax point was already being
         // worked out here — it just arrived after the calculation and went straight into the facts, so the
@@ -175,6 +203,7 @@ final readonly class SaleTaxDecision
      *
      * @param  Money  $gross  what the buyer chose to pay, tax included
      * @param  TaxArchetype|null  $soldAlongside  what a delegating archetype was paid on
+     * @param  string|null  $soldAt  the country a sale made in person is made in
      */
     public function decideOnGross(
         TaxArchetype $archetype,
@@ -183,20 +212,21 @@ final readonly class SaleTaxDecision
         ?ServicePeriod $period = null,
         ?CarbonImmutable $paidOn = null,
         ?TaxArchetype $soldAlongside = null,
+        ?string $soldAt = null,
     ): SaleTaxFacts {
         // The probe. Its own tax is meaningless — it is the tax on a number nobody is paying — but the rate
         // it carries is the regime's slope for this buyer and this product, which is the one thing needed.
-        $slope = $this->decide($archetype, $gross, $buyer, $period, $paidOn, $soldAlongside)->rateBps;
+        $slope = $this->decide($archetype, $gross, $buyer, $period, $paidOn, $soldAlongside, $soldAt)->rateBps;
 
         // Nothing to strip out: an exempt, reverse-charged or untaxed sale has a net equal to its total, and
         // `baseFromMarkup(0)` would say the same thing at more cost.
         if ($slope === 0) {
-            return $this->decide($archetype, $gross, $buyer, $period, $paidOn, $soldAlongside);
+            return $this->decide($archetype, $gross, $buyer, $period, $paidOn, $soldAlongside, $soldAt);
         }
 
         [$net, $impliedTax] = $gross->baseFromMarkup($slope);
 
-        $facts = $this->decide($archetype, $net, $buyer, $period, $paidOn, $soldAlongside);
+        $facts = $this->decide($archetype, $net, $buyer, $period, $paidOn, $soldAlongside, $soldAt);
 
         // The one-cent tolerance is a property of inverting a rounded function, not a defect: for some
         // totals no whole-cent net reproduces them exactly. A wider gap is a statement about the regime —
@@ -283,5 +313,20 @@ final readonly class SaleTaxDecision
         }
 
         return (int) round($tax->minorUnits * 10_000 / $net->minorUnits);
+    }
+
+    /**
+     * The point of sale as a country code, or a refusal.
+     *
+     * Read case-insensitively and nothing else: a code that is not two letters is not a place a rate can be
+     * found for, and guessing one would tax the sale somewhere it was not made.
+     */
+    private function pointOfSale(string $soldAt): string
+    {
+        if (preg_match('/^[A-Za-z]{2}$/', $soldAt) !== 1) {
+            throw PointOfSaleUnknown::notACountry($soldAt);
+        }
+
+        return strtoupper($soldAt);
     }
 }

@@ -11,6 +11,9 @@ namespace Pushery\Billing\Enums;
  * supply taxed where the BUYER is follows their country's rate and reports into that country, while one
  * taxed where the SELLER is carries the platform's own rate wherever the buyer happens to be.
  *
+ * A third answers a sale made in person. Goods handed over at a point of sale are supplied where it is,
+ * whoever buys them, so neither the buyer's country nor the buyer's registration moves that place.
+ *
  * It is frozen onto a transaction rather than read from the product, because a product's classification can
  * change after it has been sold — and a correction that re-derived the rule would report a past sale into a
  * country it was never declared in.
@@ -22,4 +25,7 @@ enum PlaceOfSupplyRule: string
 
     /** Taxed where the seller is, whatever the buyer's country. */
     case Domestic = 'domestic';
+
+    /** Taxed where the sale is made in person, whoever the buyer is and whatever registration they hold. */
+    case PointOfSale = 'point_of_sale';
 }

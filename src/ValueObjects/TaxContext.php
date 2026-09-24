@@ -69,6 +69,25 @@ final readonly class TaxContext
      * valid (via VIES). The reverse charge zero-rates the supply, so it must never rest on an id that was
      * merely present — a fake, or one that VIES could not confirm, would under-charge VAT.
      */
+    /**
+     * The same buyer, taxed at a band the product decides.
+     *
+     * The band belongs to what was sold rather than to who bought it, so the classification sets it here,
+     * and every other fact about the buyer travels on unchanged.
+     */
+    public function withRateCategory(TaxRateCategory $rateCategory): self
+    {
+        return new self(
+            countryCode: $this->countryCode,
+            vatId: $this->vatId,
+            business: $this->business,
+            vatIdValid: $this->vatIdValid,
+            rateCategory: $rateCategory,
+            hasAudioVisualComponent: $this->hasAudioVisualComponent,
+            taxPoint: $this->taxPoint,
+        );
+    }
+
     public function isReverseChargeCandidate(): bool
     {
         return $this->business

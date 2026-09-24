@@ -4,6 +4,22 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.39.0] - 2026-09-24
+
+### Added
+
+- **A sale made in person is taxed where it is made.** `SaleTaxDecision::decide()` and `decideOnGross()` take the country a sale is made in as `soldAt`. For a product whose taxonomy names an in-person place, the sale is placed at the point of sale, as goods handed over there are supplied there whoever buys them: a business from another member state is not reverse-charged, and a tourist pays the tax of the shop's country without the sale entering the One-Stop-Shop scheme or the distance-sale threshold. A service keeps its place when paid in person. The shipped German taxonomy sets this for goods and lets a tip take it from what it was paid on. A point of sale that is not a two-letter country code is refused with `PointOfSaleUnknown`.
+
+### Changed
+
+- **`PlaceOfSupplyRule` has a third case, `PointOfSale`.** Code that matches over the enum without a default arm must handle it. `ArchetypeClassification` takes an optional sixth argument, `placeOfSupplyInPerson`, so a `ProductTaxonomy` of your own keeps working unchanged and places a sale made in person as it places an online one.
+
+### Fixed
+
+- **A sale is taxed at the rate band its product's classification gives it.** `SaleTaxDecision` took the band from the buyer's `TaxContext`, whose default is the standard band, so an ebook sold with a plain context was charged the standard rate while its document stated the reduced band. The band now comes from the taxonomy like the place of supply, and a tip takes the band of what it was paid on. A band on the context no longer decides; whether the item carries audio or video still comes from the context. A supply taxed where the seller is, or at a point of sale, now keeps its band too, where rebuilding the context for the seller's country used to drop it. Reduced rates still need `billing.tax_matrix`.
+
+- **A verified tax id now places a business where the id registers it, and one from outside the union no longer reverse-charges.** On a driver this package bills itself, a cycle for a customer with a verified tax id took the country from the place evidence, which answers where a consumer is, and treated every verified id as a union registration. A German business whose evidence read another member state was therefore zero-rated as a cross-border reverse charge although it owed German tax, and a business whose id a register outside the union confirmed, such as a UK VAT number Stripe checks with HMRC, was reverse-charged as if it were inside the union. The country now comes from the id: a union VAT id's prefix, with `EL` read as Greece and `XI` as the United Kingdom, or the country a provider's id type names. `PlaceOfSupplyResolver::recipientStatus()` treats a verified registration outside the union as `NonUnionBusiness`, and an id whose country cannot be read is not taken as proof, so that customer is charged as the place evidence says.
+
 ## [0.38.0] - 2026-09-24
 
 ### Added
@@ -7028,7 +7044,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.38.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.39.0...HEAD
+[0.39.0]: https://github.com/pushery/billing-for-laravel/compare/v0.38.0...v0.39.0
 [0.38.0]: https://github.com/pushery/billing-for-laravel/compare/v0.37.1...v0.38.0
 [0.37.1]: https://github.com/pushery/billing-for-laravel/compare/v0.37.0...v0.37.1
 [0.37.0]: https://github.com/pushery/billing-for-laravel/compare/v0.36.0...v0.37.0
