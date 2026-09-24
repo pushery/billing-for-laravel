@@ -64,7 +64,7 @@
     "require-dev": {
         "adyen/php-api-library": "^25.0|^26.0",
         "horstoeko/zugferd": "^1.0",
-        "larastan/larastan": "3.12.1",
+        "larastan/larastan": "3.12.2",
         "laravel/ai": "^0.11.2",
         "laravel/boost": "^2.9",
         "laravel/mcp": "^1.0",
@@ -79,8 +79,9 @@
         "pestphp/pest-plugin-browser": "^5.0",
         "pestphp/pest-plugin-evals": "^5.0",
         "pestphp/pest-plugin-laravel": "^5.0",
+        "pestphp/pest-plugin-phpstan": "5.2.1",
         "pestphp/pest-plugin-type-coverage": "^5.0",
-        "phpstan/phpstan": "2.2.14",
+        "phpstan/phpstan": "2.2.15",
         "rector/rector": "2.6.7",
         "spaze/phpstan-disallowed-calls": "4.14.0"
     },
