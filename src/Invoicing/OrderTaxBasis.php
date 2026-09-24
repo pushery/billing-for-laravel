@@ -221,11 +221,48 @@ final readonly class OrderTaxBasis
             return new TaxContext(countryCode: $country);
         }
 
+        $registered = $this->registrationCountryOf($verified->type, $verified->value);
+
+        // An id whose country this package cannot read proves a business somewhere, and "somewhere" is not a
+        // place of supply. It stays unproven, which charges tax rather than dropping it.
+        if ($registered === null) {
+            return new TaxContext(countryCode: $country, vatId: $verified->value, business: true);
+        }
+
         return new TaxContext(
-            countryCode: $country,
+            countryCode: $registered,
             vatId: $verified->value,
             business: true,
             vatIdValid: true,
         );
+    }
+
+    /**
+     * The country a verified tax id registers its holder in, or null where the id does not say.
+     *
+     * A business supply is placed where the business receives it, and the id the business gives names that
+     * establishment (Article 22(1) of Implementing Regulation (EU) No 282/2011). So the country comes from
+     * the id, not from the place evidence, which answers where a CONSUMER is: a German business whose
+     * evidence reads AT is still a German business buying from a German seller.
+     *
+     * A union VAT id carries its country as a prefix, read as itself except `EL` as `GR` and `XI` as `GB`,
+     * because a Northern Irish id is a United Kingdom business for a service. Every other type names its
+     * country before the underscore, such as `gb_vat` or `ch_vat`. A type that names no single country,
+     * such as `eu_oss_vat`, gives null.
+     */
+    private function registrationCountryOf(string $type, string $value): ?string
+    {
+        if ($type === 'eu_vat') {
+            $prefix = strtoupper(substr(trim($value), 0, 2));
+
+            return match (true) {
+                $prefix === 'EL' => 'GR',
+                $prefix === 'XI' => 'GB',
+                preg_match('/^[A-Z]{2}$/', $prefix) === 1 => $prefix,
+                default => null,
+            };
+        }
+
+        return preg_match('/^([a-z]{2})_[a-z]+$/', $type, $matches) === 1 ? strtoupper($matches[1]) : null;
     }
 }

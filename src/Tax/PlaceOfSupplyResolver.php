@@ -6,6 +6,7 @@ namespace Pushery\Billing\Tax;
 
 use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\RecipientTaxStatus;
+use Pushery\Billing\Exceptions\PointOfSaleUnknown;
 use Pushery\Billing\ValueObjects\SupplyPlacement;
 use Pushery\Billing\ValueObjects\TaxContext;
 
@@ -21,6 +22,9 @@ use Pushery\Billing\ValueObjects\TaxContext;
  * Nothing about that document looks wrong, which is why this is a resolver with tests rather than a rule in
  * prose. The buyer cannot reclaim what was charged, the authority was not owed it, and the summary
  * declaration that should have existed does not.
+ *
+ * A sale made in person comes before both stages. Goods handed over at a point of sale are supplied there,
+ * so neither the buyer nor the product's online rule is asked where it is taxed.
  *
  * It is jurisdiction-neutral: it knows "a validated business elsewhere shifts the place to them", never any
  * statute. Which countries form the union, and what the rates are, live in the rate table and the profile.
@@ -79,6 +83,19 @@ final readonly class PlaceOfSupplyResolver
     public function place(PlaceOfSupplyRule $productRule, TaxContext $context): SupplyPlacement
     {
         $recipient = $this->recipientStatus($context);
+
+        // A sale made in person is placed where it is made, BEFORE the buyer stage and instead of it. A
+        // business from another member state does not move goods handed over in a shop with its VAT id,
+        // and a supply that is not a distance sale belongs in no consumer scheme.
+        if ($productRule === PlaceOfSupplyRule::PointOfSale) {
+            return new SupplyPlacement(
+                rule: PlaceOfSupplyRule::PointOfSale,
+                recipient: $recipient,
+                reverseCharge: false,
+                reportableUnderOneStopShop: false,
+            );
+        }
+
         $buyerCountry = strtoupper($context->countryCode);
         $seller = $this->sellerCountry !== null ? strtoupper($this->sellerCountry) : null;
 
@@ -130,8 +147,26 @@ final readonly class PlaceOfSupplyResolver
      * the seller is rather than where the buyer is. Deciding that here — rather than teaching the
      * calculator about products — keeps one rule in one place and leaves the rate table alone.
      */
-    public function taxContextFor(PlaceOfSupplyRule $productRule, TaxContext $buyer): TaxContext
+    public function taxContextFor(PlaceOfSupplyRule $productRule, TaxContext $buyer, ?string $soldAt = null): TaxContext
     {
+        // Taxed in the country of the point of sale, and with the buyer's registration left out on purpose: a
+        // supply placed where it happens is taxed there whoever buys it, and a calculator handed a validated
+        // id would zero a sale in a shop abroad as a cross-border reverse charge.
+        if ($productRule === PlaceOfSupplyRule::PointOfSale) {
+            if ($soldAt === null) {
+                throw PointOfSaleUnknown::missing();
+            }
+
+            return new TaxContext(
+                countryCode: strtoupper($soldAt),
+                vatId: $buyer->vatId,
+                business: $buyer->business,
+                rateCategory: $buyer->rateCategory,
+                hasAudioVisualComponent: $buyer->hasAudioVisualComponent,
+                taxPoint: $buyer->taxPoint,
+            );
+        }
+
         $placement = $this->place($productRule, $buyer);
 
         if ($placement->rule === PlaceOfSupplyRule::Destination) {
@@ -148,6 +183,11 @@ final readonly class PlaceOfSupplyResolver
                 vatId: $buyer->vatId,
                 business: $buyer->business,
                 vatIdValid: $buyer->vatIdValid,
+                // Everything else about the supply travels with it. Rebuilt without these, a reduced-band
+                // product taxed at the seller fell back to the standard band.
+                rateCategory: $buyer->rateCategory,
+                hasAudioVisualComponent: $buyer->hasAudioVisualComponent,
+                taxPoint: $buyer->taxPoint,
             );
     }
 
@@ -179,8 +219,15 @@ final readonly class PlaceOfSupplyResolver
 
         // A business that proved its registration. The existing candidate test already requires the id to
         // be present AND confirmed, so an unvalidated one never reaches here.
+        //
+        // A confirmed registration proves a business, not a union member. A provider asks registers beyond
+        // the union's (Stripe confirms a `gb_vat` with the UK's), so the confirmation is followed by the
+        // question the status is named after: is the buyer's country in the union? Outside it, the business
+        // is outside the union's tax, and the reverse charge is the union's own mechanism.
         if ($context->isReverseChargeCandidate()) {
-            return RecipientTaxStatus::UnionBusinessValidated;
+            return $this->sharesUnion($context->countryCode)
+                ? RecipientTaxStatus::UnionBusinessValidated
+                : RecipientTaxStatus::NonUnionBusiness;
         }
 
         // A business without a union registration is treated as outside it. A union business that failed to

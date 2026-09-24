@@ -7,9 +7,10 @@ namespace Pushery\Billing\ValueObjects;
 /**
  * What follows, for tax and for the buyer's rights, from what was sold.
  *
- * Five answers travel together because they are read together and because a mismatched set is worse than a
- * missing one: a sale taxed under one shape and reported under another is internally consistent everywhere
- * anybody looks, and wrong only in the relationship between two places nobody compares.
+ * Five answers, and a sixth for a sale made in person, travel together because they are read together
+ * and because a mismatched set is worse than a missing one: a sale taxed under one shape and reported
+ * under another is internally consistent everywhere anybody looks, and wrong only in the relationship
+ * between two places nobody compares.
  */
 final readonly class ArchetypeClassification
 {
@@ -24,5 +25,14 @@ final readonly class ArchetypeClassification
         public TaxonomyCell $reportable,
         /** Which cancellation regime the buyer has. */
         public TaxonomyCell $withdrawal,
+        /**
+         * Where it is taxed when sold in person, or null where selling it in person changes nothing.
+         *
+         * Goods handed over at a point of sale are supplied there, so a jurisdiction sets
+         * `PlaceOfSupplyRule::PointOfSale` for them. A service keeps the place `placeOfSupply` gives it,
+         * which is why null is the default rather than a guess: a taxonomy written before this cell existed
+         * places an in-person sale exactly as it places an online one.
+         */
+        public ?TaxonomyCell $placeOfSupplyInPerson = null,
     ) {}
 }

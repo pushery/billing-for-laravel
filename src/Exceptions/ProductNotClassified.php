@@ -62,6 +62,15 @@ final class ProductNotClassified extends RuntimeException
      * every product, so a fallback would hide the profile defect behind a correct-looking invoice — and it
      * would hide it on every sale, not just the odd one.
      */
+    public static function forRateCategory(string $archetype): self
+    {
+        return new self(
+            "The active jurisdiction profile does not classify which rate band a \"{$archetype}\" supply falls in. "
+            .'A band is not a detail that can be guessed: defaulting it would charge every sale of this product at '
+            .'a rate its own document contradicts.'
+        );
+    }
+
     public static function forPlaceOfSupply(string $archetype): self
     {
         return new self(
