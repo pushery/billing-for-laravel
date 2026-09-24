@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use InvalidArgumentException;
+use Pushery\Billing\Consumer\ProratedCancellation;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\MerchantCatalog;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\CancellationReason;
 use Pushery\Billing\Exceptions\EligibilityDenied;
+use Pushery\Billing\Exceptions\EndInsidePeriodIsFinal;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -27,7 +31,7 @@ use Stripe\SubscriptionItem;
  *
  * The swap is the superset closure that keeps upgrades/downgrades in-app: the client submits a tier
  * KEY, never a price, and the price is resolved from the plan catalog (anti-price-injection). A
- * cancel/resume/cancelNow with no live subscription is a safe no-op; a swap without one, to a tier
+ * cancel/cancelAt/resume/cancelNow with no live subscription is a safe no-op; a swap without one, to a tier
  * that carries no provider price, or onto a subscription whose tier item cannot be identified, is
  * rejected rather than silently doing nothing — or, worse, repricing the wrong item.
  */
@@ -42,9 +46,12 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
 
     public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $reference = $this->subscriptionReference($billable, $merchant, $type);
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
+        $reference = $subscription?->provider_id;
 
-        if ($reference === null) {
+        // An earlier end stays where it is. Canceling at the period end on top of a cancellation to a date would
+        // move Stripe's `cancel_at` out to the period end, past a rest of the period that may have been refunded.
+        if (! $subscription instanceof Subscription || $reference === null || $subscription->endInsideItsPeriod() instanceof Carbon) {
             return;
         }
 
@@ -84,18 +91,58 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
         };
     }
 
+    /**
+     * Take back a cancellation at the period end.
+     *
+     * A cancellation to a moment inside the period is refused rather than taken back: the rest of the period
+     * after that moment may have been refunded, and clearing `cancel_at` would hand it back unpaid.
+     */
     public function resume(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $reference = $this->subscriptionReference($billable, $merchant, $type);
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
+        $early = $subscription?->endInsideItsPeriod();
+
+        if ($early instanceof Carbon) {
+            throw EndInsidePeriodIsFinal::forResume($early);
+        }
+
+        $reference = $subscription?->provider_id;
 
         if ($reference !== null) {
             $this->ignoringDeadSubscription(fn () => $this->stripe->subscriptions->update($reference, ['cancel_at_period_end' => false]));
         }
     }
 
+    /**
+     * End the subscription at a moment inside the period it is in, through Stripe's own `cancel_at`.
+     *
+     * Without proration. Stripe would otherwise book the unused rest as a credit on the customer's balance,
+     * where nothing after the end ever spends it. The rest goes back to the payment instead, through the rails,
+     * which is what {@see ProratedCancellation} does after this.
+     *
+     * The local row learns the new state from the `customer.subscription.updated` webhook, like every other
+     * mutation here.
+     */
+    public function cancelAt(Model $billable, CarbonInterface $endsAt, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
+        $reference = $subscription?->provider_id;
+
+        if (! $subscription instanceof Subscription || $reference === null) {
+            return;
+        }
+
+        $subscription->assertCanEndAt($endsAt);
+
+        $this->ignoringDeadSubscription(fn () => $this->stripe->subscriptions->update($reference, [
+            'cancel_at' => $endsAt->getTimestamp(),
+            'proration_behavior' => 'none',
+        ]));
+    }
+
     public function cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $reference = $this->subscriptionReference($billable, $merchant, $type);
+        $reference = $this->subscriptionFor($billable, $merchant, $type)?->provider_id;
 
         if ($reference !== null) {
             $this->ignoringDeadSubscription(fn () => $this->stripe->subscriptions->cancel($reference));
@@ -121,7 +168,7 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
             throw new InvalidArgumentException("Tier '{$tierKey}' has no provider price to swap to.");
         }
 
-        $reference = $this->subscriptionReference($billable, $merchant, $type);
+        $reference = $this->subscriptionFor($billable, $merchant, $type)?->provider_id;
 
         if ($reference === null) {
             throw new InvalidArgumentException('Cannot swap: the billable has no active subscription.');
@@ -172,22 +219,20 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
     }
 
     /**
-     * The provider subscription reference from the billable's local subscription row, or null.
+     * The billable's local subscription row, whose `provider_id` is the Stripe subscription, or null.
      *
      * Scoped to the merchant so a marketplace mutation addresses exactly the (fan, creator) subscription; a
      * null merchant reproduces the single-seller selection exactly (`merchant_uid = 'platform'`). Scoped to
      * the contract type as well, so a sponsorship and a subscription at the same creator are told apart; a
      * null type is the default contract.
      */
-    private function subscriptionReference(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): ?string
+    private function subscriptionFor(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): ?Subscription
     {
-        $subscription = Subscription::model()::query()
+        return Subscription::model()::query()
             ->forOwner($billable)
             ->forMerchant($merchant)
             ->ofType($type)
             ->latest('id')
             ->first();
-
-        return $subscription?->provider_id;
     }
 }

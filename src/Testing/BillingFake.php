@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Testing;
 
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use PHPUnit\Framework\Assert as PHPUnit;
 use Pushery\Billing\Contracts\CanReceiveMoney;
@@ -40,7 +42,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     /** @var list<array{owner: Model, tier: string, prorate: bool, merchant: ?MerchantScope, type: ?string}> */
     private array $swaps = [];
 
-    /** @var list<array{owner: Model, action: string, survey?: ?CancellationSurvey, merchant: ?MerchantScope, type: ?string}> */
+    /** @var list<array{owner: Model, action: string, survey?: ?CancellationSurvey, endsAt?: CarbonImmutable, merchant: ?MerchantScope, type: ?string}> */
     private array $lifecycle = [];
 
     /** @var list<array{owner: Model, addon: string, declaration: ?string, country: ?string, collectTaxId: ?bool, callerReference: ?string}> */
@@ -141,6 +143,11 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null, ?string $type = null): void
     {
         $this->lifecycle[] = ['owner' => $billable, 'action' => 'cancel', 'survey' => $survey, 'merchant' => $merchant, 'type' => $type];
+    }
+
+    public function cancelAt(Model $billable, CarbonInterface $endsAt, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        $this->lifecycle[] = ['owner' => $billable, 'action' => 'cancelAt', 'endsAt' => CarbonImmutable::instance($endsAt), 'merchant' => $merchant, 'type' => $type];
     }
 
     public function resume(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
@@ -371,6 +378,49 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     public function assertCanceled(Model $owner, ?MerchantScope $merchant = null, ?string $type = null): void
     {
         $this->assertLifecycle($owner, 'cancel', $merchant, $type);
+    }
+
+    /**
+     * The owner's subscription was canceled to a moment inside its period: to exactly `$endsAt` when one is named,
+     * under the given merchant and of the given contract type when those are.
+     *
+     * Compared as a moment, not as text, so a moment held in another time zone still matches. A failure names
+     * the moments the owner WAS canceled to, because that is the answer the reader goes looking for.
+     */
+    public function assertCanceledAt(Model $owner, ?CarbonInterface $endsAt = null, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        if (! $endsAt instanceof CarbonInterface) {
+            $this->assertLifecycle($owner, 'cancelAt', $merchant, $type);
+
+            return;
+        }
+
+        $seen = [];
+
+        foreach ($this->lifecycle as $call) {
+            $moment = $call['endsAt'] ?? null;
+
+            if (! $moment instanceof CarbonImmutable
+                || ! $this->sameOwner($call['owner'], $owner)
+                || ($merchant instanceof MerchantScope && ($call['merchant'] ?? MerchantScope::platform())->uid() !== $merchant->uid())
+                || ($type !== null && ($call['type'] ?? Subscription::TYPE_DEFAULT) !== $type)) {
+                continue;
+            }
+
+            $seen[] = $moment->utc()->toIso8601String();
+        }
+
+        $wanted = CarbonImmutable::instance($endsAt)->utc()->toIso8601String();
+
+        PHPUnit::assertContains($wanted, $seen, $seen === []
+            ? "Expected a cancellation to [{$wanted}], but the owner was not canceled to a moment at all."
+            : "Expected a cancellation to [{$wanted}], but the owner was canceled to [".implode(', ', $seen).'].');
+    }
+
+    /** The owner's subscription was NOT canceled to a moment, under the given merchant and of the given type when named. */
+    public function assertNotCanceledAt(Model $owner, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        $this->assertNoLifecycle($owner, 'cancelAt', $merchant, $type);
     }
 
     /** The owner's cancellation was taken back, under the given merchant and of the given type when named. */

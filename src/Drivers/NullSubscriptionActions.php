@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
@@ -18,6 +19,8 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 final class NullSubscriptionActions implements SubscriptionActions
 {
     public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null, ?string $type = null): void {}
+
+    public function cancelAt(Model $billable, CarbonInterface $endsAt, ?MerchantScope $merchant = null, ?string $type = null): void {}
 
     public function resume(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void {}
 

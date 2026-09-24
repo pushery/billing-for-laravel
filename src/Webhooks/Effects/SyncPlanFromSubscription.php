@@ -425,6 +425,8 @@ final readonly class SyncPlanFromSubscription
             // The subscription trial's end, so the trial banner and the trial CTA can read the days left.
             // Same never-erase rule: an event with no trial end keeps the one we know.
             'trial_ends_at' => $this->moment($event->trialEnd) ?? $subscription?->trial_ends_at,
+            // When a canceled subscription ends. NOT under the never-erase rule, and deliberately: see endsAt().
+            'ends_at' => $this->endsAt($subscription, $event),
             // The key the buyer's withdrawal declarations were recorded under. Never erased by an event that
             // carries none, like the columns above, and never inherited by a different subscription either.
             'declaration_reference' => $this->declarationReference($subscription, $event),
@@ -447,6 +449,26 @@ final readonly class SyncPlanFromSubscription
         $existing = $subscription instanceof Subscription ? $subscription->delinquent_since : null;
 
         return $existing ?? Carbon::now();
+    }
+
+    /**
+     * When the subscription ends, as the row should say it.
+     *
+     * In grace it is the moment the provider will end it: the date a cancellation named, or the period end when
+     * it named none. A row that ended keeps the moment it ended, from the event when it carries one and from the
+     * row otherwise, because the event that ends a subscription does not always say when.
+     *
+     * Every other state has no end, and that one IS an erasure. `onGracePeriod()` reads `ends_at` before the
+     * status, so a row that kept a stale end after the owner took the cancellation back would go on reading as
+     * canceled, and a later cancellation to a date would be refused as already ending.
+     */
+    private function endsAt(?Subscription $subscription, SubscriptionStateChanged $event): ?Carbon
+    {
+        return match ($event->state) {
+            SubscriptionState::Grace => $this->moment($event->endsAt ?? $event->periodEnd) ?? $subscription?->ends_at,
+            SubscriptionState::Ended, SubscriptionState::Churned => $this->moment($event->endsAt) ?? $subscription?->ends_at,
+            default => null,
+        };
     }
 
     /** A provider Unix timestamp as a UTC moment, or null when the provider conveyed none. */

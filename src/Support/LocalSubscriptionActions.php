@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Pushery\Billing\Support;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\PlanCatalog;
@@ -15,6 +17,7 @@ use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Drivers\NullSubscriptionActions;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Exceptions\EligibilityDenied;
+use Pushery\Billing\Exceptions\EndInsidePeriodIsFinal;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -55,24 +58,29 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
     ) {}
 
     /**
-     * End the subscription at the period it is already paid for, rather than at once.
+     * End the subscription at the end of the period it is in, rather than at once.
      *
      * The row stays `active` until then — `ends_at` is what marks the grace period, and the state reads
      * from it. Canceling is not the same as losing access, and a customer who cancels on day two of a
-     * month they paid for keeps the month.
+     * month keeps the month.
+     *
+     * The schedule stays where it is. The engine collects a period at its end, so the cycle due then is the
+     * one that bills this period, and the end makes it the last: it closes the subscription instead of
+     * opening the next period. Clearing the schedule here meant the period was never billed and the row
+     * never ended.
+     *
+     * A subscription already canceled to a moment inside its period keeps that moment. Moving it out to
+     * the period end would give back time a prorated cancellation may have refunded.
      */
     public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null, ?string $type = null): void
     {
         $subscription = $this->subscriptionFor($billable, $merchant, $type);
 
-        if (! $subscription instanceof Subscription) {
+        if (! $subscription instanceof Subscription || $subscription->endInsideItsPeriod() instanceof Carbon) {
             return;
         }
 
-        $subscription->update([
-            'ends_at' => $subscription->current_period_end,
-            'scheduled_processing_at' => null,
-        ]);
+        $subscription->update(['ends_at' => $subscription->current_period_end]);
     }
 
     /**
@@ -81,6 +89,12 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
      * Only meaningful while the subscription is still inside the period it was canceled in; once it has
      * ended there is nothing to resume, and pretending otherwise would silently restore a subscription
      * nobody is paying for.
+     *
+     * A cancellation to a moment inside the period is refused rather than taken back. It is final on every
+     * driver, because on a driver that collects in advance the rest of the period may have been refunded,
+     * and one rule for all of them is the one a screen can rely on.
+     *
+     * @throws InvalidArgumentException when the subscription was canceled to a moment inside its period
      */
     public function resume(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
@@ -90,9 +104,40 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
             return;
         }
 
+        $early = $subscription->endInsideItsPeriod();
+
+        if ($early instanceof Carbon) {
+            throw EndInsidePeriodIsFinal::forResume($early);
+        }
+
         $subscription->update([
             'ends_at' => null,
             'scheduled_processing_at' => $subscription->current_period_end,
+        ]);
+    }
+
+    /**
+     * End the subscription at a moment inside the period it is in.
+     *
+     * The same shape as `cancel()` with an earlier date: the row stays `active` until then and `ends_at`
+     * marks the grace period. The last cycle moves to that moment, where it bills the days up to it and
+     * closes the subscription.
+     *
+     * @throws InvalidArgumentException when the moment has passed or lies after the period end
+     */
+    public function cancelAt(Model $billable, CarbonInterface $endsAt, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
+
+        if (! $subscription instanceof Subscription) {
+            return;
+        }
+
+        $subscription->assertCanEndAt($endsAt);
+
+        $subscription->update([
+            'ends_at' => CarbonImmutable::instance($endsAt),
+            'scheduled_processing_at' => CarbonImmutable::instance($endsAt),
         ]);
     }
 

@@ -62,7 +62,25 @@ final readonly class StripeSubscriptionMapper
             couponCode: $this->mintedCouponCode($subscription),
             subscriptionType: $this->subscriptionType($subscription),
             callerReference: $this->callerReference($subscription),
+            endsAt: $this->endsAt($subscription),
         );
+    }
+
+    /**
+     * When the subscription ends: Stripe's `cancel_at` while an end is scheduled, its `ended_at` once it ended.
+     *
+     * `cancel_at` is what a cancellation to a date sets, and it is the moment access stops. Reading the period
+     * end instead would promise the owner the rest of a period that may have been refunded. A subscription
+     * with neither answers null, and a grace period without a `cancel_at` is read from the period end where
+     * the event is consumed.
+     *
+     * @param  array<array-key, mixed>  $subscription
+     */
+    private function endsAt(array $subscription): ?int
+    {
+        return $this->string($subscription, 'status') === 'canceled'
+            ? $this->int($subscription, 'ended_at')
+            : $this->int($subscription, 'cancel_at');
     }
 
     /**
@@ -183,8 +201,8 @@ final readonly class StripeSubscriptionMapper
     }
 
     /**
-     * Collapse Stripe's subscription status onto the neutral state. A subscription set to cancel at
-     * period end but still paid is the grace period, not a plain active one.
+     * Collapse Stripe's subscription status onto the neutral state. A subscription set to cancel, at the
+     * period end or at a date inside the period, but still paid is the grace period, not a plain active one.
      *
      * @param  array<array-key, mixed>  $subscription
      */
@@ -202,7 +220,9 @@ final readonly class StripeSubscriptionMapper
             return SubscriptionState::Paused;
         }
 
-        if (($subscription['cancel_at_period_end'] ?? false) === true && in_array($status, ['active', 'trialing'], true)) {
+        $ending = ($subscription['cancel_at_period_end'] ?? false) === true || is_int($subscription['cancel_at'] ?? null);
+
+        if ($ending && in_array($status, ['active', 'trialing'], true)) {
             return SubscriptionState::Grace;
         }
 

@@ -4,6 +4,30 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.38.0] - 2026-09-24
+
+### Added
+
+- **A subscription can be canceled to a date inside its period, with the rest of the period paid back.** `ProratedCancellation::cancel()` ends the subscription at the moment you name and refunds what was paid for the time after it, through `BillingAdmin::refund()` like every other refund: the same rails, the same audit record, and on a routed sale the same correction of both links of the chain. The refund is recorded as the new `RefundKind::UnusedPrepaidPeriod`. `quote()` gives the end and the figures without ending anything, for the confirmation a customer sees first. A date at or after the period end ends the subscription at the period end and refunds nothing, and the settlement names the end that applies. On a driver this package bills itself nothing was paid for the period in progress, so nothing goes back. The case it exists for is a renewed consumer contract that may be canceled at a month's notice: on a yearly plan that end falls inside a paid year, and canceling at the period end held the customer up to eleven months too long.
+
+- **`GermanNoticePeriod::earliestEnd()` says when a consumer's cancellation ends a renewed contract.** It applies § 309 Nr. 9 BGB: the end of the initial term when the cancellation arrives at least a month before it, and a month after the cancellation arrives otherwise, counted as §§ 187 and 188 BGB count a month. The initial term comes from you, because the package does not store what a subscription was sold as.
+
+- **`BillingFake` records a cancellation to a date.** `assertCanceledAt()` compares the moment as a moment, so one held in another time zone still matches, and `assertNotCanceledAt()` is its negative side. Both are declared on the `Billing` facade.
+
+### Changed
+
+- **BREAKING (pre-1.0) — `SubscriptionActions` declares `cancelAt()`.** The signature is `cancelAt(Model $billable, CarbonInterface $endsAt, ?MerchantScope $merchant = null, ?string $type = null)`. It ends the subscription at a moment inside the period in progress and refuses a moment that has passed or lies after the period end. **A driver of your own that implements the contract has to add the method**, or PHP refuses the class when it is loaded; the built-in drivers and `BillingFake` already have it. On Stripe it sets `cancel_at` without proration, because a proration would park the unused rest on the customer's balance, where nothing after the end spends it.
+
+- **A cancellation to a date inside the period is final.** `resume()` refuses it with `EndInsidePeriodIsFinal`, a later `cancel()` at the period end leaves the earlier end in place, and the account screen shows the date and no resume button. The rest of the period may have been refunded, and taking the cancellation back would hand the owner time they were paid back for.
+
+### Fixed
+
+- **A Stripe cancellation now tells the owner when access ends.** The sync never wrote `ends_at` for a Stripe subscription, so the account screen showed no date for a canceled one, and the churn count of `BillingMetricsReporter` never counted a Stripe cancellation. A subscription with a `cancel_at` also synced as active rather than canceled. It now syncs as `grace` with `ends_at` at the moment it ends, and the cancellation notice names that moment instead of the period end.
+
+- **On a driver this package bills itself, a canceled subscription now ends, and its last period is billed.** The local engine collects a period at its end, and canceling cleared the schedule that would have collected it. The period the customer kept was never billed, and nothing ended the subscription: past its end it read as active again and was never billed after that. A cancellation now keeps its last cycle. The cycle bills the period, or on a cancellation to a date the days up to that date, and then ends the subscription. A cycle that fails goes through dunning like any other. Subscriptions canceled before this release are ended at the next run **without** billing their last period, and each is logged. Collecting it weeks late, without notice, would be the worse outcome. The upgrading guide shows how to find them first.
+
+- **Onboarding refuses a merchant that was never stored.** Such a merchant has no key, and every such merchant derived the same idempotency key for its provider account. The provider would have handed a second one the account it made for the first, and with it every payout meant for the second. `createAccount()` now throws before the provider is asked anything. Store the merchant first.
+
 ## [0.37.1] - 2026-09-24
 
 ### Fixed
@@ -7004,7 +7028,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.37.1...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.38.0...HEAD
+[0.38.0]: https://github.com/pushery/billing-for-laravel/compare/v0.37.1...v0.38.0
 [0.37.1]: https://github.com/pushery/billing-for-laravel/compare/v0.37.0...v0.37.1
 [0.37.0]: https://github.com/pushery/billing-for-laravel/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/pushery/billing-for-laravel/compare/v0.35.0...v0.36.0
