@@ -139,17 +139,17 @@ final class MollieServiceProvider extends ServiceProvider
         // configured customer model on the configured column and is provider-neutral in what it does; it is
         // bound here as well so the local driver does not depend on another driver's provider having run.
         $this->app->bind(CustomerDirectory::class, StripeCustomerDirectory::class);
-        $this->app->bind(StartsSubscriptions::class, fn (): LocalSubscriptionStarter => new LocalSubscriptionStarter(
+        $this->app->bind(StartsSubscriptions::class, static fn (Container $app): LocalSubscriptionStarter => new LocalSubscriptionStarter(
             'mollie',
-            $this->app->make(TierCatalog::class),
-            $this->app->make(PlanCatalog::class),
-            $this->app->make(TrialPolicy::class),
-            $this->app->make(Trials::class),
-            $this->app->make(EnsuresProviderCustomer::class),
-            $this->app->make(EstablishesMandateByRedirect::class),
-            $this->app->make(Repository::class),
-            $this->app->make(CheckoutUrls::class),
-            $this->app->make(CouponRedeemer::class),
+            $app->make(TierCatalog::class),
+            $app->make(PlanCatalog::class),
+            $app->make(TrialPolicy::class),
+            $app->make(Trials::class),
+            $app->make(EnsuresProviderCustomer::class),
+            $app->make(EstablishesMandateByRedirect::class),
+            $app->make(Repository::class),
+            $app->make(CheckoutUrls::class),
+            $app->make(CouponRedeemer::class),
         ));
 
         // The webhook that finishes what the redirect started. Registered here rather than with the shipped

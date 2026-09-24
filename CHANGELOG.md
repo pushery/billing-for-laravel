@@ -4,6 +4,12 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.37.1] - 2026-09-24
+
+### Fixed
+
+- **Under Octane, the Mollie driver's subscription starter builds from the request's container.** The binding took its ten collaborators from the application as it was at boot, while Octane resolves each request in a copy of it. A collaborator that a request replaced, such as the coupon redeemer, was therefore invisible to the starter. It now takes the container Laravel hands the binding. Outside Octane nothing changes.
+
 ## [0.37.0] - 2026-09-23
 
 ### Added
@@ -6998,7 +7004,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.37.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.37.1...HEAD
+[0.37.1]: https://github.com/pushery/billing-for-laravel/compare/v0.37.0...v0.37.1
 [0.37.0]: https://github.com/pushery/billing-for-laravel/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/pushery/billing-for-laravel/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/pushery/billing-for-laravel/compare/v0.34.0...v0.35.0
