@@ -70,18 +70,18 @@ final readonly class MollieCustomers implements CustomerRegistry, EnsuresProvide
             return $reference;
         }
 
-        $customer = $this->client->send(new CreateCustomerRequest(
+        $customer = MollieValue::narrow($this->client->send(new CreateCustomerRequest(
             name: $this->stringAttribute($billable, 'name'),
             email: $this->stringAttribute($billable, 'email'),
-        ));
+        )), Customer::class);
 
-        // Narrowed as its own step rather than inside the expression below: `send()` is declared
-        // `@return mixed`, so without this the id read afterwards would be a read off anything.
+        // Narrowed as its own step rather than inside the expression below: version 3 of the SDK declares
+        // `send()` as `@return mixed`, so without this the id read afterwards would be a read off anything.
         if (! $customer instanceof Customer) {
             throw MollieNotConfigured::missingApiKey();
         }
 
-        $reference = (string) $customer->id;
+        $reference = MollieValue::id($customer->id);
 
         // Persisted BEFORE anything is done with it. A payment started against a customer whose reference
         // never reached the row would produce a mandate the webhook cannot resolve to anybody — the money

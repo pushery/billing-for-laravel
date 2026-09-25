@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Drivers\Mollie;
 
 use Illuminate\Support\Facades\Config;
-use Mollie\Api\Types\MandateMethod;
 use Pushery\Billing\ValueObjects\DriverCapabilities;
-use ReflectionClass;
 
 /**
  * What the Mollie driver promises.
@@ -40,16 +38,13 @@ final readonly class MollieCapabilities
     }
 
     /**
-     * The methods a mandate can exist for, straight from the SDK's vocabulary.
+     * The methods a mandate can exist for, straight from the SDK's vocabulary, whichever major is installed.
      *
      * @return list<string>
      */
     private static function recurringMethods(): array
     {
-        /** @var list<string> $methods */
-        $methods = array_values(new ReflectionClass(MandateMethod::class)->getConstants());
-
-        return $methods;
+        return MollieValue::mandateMethods();
     }
 
     /**
