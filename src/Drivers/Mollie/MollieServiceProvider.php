@@ -11,27 +11,46 @@ use Illuminate\Support\ServiceProvider;
 use Mollie\Api\MollieApiClient;
 use Override;
 use Pushery\Billing\Contracts\BillingDriver;
+use Pushery\Billing\Contracts\CardPresentPayments;
+use Pushery\Billing\Contracts\CreditSync;
 use Pushery\Billing\Contracts\CustomerDirectory;
+use Pushery\Billing\Contracts\CustomerRegistry;
 use Pushery\Billing\Contracts\EnsuresProviderCustomer;
 use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
+use Pushery\Billing\Contracts\HostedPortal;
 use Pushery\Billing\Contracts\Invoices;
+use Pushery\Billing\Contracts\IssuesReaderPairingCodes;
+use Pushery\Billing\Contracts\LateFees;
+use Pushery\Billing\Contracts\MeterInspector;
+use Pushery\Billing\Contracts\OneTimeCharge;
+use Pushery\Billing\Contracts\PairsReadersByTheirCode;
 use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
+use Pushery\Billing\Contracts\SeatBilling;
 use Pushery\Billing\Contracts\StartsSubscriptions;
+use Pushery\Billing\Contracts\SubmitsDisputeEvidence;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\TierCatalog;
+use Pushery\Billing\Contracts\UpcomingInvoice;
+use Pushery\Billing\Contracts\UsageReporter;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Contracts\WebhookVerifier;
 use Pushery\Billing\Discounts\CouponRedeemer;
 use Pushery\Billing\Discounts\CycleCouponApplier;
+use Pushery\Billing\Drivers\NullCreditSync;
+use Pushery\Billing\Drivers\NullCustomerRegistry;
+use Pushery\Billing\Drivers\NullHostedPortal;
+use Pushery\Billing\Drivers\NullMeterInspector;
 use Pushery\Billing\Drivers\Stripe\StripeCustomerDirectory;
 use Pushery\Billing\Dunning\ConfigDunningLadder;
+use Pushery\Billing\Dunning\NullLateFees;
 use Pushery\Billing\Events\MandateEstablished;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
+use Pushery\Billing\Exceptions\LateFeesUnsupported;
 use Pushery\Billing\Exceptions\MollieNotConfigured;
 use Pushery\Billing\Invoicing\LocalInvoices;
 use Pushery\Billing\Invoicing\OrderInvoiceIssuer;
@@ -42,13 +61,17 @@ use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\Support\CreditLedger;
 use Pushery\Billing\Support\CycleItemPricer;
 use Pushery\Billing\Support\LocalBillingEngine;
+use Pushery\Billing\Support\LocalSeatBilling;
 use Pushery\Billing\Support\LocalSubscriptionActions;
 use Pushery\Billing\Support\LocalSubscriptionPayments;
 use Pushery\Billing\Support\LocalSubscriptionStarter;
+use Pushery\Billing\Support\LocalUpcomingInvoice;
 use Pushery\Billing\Support\OrderItemPreprocessorChain;
 use Pushery\Billing\Support\WebhookSecretGuard;
+use Pushery\Billing\Tax\SaleTaxDecision;
 use Pushery\Billing\Trials\TrialPolicy;
 use Pushery\Billing\Trials\Trials;
+use Pushery\Billing\Usage\NullUsageReporter;
 use Pushery\Billing\Webhooks\Effects\FailCycleOnPayment;
 use Pushery\Billing\Webhooks\Effects\SettleCycleOnPayment;
 use Pushery\Billing\Webhooks\Effects\StartSubscriptionOnMandate;
@@ -81,22 +104,16 @@ final class MollieServiceProvider extends ServiceProvider
             self::webhookUrl($app->make(Repository::class)),
         ));
         $this->app->singleton(MolliePaymentMethods::class);
+        $this->app->bind(MollieCardPresentPayments::class, static fn (Container $app): MollieCardPresentPayments => new MollieCardPresentPayments(
+            $app->make(MollieApiClient::class),
+            $app->make(SaleTaxDecision::class),
+            self::webhookUrl($app->make(Repository::class)),
+            self::terminalCountries($app->make(Repository::class)),
+        ));
 
         $this->app->singleton(MollieDriver::class, static fn (Container $app): MollieDriver => new MollieDriver(
             $app->make(MolliePaymentRails::class),
-            new LocalBillingEngine(
-                'mollie',
-                $app->make(MolliePaymentRails::class),
-                $app->make(CreditLedger::class),
-                $app->make(Repository::class),
-                $app->make(OrderItemPreprocessorChain::class),
-                $app->make(CycleItemPricer::class),
-                $app->make(CycleCouponApplier::class),
-                $app->make(OrderInvoiceIssuer::class),
-                $app->make(ConfigDunningLadder::class),
-                MollieCapabilities::make(),
-                $app->make(ProrationCreditCorrectionIssuer::class),
-            ),
+            self::engine($app),
         ));
     }
 
@@ -126,6 +143,43 @@ final class MollieServiceProvider extends ServiceProvider
         $this->app->bind(ProrationStrategy::class, CreditBalanceProrationStrategy::class);
         $this->app->bind(PaymentMethods::class, MolliePaymentMethods::class);
         $this->app->bind(PaymentCsp::class, MolliePaymentCsp::class);
+        // Payment in person, on Mollie's own terminals. Rebound because the Stripe provider binds its reader path
+        // unconditionally, and on this driver that one would ask Stripe about a reader it never saw. Mollie pairs by
+        // a code it issues, so Stripe's pairing is taken out of the container: a host asking whether it is bound
+        // gets the answer for the driver it runs.
+        $this->app->bind(CardPresentPayments::class, MollieCardPresentPayments::class);
+        $this->app->bind(IssuesReaderPairingCodes::class, MollieCardPresentPayments::class);
+        $this->app->offsetUnset(PairsReadersByTheirCode::class);
+        // Mollie takes no dispute evidence through its API. The Stripe provider binds its own answer unconditionally,
+        // and the documentation tells a host to ask the container whether the step exists, so on this driver the
+        // binding is taken out rather than left to answer yes and reach Stripe without a key.
+        $this->app->offsetUnset(SubmitsDisputeEvidence::class);
+        // The paths that reach the provider on Stripe, answered for this engine. The Stripe provider binds its own
+        // unconditionally, and each would ask Stripe about a customer whose reference Mollie issued. Credit stays in
+        // the package's ledger, which this engine spends at the cycle; usage is rated from the package's own
+        // counters; there are no provider meters to inspect and no hosted portal to open.
+        $this->app->bind(CreditSync::class, NullCreditSync::class);
+        $this->app->bind(UsageReporter::class, NullUsageReporter::class);
+        $this->app->bind(MeterInspector::class, NullMeterInspector::class);
+        $this->app->bind(HostedPortal::class, NullHostedPortal::class);
+        // The next invoice, previewed from the engine that will bill it. It is built the way the driver's engine is,
+        // so the preview and the order that follows are priced by the same steps.
+        $this->app->bind(UpcomingInvoice::class, static fn (Container $app): UpcomingInvoice => new LocalUpcomingInvoice(self::engine($app), 'mollie'));
+        // Seats live on the local subscription, and the cycle bills each quantity for the days it held.
+        $this->app->bind(SeatBilling::class, static fn (): SeatBilling => new LocalSeatBilling('mollie'));
+        // A late fee is added to an invoice item on Stripe, and this engine has no line for one yet. It is bound to
+        // what charges nothing, and an app whose dunning ladder carries a fee is refused at boot, so a fee never
+        // reaches Stripe and is never announced without being collected.
+        $this->app->bind(LateFees::class, NullLateFees::class);
+        $this->refuseWhatThisEngineCannotBill();
+        // An add-on is bought through the provider's hosted checkout on Stripe, and this driver has no such checkout
+        // yet. Taken out of the container, as the dispute step is, so the subscription screen can ask whether it is
+        // bound and offers no add-on it cannot sell.
+        $this->app->offsetUnset(OneTimeCharge::class);
+        // Erasing an owner deletes their customer at the provider only where the app asked for it, as on Stripe.
+        $this->app->bind(CustomerRegistry::class, static fn (Container $app): CustomerRegistry => (bool) $app->make(Repository::class)->get('billing.erasure.forget_customer', false)
+            ? $app->make(MollieCustomers::class)
+            : new NullCustomerRegistry);
         // Turning an owner into a provider customer, which nothing could do before: the reference was only
         // ever read off an existing mandate, so it answered null for exactly the person a subscribe flow is
         // for — somebody with no payment method yet.
@@ -191,7 +245,58 @@ final class MollieServiceProvider extends ServiceProvider
         return rtrim(is_string($base) ? $base : '', '/').'/'.ltrim(is_string($path) ? $path : 'billing/webhook', '/');
     }
 
+    /**
+     * The countries the host declared for its terminals, keyed by a terminal's or a profile's id.
+     *
+     * @return array<array-key, mixed>
+     */
+    private static function terminalCountries(Repository $config): array
+    {
+        $declared = $config->get('billing.mollie.terminal_countries', []);
+
+        return is_array($declared) ? $declared : [];
+    }
+
     /** Whether Mollie is the driver this installation actually bills through. */
+    /**
+     * The local engine this driver bills with, built from the container.
+     *
+     * The driver holds one, and the preview of the next invoice builds another the same way. The engine keeps
+     * no state of its own, so the two price a cycle identically.
+     */
+    private static function engine(Container $app): LocalBillingEngine
+    {
+        return new LocalBillingEngine(
+            'mollie',
+            $app->make(MolliePaymentRails::class),
+            $app->make(CreditLedger::class),
+            $app->make(Repository::class),
+            $app->make(OrderItemPreprocessorChain::class),
+            $app->make(CycleItemPricer::class),
+            $app->make(CycleCouponApplier::class),
+            $app->make(OrderInvoiceIssuer::class),
+            $app->make(ConfigDunningLadder::class),
+            MollieCapabilities::make(),
+            $app->make(ProrationCreditCorrectionIssuer::class),
+        );
+    }
+
+    /**
+     * Refuse to boot an app that configured what this engine cannot bill yet.
+     *
+     * A late fee is configured by a dunning rung that carries one. On this driver it is bound to what charges
+     * nothing, so an app left running would climb the ladder and announce a fee that nothing collects. The
+     * metering and tax guards refuse at boot for the same reason.
+     */
+    private function refuseWhatThisEngineCannotBill(): void
+    {
+        foreach ($this->app->make(ConfigDunningLadder::class)->levels() as $level) {
+            if ($level->hasFee()) {
+                throw LateFeesUnsupported::forDriver('mollie', $level->label);
+            }
+        }
+    }
+
     private function isActive(): bool
     {
         $config = $this->app->make(Repository::class);

@@ -250,6 +250,28 @@ final readonly class LocalBillingEngine implements BillingEngine
     }
 
     /**
+     * What the next cycle of this subscription comes to, assembled the way the cycle assembles it and written
+     * nowhere.
+     *
+     * The same plan, lines, steps, trial waiver and coupon as {@see self::processCycle()}, so a preview and the
+     * order that follows agree. Two things differ on purpose: the coupon is priced without counting its cycle
+     * ({@see CycleCouponApplier::preview()}), and no credit is spent, because the cycle offsets credit against
+     * this total when it runs and a preview of the invoice shows the invoice.
+     *
+     * Null for a tier without a price, the subscription the cycle leaves for an operator rather than guessing.
+     */
+    public function preview(Subscription $subscription): ?Money
+    {
+        $plan = $this->planFor($subscription);
+
+        if (! $plan instanceof Money) {
+            return null;
+        }
+
+        return $this->totalOf($this->assembleDrafts($subscription, $plan, false), $plan->currency);
+    }
+
+    /**
      * Assemble and collect one due cycle.
      *
      * The order is claimed and committed BEFORE the provider is called, so the claim survives whatever the
@@ -272,7 +294,7 @@ final readonly class LocalBillingEngine implements BillingEngine
             return;
         }
 
-        $drafts = $this->assembleDrafts($subscription, $this->planForTheDaysProvided($subscription, $plan));
+        $drafts = $this->assembleDrafts($subscription, $plan, true);
         $total = $this->totalOf($drafts, $plan->currency);
 
         $order = $this->claimCycle($subscription, $total, $drafts, $moment);
@@ -595,20 +617,16 @@ final readonly class LocalBillingEngine implements BillingEngine
      * step is free to add to it, reprice it, or remove it entirely if the application bills purely on
      * consumption.
      *
+     * `$count` is false for a preview: the coupon is then priced and its cycle not counted.
+     *
      * @return list<OrderItemDraft>
      */
-    private function assembleDrafts(Subscription $subscription, Money $plan): array
+    private function assembleDrafts(Subscription $subscription, Money $plan, bool $count): array
     {
         $drafts = $this->linesOf($subscription);
 
         if ($drafts === []) {
-            $drafts = [new OrderItemDraft(
-                $subscription->tier_key ?? 'subscription',
-                $plan->minorUnits,
-                1,
-                $plan->currency,
-                OrderItemType::Subscription,
-            )];
+            $drafts = [$this->planLine($subscription, $plan)];
         }
 
         if ($this->preprocessors instanceof OrderItemPreprocessorChain) {
@@ -629,7 +647,49 @@ final readonly class LocalBillingEngine implements BillingEngine
         // reprice it back. Before the discount, because a coupon whose gross has been waived to zero is
         // then refused by the applier's own positive-gross guard — so a customer does not spend one of
         // their discounted cycles on a cycle nobody charged them for.
-        return $this->discounted($subscription, $drafts);
+        return $this->discounted($subscription, $drafts, $count);
+    }
+
+    /**
+     * The plan line of the cycle: the tier price for the days provided, times the seats where the subscription
+     * bills seats.
+     *
+     * Without seats it is one unit for the days the subscription ran ({@see self::planForTheDaysProvided()}).
+     * With one seat count for the whole period it is that count at the tier price, one line a customer can read as
+     * quantity and unit price. After a change inside the period, or when a cancellation ends it early, each
+     * quantity is billed for the days it held ({@see Subscription::seatDaysUntil()}), and the line names the
+     * seat-days, because no single seat count describes such a period.
+     */
+    private function planLine(Subscription $subscription, Money $plan): OrderItemDraft
+    {
+        $description = $subscription->tier_key ?? 'subscription';
+        $seats = $subscription->seat_quantity;
+        $start = $subscription->current_period_start;
+        $periodEnd = $subscription->current_period_end;
+
+        if ($seats === null || ! $start instanceof Carbon || ! $periodEnd instanceof Carbon) {
+            $provided = $this->planForTheDaysProvided($subscription, $plan);
+
+            return new OrderItemDraft($description, $provided->minorUnits, $seats ?? 1, $provided->currency, OrderItemType::Subscription);
+        }
+
+        $days = (int) round($start->diffInDays($periodEnd));
+        $seatDays = $subscription->seatDaysUntil($subscription->endInsideItsPeriod() ?? $periodEnd);
+
+        if ($days < 2) {
+            return new OrderItemDraft($description, $plan->minorUnits, $seats, $plan->currency, OrderItemType::Subscription);
+        }
+
+        // One quantity for the whole period is a quantity. Seat-days that merely divide by the period are not:
+        // two seats and then five can add up to four seats' worth, and no invoice should claim four seats.
+        if ($subscription->seat_days_accrued === 0 && $seatDays === $seats * $days) {
+            return new OrderItemDraft($description, $plan->minorUnits, $seats, $plan->currency, OrderItemType::Subscription);
+        }
+
+        // allocate() gives the odd minor unit to the first share, the same way the prorated refund decides it.
+        [$billed] = $plan->multipliedBy($seatDays)->allocate(1, $days - 1);
+
+        return new OrderItemDraft("{$description} ({$seatDays} seat-days)", $billed->minorUnits, 1, $plan->currency, OrderItemType::Subscription);
     }
 
     /**
@@ -709,7 +769,7 @@ final readonly class LocalBillingEngine implements BillingEngine
      * @param  list<OrderItemDraft>  $drafts
      * @return list<OrderItemDraft>
      */
-    private function discounted(Subscription $subscription, array $drafts): array
+    private function discounted(Subscription $subscription, array $drafts, bool $count): array
     {
         $start = $subscription->current_period_start;
 
@@ -719,9 +779,15 @@ final readonly class LocalBillingEngine implements BillingEngine
 
         $owner = $this->ownerOf($subscription);
 
-        return $owner instanceof Model
-            ? $this->coupons->apply($drafts, $subscription, $owner, $start->toDateString())
-            : $drafts;
+        if (! $owner instanceof Model) {
+            return $drafts;
+        }
+
+        if ($count) {
+            return $this->coupons->apply($drafts, $subscription, $owner, $start->toDateString());
+        }
+
+        return $this->coupons->preview($drafts, $subscription, $owner, $start->toDateString());
     }
 
     /**

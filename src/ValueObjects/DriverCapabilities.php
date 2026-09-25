@@ -20,11 +20,9 @@ namespace Pushery\Billing\ValueObjects;
  * `src/Tax/`, where a wrong answer is a filed return rather than a missing feature. Hanging a tenth
  * boolean here would let a consumer ask the question and get an answer this package could not keep.
  *
- * The sentence exists because the absence reads exactly like an oversight. Measured 2026-09-04: both
- * providers' SDKs carry terminal APIs, and a case-insensitive search for "terminal" over this tree returns
- * 22 hits that look like support and are, every one of them, something else -- a state machine or the
- * shell. Somebody will make that measurement again; this paragraph is what stops it costing them the
- * afternoon it cost once.
+ * That path is `CardPresentPayments`, with pairing beside it in `PairsReadersByTheirCode` or
+ * `IssuesReaderPairingCodes`. A driver binds them when its provider runs readers, and a host asks the
+ * container whether they are bound.
  */
 final readonly class DriverCapabilities
 {

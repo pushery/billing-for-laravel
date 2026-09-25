@@ -48,6 +48,30 @@ final readonly class CycleCouponApplier
      */
     public function apply(array $drafts, Subscription $subscription, Model $owner, string $period): array
     {
+        return $this->discounted($drafts, $subscription, $owner, $period, true);
+    }
+
+    /**
+     * The lines apply() would return, without counting the cycle.
+     *
+     * A preview of the next invoice prices the cycle before the cycle runs. Counting there would spend one of
+     * the customer's discounted cycles on a figure shown on a screen: a coupon sold as three months half price
+     * would lose a month each time somebody opened the subscription page.
+     *
+     * @param  list<OrderItemDraft>  $drafts
+     * @return list<OrderItemDraft>
+     */
+    public function preview(array $drafts, Subscription $subscription, Model $owner, string $period): array
+    {
+        return $this->discounted($drafts, $subscription, $owner, $period, false);
+    }
+
+    /**
+     * @param  list<OrderItemDraft>  $drafts
+     * @return list<OrderItemDraft>
+     */
+    private function discounted(array $drafts, Subscription $subscription, Model $owner, string $period, bool $count): array
+    {
         $gross = $this->grossOf($drafts);
 
         if (! $gross instanceof Money || ! $gross->isPositive()) {
@@ -76,7 +100,9 @@ final readonly class CycleCouponApplier
             return $drafts;
         }
 
-        $this->countCycle($redemption, $period);
+        if ($count) {
+            $this->countCycle($redemption, $period);
+        }
 
         $drafts[] = new OrderItemDraft(
             "Discount ({$coupon->code})",

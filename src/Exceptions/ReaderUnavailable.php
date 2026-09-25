@@ -35,4 +35,14 @@ final class ReaderUnavailable extends RuntimeException
     {
         return new self("The reader '{$reader}' stands at no location with a country, and a sale at the counter is taxed in the country it is made in. Pair the reader with a location that has an address.");
     }
+
+    public static function inactive(string $reader): self
+    {
+        return new self("The terminal '{$reader}' is not activated at its provider, so it takes no payment. Activate it, or take the sale on another terminal.");
+    }
+
+    public static function withoutDeclaredCountry(string $reader): self
+    {
+        return new self("No country is declared for the terminal '{$reader}', and a sale at the counter is taxed in the country it is made in. Mollie reports no address for a terminal, so name the country it stands in under billing.mollie.terminal_countries, by the terminal's id or by its profile's.");
+    }
 }

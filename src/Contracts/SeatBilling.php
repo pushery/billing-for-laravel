@@ -7,6 +7,7 @@ namespace Pushery\Billing\Contracts;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Exceptions\SeatDowngradeBelowOccupied;
 use Pushery\Billing\Seats\SeatSync;
+use Pushery\Billing\Support\LocalSeatBilling;
 
 /**
  * The provider seam for seat-based billing: read the quantity the provider is currently billing, and change
@@ -15,8 +16,11 @@ use Pushery\Billing\Seats\SeatSync;
  * {@see SeatSync} service is the only thing that drives it, delegating the
  * provider-specific call here rather than talking to a driver directly.
  *
- * How proration is applied is the driver's own strategy: Stripe books it natively; a credit-balance driver
- * computes it into the customer balance. Neither is the seat service's concern.
+ * How proration is applied is the driver's own strategy: Stripe books it natively. It is not the seat
+ * service's concern.
+ *
+ * On the Mollie driver the quantity lives on the local subscription, and the cycle that closes a period bills
+ * each quantity for the days it held ({@see LocalSeatBilling}).
  */
 interface SeatBilling
 {

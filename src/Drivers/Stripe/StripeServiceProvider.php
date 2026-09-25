@@ -25,6 +25,7 @@ use Pushery\Billing\Contracts\MerchantPriceProvisioner;
 use Pushery\Billing\Contracts\MeterInspector;
 use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Contracts\OneTimeCharge;
+use Pushery\Billing\Contracts\PairsReadersByTheirCode;
 use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Contracts\ProrationStrategy;
@@ -164,11 +165,15 @@ final class StripeServiceProvider extends ServiceProvider
         // exists because this provider's setup session attaches a method and sets nothing.
         $this->app->bind(AdoptsCollectedPaymentMethod::class, StripePaymentMethods::class);
         // Answering a dispute is a capability of the provider, not of every driver: Mollie takes no evidence
-        // through its API, so it binds nothing and a host can ask the container whether the step exists.
+        // through its API, so the Mollie provider takes this binding out again and a host can ask the container
+        // whether the step exists.
         $this->app->bind(SubmitsDisputeEvidence::class, StripeDisputeEvidence::class);
-        // Payment in person is the same kind of capability: Stripe runs card readers, Mollie's terminals are not
-        // wired, so only this driver binds it and a host asks the container before it offers a counter sale.
+        // Payment in person is a capability of the same kind: a driver binds it when its provider runs card readers,
+        // and a host asks the container before it offers a counter sale. The Mollie provider rebinds it to its own
+        // terminals when Mollie is the driver. Pairing is bound on its own, because Stripe pairs by the code the
+        // reader shows and Mollie the other way round.
         $this->app->bind(CardPresentPayments::class, StripeCardPresentPayments::class);
+        $this->app->bind(PairsReadersByTheirCode::class, StripeCardPresentPayments::class);
         $this->app->bind(Invoices::class, StripeInvoices::class);
         $this->app->bind(UpcomingInvoice::class, StripeUpcomingInvoice::class);
         $this->app->bind(SubscriptionActions::class, StripeSubscriptionActions::class);

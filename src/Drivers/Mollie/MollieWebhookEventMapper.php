@@ -14,6 +14,8 @@ use Pushery\Billing\Contracts\DerivesDeliveryKey;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\ChargebackReceived;
+use Pushery\Billing\Events\InPersonSaleCanceled;
+use Pushery\Billing\Events\InPersonSalePaid;
 use Pushery\Billing\Events\MandateEstablished;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
@@ -114,7 +116,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
         return is_string($id) && trim($id) !== '' ? trim($id) : null;
     }
 
-    /** @return iterable<AddonRefunded|ChargebackReceived|MandateEstablished|PaymentFailed|PaymentSucceeded> */
+    /** @return iterable<AddonRefunded|ChargebackReceived|InPersonSaleCanceled|InPersonSalePaid|MandateEstablished|PaymentFailed|PaymentSucceeded> */
     public function map(Request $request): iterable
     {
         // Answered BEFORE the id is looked at, because the id cannot answer it. A next-generation delivery
@@ -141,6 +143,12 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
             return;
         }
 
+        if ($this->isCounterSale($payment)) {
+            yield from $this->counterSaleEvents($payment);
+
+            return;
+        }
+
         $amount = MollieAmount::fromResource($payment->amount);
         $customer = is_string($payment->customerId) ? $payment->customerId : '';
 
@@ -163,6 +171,40 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
         }
 
         $this->noteUnmappedStatus($payment);
+    }
+
+    /**
+     * Whether this payment is a sale the package put on a terminal, told apart by the marker it set.
+     *
+     * Such a payment belongs to no customer and to no billing cycle, so reading it as an ordinary payment would
+     * report a success nothing could settle. Its confirmation goes to the sale instead.
+     */
+    private function isCounterSale(Payment $payment): bool
+    {
+        $metadata = $payment->metadata;
+
+        return is_object($metadata) && ($metadata->{MollieCardPresentPayments::SALE_MARKER} ?? null) === '1';
+    }
+
+    /**
+     * The events of a sale at the counter: paid, or over without being paid.
+     *
+     * A declined card, a terminal the payment never reached and a buyer who walked away all end the payment at
+     * Mollie, so each one closes the sale. A payment still open says nothing yet.
+     *
+     * @return iterable<InPersonSaleCanceled|InPersonSalePaid>
+     */
+    private function counterSaleEvents(Payment $payment): iterable
+    {
+        if ($payment->isPaid()) {
+            yield new InPersonSalePaid('mollie', (string) $payment->id, MollieAmount::fromResource($payment->amount));
+
+            return;
+        }
+
+        if ($payment->isFailed() || $payment->isCanceled() || $payment->isExpired()) {
+            yield new InPersonSaleCanceled('mollie', (string) $payment->id);
+        }
     }
 
     /**

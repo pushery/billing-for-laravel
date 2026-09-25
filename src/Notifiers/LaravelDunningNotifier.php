@@ -68,9 +68,9 @@ final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, 
         ));
     }
 
-    public function suspensionWarning(Model $owner, Money $amountDue): void
+    public function suspensionWarning(Model $owner, Money $lateFee): void
     {
-        Notification::send($owner, new SuspensionWarningNotification($amountDue));
+        Notification::send($owner, new SuspensionWarningNotification($lateFee));
     }
 
     public function mandateRevoked(Model $owner, string $mandateReference): void

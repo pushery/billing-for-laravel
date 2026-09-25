@@ -144,12 +144,17 @@ final class ManageSubscription extends AccountScreen
     /**
      * The purchasable one-time add-ons (top-ups) — key, label, and formatted price from the catalog. The
      * client only ever submits a KEY; the price is resolved server-side, mirroring the tier allowlist so a
-     * client can never inject a price. Only add-ons with a configured display price are offered.
+     * client can never inject a price. Only add-ons with a configured display price are offered, and none at all
+     * where the driver binds no way to sell one.
      *
      * @return list<array{key: string, label: string, price: string}>
      */
     private function addonOptions(): array
     {
+        if (! Container::getInstance()->bound(OneTimeCharge::class)) {
+            return [];
+        }
+
         $catalog = Container::getInstance()->make(ConfigAddonCatalog::class);
         $out = [];
 
@@ -218,6 +223,11 @@ final class ManageSubscription extends AccountScreen
     {
         $this->denyInAppCheckout();
         $this->ensureEligible();
+
+        // The same answer as an unknown key, because on a driver that sells no add-ons none of them is offered.
+        if (! Container::getInstance()->bound(OneTimeCharge::class)) {
+            throw new NotFoundHttpException;
+        }
 
         if (! (Container::getInstance()->make(ConfigAddonCatalog::class)->exists($addonKey))) {
             throw new NotFoundHttpException;

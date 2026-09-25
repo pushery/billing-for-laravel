@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Drivers\Stripe;
 
 use Pushery\Billing\Contracts\CardPresentPayments;
+use Pushery\Billing\Contracts\PairsReadersByTheirCode;
 use Pushery\Billing\Enums\InPersonSaleStatus;
 use Pushery\Billing\Exceptions\ReaderUnavailable;
 use Pushery\Billing\Models\InPersonSaleRecord;
@@ -28,7 +29,7 @@ use Stripe\Terminal\Reader;
  * tax decided for it are kept in the package's own table before the reader is asked; the metadata only marks the
  * payment as a counter sale, so its confirmation is routed to that row.
  */
-final readonly class StripeCardPresentPayments implements CardPresentPayments
+final readonly class StripeCardPresentPayments implements CardPresentPayments, PairsReadersByTheirCode
 {
     /** The metadata key that marks a payment as a sale at the counter. The confirmation reads it. */
     public const string SALE_MARKER = 'in_person_sale';

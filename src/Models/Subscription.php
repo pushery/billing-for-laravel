@@ -49,6 +49,9 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * @property int|string|null $merchant_id
  * @property ?string $declaration_reference
  * @property ?Carbon $started_at
+ * @property ?int $seat_quantity
+ * @property ?Carbon $seat_quantity_since
+ * @property int $seat_days_accrued
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
@@ -65,6 +68,7 @@ class Subscription extends Model
         'trial_ends_at', 'ends_at', 'delinquent_since', 'dunning_level', 'payment_reminded_on', 'synced_event_at',
         'current_period_start', 'current_period_end', 'scheduled_processing_at',
         'merchant_uid', 'merchant_type', 'merchant_id', 'declaration_reference', 'started_at',
+        'seat_quantity', 'seat_quantity_since', 'seat_days_accrued',
     ];
 
     /**
@@ -83,6 +87,7 @@ class Subscription extends Model
         // own, exactly as the schema default records it — so the row and the freshly-built instance agree
         // before anyone re-reads. Held against the migration by ModelSchemaDefaultsTest.
         'merchant_uid' => 'platform',
+        'seat_days_accrued' => 0,
     ];
 
     /** @var array<string,string> */
@@ -104,6 +109,9 @@ class Subscription extends Model
         'scheduled_processing_at' => UtcDateTime::class,
         'scheduled_swap_at' => UtcDateTime::class,
         'started_at' => UtcDateTime::class,
+        'seat_quantity' => 'integer',
+        'seat_quantity_since' => UtcDateTime::class,
+        'seat_days_accrued' => 'integer',
     ];
 
     public function onTrial(): bool
@@ -493,6 +501,50 @@ class Subscription extends Model
             'current_period_start' => $start,
             'current_period_end' => $end,
             'scheduled_processing_at' => $end,
+            // The seats in force carry into the new period, which has billed none of them yet.
+            'seat_quantity_since' => $start,
+            'seat_days_accrued' => 0,
+        ]);
+    }
+
+    /**
+     * The seat-days this period has run up to the given moment, counted in whole days.
+     *
+     * The seat-days before the last change are held in `seat_days_accrued`; the current quantity adds one per
+     * whole day it has held, from `seat_quantity_since` or the start of the period, whichever is later. A
+     * subscription with no seat quantity counts as one seat, which is how it bills without seats.
+     */
+    public function seatDaysUntil(CarbonInterface $moment): int
+    {
+        $start = $this->current_period_start;
+
+        if (! $start instanceof CarbonInterface) {
+            return 0;
+        }
+
+        $since = $start;
+
+        if ($this->seat_quantity_since instanceof CarbonInterface && $this->seat_quantity_since->greaterThan($start)) {
+            $since = $this->seat_quantity_since;
+        }
+
+        $days = $moment->greaterThan($since) ? (int) floor($since->diffInDays($moment)) : 0;
+
+        return $this->seat_days_accrued + ($this->seat_quantity ?? 1) * $days;
+    }
+
+    /**
+     * Change the seats this subscription pays for, from the given moment on.
+     *
+     * The days the old quantity held until then are added to the period's seat-days, so the cycle that closes
+     * the period bills each quantity for the days it held.
+     */
+    public function changeSeatQuantity(int $quantity, CarbonInterface $from): void
+    {
+        $this->update([
+            'seat_days_accrued' => $this->seatDaysUntil($from),
+            'seat_quantity' => $quantity,
+            'seat_quantity_since' => $from,
         ]);
     }
 

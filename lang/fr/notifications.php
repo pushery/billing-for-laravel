@@ -73,7 +73,8 @@ return [
     'suspension_warning' => [
         'subject' => 'Action requise : ton accès va être suspendu',
         'intro' => 'Ton compte présente un solde impayé et ton accès sera bientôt suspendu.',
-        'outro' => 'Règle le montant indiqué ci-dessous pour conserver ton accès.',
+        'late_fee' => 'Des frais de retard de :amount ont été ajoutés au montant dû.',
+        'outro' => 'Règle le montant dû pour conserver ton accès.',
         'cta' => 'Régler le montant dû',
     ],
 
