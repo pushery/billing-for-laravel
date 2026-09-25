@@ -16,5 +16,11 @@ use Pushery\Billing\ValueObjects\Money;
  */
 interface SuspensionNotifier
 {
-    public function suspensionWarning(Model $owner, Money $amountDue): void;
+    /**
+     * @param  Money  $lateFee  the fee this rung added to what the owner is charged next, zero when it added
+     *                          none. It is not the overdue amount: the dunning advance does not know that
+     *                          figure on every driver, and printing the fee in its place asked a customer to
+     *                          settle 0.00 on every rung without one.
+     */
+    public function suspensionWarning(Model $owner, Money $lateFee): void;
 }

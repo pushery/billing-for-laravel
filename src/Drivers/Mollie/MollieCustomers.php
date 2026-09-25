@@ -6,9 +6,11 @@ namespace Pushery\Billing\Drivers\Mollie;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
+use Mollie\Api\Exceptions\NotFoundException;
 use Mollie\Api\Http\Requests\CreateCustomerRequest;
 use Mollie\Api\MollieApiClient;
 use Mollie\Api\Resources\Customer;
+use Pushery\Billing\Contracts\CustomerRegistry;
 use Pushery\Billing\Contracts\EnsuresProviderCustomer;
 use Pushery\Billing\Exceptions\CustomerBelongsToAnotherProvider;
 use Pushery\Billing\Exceptions\MollieNotConfigured;
@@ -36,7 +38,7 @@ use Pushery\Billing\Exceptions\MollieNotConfigured;
  * work with. Both fields are read off the model only if they are there — the package does not require a
  * shape from a host application's user model.
  */
-final readonly class MollieCustomers implements EnsuresProviderCustomer
+final readonly class MollieCustomers implements CustomerRegistry, EnsuresProviderCustomer
 {
     /** What a Mollie customer id starts with. */
     private const string PREFIX = 'cst_';
@@ -87,6 +89,32 @@ final readonly class MollieCustomers implements EnsuresProviderCustomer
         $billable->forceFill([$column => $reference])->save();
 
         return $reference;
+    }
+
+    /**
+     * Delete the owner's Mollie customer and forget its reference.
+     *
+     * Irreversible: Mollie cancels the customer's mandates with it, which is why nothing does this unless the app
+     * turned `billing.erasure.forget_customer` on. A customer Mollie has already deleted is not an error, since the
+     * point is that it is gone, and a reference another driver issued is not Mollie's to delete.
+     */
+    public function forget(Model $billable): void
+    {
+        $column = $this->column();
+        $existing = $billable->getAttribute($column);
+        $reference = is_string($existing) ? trim($existing) : '';
+
+        if (! str_starts_with($reference, self::PREFIX)) {
+            return;
+        }
+
+        try {
+            $this->client->customers->delete($reference);
+        } catch (NotFoundException) {
+            // Already gone at Mollie. The local reference still has to go.
+        }
+
+        $billable->forceFill([$column => null])->save();
     }
 
     /** The column the directory reads, so both sides always mean the same field. */

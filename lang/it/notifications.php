@@ -73,7 +73,8 @@ return [
     'suspension_warning' => [
         'subject' => 'Azione necessaria: il tuo accesso verrà sospeso',
         'intro' => 'Il tuo account ha un saldo scaduto e l’accesso verrà sospeso a breve.',
-        'outro' => 'Salda l’importo indicato di seguito per mantenere l’accesso.',
+        'late_fee' => 'All’importo dovuto è stata aggiunta una penale per ritardato pagamento di :amount.',
+        'outro' => 'Salda l’importo dovuto per mantenere l’accesso.',
         'cta' => 'Salda l\'importo dovuto',
     ],
 

@@ -73,7 +73,8 @@ return [
     'suspension_warning' => [
         'subject' => 'Ação necessária: o teu acesso vai ser suspenso',
         'intro' => 'A tua conta tem um valor em dívida e o teu acesso vai ser suspenso em breve.',
-        'outro' => 'Regulariza o valor indicado abaixo para manteres o teu acesso.',
+        'late_fee' => 'Foi acrescentada ao valor em dívida uma taxa de atraso de :amount.',
+        'outro' => 'Regulariza o valor em dívida para manteres o teu acesso.',
         'cta' => 'Liquidar o valor em dívida',
     ],
 

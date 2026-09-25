@@ -4,6 +4,32 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.41.0] - 2026-09-25
+
+### Added
+
+- **Card payments at the counter on Mollie terminals.** The Mollie driver binds `CardPresentPayments`: a sale goes onto a point-of-sale terminal as a `pointofsale` payment, is taxed in the country the terminal stands in, and is receipted when Mollie confirms the card, as on Stripe. Mollie reports no address for a terminal, so the country comes from the new `billing.mollie.terminal_countries`, by the terminal's id or its profile's, and a terminal without one takes no sale. `IssuesReaderPairingCodes` requests the code a merchant types into a terminal to pair it. A sale the package cannot keep after Mollie created its payment is canceled again, so the buyer is never asked to pay for a sale without a receipt.
+
+- **A Mollie install bills seats.** The seat count lives on the local subscription, and the cycle that closes a period bills each count for the days it held: two seats for ten days and five for the other twenty are 120 seat-days at the tier price. A count that held the whole period is billed as a quantity at the unit price. A change without proration starts with the next period, and a count below the occupied seats is refused as on Stripe. Before this, a seat change on Mollie asked Stripe about a subscription it never saw and nothing was billed. The migration adds `seat_quantity`, `seat_quantity_since` and `seat_days_accrued` to `billing_subscriptions`.
+
+- **A Mollie install shows the next invoice on the subscription screen.** The local engine previews the order that closes the running period: the same plan, lines, trial waiver and coupon the cycle uses, dated at the moment the cycle charges it. Pricing a coupon for the preview does not spend one of its cycles, so opening the page does not shorten a discount. Credit is left out, as it is on Stripe, because the cycle offsets it when it runs.
+
+### Changed (breaking — pre-1.0)
+
+- **Pairing a reader left `CardPresentPayments`.** Stripe claims the code a reader shows and Mollie issues a code for the terminal, so one method could not serve both. `pairReader()` is now on `PairsReadersByTheirCode`, which the Stripe driver binds, with the same signature.
+
+### Fixed
+
+- **On a Mollie install, `CardPresentPayments` resolved to the Stripe implementation.** The Stripe driver binds its reader path unconditionally, so a host that asked the container whether a counter sale was possible heard yes and reached Stripe without a key. The Mollie driver binds its own now, and Stripe's pairing is not bound there.
+
+- **On a Mollie install, asking the container for `SubmitsDisputeEvidence` answered yes.** The documentation tells a host to ask before it offers to answer a dispute, because Mollie takes no evidence through its API, and the answer came from the Stripe binding every install carries. The Mollie driver removes that binding now, so the question gets the answer for the driver in use.
+
+- **On a Mollie install, five paths asked Stripe about a customer Mollie had issued.** Both drivers keep the customer reference in the same column, and the Stripe driver binds its services on every install. Refunding an add-on pushed the credit onto a Stripe customer balance, erasing an owner with `billing.erasure.forget_customer` deleted a Stripe customer, the portal route opened a Stripe portal session, and the usage reporter and the meter inspector resolved to Stripe's as well. Each now answers for Mollie: the credit stays in the package's ledger, which the local engine spends at the cycle, the erasure deletes the customer at Mollie, the portal route answers 404, and usage and meters have nothing to reach at a provider.
+
+- **On a Mollie install, late fees and buying an add-on no longer reach Stripe.** Both resolved to the Stripe implementation. Mollie charges no late fees yet, so an app that puts a fee on a rung of `billing.dunning` now refuses to boot with `LateFeesUnsupported`, as a metered tier already did, instead of announcing a fee nothing collects. `OneTimeCharge` is not bound on Mollie, so the subscription screen offers no add-on.
+
+- **The suspension warning no longer asks a customer to settle 0.00.** It printed the rung's late fee as the overdue amount, between "an overdue balance" and "settle the amount below", so every rung without a fee, which is every rung of the default ladder, asked for 0.00, and a rung with a fee named the fee as the debt. The warning now names a late fee as a fee, and only when the rung added one; the amount that failed is named by the payment-failed notice that opened the arrears. The notification's database payload carries `late_fee`, null without a fee, instead of `amount_due`.
+
 ## [0.40.0] - 2026-09-25
 
 ### Added
@@ -7094,7 +7120,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.40.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.41.0...HEAD
+[0.41.0]: https://github.com/pushery/billing-for-laravel/compare/v0.40.0...v0.41.0
 [0.40.0]: https://github.com/pushery/billing-for-laravel/compare/v0.39.0...v0.40.0
 [0.39.0]: https://github.com/pushery/billing-for-laravel/compare/v0.38.0...v0.39.0
 [0.38.0]: https://github.com/pushery/billing-for-laravel/compare/v0.37.1...v0.38.0

@@ -73,7 +73,8 @@ return [
     'suspension_warning' => [
         'subject' => 'Acción necesaria: tu acceso se suspenderá',
         'intro' => 'Tu cuenta tiene un saldo vencido y tu acceso se suspenderá pronto.',
-        'outro' => 'Paga el importe indicado abajo para mantener tu acceso.',
+        'late_fee' => 'Se ha añadido a lo pendiente un recargo por demora de :amount.',
+        'outro' => 'Paga lo pendiente para mantener tu acceso.',
         'cta' => 'Saldar lo pendiente',
     ],
 

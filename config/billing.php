@@ -130,6 +130,12 @@ return [
         // Set it, and an UNSIGNED ping is refused: you have said your account signs, so an unsigned
         // request is either a misconfiguration or somebody knocking.
         'webhook_secret' => env('BILLING_MOLLIE_WEBHOOK_SECRET'),
+
+        // Where each point-of-sale terminal stands, as an ISO 3166 country code. A sale at the counter is taxed
+        // in the country it is made in, and Mollie reports no address for a terminal, so the country is yours to
+        // state. Key an entry by a terminal's id ('term_…') or by a profile's id ('pfl_…') for every terminal of
+        // that profile; a terminal's own entry wins. A terminal with no usable entry takes no sale.
+        'terminal_countries' => [],
     ],
 
     /*

@@ -73,7 +73,8 @@ return [
     'suspension_warning' => [
         'subject' => 'Handlungsbedarf: Dein Zugang wird gesperrt',
         'intro' => 'Auf deinem Konto ist ein offener Betrag fällig und dein Zugang wird bald gesperrt.',
-        'outro' => 'Begleiche den unten genannten Betrag, um deinen Zugang zu behalten.',
+        'late_fee' => 'Zum offenen Betrag kommt eine Mahngebühr von :amount hinzu.',
+        'outro' => 'Begleiche den offenen Betrag, um deinen Zugang zu behalten.',
         'cta' => 'Offenen Betrag begleichen',
     ],
 

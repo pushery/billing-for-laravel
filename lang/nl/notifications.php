@@ -73,7 +73,8 @@ return [
     'suspension_warning' => [
         'subject' => 'Actie nodig: je toegang wordt opgeschort',
         'intro' => 'Je account heeft een achterstallig bedrag en je toegang wordt binnenkort opgeschort.',
-        'outro' => 'Betaal het onderstaande bedrag om je toegang te behouden.',
+        'late_fee' => 'Er zijn aanmaningskosten van :amount bij het openstaande bedrag gekomen.',
+        'outro' => 'Betaal het openstaande bedrag om je toegang te behouden.',
         'cta' => 'Openstaand bedrag voldoen',
     ],
 

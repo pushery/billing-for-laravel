@@ -73,7 +73,8 @@ return [
     'suspension_warning' => [
         'subject' => 'Action needed: your access will be suspended',
         'intro' => 'Your account has an overdue balance and access will soon be suspended.',
-        'outro' => 'Settle the amount below to keep your access.',
+        'late_fee' => 'A late fee of :amount has been added to what is owed.',
+        'outro' => 'Settle the overdue balance to keep your access.',
         'cta' => 'Settle what is owed',
     ],
 
