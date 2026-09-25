@@ -162,6 +162,13 @@ final readonly class RoutedPayment
          * share moves now, which is what this lane always did.
          */
         private ?BuyerProtectionClock $protection = null,
+        /**
+         * Whether the merchant's payouts are withheld, asked before the share moves.
+         *
+         * Nullable for the same reason as the clock above: a caller constructing this by hand keeps the
+         * behavior it always had, the share moving now.
+         */
+        private ?MerchantPayoutGate $payouts = null,
     ) {}
 
     /**
@@ -309,6 +316,8 @@ final readonly class RoutedPayment
         // Union are never recorded as an intermediation, because the law treats the platform as their supplier.
         // The reasons and the two limits are on SellerSaleGate.
         $sellers->assertPostureCarriesTheSupply($merchant, $posture, $archetype);
+        $sellers->assertTradingStandingDeclared($merchant, $posture, $archetype);
+        $sellers->assertGoodsSellerRecordComplete($merchant, $posture, $archetype);
 
         $routesSeparately = $routing->type === ChargeType::SeparateTransfer;
 
@@ -347,7 +356,7 @@ final readonly class RoutedPayment
             return $result;
         }
 
-        $charge = $this->record($merchant, $result, $gross, $fee, $taxBps, $routing->type, $posture);
+        $charge = $this->record($merchant, $result, $gross, $fee, $taxBps, $routing->type, $posture, $archetype);
 
         // A settled payment is settled NOW, from what the provider just said — not later, from a webhook
         // re-deriving it. The result already carries the transfer reference on a destination charge,
@@ -390,7 +399,17 @@ final readonly class RoutedPayment
         $moved = null;
         $failure = null;
 
-        if ($transfers instanceof MovesMerchantShare) {
+        // A merchant whose payouts are withheld keeps their share where it is. The sale is complete for the
+        // buyer; the row stays `pending` with the reason on it, and the share moves when the reason ends or
+        // the money rail's limit is reached. Only on this lane, because on a destination charge the share has
+        // already gone with the payment.
+        $withheld = $transfers instanceof MovesMerchantShare
+            ? $this->payouts?->withheldBecause($merchant, CarbonImmutable::now())
+            : null;
+
+        if ($withheld !== null) {
+            $this->ledger->recordWithholding($charge, $withheld);
+        } elseif ($transfers instanceof MovesMerchantShare) {
             try {
                 $moved = $this->moveMerchantShare($transfers, $charge, $routing);
             } catch (Throwable $caught) {
@@ -409,7 +428,7 @@ final readonly class RoutedPayment
             $this->report($failure);
 
             $this->ledger->recordTransferFailure($charge, $merchant, $failure);
-        } else {
+        } elseif ($withheld === null) {
             $this->ledger->settle(
                 $charge,
                 $moved instanceof TransferResult ? $moved->reference : $result->transferReference,
@@ -621,7 +640,7 @@ final readonly class RoutedPayment
      * the same charge converges on the row it already wrote rather than starting a second one with all its
      * reversal totals back at zero.
      */
-    private function record(Model $merchant, ChargeResult $result, Money $gross, PlatformFee $fee, int $taxBps, ChargeType $chargeType, SellerOfRecordPosture $posture): MerchantCharge
+    private function record(Model $merchant, ChargeResult $result, Money $gross, PlatformFee $fee, int $taxBps, ChargeType $chargeType, SellerOfRecordPosture $posture, ?TaxArchetype $archetype): MerchantCharge
     {
         // THE COMMISSION IS TAKEN ON THE NET. The configuration has said so in as many words since the fee
         // was introduced -- "it is applied to the transaction's net, not to what the buyer paid" -- and the
@@ -667,6 +686,9 @@ final readonly class RoutedPayment
             // And WHO SOLD, for the small-business turnover: a creator who supplies the buyer counts the whole
             // price less their tax, one who supplies the platform counts the payout.
             sellerPosture: $posture,
+            // And WHAT was sold. Under intermediation this row is the only record of the sale, so it is what a
+            // count of a seller's sales of goods reads.
+            taxArchetype: $archetype,
         );
     }
 }

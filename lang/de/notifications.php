@@ -41,6 +41,35 @@ return [
         'outro' => 'Wenn das nicht zu deiner Lage passt, sag uns Bescheid — wir korrigieren es.',
     ],
 
+    'reattestation_due' => [
+        'subject' => 'Deine Steuer-Attestierung muss erneuert werden',
+        'intro_due' => 'Ein neues Jahr hat begonnen, deshalb muss deine Steuer-Attestierung erneuert werden. Bitte bestätige deinen Steuerstatus bis zum :date.',
+        'intro_last' => 'Deine Steuer-Attestierung läuft am :date ab, und wir haben noch keine Erneuerung erhalten.',
+        'consequence' => 'Ist sie bis zum :date nicht erneuert, ruhen Verkäufe und Auszahlungen ab diesem Tag, bis du deinen Status wieder bestätigst.',
+        'cta' => 'Steuerstatus bestätigen',
+        'outro' => 'Das dauert nur einen Moment, und wenn dein Status gleich geblieben ist, ändert sich für dich nichts.',
+    ],
+
+    'seller_data_reminder' => [
+        'subject' => 'Bitte vervollständige deine Verkäuferangaben',
+        'intro_first' => 'Für deine Verkäufe fehlen uns noch Angaben von dir: :fields.',
+        'intro_second' => 'Zweite Erinnerung: Für deine Verkäufe fehlen uns noch Angaben von dir: :fields.',
+        'consequence_withhold_payout' => 'Sind sie bis zum :date nicht vollständig, halten wir deine Auszahlungen ab diesem Tag zurück, bis sie es sind. Verloren geht dabei nichts: Alles Zurückgehaltene wird ausgezahlt, sobald deine Angaben vollständig sind.',
+        'consequence_suspend_sales' => 'Sind sie bis zum :date nicht vollständig, ruhen Verkäufe ab diesem Tag, bis sie es sind.',
+        'cta' => 'Angaben vervollständigen',
+        'outro' => 'Das dauert nur einen Moment.',
+        'fields' => [
+            'seller_name' => 'dein Name',
+            'seller_address' => 'deine Anschrift',
+            'payout_account' => 'dein Auszahlungskonto',
+            'payout_account_holder' => 'der Inhaber deines Auszahlungskontos',
+            'seller_tax_identifier' => 'deine Steuer-Identifikationsnummer',
+            'seller_register_number' => 'deine Handelsregisternummer',
+            'seller_date_of_birth' => 'dein Geburtsdatum',
+            'seller_vat_identifier' => 'deine Umsatzsteuer-Identifikationsnummer',
+        ],
+    ],
+
     'suspension_warning' => [
         'subject' => 'Handlungsbedarf: Dein Zugang wird gesperrt',
         'intro' => 'Auf deinem Konto ist ein offener Betrag fällig und dein Zugang wird bald gesperrt.',

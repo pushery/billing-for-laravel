@@ -26,9 +26,10 @@ use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
  * own docblock warned against exactly that. Reporting data that need not be reported is an incorrect report
  * in its own right and a data protection breach besides, so that direction is not the cautious one.
  *
- * The two questions still meet at the money figure and still answer differently there — the declaration
- * fires at it, the statutory exemption holds at it. Keeping them in separate classes reading separate keys
- * is what makes that a design rather than a coincidence. Pinned by DeMinimisBoundaryHasOneHomeTest.
+ * With the shipped defaults the two questions agree at the money figure: the declaration fires at it, and
+ * the statutory exemption, which only covers LESS than the figure, no longer holds there. That agreement is
+ * where the German statute draws its line, not a shared rule, which is why they stay in separate classes
+ * reading separate keys. Moving one must never move the other. Pinned by DeMinimisBoundaryHasOneHomeTest.
  */
 final readonly class SellerActivityThreshold
 {
@@ -43,11 +44,11 @@ final readonly class SellerActivityThreshold
      */
     public function requiresStatusDeclaration(int $sales, int $proceedsMinor): bool
     {
-        if ($sales >= $this->salesThreshold()) {
+        if ($this->reaches($sales, $this->salesThreshold(), $this->config->get('billing.marketplace.seller_activity.sales_comparison'))) {
             return true;
         }
 
-        return $proceedsMinor >= $this->proceedsThresholdMinor();
+        return $this->reaches($proceedsMinor, $this->proceedsThresholdMinor(), $this->config->get('billing.marketplace.seller_activity.proceeds_comparison'));
     }
 
     /** How many sales in the period count as trading. */
@@ -64,5 +65,17 @@ final readonly class SellerActivityThreshold
         $value = $this->config->get('billing.marketplace.seller_activity.proceeds_threshold_minor', 200_000);
 
         return is_int($value) && $value > 0 ? $value : 200_000;
+    }
+
+    /**
+     * Whether a figure has reached its threshold, by the operator configured for it.
+     *
+     * `>=` by default: reaching the figure is enough. `>` asks for more than it. Any other value falls back to
+     * `>=`, the earlier of the two, because this is a question meant to be asked early. It lives here and
+     * nowhere else on purpose: the reporting exemption compares its own figures by its own rule.
+     */
+    private function reaches(int $figure, int $threshold, mixed $comparison): bool
+    {
+        return $comparison === '>' ? $figure > $threshold : $figure >= $threshold;
     }
 }

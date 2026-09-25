@@ -337,6 +337,16 @@ final readonly class SelfBillingEngine
             'sold_alongside_archetype' => $characteristics->soldAlongside,
             'place_of_supply_rule' => $characteristics->placeOfSupply,
             'tax_rate_category' => $characteristics->rateCategory,
+            // The rate the document STATES, and only where it states one. Readers take the rate from this
+            // column: the DATEV export tells a 7% input from a 19% one by it, and a correction copies it
+            // onto its own line. Left empty on a document that states tax, a reduced-rate settlement booked
+            // to the standard input account and its correction stated tax at 0%. A document that states no
+            // tax names no rate, because the renderer prints this column as the document's rate.
+            'tax_rate_bps' => $treatment->showsTax ? $supplyRateBps : null,
+            // The rate the supply is taxable at, whoever supplies it. A reverse charge is self-assessed at
+            // it although the document states nothing, and the export picks the reduced reverse-charge
+            // account from it.
+            'supply_rate_bps' => $supplyRateBps,
             // BT-72. Not a new argument here: a settlement documents ONE supply and this method is already
             // told when it happened -- the same date it dates the document to. Asking for it twice would be
             // two places for one fact, and the second one would eventually disagree.
@@ -409,6 +419,126 @@ final readonly class SelfBillingEngine
         $this->deliveries->provided($record->number ?? (string) $record->id, $creator);
 
         return $record;
+    }
+
+    /**
+     * Issue a settlement again, in the treatment its creator's corrected standing gives it.
+     *
+     * The caller has canceled the original, or is about to in the same transaction, and has worked out the
+     * treatment under the standing now in force at the supply date. What stays the same is everything about
+     * the SUPPLY: its date, what was sold, the payout, the commission it was priced under and the charge it
+     * settles. What changes is what the document says about tax, and the document itself.
+     *
+     * ## Dated the day it is issued, numbered in that year
+     *
+     * Not dated back to the supply. The original's period has been declared, and a document dated into it
+     * would reopen it. The platform can deduct tax a settlement states from the period it holds the document
+     * in, which is now. The supply date stays on the document as the delivery date, which is where a reader
+     * finds when the supply happened.
+     *
+     * ## The same guards as the first time
+     *
+     * A replacement is a new document and has to be allowed like one: a self-billed invoice needs an
+     * agreement covering the supply date, stated tax has to clear the whitelist at that date, and a reverse
+     * charge has to know what was sold. They run before a number is drawn, as they do in `settle()`.
+     *
+     * The seller is read now rather than copied. The creator's details at the time of the original may be
+     * the reason the standing was wrong, and a document issued today names the party as it is today.
+     */
+    public function reissue(
+        InvoiceRecord $original,
+        Model $creator,
+        InboundTaxTreatment $treatment,
+        int $supplyRateBps,
+        CarbonImmutable $supplyDate,
+        CarbonImmutable $reissuedOn,
+    ): InvoiceRecord {
+        $this->assertMayReissue($original, $creator, $treatment, $supplyDate);
+
+        $series = $treatment->document === SettlementDocumentType::SelfBilledInvoice
+            ? DocumentSeries::SelfBilledInvoice
+            : DocumentSeries::SettlementNote;
+
+        $net = $treatment->payoutAmount->minus($treatment->taxAmount);
+
+        $record = InvoiceRecord::model()::query()->create([
+            'owner_type' => $creator->getMorphClass(),
+            'owner_id' => $creator->getKey(),
+            'number' => $this->numbers->allocate($series, $reissuedOn->year),
+            'currency' => $original->currency,
+            'status' => InvoiceStatus::Open,
+            'issued_at' => $reissuedOn,
+            'delivered_on' => $supplyDate,
+            // Which settlement this one stands in for. It also keeps this document from claiming the charge a
+            // second time: the canceled settlement holds that claim for good.
+            'restates_invoice_id' => $original->id,
+            'subtotal_minor' => $net->minorUnits,
+            'tax_minor' => $treatment->taxAmount->minorUnits,
+            'total_minor' => $treatment->payoutAmount->minorUnits,
+            'reverse_charge' => $treatment->reverseChargeToRecipient,
+            'tax_exempt' => $treatment->exempt,
+            'tax_exemption_reason' => $treatment->exemptionReason,
+            'tax_archetype' => $original->tax_archetype,
+            'sold_alongside_archetype' => $original->sold_alongside_archetype,
+            'place_of_supply_rule' => $original->place_of_supply_rule,
+            'tax_rate_category' => $original->tax_rate_category,
+            'tax_rate_bps' => $treatment->showsTax ? $supplyRateBps : null,
+            'supply_rate_bps' => $supplyRateBps,
+            'supply_regime' => $original->supply_regime,
+            'settlement_document_type' => $treatment->document,
+            'document_series' => $series,
+            'fan_gross_minor' => $original->fan_gross_minor,
+            'provider' => $original->provider,
+            'settled_charge_reference' => $original->settled_charge_reference,
+            'commission_bps' => $original->commission_bps,
+            'commission_flat_minor' => $original->commission_flat_minor,
+            'commission_residual' => $original->commission_residual,
+            'seller' => $this->merchantParty->partyFor($creator)->toArray(),
+            'buyer' => $this->platformParty(),
+            'lines' => [[
+                'description' => 'Platform settlement',
+                'quantity' => 1,
+                'unit' => 'C62',
+                'unit_price_minor' => $net->minorUnits,
+                'net_minor' => $net->minorUnits,
+                'tax_rate' => $treatment->showsTax ? $supplyRateBps / 100 : 0.0,
+            ]],
+        ]);
+
+        // The conversion the original was issued at. The supply did not move, so neither does its rate.
+        $this->exchangeRates?->carryTo($original, $record);
+
+        // The charge now names the settlement that stands, so a later refund corrects this one.
+        if ($original->provider !== null && $original->settled_charge_reference !== null) {
+            MerchantCharge::linkToSettlement($creator, $record, [[$original->provider, $original->settled_charge_reference]]);
+        }
+
+        $this->deliveries->provided($record->number ?? (string) $record->id, $creator);
+
+        return $record;
+    }
+
+    /**
+     * Whether a settlement may be issued again in this treatment — asked before anything is canceled.
+     *
+     * The caller cancels the original and issues the replacement as one pair, and a refusal found halfway
+     * would leave the cancellation standing alone. So the refusals are asked for first, and `reissue()`
+     * asks again, because a check that only one caller runs is a check the next caller skips.
+     */
+    public function assertMayReissue(
+        InvoiceRecord $original,
+        Model $creator,
+        InboundTaxTreatment $treatment,
+        CarbonImmutable $supplyDate,
+    ): void {
+        if ($treatment->document === SettlementDocumentType::SelfBilledInvoice) {
+            $this->agreementGuard->assertMayIssueSelfBilledInvoice($creator, $supplyDate);
+            $this->disclosureGuard->assertMayDiscloseTax($creator, $supplyDate, $treatment->taxAmount);
+        }
+
+        if ($treatment->reverseChargeToRecipient && ! $original->tax_archetype instanceof TaxArchetype) {
+            throw ProductNotClassified::beforeReverseChargedDocument('a restated settlement');
+        }
     }
 
     /** @return array<string, ?string> */

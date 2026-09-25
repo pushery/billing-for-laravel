@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Marketplace;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -11,7 +12,6 @@ use Pushery\Billing\Enums\ReversalAttribution;
 use Pushery\Billing\Exceptions\SellerModelMissing;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\CountingPeriod;
-use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\SellerPeriodReport;
 use Pushery\Billing\ValueObjects\SellerQuarterFigures;
 
@@ -23,16 +23,18 @@ use Pushery\Billing\ValueObjects\SellerQuarterFigures;
  * seller's record needs. A reporting period asks all of that about EVERY seller who was active in it, and
  * nothing did.
  *
- * ## Who is in the period, and why it is decided by the documents
+ * ## Who is in the period, and why it is decided by what they sold
  *
- * The sellers are read off the settlement documents the period contains — not off the merchant registry.
- * The registry lists everyone who ever onboarded, so a run built from it would produce a row of zeros for
- * every merchant who sold nothing, and a zero is a REPORTABLE ANSWER: it states that a seller received
- * nothing, which is a claim about their year rather than the absence of one.
+ * The sellers are read off the records of their sales — not off the merchant registry. There are two kinds:
+ * the settlement documents of a commission chain, and the sales the platform arranged as an intermediary,
+ * which produce no settlement document and are read off the sale itself. The registry lists everyone who
+ * ever onboarded, so a run built from it would produce a row of zeros for every merchant who sold nothing,
+ * and a zero is a REPORTABLE ANSWER: it states that a seller received nothing, which is a claim about their
+ * year rather than the absence of one.
  *
- * Reading the documents also makes the figures and the roster come from ONE source. A roster from the
- * registry and figures from the documents can disagree — a seller present with no figures, or figures with
- * no seller — and both disagreements look like data problems rather than like the two queries they are.
+ * Reading the sales also makes the figures and the roster come from the same records. A roster from the
+ * registry and figures from the sales can disagree — a seller present with no figures, or figures with no
+ * seller — and both disagreements look like data problems rather than like the two queries they are.
  *
  * ## What it does NOT assemble
  *
@@ -59,6 +61,15 @@ final readonly class SellerReportingPeriod
          * counters fall back to.
          */
         private ?Repository $config = null,
+        /**
+         * The sales arranged as an intermediary. They produce no settlement document, so without them a
+         * seller who only sold that way would be missing from every period.
+         *
+         * Resolved where it is read when none is given, and not for convenience: the container never hands
+         * it over, because Laravel prefers a nullable parameter's default to resolving a class nothing bound.
+         * A period that skipped these sales would under-report, and no caller wants that.
+         */
+        private ?IntermediatedSalesCounter $intermediated = null,
     ) {}
 
     /**
@@ -104,30 +115,20 @@ final readonly class SellerReportingPeriod
 
             $quarters[$quarter] = new SellerQuarterFigures(
                 quarter: $quarter,
-                grossInflow: $this->inflow->countedIn($seller, $currency, $period),
-                transactions: $this->inflow->transactionsIn($seller, $currency, $period),
+                // What reached the seller, from both kinds of record: the settlement documents of the chain,
+                // and the sales the platform arranged as an intermediary, which produce no such document.
+                grossInflow: $this->inflow->countedIn($seller, $currency, $period)
+                    ->plus($this->intermediated()->countedIn($seller, $currency, $period)),
+                transactions: $this->inflow->transactionsIn($seller, $currency, $period)
+                    + $this->intermediated()->transactionsIn($seller, $currency, $period),
                 // Not simply what the platform kept. "Separately withheld fees" asks what the SELLER was
-                // charged, and under a commission chain the answer is nothing at all — the platform's
-                // margin is the difference between two supplies, never billed to them, and the package
-                // deliberately issues them no commission invoice for it. Reporting it here would invent a
-                // service relationship the books do not contain.
-                //
-                // Zero rather than a lookup, and the reason is structural rather than a shortcut: this
-                // roster is built from SETTLEMENT documents, and only a commission chain produces one.
-                // Under intermediation the platform issues the seller a commission invoice for its fee —
-                // `FanReceiptIssuer::issueSellerCommission()`, series P, owned by the merchant — and the
-                // seller documents their own sale. So every seller who can appear in a report at all was
-                // settled under the chain, and the honest figure for all of them is nothing.
-                //
-                // That sentence used to describe a document that did not exist. It was written from the
-                // design, the design was half built, and three places in the package went on describing the
-                // missing half as present — which is how an absence reads as a decision.
-                //
-                // The premise is pinned rather than trusted. `ReportedWithheldFeeByRegimeTest` fails the
-                // day a fee-charging regime gains a settlement-document role, which is the day this line
-                // has to become a per-document read instead. Writing that read TODAY would be a branch no
-                // test could reach, and an unreachable branch is where a wrong answer waits unmeasured.
-                feesWithheld: Money::zero(strtoupper($currency)),
+                // charged. Under a commission chain the answer is nothing: the platform's margin is the
+                // difference between two supplies, never billed to them, and reporting it would invent a
+                // service relationship the books do not contain. Under intermediation the platform charges
+                // the seller for arranging the sale, and that fee is exactly what the field is for. So the
+                // field carries the intermediated fee and nothing from the chain, per sale rather than per
+                // seller, because one seller can have sold both ways.
+                feesWithheld: $this->intermediated()->feesIn($seller, $currency, $period),
             );
         }
 
@@ -135,7 +136,7 @@ final readonly class SellerReportingPeriod
     }
 
     /**
-     * The sellers a period's settlement documents name, resolved to models.
+     * The sellers a period's settlement documents and intermediated sales name, resolved to models.
      *
      * A stored morph type is a class name or a morph-map alias for one, and a consumer that renames or
      * removes a model leaves rows naming a class that is gone. That is asked BEFORE the model is fetched
@@ -167,14 +168,30 @@ final readonly class SellerReportingPeriod
             // claim about their year — and this class documents itself as avoiding exactly that.
             ->placedIn($period, ReversalAttribution::configured($this->config))
             ->distinct()
-            ->orderBy('owner_type')
-            ->orderBy('owner_id')
             ->get(['owner_type', 'owner_id']);
+
+        // Both kinds of record name sellers, and a seller named by both is one seller. Keyed by the stored
+        // pair, then sorted, so the roster reads the same on every run.
+        $byPair = [];
+
+        foreach ($pairs as $pair) {
+            $byPair[$pair->owner_type.'#'.$pair->owner_id] = ['type' => (string) $pair->owner_type, 'id' => (string) $pair->owner_id];
+        }
+
+        foreach ($this->intermediated()->sellersIn($period, $currency) as $pair) {
+            $byPair[$pair['type'].'#'.$pair['id']] = $pair;
+        }
+
+        // Numeric ids compare as numbers, as the database ordered them before this list had two sources, so
+        // a report keeps its row order across versions; anything else (a UUID) compares as text.
+        uasort($byPair, static fn (array $a, array $b): int => ($a['type'] <=> $b['type']) ?: (is_numeric($a['id']) && is_numeric($b['id'])
+            ? (int) $a['id'] <=> (int) $b['id']
+            : strcmp($a['id'], $b['id'])));
 
         $sellers = [];
 
-        foreach ($pairs as $pair) {
-            $type = (string) $pair->owner_type;
+        foreach ($byPair as $pair) {
+            $type = $pair['type'];
             $class = Relation::getMorphedModel($type) ?? $type;
             if (! class_exists($class)) {
                 continue;
@@ -188,18 +205,23 @@ final readonly class SellerReportingPeriod
             // otherwise have `find()` answer null for a seller who is merely hidden -- and a whole year of
             // their activity would drop out of the reporting period, silently, in the under-reporting
             // direction. A closed account still owes a return for the year it was open.
-            $seller = $class::query()->withoutGlobalScopes()->find($pair->owner_id);
+            $seller = $class::query()->withoutGlobalScopes()->find($pair['id']);
 
             if (! $seller instanceof Model) {
                 // The class exists, the id came off a settlement document, and money was paid against it --
                 // so there is no reading under which this is an empty answer. Skipping it would remove a
                 // seller from a filing without saying so; the only honest response is to stop.
-                throw SellerModelMissing::for($type, (string) $pair->owner_id);
+                throw SellerModelMissing::for($type, $pair['id']);
             }
 
             $sellers[] = $seller;
         }
 
         return $sellers;
+    }
+
+    private function intermediated(): IntermediatedSalesCounter
+    {
+        return $this->intermediated ?? Container::getInstance()->make(IntermediatedSalesCounter::class);
     }
 }

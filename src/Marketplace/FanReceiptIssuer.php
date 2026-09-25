@@ -14,6 +14,7 @@ use Pushery\Billing\Enums\DocumentSeries;
 use Pushery\Billing\Enums\FanReceiptTier;
 use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Enums\SupplyRegime;
+use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Invoicing\Party;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\Money;
@@ -233,6 +234,12 @@ final readonly class FanReceiptIssuer
             // the union is taxed by nobody. Rendering the first where the second happened tells the recipient
             // to account for tax that nothing is owed on.
             'tax_exemption_reason' => $characteristics->exemptionReason,
+            // And the flag beside it, set from the same statement. The renderers read a reverse charge from
+            // either, but the readers that total sales read the flag alone: the booking export routes a
+            // reverse-charged sale to its own account by it, and the distance-selling threshold leaves a
+            // business sale out by it. Left unset, a reverse-charged sale booked as a domestic taxed one and
+            // counted towards a threshold that is about consumers.
+            'reverse_charge' => $characteristics->exemptionReason === TaxExemptionReason::ReverseCharge,
             // WHICH provider's reference that is. Frozen beside it because the two are one key: the charge
             // table is unique on the pair, and a reference on its own is a prefix rather than an identifier.
             // A document that stored only the reference could be matched to another provider's sale — and

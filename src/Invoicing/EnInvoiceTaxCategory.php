@@ -178,11 +178,15 @@ final readonly class EnInvoiceTaxCategory
      * the enum.
      *
      * Goods-versus-services is not one of those varying answers — a download is a service wherever it is
-     * sold — so it is read here, at the one place that needs it, rather than pushed into the profile
-     * contract as a sixth taxonomy cell every profile would have to answer identically. If a jurisdiction
-     * ever needs to disagree, this is the seam to move, and moving it means adding that cell.
+     * sold — so it is read here rather than pushed into the profile contract as a sixth taxonomy cell every
+     * profile would have to answer identically. If a jurisdiction ever needs to disagree, this is the seam to
+     * move, and moving it means adding that cell.
+     *
+     * Public because the recapitulative statement asks the same question of the same document: it reports a
+     * supply of goods and a service on separate lines, and a second answer there could disagree with the
+     * category this document's e-invoice states.
      */
-    private static function isGoods(?TaxArchetype $archetype): bool
+    public static function isGoods(?TaxArchetype $archetype): bool
     {
         return $archetype === TaxArchetype::ConsumerGoods;
     }

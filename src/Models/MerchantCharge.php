@@ -15,6 +15,7 @@ use Pushery\Billing\Enums\MerchantChargePurpose;
 use Pushery\Billing\Enums\RoundingResidual;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\SettlementState;
+use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\Money;
@@ -33,6 +34,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property ?string $transfer_reference
  * @property ?ChargeType $charge_type
  * @property ?MerchantChargePurpose $purpose what was sold, null on rows written before it was recorded
+ * @property ?TaxArchetype $tax_archetype what was sold, null on rows written before it was recorded
  * @property ?SellerOfRecordPosture $seller_posture who the tax law treated as the seller, null on rows written before it was recorded
  * @property int $gross_minor
  * @property int $fee_minor
@@ -46,6 +48,8 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  *                                      the share as part of the payment and makes no transfer call
  * @property ?Carbon $transfer_failed_at when the share last failed to move after the sale was paid, null if it never did
  * @property ?string $transfer_failure what was said when it did, class first
+ * @property ?Carbon $transfer_withheld_at when the share was held back because the merchant's payouts were withheld, kept after it moved
+ * @property ?string $transfer_withheld_reason why it was held back, the first reason given
  * @property string $currency
  * @property SettlementState $settlement_state
  * @property ?Carbon $settled_at
@@ -59,6 +63,8 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property ?string $buyer_fee_place_of_supply
  * @property int $buyer_fee_refunded_minor
  * @property ?Carbon $merchant_erased_at
+ * @property ?Carbon $created_at
+ * @property ?Carbon $updated_at
  */
 class MerchantCharge extends Model
 {
@@ -68,7 +74,7 @@ class MerchantCharge extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'payment_reference', 'transfer_reference', 'transfer_moved_minor', 'charge_type', 'purpose', 'seller_posture',
+        'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'payment_reference', 'transfer_reference', 'transfer_moved_minor', 'charge_type', 'purpose', 'tax_archetype', 'seller_posture',
         'gross_minor', 'fee_minor', 'fee_bps', 'fee_flat_minor', 'fee_residual', 'commission_tax_bps', 'net_minor', 'currency', 'settlement_state', 'settled_at',
         'settlement_invoice_id',
         'refunded_minor', 'transfer_reversed_minor', 'fee_refunded_minor', 'merchant_erased_at',
@@ -102,6 +108,7 @@ class MerchantCharge extends Model
         // never makes a transfer call — and that is a different claim from "zero moved".
         'transfer_moved_minor' => 'integer',
         'transfer_failed_at' => UtcDateTime::class,
+        'transfer_withheld_at' => UtcDateTime::class,
         'refunded_minor' => 'integer',
         'transfer_reversed_minor' => 'integer',
         'fee_refunded_minor' => 'integer',
@@ -114,6 +121,7 @@ class MerchantCharge extends Model
         // Cast for the same reason `fee_residual` above is: a driver comparing a raw string against the enum
         // it was written as would never match, and would then type its ledger entry by the fallback.
         'purpose' => MerchantChargePurpose::class,
+        'tax_archetype' => TaxArchetype::class,
         'seller_posture' => SellerOfRecordPosture::class,
         'settled_at' => UtcDateTime::class,
         'merchant_erased_at' => UtcDateTime::class,

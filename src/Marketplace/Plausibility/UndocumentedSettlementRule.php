@@ -5,31 +5,40 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace\Plausibility;
 
 use Pushery\Billing\Contracts\ReportingPlausibilityRule;
+use Pushery\Billing\Marketplace\IntermediatedSalesCounter;
 use Pushery\Billing\Marketplace\WithheldFeeCounter;
+use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\ValueObjects\CountingPeriod;
 use Pushery\Billing\ValueObjects\PlausibilityFinding;
 
 /**
- * Which rows a quarter placed by their MONEY because no settlement document could place them.
+ * Which chain sales no settlement document names, by the quarter their money moved.
  *
  * ## Why this is a finding rather than a footnote
  *
- * The two figures a return states side by side — the consideration credited to a seller and the fee withheld
- * out of it — are placed by the settlement document that credits them. A charge no document claims has no
- * such date, so it keeps the charge's own settlement date, which is what the package did everywhere before.
+ * Under a commission chain the period reads what a seller received off the settlement documents, and only off
+ * them. A charge carries the link to the document that settled it, but a collective settlement writes that
+ * link only where its caller named the charge, and no caller did before the link existed. So a charge no
+ * document names is one of two things, and nothing in the rows tells them apart: a sale a collective document
+ * covers without naming it, which the period already counts, or a sale no document covers, which the period
+ * leaves out although the seller was paid.
  *
- * That fallback is correct and it is not nothing. It means one line of the quarter was placed by a different
- * event from the rest, and a reader reconciling the quarter against the seller's own settlement documents
- * will not find it there. Reporting the fee anyway is deliberate: a fee nobody reports is as wrong as one
- * reported twice, and it is the quieter of the two.
+ * Counting such a sale from the charge would settle the second case and double the first, and reporting more
+ * than a seller received is no safer than reporting less. So the period counts documents, and this run names
+ * the sales somebody has to look at: either a document covers each of them, or the missing document is raised
+ * and the run repeated. Both are answers, and neither is available to somebody who was not told.
  *
- * So the run says which rows those were. An operator either accepts the placement or raises the missing
- * document and re-runs — both are answers, and neither is available to somebody who was not told.
+ * ## A sale arranged as an intermediary is not one of them
+ *
+ * Under intermediation no settlement document is ever issued: the seller documents their own sale and the
+ * platform invoices them its fee. Such a sale is dated by itself because that is the only date it has, not
+ * because a document went missing, and telling an operator to raise one would ask for a document the
+ * arrangement does not have.
  *
  * ## Structural, like the four it joins
  *
- * It names no country, no threshold and no form. "A consideration has a date, and this row has none" holds
- * under any duty that reports per period.
+ * It names no country, no threshold and no form. "Money reached a seller, and no document names the sale"
+ * holds under any duty that reports per period.
  *
  * ## What an acknowledgement covers
  *
@@ -50,7 +59,10 @@ final readonly class UndocumentedSettlementRule implements ReportingPlausibility
     /** How many references a detail names before it says how many more there are. */
     private const int SAMPLE = 5;
 
-    public function __construct(private WithheldFeeCounter $fees) {}
+    public function __construct(
+        private WithheldFeeCounter $fees,
+        private IntermediatedSalesCounter $intermediated,
+    ) {}
 
     public function key(): string
     {
@@ -71,7 +83,7 @@ final readonly class UndocumentedSettlementRule implements ReportingPlausibility
                     $report->seller,
                     $currency,
                     CountingPeriod::quarter($year, $quarter),
-                );
+                )->reject(fn (MerchantCharge $charge): bool => $this->intermediated->arranged($charge));
 
                 if ($charges->isEmpty()) {
                     continue;
@@ -98,11 +110,12 @@ final readonly class UndocumentedSettlementRule implements ReportingPlausibility
             $findings[] = new PlausibilityFinding(
                 rule: $this->key(),
                 subject: UnclassifiedActivityRule::subjectOf($report->seller),
-                detail: 'No settlement document claims '.$total.' of this seller\'s charges ('
-                    .implode('; ', $perQuarter).'), so each was placed in a quarter by its own settlement '
-                    .'date rather than by the document that credited it. The fee is still reported. Sample: '
-                    .implode(', ', $sample).($more > 0 ? ' and '.$more.' more' : '')
-                    .'. Either accept the placement or raise the missing document and re-run.',
+                detail: 'No settlement document names '.$total.' of this seller\'s charges, by the quarter they '
+                    .'were paid out in ('.implode('; ', $perQuarter).'). The period counts what a chain seller '
+                    .'received from settlement documents alone, so each of these sales is in it only if a '
+                    .'document covers it without naming it, as a collective settlement does when its run named '
+                    .'no charges. Sample: '.implode(', ', $sample).($more > 0 ? ' and '.$more.' more' : '')
+                    .'. Either confirm that a document covers each of them, or raise the missing document and re-run.',
             );
         }
 

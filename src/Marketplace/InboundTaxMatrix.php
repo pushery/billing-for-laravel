@@ -52,12 +52,30 @@ final class InboundTaxMatrix
         PlatformFee $commission,
         int $supplyRateBps,
     ): InboundTaxTreatment {
+        return $this->resolveOnPayout($regime, $creatorStatus, $commission->netOf($transactionNet), $supplyRateBps);
+    }
+
+    /**
+     * The same decision, from the payout rather than from the sale.
+     *
+     * The payout does not depend on the creator's standing — only the tax on top of it does — so a
+     * settlement already issued fixes it for good. That is what lets a settlement be issued again under a
+     * corrected standing without the sale it came from: its payout net is on the document, and the
+     * commission that produced it was already taken.
+     *
+     * @param  Money  $payout  the creator's payout net of any tax, as a settlement states it
+     */
+    public function resolveOnPayout(
+        SupplyRegime $regime,
+        CreatorTaxStatus $creatorStatus,
+        Money $payout,
+        int $supplyRateBps,
+    ): InboundTaxTreatment {
         if ($regime !== SupplyRegime::CommissionChain) {
             throw RegimeNotPermitted::intermediationHasNoInboundTaxMatrix($regime);
         }
 
-        $currency = $transactionNet->currency;
-        $payout = $commission->netOf($transactionNet);
+        $currency = $payout->currency;
 
         return match ($creatorStatus) {
             // Charges tax normally: the one case that states tax. The self-billed invoice carries the rate on

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Marketplace;
 
+use Carbon\CarbonImmutable;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -44,6 +46,8 @@ final readonly class UnmovedMerchantShares
         private ?MovesMerchantShare $transfers = null,
         /** Null where no directory is bound, and then there is nobody to name as the destination. */
         private ?MerchantAccountDirectory $accounts = null,
+        /** Null where nothing is asked before a share moves, which is how a hand-built instance behaves. */
+        private ?MerchantPayoutGate $payouts = null,
     ) {}
 
     public function count(): int
@@ -92,6 +96,20 @@ final readonly class UnmovedMerchantShares
         $destination = $this->accounts?->accountFor($merchant);
 
         if (! $this->transfers instanceof MovesMerchantShare || ! $destination instanceof MerchantAccountReference) {
+            return 'skipped';
+        }
+
+        // Asked here rather than by each caller, because both callers owe the same answer: a retry must not
+        // move a share whose merchant's payouts are withheld, and neither may a late confirmation. The row
+        // says why it waits, and it moves on the run after the reason ends.
+        $withheld = $this->payouts?->withheldBecause(
+            $merchant,
+            $charge->created_at instanceof DateTimeInterface ? CarbonImmutable::instance($charge->created_at) : CarbonImmutable::now(),
+        );
+
+        if ($withheld !== null) {
+            $this->ledger->recordWithholding($charge, $withheld);
+
             return 'skipped';
         }
 

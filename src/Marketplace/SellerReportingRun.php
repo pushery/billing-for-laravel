@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Marketplace;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\ClassifiesReportability;
 use Pushery\Billing\Enums\TaxArchetype;
@@ -27,14 +28,15 @@ use Pushery\Billing\ValueObjects\SellerReportingLine;
  * quarter has two answers, and a single figure handed to the rule would get one of them — whichever the
  * caller happened to name — for all of it.
  *
- * ## Nothing is decided about what the documents cannot say
+ * ## Nothing is decided about what the records cannot say
  *
- * Settlements carrying no archetype come back as their own line with `classified: false` and NO verdict.
- * That is the whole safety of this class. Two real things land there: a settlement from before the
- * classification could be recorded, and a COLLECTIVE settlement, which covers many transactions and has no
- * single archetype to carry. Deciding either way about them would be a guess in a place where both
- * directions are violations — filing a seller the statute leaves out hands an authority personal data with
- * no basis, and leaving out one it covers is the offense the duty exists to prevent.
+ * Sales carrying no archetype come back as their own line with `classified: false` and NO verdict. That is
+ * the whole safety of this class. Three real things land there: a settlement from before the classification
+ * could be recorded, a COLLECTIVE settlement, which covers many transactions and has no single archetype to
+ * carry, and a sale arranged as an intermediary that was recorded before its archetype was. Deciding either
+ * way about them would be a guess in a place where both directions are violations — filing a seller the
+ * statute leaves out hands an authority personal data with no basis, and leaving out one it covers is the
+ * offense the duty exists to prevent.
  *
  * So the line is returned, unjudged, for a caller to resolve from their own catalog. It is deliberately
  * impossible to consume this without seeing it.
@@ -49,6 +51,14 @@ final readonly class SellerReportingRun
     public function __construct(
         private SettlementGrossInflowCounter $inflow,
         private ClassifiesReportability $rule,
+        /**
+         * The sales arranged as an intermediary, which produce no settlement document to count.
+         *
+         * Resolved where it is read when none is given: the container never hands it over, because Laravel
+         * prefers a nullable parameter's default to resolving a class nothing bound, and a run that skipped
+         * these sales would under-report the seller.
+         */
+        private ?IntermediatedSalesCounter $intermediated = null,
     ) {}
 
     /**
@@ -130,6 +140,13 @@ final readonly class SellerReportingRun
         $groups = $this->inflow->countedInByArchetype($seller, $currency, $period);
 
         ksort($groups);
+
+        // The sales arranged as an intermediary, merged by kind with the settled ones below: one seller who
+        // sold goods both ways has one line for goods, not two the rule would judge apart.
+        $groups = [
+            ...array_values($groups),
+            ...array_values(($this->intermediated ?? Container::getInstance()->make(IntermediatedSalesCounter::class))->countedInByArchetype($seller, $currency, $period)),
+        ];
 
         /** @var array<string, SellerActivity> $merged */
         $merged = [];

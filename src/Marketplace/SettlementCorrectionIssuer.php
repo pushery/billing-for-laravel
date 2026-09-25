@@ -8,10 +8,12 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use InvalidArgumentException;
 use Pushery\Billing\Enums\DocumentSeries;
 use Pushery\Billing\Enums\InvoiceCorrectionKind;
 use Pushery\Billing\Enums\InvoiceStatus;
+use Pushery\Billing\Enums\SettlementDocumentType;
 use Pushery\Billing\Enums\TaxBaseChangeReason;
 use Pushery\Billing\Exceptions\InvalidInvoiceCorrection;
 use Pushery\Billing\Models\InvoiceRecord;
@@ -153,6 +155,8 @@ final readonly class SettlementCorrectionIssuer
             return $named;
         }
 
+        $table = new (InvoiceRecord::model())()->getTable();
+
         return InvoiceRecord::model()::query()
             ->where('settled_charge_reference', $chargeReference)
             ->when(
@@ -164,6 +168,14 @@ final readonly class SettlementCorrectionIssuer
             ->whereIn('document_series', array_map(fn (DocumentSeries $s): string => $s->value, $series))
             ->whereNull('credited_invoice_id')
             ->whereNull('credited_invoice_number')
+            // A settlement canceled so it could be issued again under a corrected standing is no longer the
+            // one a refund corrects. The settlement issued in its place states the same charge, and the
+            // older row would otherwise win on its smaller id.
+            ->whereNotExists(static fn (QueryBuilder $cancellations): QueryBuilder => $cancellations
+                ->selectRaw('1')
+                ->from($table, 'cancellations')
+                ->whereColumn('cancellations.credited_invoice_id', $table.'.id')
+                ->where('cancellations.correction_kind', InvoiceCorrectionKind::Cancellation->value))
             // The EXACT match first. Admitting NULL rows is what carries the upgrade, and it also makes a
             // legacy row a candidate for a provider it may not belong to -- with `orderBy('id')` alone the
             // older row has the smaller id and WINS against the document that names this provider outright.
@@ -269,6 +281,40 @@ final readonly class SettlementCorrectionIssuer
     }
 
     /**
+     * Cancel a creator-side settlement outright, so it can be issued again under a corrected standing.
+     *
+     * A cancellation takes back everything the settlement said: its net, its tax and its total, in the
+     * correction series paired to the settlement's own and naming it. It is dated the day it is written,
+     * in the period it happens in, like every correction here.
+     *
+     * The disclosure whitelist is not asked, and that is the point of this method rather than a gap. The
+     * whitelist decides whether a document may state tax on a creator's behalf. A cancellation withdraws
+     * tax an earlier document stated. Once a standing is corrected to one that states none, the whitelist
+     * refuses exactly the tax the cancellation exists to withdraw.
+     */
+    public function cancel(InvoiceRecord $original, CarbonImmutable $canceledOn): InvoiceRecord
+    {
+        if (! $original->settlement_document_type instanceof SettlementDocumentType) {
+            throw new InvalidArgumentException(
+                'Only a creator-side settlement is canceled this way. The record given is not a settlement, and '
+                .'a document on the buyer\'s side is not affected by the creator\'s standing.'
+            );
+        }
+
+        $taxMinor = $original->tax_minor ?? 0;
+
+        return $this->write(
+            $original,
+            $canceledOn,
+            $original->subtotal_minor ?? $original->total_minor - $taxMinor,
+            $taxMinor,
+            $original->total_minor,
+            reverseCharge: (bool) $original->reverse_charge,
+            kind: InvoiceCorrectionKind::Cancellation,
+        );
+    }
+
+    /**
      * Write a correcting document against an original, with the side's own amounts.
      *
      * Everything except the amounts is identical on both sides, and shared rather than duplicated: the date
@@ -284,6 +330,7 @@ final readonly class SettlementCorrectionIssuer
         bool $reverseCharge,
         ?TaxBaseChangeReason $reason = null,
         ?RefundAttempt $attempt = null,
+        InvoiceCorrectionKind $kind = InvoiceCorrectionKind::Amendment,
     ): InvoiceRecord {
         $origin = $original->number;
 
@@ -310,8 +357,9 @@ final readonly class SettlementCorrectionIssuer
             // supply the original stated; re-deriving the relief here would let a creator's standing change
             // between the two and quietly restate the earlier supply's legal ground.
             'tax_exemption_reason' => $original->tax_exemption_reason,
-            // An amendment, not a cancellation: it corrects a specific earlier document and says which.
-            'correction_kind' => InvoiceCorrectionKind::Amendment,
+            // An amendment corrects a specific earlier document and says which; a cancellation takes all of
+            // it back, and says which too.
+            'correction_kind' => $kind,
             // WHY the taxable amount changed. The figures cannot say it — money given back and money that
             // will not arrive produce the same correction — and only this tells a finished matter from one a
             // later payment reopens.
@@ -361,6 +409,7 @@ final readonly class SettlementCorrectionIssuer
             'place_of_supply_rule' => $original->place_of_supply_rule,
             'tax_rate_category' => $original->tax_rate_category,
             'tax_rate_bps' => $original->tax_rate_bps,
+            'supply_rate_bps' => $original->supply_rate_bps,
             'recipient_tax_status' => $original->recipient_tax_status,
             'rate_matrix_version' => $original->rate_matrix_version,
             'supply_regime' => $original->supply_regime,
@@ -374,7 +423,7 @@ final readonly class SettlementCorrectionIssuer
             'seller' => $original->getAttribute('seller'),
             'buyer' => $original->getAttribute('buyer'),
             'lines' => [[
-                'description' => 'Correction',
+                'description' => $kind === InvoiceCorrectionKind::Cancellation ? 'Cancellation' : 'Correction',
                 'quantity' => 1,
                 'unit' => 'C62',
                 'unit_price_minor' => $netMinor,

@@ -8,7 +8,8 @@ namespace Pushery\Billing\Invoicing\Guards;
  * Which document holds the exclusive claim on a settled charge — the value behind
  * `billing_invoices_owner_series_charge_unique`.
  *
- * The sale's FIRST document claims its charge reference; a reissue and a correction claim nothing. Derived
+ * The sale's FIRST document claims its charge reference; a reissue, a correction and a settlement issued in
+ * place of a canceled one claim nothing. Derived
  * on the record rather than at the four call sites deliberately: the model is public surface, so a consumer
  * writing its own document is covered by the same invariant without knowing the column exists.
  *
@@ -30,6 +31,8 @@ final class ChargeClaimKeyDeriver
      *                               carry the same charge, and claiming it would refuse eleven of them.
      * @param  bool  $isReissue  a reissue restates a document that already holds the claim
      * @param  bool  $isCorrection  a correction belongs to an original that already holds it
+     * @param  bool  $isReplacement  a settlement issued in place of a canceled one stands in for a document
+     *                               that holds the claim for good; the cancellation does not release it
      */
     public function keyFor(
         ?string $reference,
@@ -37,11 +40,13 @@ final class ChargeClaimKeyDeriver
         bool $coversAPeriod,
         bool $isReissue,
         bool $isCorrection,
+        bool $isReplacement = false,
     ): ?string {
         $claims = $reference !== null && $reference !== ''
             && ! $coversAPeriod
             && ! $isReissue
-            && ! $isCorrection;
+            && ! $isCorrection
+            && ! $isReplacement;
 
         return $claims ? ($provider ?? '').'|'.$reference : null;
     }

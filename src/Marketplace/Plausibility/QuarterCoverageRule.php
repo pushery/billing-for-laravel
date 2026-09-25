@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace\Plausibility;
 
 use Pushery\Billing\Contracts\ReportingPlausibilityRule;
+use Pushery\Billing\Marketplace\IntermediatedSalesCounter;
 use Pushery\Billing\Marketplace\SettlementGrossInflowCounter;
-use Pushery\Billing\Marketplace\WithheldFeeCounter;
 use Pushery\Billing\ValueObjects\CountingPeriod;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlausibilityFinding;
@@ -27,6 +27,14 @@ use Pushery\Billing\ValueObjects\PlausibilityFinding;
  * quarters do not sum to its year states one number four times and a different one once, and a reader
  * cannot tell which is the claim.
  *
+ * ## The year is asked of the sources the quarters come from, and of nothing else
+ *
+ * The quarters read two kinds of sale: the settlement documents of a commission chain, and the sales the
+ * platform arranged as an intermediary. So the year reads both, and the fee reads only the second, because
+ * a chain charges the seller no fee and the quarters report none for it. The fee used to be compared with
+ * what the platform KEPT, which under a chain is its margin: every chain seller whose sales carried one
+ * was told their quarters did not add up to their year, when the quarters were right.
+ *
  * ## Why the currency comparison is not just an amount comparison
  *
  * {@see Money} refuses to compare across currencies, which is what makes a mismatched-currency figure a
@@ -36,7 +44,7 @@ final readonly class QuarterCoverageRule implements ReportingPlausibilityRule
 {
     public function __construct(
         private SettlementGrossInflowCounter $inflow,
-        private WithheldFeeCounter $fees,
+        private IntermediatedSalesCounter $intermediated,
     ) {}
 
     public function key(): string
@@ -62,9 +70,11 @@ final readonly class QuarterCoverageRule implements ReportingPlausibilityRule
                 $quarterlyCount += $figures->transactions;
             }
 
-            $annualGross = $this->inflow->countedIn($report->seller, $currency, $window);
-            $annualFees = $this->fees->feesWithheldIn($report->seller, $currency, $window);
-            $annualCount = $this->inflow->transactionsIn($report->seller, $currency, $window);
+            $annualGross = $this->inflow->countedIn($report->seller, $currency, $window)
+                ->plus($this->intermediated->countedIn($report->seller, $currency, $window));
+            $annualFees = $this->intermediated->feesIn($report->seller, $currency, $window);
+            $annualCount = $this->inflow->transactionsIn($report->seller, $currency, $window)
+                + $this->intermediated->transactionsIn($report->seller, $currency, $window);
 
             if ($quarterlyGross->minorUnits !== $annualGross->minorUnits) {
                 $mismatches[] = 'gross inflow '.$quarterlyGross->minorUnits.' vs '.$annualGross->minorUnits;

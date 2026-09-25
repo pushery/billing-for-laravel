@@ -92,6 +92,47 @@ final readonly class SellerDataEscalation
     }
 
     /**
+     * Whether money that arrived this long ago has reached the rail's own limit, whatever held it.
+     *
+     * A withholding for another reason is capped by the same limit, because the limit belongs to the money
+     * and not to the reason it waits.
+     */
+    public function payoutDeadlinePassed(int $arrivedDaysAgo): bool
+    {
+        return $arrivedDaysAgo >= $this->days('payout_deadline_days', 90);
+    }
+
+    /**
+     * How many days after the record became incomplete a stage is due.
+     *
+     * The escalation also keeps these distances between the steps it actually took: a reminder that went out
+     * late moves the next step back by the same amount, so the seller always has the time the reminder
+     * promised them.
+     */
+    public function daysAfter(Stage $stage): int
+    {
+        return match ($stage) {
+            Stage::Clear => 0,
+            Stage::FirstReminder => $this->days('first_reminder_after_days', 7),
+            Stage::SecondReminder => $this->days('second_reminder_after_days', 30),
+            Stage::MeasureActive => $this->days('measure_after_days', 60),
+        };
+    }
+
+    /**
+     * What follows when a withholding has run as long as it may without the data arriving.
+     *
+     * The money moves either way, because the rail's limit is not negotiable. The question is only whether the
+     * measure goes on as a suspension, so the seller keeps being held to the duty, or ends with the money. It
+     * is a decision for the platform and its advisers, so it is configured rather than guessed, and an
+     * unreadable value falls back to the suspension: of the two, it is the one that keeps the duty enforced.
+     */
+    public function convertsExhaustedWithholding(): bool
+    {
+        return $this->config->get('billing.marketplace.seller_data_escalation.on_withholding_exhausted', 'suspend_sales') !== 'release';
+    }
+
+    /**
      * Whether measures also apply where only precautionary data is missing.
      *
      * Off by default and deliberately a decision rather than a default: extending a sanction to data no law

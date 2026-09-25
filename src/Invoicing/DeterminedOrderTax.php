@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Invoicing;
 
+use Pushery\Billing\Enums\RecipientTaxStatus;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\ServicePeriod;
 use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
@@ -45,5 +46,16 @@ final readonly class DeterminedOrderTax
         public SupplyTaxCharacteristics $characteristics,
         /** The period supplied, as the document states it — both dates inclusive. */
         public ServicePeriod $period,
+        /** Who the buyer was for the placement: a consumer, a business in the union, or one outside it. */
+        public RecipientTaxStatus $recipient,
+        /**
+         * The buyer's VAT ID, where a register confirmed it and the package could read its country.
+         *
+         * Only then, because the document states it as the ID the supply was decided on. An ID that was
+         * merely present, or one whose country nobody could read, decided nothing and is not repeated here.
+         */
+        public ?string $buyerVatId,
+        /** The country that ID registers the buyer in, which is where a business supply is placed. */
+        public ?string $buyerCountry,
     ) {}
 }

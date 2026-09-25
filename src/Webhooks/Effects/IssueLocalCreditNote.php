@@ -146,12 +146,10 @@ final readonly class IssueLocalCreditNote
                 //
                 // Copied, never re-derived: a correction shares the tax position of the supply it corrects,
                 // and determining it again here would be a second opinion about a question that was settled
-                // when the original was issued. The marketplace writers and
-                // {@see \Pushery\Billing\Invoicing\ProrationCreditCorrectionIssuer} already do this; this
-                // was the one correction writer that did not.
-                'tax_rate_bps' => $invoice->tax_rate_bps,
-                'oss' => $invoice->oss,
-                'destination_country' => $invoice->destination_country,
+                // when the original was issued. The whole position, from the one list that names it: this
+                // carried the rate and the one-stop-shop fields alone for a while, and a credit note against
+                // a reverse-charged sale then read as a domestic one wherever it was read.
+                ...$invoice->taxPosition(),
                 'status' => InvoiceStatus::Refunded,
                 'issued_at' => $issuedAt,
                 'buyer' => $invoice->buyer,

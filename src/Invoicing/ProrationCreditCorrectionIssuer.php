@@ -186,10 +186,9 @@ final readonly class ProrationCreditCorrectionIssuer
                 // The FROZEN characteristics of the supply being reduced, copied rather than re-derived.
                 // They are what the revenue account is resolved from, and a correction shares the tax
                 // position of the supply it corrects — determining it again here would be a second opinion
-                // about a question that was settled when the original was issued.
-                'tax_rate_bps' => $original->tax_rate_bps,
-                'oss' => $original->oss,
-                'destination_country' => $original->destination_country,
+                // about a question that was settled when the original was issued. All of it, from the one
+                // list that names it, not the three columns the revenue account happened to need.
+                ...$original->taxPosition(),
                 'status' => InvoiceStatus::Refunded,
                 'issued_at' => $issuedAt,
                 'buyer' => $original->buyer,

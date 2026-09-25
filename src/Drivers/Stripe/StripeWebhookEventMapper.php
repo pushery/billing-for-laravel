@@ -20,6 +20,8 @@ use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\Events\DisputeOpened;
 use Pushery\Billing\Events\FanTipPaid;
+use Pushery\Billing\Events\InPersonSaleCanceled;
+use Pushery\Billing\Events\InPersonSalePaid;
 use Pushery\Billing\Events\InvoiceCorrected;
 use Pushery\Billing\Events\InvoiceFinalized;
 use Pushery\Billing\Events\InvoiceUpcoming;
@@ -176,9 +178,13 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             // The rest of the narrowing happens downstream: the effect only acts on a reference matching a
             // routed charge this package wrote as pending, and no-ops otherwise. So an ordinary one-time
             // checkout, which also has no invoice, emits an event that finds nothing and changes nothing.
-            'payment_intent.succeeded' => $this->routedChargeEvents($object, confirmed: true),
-            'payment_intent.payment_failed',
-            'payment_intent.canceled' => $this->routedChargeEvents($object, confirmed: false),
+            //
+            // A sale at the counter carries a marker of its own and is answered before any of that. It is never a
+            // routed charge, and a declined card leaves its payment open on the reader, so only its success and its
+            // cancellation mean anything for it.
+            'payment_intent.succeeded' => $this->inPersonSaleEvents($object, paid: true) ?? $this->routedChargeEvents($object, confirmed: true),
+            'payment_intent.payment_failed' => $this->inPersonSaleEvents($object, paid: null) ?? $this->routedChargeEvents($object, confirmed: false),
+            'payment_intent.canceled' => $this->inPersonSaleEvents($object, paid: false) ?? $this->routedChargeEvents($object, confirmed: false),
             'charge.refunded' => $this->refundEvents($object),
             'charge.dispute.created' => $this->disputeOpenedEvents($object),
             'charge.dispute.closed' => $this->disputeClosedEvents($object),
@@ -1073,6 +1079,42 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         $value = $data[$key] ?? null;
 
         return is_int($value) ? $value : null;
+    }
+
+    /**
+     * The events of a payment the counter path created, or null for any other payment.
+     *
+     * Told apart by the marker `StripeCardPresentPayments` puts in the metadata. A paid sale carries what the
+     * provider collected, which the effect holds against the gross the sale went up with. A declined card maps to
+     * nothing, because the payment stays open and the buyer can present another card.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @param  ?bool  $paid  true for a success, false for a cancellation, null for a declined card
+     * @return list<BillingDomainEvent>|null
+     */
+    private function inPersonSaleEvents(array $object, ?bool $paid): ?array
+    {
+        $metadata = $object['metadata'] ?? null;
+
+        if (! is_array($metadata) || ($metadata[StripeCardPresentPayments::SALE_MARKER] ?? null) !== '1') {
+            return null;
+        }
+
+        $reference = $this->string($object, 'id');
+        $currency = $this->string($object, 'currency');
+        $received = $this->int($object, 'amount_received');
+
+        if ($paid === null || $reference === null) {
+            return [];
+        }
+
+        if (! $paid) {
+            return [new InPersonSaleCanceled('stripe', $reference)];
+        }
+
+        return $currency === null || $received === null
+            ? []
+            : [new InPersonSalePaid('stripe', $reference, Money::of($received, strtoupper($currency)))];
     }
 
     /**

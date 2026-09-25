@@ -227,6 +227,12 @@ final class OwnerScopedTables
         // buyer was given the protection they were promised.
         'billing_buyer_protection_holds',
 
+        // What the platform did about a seller whose record stayed incomplete: when it asked, which channels
+        // the request reached, which measure applied and why it ended. It is the evidence that the platform
+        // acted on a duty, which is the whole reason it is written, so it outlives the seller, unlinked
+        // rather than deleted. It names fields, never their values, and its delivery log names no identifier.
+        'billing_seller_data_escalations',
+
         // A seller's declaration about where they are taxed. It is the evidence for how — or whether —
         // anything was withheld and reported about them, and those obligations outlast the relationship, so
         // the row is unlinked rather than deleted. It holds no identifying number to begin with.

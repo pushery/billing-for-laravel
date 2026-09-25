@@ -41,6 +41,35 @@ return [
         'outro' => 'Si cela ne correspond pas à ta situation, dis-le-nous — nous pouvons le corriger.',
     ],
 
+    'reattestation_due' => [
+        'subject' => 'Ton attestation fiscale doit être renouvelée',
+        'intro_due' => 'Une nouvelle année a commencé, ton attestation fiscale doit donc être renouvelée. Confirme ton statut fiscal d\'ici le :date.',
+        'intro_last' => 'Ton attestation fiscale expire le :date et nous n\'avons pas encore reçu de renouvellement.',
+        'consequence' => 'Si elle n\'est pas renouvelée d\'ici le :date, les ventes et les versements sont suspendus à partir de ce jour, jusqu\'à ce que tu confirmes à nouveau ton statut.',
+        'cta' => 'Confirmer ton statut fiscal',
+        'outro' => 'Cela ne prend qu\'un instant, et rien ne change pour toi si ton statut est resté le même.',
+    ],
+
+    'seller_data_reminder' => [
+        'subject' => 'Complète tes informations de vendeur',
+        'intro_first' => 'Il nous manque encore des informations dont nous avons besoin de ta part en tant que vendeur : :fields.',
+        'intro_second' => 'Second rappel : il nous manque encore des informations dont nous avons besoin de ta part en tant que vendeur : :fields.',
+        'consequence_withhold_payout' => 'Si elles ne sont pas complètes d\'ici le :date, tes versements sont retenus à partir de ce jour, jusqu\'à ce qu\'elles le soient. Rien n\'est perdu : tout ce qui est retenu est versé dès que tes informations sont complètes.',
+        'consequence_suspend_sales' => 'Si elles ne sont pas complètes d\'ici le :date, les ventes sont suspendues à partir de ce jour, jusqu\'à ce qu\'elles le soient.',
+        'cta' => 'Compléter tes informations',
+        'outro' => 'Cela ne prend qu\'un instant.',
+        'fields' => [
+            'seller_name' => 'ton nom',
+            'seller_address' => 'ton adresse',
+            'payout_account' => 'ton compte de versement',
+            'payout_account_holder' => 'le titulaire de ton compte de versement',
+            'seller_tax_identifier' => 'ton numéro d\'identification fiscale',
+            'seller_register_number' => 'ton numéro d\'immatriculation',
+            'seller_date_of_birth' => 'ta date de naissance',
+            'seller_vat_identifier' => 'ton numéro de TVA',
+        ],
+    ],
+
     'suspension_warning' => [
         'subject' => 'Action requise : ton accès va être suspendu',
         'intro' => 'Ton compte présente un solde impayé et ton accès sera bientôt suspendu.',

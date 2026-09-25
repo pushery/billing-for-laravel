@@ -14,8 +14,11 @@ use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Consumer\GermanWithdrawalPolicy;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\AddonContentMap;
+use Pushery\Billing\Contracts\BuyerPartyResolver;
+use Pushery\Billing\Contracts\ClassifiesReportability;
 use Pushery\Billing\Contracts\ConsumerWithdrawalPolicy;
 use Pushery\Billing\Contracts\DefinesUnionMembership;
+use Pushery\Billing\Contracts\DescribesSellerStanding;
 use Pushery\Billing\Contracts\JurisdictionProfile;
 use Pushery\Billing\Contracts\ProductTaxonomy;
 use Pushery\Billing\Contracts\ReportingProfile;
@@ -25,6 +28,7 @@ use Pushery\Billing\Contracts\TaxDisclosurePolicy;
 use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Enums\TaxArchetype;
+use Pushery\Billing\Invoicing\NullBuyerPartyResolver;
 use Pushery\Billing\Marketplace\GermanTaxDisclosurePolicy;
 use Pushery\Billing\Marketplace\UnmovedMerchantShares;
 use Pushery\Billing\Models\ExchangeRateRecord;
@@ -32,6 +36,8 @@ use Pushery\Billing\Models\Order;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
 use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
+use Pushery\Billing\Preflight\Profiles\GermanSellerStanding;
+use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\BillingSchema;
 use Pushery\Billing\Tax\DatabaseExchangeRateSource;
 use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
@@ -112,11 +118,13 @@ final class DoctorCommand extends Command
     private const array PROFILE_READINGS = [
         ProductTaxonomy::class => GermanProductTaxonomy::class,
         ReportingProfile::class => GermanReportingProfile::class,
+        ClassifiesReportability::class => GermanReportingProfile::class,
+        DescribesSellerStanding::class => GermanSellerStanding::class,
         TaxDisclosurePolicy::class => GermanTaxDisclosurePolicy::class,
         ConsumerWithdrawalPolicy::class => GermanWithdrawalPolicy::class,
     ];
 
-    public function handle(Repository $config, StripeClient $stripe, AddonCatalog $addons, AddonContentMap $works, DistanceSaleThresholdMonitor $thresholds, UnmovedMerchantShares $unmoved): int
+    public function handle(Repository $config, StripeClient $stripe, AddonCatalog $addons, AddonContentMap $works, DistanceSaleThresholdMonitor $thresholds, UnmovedMerchantShares $unmoved, BillingManager $drivers, BuyerPartyResolver $buyers): int
     {
         if (! (bool) $config->get('billing.enabled', true)) {
             $this->components->info('Billing is disabled; nothing to check.');
@@ -142,6 +150,8 @@ final class DoctorCommand extends Command
         $this->reportProfileInheritance();
 
         $this->reportCredentialEnvironment($config);
+
+        $this->reportUnnamedBuyers($drivers, $buyers);
 
         $failing = $this->reportWorksTheProfileDoesNotCover($config, $addons, $works) || $failing;
 
@@ -277,6 +287,45 @@ final class DoctorCommand extends Command
         }
 
         $this->components->info("{$setting} matches this environment.");
+    }
+
+    /**
+     * An installation that raises its own invoices and names no customer on them.
+     *
+     * The local engine asks {@see BuyerPartyResolver} for the customer's name and address when it raises an
+     * invoice, and the shipped default knows nobody. A consumer's invoice can do without them, and a business
+     * whose VAT id a register confirmed is still named by that id and its country. A business customer
+     * without one is named by nothing, which is not a document a business can file.
+     *
+     * WARNED, NOT FAILED: an install that only sells to consumers is right to bind nothing, and only its
+     * operator knows which install this is. A provider that issues its own documents names the buyer itself,
+     * so the question is only asked where the package raises the invoice.
+     */
+    private function reportUnnamedBuyers(BillingManager $drivers, BuyerPartyResolver $buyers): void
+    {
+        try {
+            $raisesItsOwnInvoices = ! $drivers->capabilities()->supportsProviderTax;
+        } catch (Throwable) {
+            // A driver that cannot be built is the credential guard's finding, reported at boot. Guessing here
+            // would describe an install this check cannot see.
+            return;
+        }
+
+        if (! $raisesItsOwnInvoices) {
+            return;
+        }
+
+        if (! $buyers instanceof NullBuyerPartyResolver) {
+            $this->components->info('Invoices the local engine raises name the customer your BuyerPartyResolver returns.');
+
+            return;
+        }
+
+        $this->components->warn(
+            'Invoices the local engine raises name no customer: no BuyerPartyResolver is bound. A business '
+            .'customer is named only by a VAT id a register confirmed. Bind a resolver that returns the '
+            .'customer\'s name and address if you invoice businesses.',
+        );
     }
 
     /**

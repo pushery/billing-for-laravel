@@ -92,6 +92,18 @@ enum CreatorTaxStatus: string
     }
 
     /**
+     * Whether the creator has said they sell as a business.
+     *
+     * A private individual has not, and neither has somebody whose standing is unestablished. It is what a
+     * buyer's rights and the documents of a sale turn on, and what a seller who trades regularly is asked to
+     * declare.
+     */
+    public function isBusiness(): bool
+    {
+        return $this !== self::PrivateIndividual && $this !== self::Unclarified;
+    }
+
+    /**
      * Whether the creator's own net earnings may be paid out.
      *
      * The net is what the creator earned and it does not depend on how their supply is taxed, so an

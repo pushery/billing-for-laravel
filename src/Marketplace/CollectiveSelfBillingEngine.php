@@ -198,6 +198,12 @@ final readonly class CollectiveSelfBillingEngine
                 'commission_flat_minor' => $transaction->commission->flatMinor,
                 'commission_residual' => $transaction->commission->residual->value,
                 'tax_rate_bps' => $treatment->showsTax ? $transaction->supplyRateBps : 0,
+                // The rate the supply is taxable at whatever the line states, and the tax it carries. The
+                // booking export splits the document's input by rate from these two, as the writer splits
+                // its tax: a month can hold a 19% supply and a 7% one, and a reverse charge states no rate
+                // of its own while the platform self-assesses at this one.
+                'supply_rate_bps' => $transaction->supplyRateBps,
+                'tax_minor' => $treatment->taxAmount->minorUnits,
                 // What the buyer paid for THIS transaction, frozen for the same reason the header freezes it
                 // on a per-transaction settlement: a correction states what is being reversed, and
                 // recomputing the fan gross later would reintroduce the rounding this resolved once.

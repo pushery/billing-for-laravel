@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Pushery\Billing;
 
+use Illuminate\Console\Application as ConsoleApplication;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
+use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +37,7 @@ use Pushery\Billing\Console\Commands\CheckTaxRatesCommand;
 use Pushery\Billing\Console\Commands\DatevExportCommand;
 use Pushery\Billing\Console\Commands\DoctorCommand;
 use Pushery\Billing\Console\Commands\EraseOwnerCommand;
+use Pushery\Billing\Console\Commands\EscalateSellerDataCommand;
 use Pushery\Billing\Console\Commands\ExpireDelinquentSubscriptionsCommand;
 use Pushery\Billing\Console\Commands\ExportOwnerCommand;
 use Pushery\Billing\Console\Commands\FlushUsageCommand;
@@ -48,6 +52,7 @@ use Pushery\Billing\Console\Commands\MerchantReopenCommand;
 use Pushery\Billing\Console\Commands\MerchantStatusCommand;
 use Pushery\Billing\Console\Commands\ProbeRatesCommand;
 use Pushery\Billing\Console\Commands\PruneBillingCommand;
+use Pushery\Billing\Console\Commands\RecapitulativeStatementExportCommand;
 use Pushery\Billing\Console\Commands\ReconcileMerchantJournalCommand;
 use Pushery\Billing\Console\Commands\ReconcileTaxStatusCommand;
 use Pushery\Billing\Console\Commands\ReconcileUsageCommand;
@@ -55,9 +60,11 @@ use Pushery\Billing\Console\Commands\RecordMarketAccessCommand;
 use Pushery\Billing\Console\Commands\RefreshMerchantCapabilitiesCommand;
 use Pushery\Billing\Console\Commands\ReleaseAbandonedClaimCommand;
 use Pushery\Billing\Console\Commands\RemindDelinquentSubscriptionsCommand;
+use Pushery\Billing\Console\Commands\RemindReattestationsCommand;
 use Pushery\Billing\Console\Commands\ReplayWebhooksCommand;
 use Pushery\Billing\Console\Commands\ReportingFileCommand;
 use Pushery\Billing\Console\Commands\ReportingRunCommand;
+use Pushery\Billing\Console\Commands\RestateSettlementsCommand;
 use Pushery\Billing\Console\Commands\RetryMerchantTransfersCommand;
 use Pushery\Billing\Console\Commands\SyncSubscriptionsCommand;
 use Pushery\Billing\Console\Commands\TaxReturnExportCommand;
@@ -81,8 +88,10 @@ use Pushery\Billing\Contracts\ArrearsClock;
 use Pushery\Billing\Contracts\ArrearsRoster;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\BundleContents;
+use Pushery\Billing\Contracts\BuyerPartyResolver;
 use Pushery\Billing\Contracts\CanReceiveMoney;
 use Pushery\Billing\Contracts\CanTransactMoney;
+use Pushery\Billing\Contracts\ClassifiesReportability;
 use Pushery\Billing\Contracts\ConformityUpdatePolicy;
 use Pushery\Billing\Contracts\ConsumerWithdrawalPolicy;
 use Pushery\Billing\Contracts\ContentAccessReader;
@@ -97,6 +106,7 @@ use Pushery\Billing\Contracts\CustomerRegistry;
 use Pushery\Billing\Contracts\CycleAmountResolver;
 use Pushery\Billing\Contracts\DatevAccountResolver;
 use Pushery\Billing\Contracts\DefinesUnionMembership;
+use Pushery\Billing\Contracts\DescribesSellerStanding;
 use Pushery\Billing\Contracts\DiscountResolver;
 use Pushery\Billing\Contracts\DunningGuard;
 use Pushery\Billing\Contracts\DunningNotifier;
@@ -173,16 +183,23 @@ use Pushery\Billing\Eligibility\AlwaysEligible;
 use Pushery\Billing\Eligibility\AlwaysReceivable;
 use Pushery\Billing\Entitlements\ConfigLicense;
 use Pushery\Billing\Events\BillableAccountDeleting;
+use Pushery\Billing\Events\CreatorReattestationDue;
 use Pushery\Billing\Events\CreatorTaxStatusChanged;
+use Pushery\Billing\Events\SellerDataReminderDue;
 use Pushery\Billing\Http\Controllers\BillingController;
 use Pushery\Billing\Http\Middleware\AccountContentSecurityPolicy;
 use Pushery\Billing\Http\Middleware\EnforceDunning;
 use Pushery\Billing\Http\Middleware\EnforceQuota;
 use Pushery\Billing\Http\Middleware\EnforceSuspension;
 use Pushery\Billing\Invoicing\ConfigDatevAccountResolver;
+use Pushery\Billing\Invoicing\NullBuyerPartyResolver;
 use Pushery\Billing\Invoicing\UnavailablePdfRenderer;
 use Pushery\Billing\Invoicing\XRechnungInvoice;
 use Pushery\Billing\Listeners\NotifyMerchantOfAutomaticTaxStatusChange;
+use Pushery\Billing\Listeners\NotifyMerchantOfReattestationDue;
+use Pushery\Billing\Listeners\NotifyMerchantOfSellerDataReminder;
+use Pushery\Billing\Listeners\QueueSettlementRestatements;
+use Pushery\Billing\Listeners\RecordSellerDataReminderDelivery;
 use Pushery\Billing\Listeners\StopBillingForDeletedAccount;
 use Pushery\Billing\Listeners\SyncSeatsOnMembershipChange;
 use Pushery\Billing\Livewire\AccountOverview;
@@ -217,6 +234,7 @@ use Pushery\Billing\Marketplace\MarketAllowlist;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Marketplace\MerchantChargeAnnualEarningsCounter;
 use Pushery\Billing\Marketplace\MerchantChargeLedgerBalanceReader;
+use Pushery\Billing\Marketplace\MerchantPayoutGate;
 use Pushery\Billing\Marketplace\NullMerchantPartyResolver;
 use Pushery\Billing\Marketplace\NullMerchantResolver;
 use Pushery\Billing\Marketplace\ProductClassifier;
@@ -227,10 +245,12 @@ use Pushery\Billing\Marketplace\RoutedPayment;
 use Pushery\Billing\Marketplace\SelfBillingAgreementGuard;
 use Pushery\Billing\Marketplace\SelfBillingEngine;
 use Pushery\Billing\Marketplace\UnmovedMerchantShares;
+use Pushery\Billing\Models\InPersonSaleRecord;
 use Pushery\Billing\Notifiers\LaravelDunningNotifier;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
 use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
+use Pushery\Billing\Preflight\Profiles\GermanSellerStanding;
 use Pushery\Billing\Proration\DelegatedProrationStrategy;
 use Pushery\Billing\Resolvers\ColumnTierResolver;
 use Pushery\Billing\Resolvers\ConfigBillingEntityResolver;
@@ -343,6 +363,11 @@ final class BillingServiceProvider extends ServiceProvider
         // merchants, and a single-seller install never reaches it.
         $this->app->bind(MerchantPartyResolver::class, NullMerchantPartyResolver::class);
 
+        // Who an invoice of the local engine is addressed to. The customer's name and address are the
+        // application's data, so the default knows nobody and answers null; the VAT ID and country a register
+        // confirmed reach the document from the tax facts either way.
+        $this->app->bind(BuyerPartyResolver::class, NullBuyerPartyResolver::class);
+
         // What the platform keeps of a routed sale. Behind a contract because a commission is a commercial
         // arrangement and arrangements differ per merchant; the shipped answer is the configured one, which
         // defaults to nothing at all.
@@ -391,6 +416,10 @@ final class BillingServiceProvider extends ServiceProvider
             // consulted only when the switch is on: the clock alone changes nothing, and an install that
             // never turns it on takes the same path it always took.
             protection: $app->make(BuyerProtectionClock::class),
+            // The payout gate, so a merchant whose payouts are withheld keeps their share where it is. The
+            // parameter is nullable for an instance built by hand, which moves the share as it always did;
+            // left to autowiring it would be null here too, and nobody's payouts would ever be withheld.
+            payouts: $app->make(MerchantPayoutGate::class),
         ));
 
         // The clock, with the two seams a release needs and the dispatcher it never had. Bound explicitly
@@ -403,6 +432,8 @@ final class BillingServiceProvider extends ServiceProvider
             $app->bound(MerchantAccountDirectory::class) ? $app->make(MerchantAccountDirectory::class) : null,
             $app->make(Dispatcher::class),
             $app->make(RoutedChargeLedger::class),
+            // Asked before a released share moves, for the reason given on the payment above.
+            payouts: $app->make(MerchantPayoutGate::class),
         ));
 
         // The shares that failed to move, bound explicitly for the clock's reason above: both seams are nullable
@@ -412,6 +443,8 @@ final class BillingServiceProvider extends ServiceProvider
             $app->make(RoutedChargeLedger::class),
             $app->bound(MovesMerchantShare::class) ? $app->make(MovesMerchantShare::class) : null,
             $app->bound(MerchantAccountDirectory::class) ? $app->make(MerchantAccountDirectory::class) : null,
+            // Asked before a retried share moves, for the reason given on the payment above.
+            payouts: $app->make(MerchantPayoutGate::class),
         ));
 
         // Bound explicitly, and the reason is a container subtlety that cost a debugging round: the engine's
@@ -489,6 +522,15 @@ final class BillingServiceProvider extends ServiceProvider
         // a consumer elsewhere needs entirely different fields, and receiving one country's would be both
         // wrong and a privacy problem — they would be collecting data no law asks them for.
         $this->app->bind(ReportingProfile::class, GermanReportingProfile::class);
+
+        // Who falls under that regime's reporting duty, answered by the same profile. It was left unbound, so
+        // everything that asks it (the reporting run, and the escalation over missing seller data) could not
+        // even be built on an installation that had not bound its own rule.
+        $this->app->bind(ClassifiesReportability::class, GermanReportingProfile::class);
+
+        // What a seller's standing means for the buyer of a sale the platform arranges: their rights and the
+        // document. A jurisdiction's rule, so a profile reading like the ones above.
+        $this->app->bind(DescribesSellerStanding::class, GermanSellerStanding::class);
 
         // Whether a self-billed document may state tax at all, per the creator's standing. In the profile:
         // the consequence of stating it wrongly (the recipient owing the tax) is a jurisdiction's rule, and
@@ -845,6 +887,11 @@ final class BillingServiceProvider extends ServiceProvider
             $this->loadMigrationsFrom(__DIR__.'/../database/migrations/server');
         }
 
+        // A receipt from the counter is filed under the sale it documents, by an alias rather than a class name, and
+        // the alias is registered here. A host that enforces a morph map would otherwise refuse the receipt the
+        // moment the first card is paid.
+        Relation::morphMap([InPersonSaleRecord::MORPH_ALIAS => InPersonSaleRecord::model()]);
+
         // The account hub is part of the master switch: when billing is off, the SCREENS and their routes do
         // not exist at all (a clean no-op clone).
         //
@@ -941,10 +988,46 @@ final class BillingServiceProvider extends ServiceProvider
                 CreatorTaxStatusChanged::class,
                 NotifyMerchantOfAutomaticTaxStatusChange::class,
             );
+
+            // Queue the settlements a corrected standing has made wrong. A standing recorded with a start date
+            // in the past changes what every settlement since then should have said, and the documents already
+            // issued say something else; `billing:settlements:restate` issues them again.
+            $this->app->make(Dispatcher::class)->listen(
+                CreatorTaxStatusChanged::class,
+                QueueSettlementRestatements::class,
+            );
+
+            // Tell a creator that their tax attestation is due, with the date their hold begins. Without it
+            // the first they hear of the renewal is the hold itself.
+            $this->app->make(Dispatcher::class)->listen(
+                CreatorReattestationDue::class,
+                NotifyMerchantOfReattestationDue::class,
+            );
+
+            // Ask a seller for the details their record is missing, and write down each channel the request
+            // actually reached. Both listeners ask the marketplace switch themselves when they run, so a
+            // single-seller install sends nothing and records nothing.
+            $this->app->make(Dispatcher::class)->listen(
+                SellerDataReminderDue::class,
+                NotifyMerchantOfSellerDataReminder::class,
+            );
+            $this->app->make(Dispatcher::class)->listen(
+                NotificationSent::class,
+                RecordSellerDataReminderDelivery::class,
+            );
         }
 
         if ($this->app->runningInConsole()) {
             $this->registerPublishing();
+
+            // Listed only where the marketplace is on, and decided when the console starts rather than at
+            // boot, so the answer follows the configuration a run actually has. A single-seller install has no
+            // sellers to chase and its command list stays as it was.
+            ConsoleApplication::starting(function (ConsoleApplication $artisan): void {
+                if ((bool) $this->app->make(Repository::class)->get('billing.marketplace.enabled', false)) {
+                    $artisan->resolveCommands([EscalateSellerDataCommand::class]);
+                }
+            });
             $this->commands([
                 InstallCommand::class,
                 BillingRunCommand::class,
@@ -954,6 +1037,7 @@ final class BillingServiceProvider extends ServiceProvider
                 AdvanceBuyerProtectionCommand::class,
                 AdvanceDunningCommand::class,
                 TaxReturnExportCommand::class,
+                RecapitulativeStatementExportCommand::class,
                 RecordMarketAccessCommand::class,
                 SyncSubscriptionsCommand::class,
                 ReplayWebhooksCommand::class,
@@ -964,6 +1048,8 @@ final class BillingServiceProvider extends ServiceProvider
                 ReleaseAbandonedClaimCommand::class,
                 RetryMerchantTransfersCommand::class,
                 AnnounceLapsedAttestationsCommand::class,
+                RestateSettlementsCommand::class,
+                RemindReattestationsCommand::class,
                 ExpireDelinquentSubscriptionsCommand::class,
                 RemindDelinquentSubscriptionsCommand::class,
                 WarnUnestablishedStandingsCommand::class,
@@ -1076,10 +1162,23 @@ final class BillingServiceProvider extends ServiceProvider
             // past the point it can still be billed. The flush is quiet about both by design — this is the
             // daily check that surfaces revenue quietly going uncollected.
             $schedule->command('billing:usage:reconcile')->dailyAt('04:00')->withoutOverlapping();
+            // The notice before the hold below: when an attestation's renewal falls due at the year boundary,
+            // and again shortly before it runs out. Safe unconditionally: with nothing due it touches nothing
+            // and exits zero.
+            $schedule->command('billing:tax-holds:remind')->dailyAt('05:55')->withoutOverlapping();
             // The one hold nothing else can notice. A merchant whose attestation expires is stopped from
             // selling and from being paid WITHOUT a row changing anywhere — the date simply passed. Without
             // this sweep they find out by trying to sell. Early, so the notice lands before their day does.
             $schedule->command('billing:tax-holds:announce')->dailyAt('06:00')->withoutOverlapping();
+            // The settlements a corrected creator standing has made wrong, issued again. Safe to schedule
+            // unconditionally: with nothing queued it touches nothing and exits zero.
+            $schedule->command('billing:settlements:restate')->dailyAt('06:05')->withoutOverlapping();
+            // Sellers whose record is incomplete: one step of the escalation a day, then the release of what
+            // may move again. Gated at registration like the voucher entry below, because a single-seller
+            // install has no sellers, and an entry that always no-ops is not what `schedule:list` should show.
+            if ((bool) $scheduleConfig->get('billing.marketplace.enabled', false)) {
+                $schedule->command('billing:seller-data:escalate')->dailyAt('06:10')->withoutOverlapping();
+            }
             // The filing obligations, announced before their day. Daily, because the notice window is
             // measured in days and a weekly sweep would land inside it by chance rather than by design.
             $schedule->command('billing:filings:announce')->dailyAt('06:15')->withoutOverlapping();

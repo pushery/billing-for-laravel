@@ -9,6 +9,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 use Override;
 use Pushery\Billing\Contracts\AdoptsCollectedPaymentMethod;
+use Pushery\Billing\Contracts\CardPresentPayments;
 use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\CreditSync;
 use Pushery\Billing\Contracts\CustomerDirectory;
@@ -46,6 +47,8 @@ use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\Events\DisputeOpened;
+use Pushery\Billing\Events\InPersonSaleCanceled;
+use Pushery\Billing\Events\InPersonSalePaid;
 use Pushery\Billing\Events\InvoiceCorrected;
 use Pushery\Billing\Events\InvoiceFinalized;
 use Pushery\Billing\Events\InvoiceUpcoming;
@@ -70,9 +73,11 @@ use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\WebhookSecretGuard;
 use Pushery\Billing\Webhooks\Effects\AdoptCollectedPaymentMethod;
 use Pushery\Billing\Webhooks\Effects\ClaimChargebackClawback;
+use Pushery\Billing\Webhooks\Effects\CloseInPersonSale;
 use Pushery\Billing\Webhooks\Effects\CorrectChainOnChargeback;
 use Pushery\Billing\Webhooks\Effects\CreditAddonPurchase;
 use Pushery\Billing\Webhooks\Effects\DebitCreditAppliedByProvider;
+use Pushery\Billing\Webhooks\Effects\DocumentInPersonSale;
 use Pushery\Billing\Webhooks\Effects\FlushUpcomingUsage;
 use Pushery\Billing\Webhooks\Effects\GrantPurchasedContent;
 use Pushery\Billing\Webhooks\Effects\IssueDocumentForRoutedHostedPurchase;
@@ -161,6 +166,9 @@ final class StripeServiceProvider extends ServiceProvider
         // Answering a dispute is a capability of the provider, not of every driver: Mollie takes no evidence
         // through its API, so it binds nothing and a host can ask the container whether the step exists.
         $this->app->bind(SubmitsDisputeEvidence::class, StripeDisputeEvidence::class);
+        // Payment in person is the same kind of capability: Stripe runs card readers, Mollie's terminals are not
+        // wired, so only this driver binds it and a host asks the container before it offers a counter sale.
+        $this->app->bind(CardPresentPayments::class, StripeCardPresentPayments::class);
         $this->app->bind(Invoices::class, StripeInvoices::class);
         $this->app->bind(UpcomingInvoice::class, StripeUpcomingInvoice::class);
         $this->app->bind(SubscriptionActions::class, StripeSubscriptionActions::class);
@@ -354,6 +362,10 @@ final class StripeServiceProvider extends ServiceProvider
         $registry->on(MerchantAccountDeauthorized::class, MarkMerchantDeauthorized::class);
         $registry->on(RoutedChargeConfirmed::class, SettleRoutedChargeOnConfirmation::class);
         $registry->on(RoutedChargeAbandoned::class, SettleRoutedChargeOnConfirmation::class);
+        // A card paid at the counter is documented when the provider confirms it, with the tax decided when the
+        // sale went onto the reader. A sale taken off the reader closes without a receipt.
+        $registry->on(InPersonSalePaid::class, DocumentInPersonSale::class);
+        $registry->on(InPersonSaleCanceled::class, CloseInPersonSale::class);
         // A reversal the provider performed on its own. Registered beside the chargeback effects because it
         // answers the same question from the other direction: money that left the merchant without this
         // platform asking for it.
