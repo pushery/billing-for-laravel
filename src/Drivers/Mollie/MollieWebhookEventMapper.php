@@ -9,7 +9,6 @@ use Illuminate\Support\Facades\Log;
 use Mollie\Api\Http\Requests\GetPaymentRequest;
 use Mollie\Api\MollieApiClient;
 use Mollie\Api\Resources\Payment;
-use Mollie\Api\Types\PaymentStatus;
 use Pushery\Billing\Contracts\DerivesDeliveryKey;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Events\AddonPurchased;
@@ -91,7 +90,8 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
             return null;
         }
 
-        $status = trim($payment->status) !== '' ? trim($payment->status) : 'unknown';
+        $status = trim(MollieValue::of($payment->status) ?? '');
+        $status = $status !== '' ? $status : 'unknown';
 
         return $id.':'.$status;
     }
@@ -155,7 +155,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
         $customer = is_string($payment->customerId) ? $payment->customerId : '';
 
         if ($payment->isPaid()) {
-            yield new PaymentSucceeded($customer, $amount, (string) $payment->id);
+            yield new PaymentSucceeded($customer, $amount, MollieValue::id($payment->id));
 
             yield from $this->addonPurchaseOf($payment, $customer, $amount);
 
@@ -169,7 +169,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
         }
 
         if ($payment->isFailed() || $payment->isCanceled() || $payment->isExpired()) {
-            yield new PaymentFailed($customer, $amount, (string) $payment->id);
+            yield new PaymentFailed($customer, $amount, MollieValue::id($payment->id));
 
             return;
         }
@@ -201,13 +201,13 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
     private function counterSaleEvents(Payment $payment): iterable
     {
         if ($payment->isPaid()) {
-            yield new InPersonSalePaid('mollie', (string) $payment->id, MollieAmount::fromResource($payment->amount));
+            yield new InPersonSalePaid('mollie', MollieValue::id($payment->id), MollieAmount::fromResource($payment->amount));
 
             return;
         }
 
         if ($payment->isFailed() || $payment->isCanceled() || $payment->isExpired()) {
-            yield new InPersonSaleCanceled('mollie', (string) $payment->id);
+            yield new InPersonSaleCanceled('mollie', MollieValue::id($payment->id));
         }
     }
 
@@ -225,17 +225,18 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
      */
     private function noteUnmappedStatus(Payment $payment): void
     {
-        // Read from the SDK's own type constants rather than typed here, so a status Mollie renames does
-        // not leave a hand-copied literal quietly matching nothing.
-        $inert = [PaymentStatus::OPEN, PaymentStatus::PENDING, PaymentStatus::AUTHORIZED];
+        // The strings Mollie sends, not the SDK's constants for them: version 4 renamed every one of those
+        // constants and hands the status back as an enum, while the wire value stayed the same.
+        $inert = [MollieValue::PAYMENT_OPEN, MollieValue::PAYMENT_PENDING, MollieValue::PAYMENT_AUTHORIZED];
+        $status = MollieValue::of($payment->status);
 
-        if (in_array($payment->status, $inert, true)) {
+        if (in_array($status, $inert, true)) {
             return;
         }
 
         Log::warning('billing: unmapped Mollie payment status, so this delivery produced no event', [
-            'payment' => (string) $payment->id,
-            'status' => $payment->status,
+            'payment' => MollieValue::id($payment->id),
+            'status' => $status,
         ]);
     }
 
@@ -340,12 +341,13 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
             return;
         }
 
-        $method = is_string($payment->method) && $payment->method !== '' ? $payment->method : null;
+        $method = MollieValue::of($payment->method);
+        $method = $method !== '' ? $method : null;
 
         // The payment id travels with the mandate, because under this provider the payment IS how the
         // mandate was granted — and it is the only thing that says which request this answers. A customer
         // adding a second card establishes a mandate too; without the reference the two are the same event.
-        yield new MandateEstablished($customer, trim($mandateId), 'mollie', $method, (string) $payment->id);
+        yield new MandateEstablished($customer, trim($mandateId), 'mollie', $method, MollieValue::id($payment->id));
     }
 
     /**
@@ -373,8 +375,8 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
             $customer,
             $key,
             $amount,
-            (string) $payment->id,
-            paymentReference: (string) $payment->id,
+            MollieValue::id($payment->id),
+            paymentReference: MollieValue::id($payment->id),
             declarationReference: $this->stringOf($metadata, 'withdrawal_declaration'),
             provider: 'mollie',
             callerReference: $this->stringOf($metadata, 'caller_reference'),
@@ -408,10 +410,8 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
      */
     private function refundOf(Payment $payment): iterable
     {
-        if ($payment->amountRefunded === null) {
-            return;
-        }
-
+        // No null check of its own: an absent amount is as unreadable as a malformed one, and the reader refuses
+        // both into the same silent return.
         try {
             $refunded = MollieAmount::fromResource($payment->amountRefunded);
         } catch (Throwable) {
@@ -422,7 +422,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
             return;
         }
 
-        yield new AddonRefunded((string) $payment->id, $refunded);
+        yield new AddonRefunded(MollieValue::id($payment->id), $refunded);
     }
 
     /**
@@ -481,6 +481,6 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
             return $this->fetched[$id] = null;
         }
 
-        return $this->fetched[$id] = $payment instanceof Payment ? $payment : null;
+        return $this->fetched[$id] = MollieValue::narrow($payment, Payment::class);
     }
 }

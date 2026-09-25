@@ -7,8 +7,6 @@ namespace Pushery\Billing\Drivers\Mollie;
 use Carbon\CarbonImmutable;
 use Mollie\Api\MollieApiClient;
 use Mollie\Api\Resources\Payment;
-use Mollie\Api\Types\PaymentMethod;
-use Mollie\Api\Types\TerminalStatus;
 use Pushery\Billing\Contracts\CardPresentPayments;
 use Pushery\Billing\Contracts\IssuesReaderPairingCodes;
 use Pushery\Billing\Enums\InPersonSaleStatus;
@@ -69,7 +67,7 @@ final readonly class MollieCardPresentPayments implements CardPresentPayments, I
             label: $this->text($terminal->description),
             location: $profile,
             country: $this->countryOf($reader, $profile),
-            online: $terminal->status === TerminalStatus::ACTIVE,
+            online: MollieValue::of($terminal->status) === MollieValue::TERMINAL_ACTIVE,
             busy: $this->openPaymentOn($reader) instanceof Payment,
             deviceType: implode(' ', array_filter(
                 [$this->text($terminal->brand), $this->text($terminal->model)],
@@ -115,7 +113,7 @@ final readonly class MollieCardPresentPayments implements CardPresentPayments, I
             $payment = $this->client->payments->create([
                 'description' => $sale->description,
                 'amount' => ['currency' => $sale->gross->currency, 'value' => $sale->gross->toDecimal()],
-                'method' => PaymentMethod::POINT_OF_SALE,
+                'method' => MollieValue::METHOD_POINT_OF_SALE,
                 'terminalId' => $reader,
                 'webhookUrl' => $this->webhookUrl,
                 'metadata' => array_filter([
@@ -144,7 +142,7 @@ final readonly class MollieCardPresentPayments implements CardPresentPayments, I
         $payment = $this->openPaymentOn($reader);
 
         if ($payment instanceof Payment && $payment->isCancelable === true) {
-            $this->client->payments->cancel((string) $payment->id);
+            $this->client->payments->cancel(MollieValue::id($payment->id));
         }
     }
 
@@ -192,7 +190,7 @@ final readonly class MollieCardPresentPayments implements CardPresentPayments, I
     {
         try {
             InPersonSaleRecord::model()::query()->firstOrCreate(
-                ['provider' => self::PROVIDER, 'payment_reference' => (string) $payment->id],
+                ['provider' => self::PROVIDER, 'payment_reference' => MollieValue::id($payment->id)],
                 [
                     'reader' => $reader,
                     'sold_at' => $soldAt,
@@ -212,7 +210,7 @@ final readonly class MollieCardPresentPayments implements CardPresentPayments, I
             );
         } catch (Throwable $failure) {
             try {
-                $this->client->payments->cancel((string) $payment->id);
+                $this->client->payments->cancel(MollieValue::id($payment->id));
             } finally {
                 throw $failure;
             }

@@ -10,7 +10,6 @@ use Mollie\Api\Http\Requests\CreatePaymentRequest;
 use Mollie\Api\MollieApiClient;
 use Mollie\Api\Resources\Payment;
 use Mollie\Api\Resources\Refund;
-use Mollie\Api\Types\SequenceType;
 use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
 use Pushery\Billing\Contracts\PaymentRails;
 use Pushery\Billing\Exceptions\MandateNeedsRedirect;
@@ -91,7 +90,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
             webhookUrl: $this->returnUrl,
             method: $token,
             metadata: $this->traceOf($idempotencyKey),
-            sequenceType: SequenceType::ONEOFF,
+            sequenceType: MollieValue::SEQUENCE_ONEOFF,
         )));
 
         return $this->settle($payment, $amount);
@@ -126,17 +125,17 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
      */
     public function beginMandate(string $customerReference, Money $verification, string $returnUrl): MandateHandshake
     {
-        $payment = $this->client->send(new CreatePaymentRequest(
+        $payment = MollieValue::narrow($this->client->send(new CreatePaymentRequest(
             description: 'Mandate verification',
             amount: MollieAmount::toMollie($verification),
             redirectUrl: $returnUrl,
             webhookUrl: $this->returnUrl,
-            sequenceType: SequenceType::FIRST,
+            sequenceType: MollieValue::SEQUENCE_FIRST,
             customerId: $customerReference,
-        ));
+        )), Payment::class);
 
-        // Narrowed as its own step rather than inside the expression below: `send()` is declared
-        // `@return mixed`, so without this the id read afterwards would be a read off anything.
+        // Narrowed as its own step rather than inside the expression below: version 3 of the SDK declares
+        // `send()` as `@return mixed`, so without this the id read afterwards would be a read off anything.
         if (! $payment instanceof Payment) {
             throw MandateNeedsRedirect::noCheckoutReturned('Mollie', 'unknown');
         }
@@ -144,10 +143,10 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
         $checkout = $payment->getCheckoutUrl();
 
         if ($checkout === null) {
-            throw MandateNeedsRedirect::noCheckoutReturned('Mollie', (string) $payment->id);
+            throw MandateNeedsRedirect::noCheckoutReturned('Mollie', MollieValue::id($payment->id));
         }
 
-        return new MandateHandshake($checkout, (string) $payment->id);
+        return new MandateHandshake($checkout, MollieValue::id($payment->id));
     }
 
     /**
@@ -172,7 +171,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
             amount: MollieAmount::toMollie($amount),
             webhookUrl: $this->returnUrl,
             metadata: $this->traceOf($idempotencyKey),
-            sequenceType: SequenceType::RECURRING,
+            sequenceType: MollieValue::SEQUENCE_RECURRING,
             mandateId: $mandate->id,
             customerId: $mandate->customerReference,
         )));
@@ -205,7 +204,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
 
         return new RefundResult(
             successful: ! $refund instanceof Refund || ! $refund->isFailed() && ! $refund->isCanceled(),
-            reference: $refund instanceof Refund ? (string) $refund->id : '',
+            reference: $refund instanceof Refund ? MollieValue::id($refund->id) : '',
             amount: $amount,
         );
     }
@@ -276,7 +275,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
             return new ChargeResult(false, '', $amount, 'unexpected_response');
         }
 
-        $reference = (string) $payment->id;
+        $reference = MollieValue::id($payment->id);
 
         if ($payment->isPaid()) {
             return new ChargeResult(true, $reference, $amount);
@@ -305,16 +304,11 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
      * Mollie's own words for why it refused, kept rather than replaced with ours.
      *
      * Not every decline carries one: a canceled or expired payment simply ran out, and there is nothing to
-     * quote. The status is then the reason, which is more useful than a placeholder saying we do not know.
+     * quote, and an empty code quotes nothing either. The status is then the reason, which is more useful
+     * than a placeholder saying we do not know.
      */
     private function reasonFor(Payment $payment): string
     {
-        $reason = $payment->statusReason;
-
-        if (is_object($reason) && isset($reason->code) && is_string($reason->code)) {
-            return $reason->code;
-        }
-
-        return $payment->status;
+        return MollieValue::reasonCode($payment->statusReason) ?? MollieValue::of($payment->status) ?? '';
     }
 }

@@ -4,6 +4,12 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.1] - 2026-09-25
+
+### Fixed
+
+- **The Mollie driver runs on version 4 of Mollie's PHP SDK.** `composer require mollie/mollie-api-php`, as the README says, has installed version 4 since its release, and the driver was written against version 3. Version 4 turned the SDK's status, sequence and method constants into backed enums, hands a payment's status back as one and types a resource's amounts, so direct debits, terminal payments and the reading of a payment's status failed on it. The driver now writes the plain strings both versions send and reads whatever comes back through one reader, so an install on 3.13 keeps working and one on 4 works.
+
 ## [0.42.0] - 2026-09-25
 
 ### Added
@@ -7148,7 +7154,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.42.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.42.1...HEAD
+[0.42.1]: https://github.com/pushery/billing-for-laravel/compare/v0.42.0...v0.42.1
 [0.42.0]: https://github.com/pushery/billing-for-laravel/compare/v0.41.0...v0.42.0
 [0.41.0]: https://github.com/pushery/billing-for-laravel/compare/v0.40.0...v0.41.0
 [0.40.0]: https://github.com/pushery/billing-for-laravel/compare/v0.39.0...v0.40.0

@@ -62,16 +62,16 @@
         "symfony/http-kernel": "^7.4|^8.0"
     },
     "require-dev": {
-        "adyen/php-api-library": "^25.0|^26.0",
+        "adyen/php-api-library": "^25.0|^26.0|^30.1",
         "horstoeko/zugferd": "^1.0",
         "larastan/larastan": "3.12.2",
         "laravel/ai": "^0.11.2",
-        "laravel/boost": "^2.9",
-        "laravel/mcp": "^1.0",
+        "laravel/boost": "^2.10.0",
+        "laravel/mcp": "^1.0.1",
         "laravel/pao": "^1.1",
         "laravel/pint": "^1.0",
         "livewire/livewire": "^4.3",
-        "mollie/mollie-api-php": "^3.13",
+        "mollie/mollie-api-php": "^3.13 || ^4.0",
         "nikic/php-parser": "^5.8",
         "orchestra/testbench": "^11.0",
         "orchestra/testbench-core": "^11.3.5",
@@ -93,7 +93,7 @@
         "horstoeko/zugferd": "Required only to embed the EN 16931 CII XML into a ZUGFeRD/Factur-X hybrid PDF/A-3 via Invoicing\\ZugferdPdfInvoice. The CII and XRechnung XML writers need none of it.",
         "laravel/ai": "Required only to score evals with a real judge. Not a dev dependency: it requires aws/aws-sdk-php for a provider this package never calls, which is 67 MB and 3512 files in every checkout and every CI lane.",
         "livewire/livewire": "Required only for the optional account-hub UI — the nine Livewire screens. The billing core (models, webhooks, invoicing, tax, contracts) needs none of it.",
-        "mollie/mollie-api-php": "Required only for the Mollie driver — the local billing engine and every other driver need none of it. Deliberately not a hard dependency: an install that never selects billing.default=mollie would otherwise carry an HTTP client it never calls, the same reasoning that keeps horstoeko/zugferd optional."
+        "mollie/mollie-api-php": "Required only for the Mollie driver, version 3.13 or 4 — the local billing engine and every other driver need none of it. Deliberately not a hard dependency: an install that never selects billing.default=mollie would otherwise carry an HTTP client it never calls, the same reasoning that keeps horstoeko/zugferd optional."
     },
     "autoload": {
         "psr-4": {

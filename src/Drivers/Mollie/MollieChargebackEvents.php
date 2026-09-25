@@ -46,7 +46,7 @@ final readonly class MollieChargebackEvents
                 continue;
             }
 
-            yield new ChargebackReceived($customerReference, (string) $chargeback->id, $amount);
+            yield new ChargebackReceived($customerReference, MollieValue::id($chargeback->id), $amount);
         }
     }
 }

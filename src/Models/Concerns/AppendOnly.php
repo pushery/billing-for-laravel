@@ -26,7 +26,7 @@ use RuntimeException;
  *
  * ## What each model still answers for itself
  *
- * The MECHANISM is here; the JUDGEMENTS stay with the model, because they are statements about that record
+ * The MECHANISM is here; the JUDGMENTS stay with the model, because they are statements about that record
  * and not shared code:
  *
  * - which columns may still move (`appendOnlyMutableColumns()`, empty by default — the whole row is frozen),
