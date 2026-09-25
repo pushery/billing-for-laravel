@@ -16,6 +16,7 @@ use Pushery\Billing\Enums\RefundAttemptStatus;
 use Pushery\Billing\Enums\ReversalCause;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\SettlementState;
+use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Events\MerchantShareNotMoved;
 use Pushery\Billing\Events\MerchantTransferReversed;
 use Pushery\Billing\Models\MerchantCharge;
@@ -146,6 +147,14 @@ final readonly class RoutedChargeLedger
          * reference already is the payment.
          */
         ?string $paymentReference = null,
+        /**
+         * WHAT KIND of thing was sold, where the lane knows it.
+         *
+         * Under intermediation this row is the only record of the sale the package writes, so it is the only
+         * place a count of a seller's sales of goods can read. Null means "written before this was recorded"
+         * or "a lane that does not know", never a guess.
+         */
+        ?TaxArchetype $taxArchetype = null,
     ): MerchantCharge {
         return MerchantCharge::model()::query()->firstOrCreate(
             ['provider' => $provider, 'charge_reference' => $chargeReference],
@@ -157,6 +166,7 @@ final readonly class RoutedChargeLedger
                 'payment_reference' => $paymentReference,
                 'charge_type' => $chargeType,
                 'purpose' => $purpose,
+                'tax_archetype' => $taxArchetype,
                 'seller_posture' => $sellerPosture,
                 'fee_bps' => $policy?->bps,
                 'fee_flat_minor' => $policy?->flatMinor,
@@ -277,6 +287,20 @@ final readonly class RoutedChargeLedger
         }
 
         return $recorded;
+    }
+
+    /**
+     * Note that a paid sale's share was held back because the merchant's payouts are withheld, and why.
+     *
+     * The row stays `pending` and nothing counts as failed: the share moves when the reason ends, or when the
+     * money rail's own limit is reached, whichever comes first. The first reason is kept, the way a suspension
+     * keeps its first reason, and the marker stays on the row after the share has moved.
+     */
+    public function recordWithholding(MerchantCharge $charge, string $reason): bool
+    {
+        return $this->changeWhilePending($charge, static fn (MerchantCharge $locked): array => $locked->transfer_withheld_at === null
+            ? ['transfer_withheld_at' => Carbon::now(), 'transfer_withheld_reason' => $reason]
+            : []);
     }
 
     /**

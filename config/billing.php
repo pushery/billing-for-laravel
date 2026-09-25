@@ -1212,6 +1212,10 @@ return [
         // read as current and are not. The grace period is the only part that is a choice.
         'reattestation' => [
             'grace_days' => (int) env('BILLING_TAX_REATTEST_GRACE_DAYS', 30),
+            // How many days before a declaration runs out its creator is reminded, on top of the notice
+            // they get when the year turns and the renewal falls due. Long enough to answer, short enough
+            // that the reminder is still about something close.
+            'remind_days' => (int) env('BILLING_TAX_REATTEST_REMIND_DAYS', 14),
         ],
     ],
 
@@ -1306,12 +1310,13 @@ return [
     | to an authority under a statute the package knows nothing about.
     |
     | Where a regime exempts small-scale sales of GOODS, both edges have to hold
-    | at once, and the operators are configurable because the upper one is where
-    | this is easy to get wrong: a statute that exempts a seller who "does not
-    | exceed" a figure is exempting the one sitting exactly on it, and a strict
-    | comparison would report them. Reporting somebody the law leaves out is its
-    | own offense and a data protection breach besides — so "when in doubt,
-    | report" is not the careful direction, it is the second mistake.
+    | at once, and the operators are configurable because the texts disagree at
+    | the upper one: the German statute exempts a seller paid "less than" the
+    | figure, the directive behind it one who "did not exceed" it, which also
+    | covers the seller sitting exactly on it. The defaults follow the German
+    | statute. Reporting somebody the law leaves out is its own offense and a
+    | data protection breach besides — so "when in doubt, report" is not the
+    | careful direction, it is the second mistake.
     |
     | The exemption belongs to the goods branch alone. There is no small-scale
     | relief for commissioned work: three commissions worth a year's rent are
@@ -1335,7 +1340,7 @@ return [
             'max_sales' => is_numeric($maxGoodsSales = env('BILLING_REPORTING_MAX_GOODS_SALES')) ? (int) $maxGoodsSales : 30,
             'sales_operator' => env('BILLING_REPORTING_SALES_OPERATOR', '<'),
             'max_compensation_minor' => is_numeric($maxGoodsCompensation = env('BILLING_REPORTING_MAX_GOODS_COMPENSATION_MINOR')) ? (int) $maxGoodsCompensation : 200000,
-            'compensation_operator' => env('BILLING_REPORTING_COMPENSATION_OPERATOR', '<='),
+            'compensation_operator' => env('BILLING_REPORTING_COMPENSATION_OPERATOR', '<'),
         ],
     ],
 
@@ -1406,10 +1411,31 @@ return [
     */
 
     'invoices' => [
-        // The prefix on a locally issued invoice number: PREFIX-YYYY-0000001. Only a local engine mints
-        // these — a provider-driven driver copies the number its provider already issued.
+        // The prefix on an invoice number the package mints itself: PREFIX-YYYY-0000001. A local engine's
+        // invoices carry it, and so does every receipt from the counter. A provider-driven driver's own
+        // invoices copy the number its provider already issued.
         'number_prefix' => env('BILLING_INVOICE_NUMBER_PREFIX', 'INV'),
         'pdf_disk' => env('BILLING_INVOICE_PDF_DISK'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Payment in person
+    |--------------------------------------------------------------------------
+    |
+    | A sale paid by card at the counter gets its receipt when the provider
+    | confirms the payment. Up to and including this gross the receipt is a
+    | simplified invoice, which names no buyer. Above it, a buyer at the
+    | counter is still anonymous, so the document is a payment record.
+    |
+    | 25000 is the German small-amount limit of 250 euros (§ 33 UStDV). A
+    | seller whose counter stands in a country with another limit sets that
+    | country's figure here.
+    |
+    */
+
+    'card_present' => [
+        'small_amount_threshold_minor' => (int) env('BILLING_CARD_PRESENT_SMALL_AMOUNT_MINOR', 25_000),
     ],
 
     'tax_us' => [
@@ -1659,6 +1685,13 @@ return [
             'skr03' => [
                 'fan_revenue_standard' => ['account' => '8400', 'automatic' => true],
                 'fan_revenue_reduced' => ['account' => '8300', 'automatic' => true],
+                // A service to a business in another member state, whose tax the recipient owes, and one to a
+                // business outside the union, which is not taxable here. Neither may land on 8400: that is an
+                // automatic account, and it would derive German tax from a posting that carries none. The
+                // reverse-charge booking also names the recipient's VAT id, which the recapitulative
+                // statement is read from.
+                'fan_revenue_eu_reverse_charge' => ['account' => '8336', 'automatic' => true],
+                'fan_revenue_third_country' => ['account' => '8338', 'automatic' => true],
                 'commission_revenue' => ['account' => '8510', 'automatic' => true],
                 'creator_input_de_standard' => ['account' => '3106', 'automatic' => true],
                 'creator_input_exempt' => ['account' => '3109', 'automatic' => false],
@@ -1686,6 +1719,8 @@ return [
             'skr04' => [
                 'fan_revenue_standard' => ['account' => '4400', 'automatic' => true],
                 'fan_revenue_reduced' => ['account' => '4300', 'automatic' => true],
+                'fan_revenue_eu_reverse_charge' => ['account' => '4336', 'automatic' => true],
+                'fan_revenue_third_country' => ['account' => '4338', 'automatic' => true],
                 'commission_revenue' => ['account' => '4510', 'automatic' => true],
                 'creator_input_de_standard' => ['account' => '5906', 'automatic' => true],
                 'creator_input_exempt' => ['account' => '5909', 'automatic' => false],
@@ -2062,6 +2097,17 @@ return [
             'export_path' => env('BILLING_REPORTING_EXPORT_PATH', 'reporting'),
         ],
 
+        // The route of the screen where a creator declares or renews their tax standing, if your application
+        // has one. The package has no such screen: the standing is recorded by your own flow. Named here, a
+        // reminder that an attestation is due carries a button to it; left empty, the reminder says the
+        // same without one.
+        'tax_standing_route' => env('BILLING_MARKETPLACE_TAX_STANDING_ROUTE'),
+
+        // The route of the screen where a seller completes their record, if your application has one. The
+        // record lives in your application, so the screen does too. Named here, a reminder about missing
+        // seller details carries a button to it; left empty, the reminder says the same without one.
+        'seller_record_route' => env('BILLING_MARKETPLACE_SELLER_RECORD_ROUTE'),
+
         'seller_record' => [
             'collect_precautionary' => (bool) env('BILLING_MARKETPLACE_COLLECT_PRECAUTIONARY', true),
         ],
@@ -2074,8 +2120,10 @@ return [
         //
         // They do NOT set the reporting duty's de-minimis exemption, and the similarity is a trap worth
         // naming here because the two read almost identically. That boundary is set by law, holds only
-        // while BOTH measures stay under, is inclusive at its money figure, and lives under
-        // `billing.reporting.goods_de_minimis.*` — a separate family, deliberately.
+        // while BOTH measures stay under, and lives under `billing.reporting.goods_de_minimis.*` — a
+        // separate family, deliberately. With the shipped defaults the two agree at the money figure: a
+        // seller paid exactly that much is asked to declare and is reportable as well. That is where the
+        // German statute draws its line, not a reason to merge the two.
         //
         // They used to be coupled: a second copy of the exemption read THESE keys, so moving the
         // declaration trigger moved the statutory boundary with it, in the over-reporting direction.
@@ -2087,6 +2135,11 @@ return [
         'seller_activity' => [
             'sales_threshold' => (int) env('BILLING_MARKETPLACE_SALES_THRESHOLD', 30),
             'proceeds_threshold_minor' => (int) env('BILLING_MARKETPLACE_PROCEEDS_THRESHOLD_MINOR', 200000),
+            // How each figure is compared with its threshold: `>=` (reaching it is enough) or `>`.
+            'sales_comparison' => env('BILLING_MARKETPLACE_SALES_COMPARISON', '>='),
+            'proceeds_comparison' => env('BILLING_MARKETPLACE_PROCEEDS_COMPARISON', '>='),
+            // What the figures are counted over: `calendar_year`, or `rolling_year` for the 365 days up to now.
+            'window' => env('BILLING_MARKETPLACE_ACTIVITY_WINDOW', 'calendar_year'),
         ],
 
         // What happens when a seller does not supply the data a reporting duty needs.
@@ -2112,6 +2165,11 @@ return [
             'withhold_up_to_days' => (int) env('BILLING_MARKETPLACE_WITHHOLD_UP_TO_DAYS', 90),
             // The rail's own limit. Read here, defined by the payout schedule — this never sets it.
             'payout_deadline_days' => (int) env('BILLING_MARKETPLACE_PAYOUT_DEADLINE_DAYS', 90),
+            // What follows when a withholding has run as long as it may without the data arriving. The money
+            // moves either way, because the rail's limit is not negotiable; the question is whether the seller
+            // stays held to the duty. suspend_sales converts the withholding into a suspension, release ends
+            // it with the money. A decision for you and your advisers, so it is set here rather than guessed.
+            'on_withholding_exhausted' => env('BILLING_MARKETPLACE_ON_WITHHOLDING_EXHAUSTED', 'suspend_sales'),
         ],
 
         // What happens while a merchant's tax standing is unestablished. Both locks default ON, and both

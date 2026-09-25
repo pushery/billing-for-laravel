@@ -41,6 +41,35 @@ return [
         'outro' => 'Klopt dit niet met jouw situatie, laat het ons weten — wij kunnen het corrigeren.',
     ],
 
+    'reattestation_due' => [
+        'subject' => 'Je fiscale attestatie moet worden vernieuwd',
+        'intro_due' => 'Er is een nieuw jaar begonnen, dus je fiscale attestatie moet worden vernieuwd. Bevestig je fiscale status vóór :date.',
+        'intro_last' => 'Je fiscale attestatie verloopt op :date en we hebben nog geen vernieuwing ontvangen.',
+        'consequence' => 'Wordt ze niet vóór :date vernieuwd, dan liggen verkopen en uitbetalingen vanaf die dag stil tot je je status opnieuw bevestigt.',
+        'cta' => 'Fiscale status bevestigen',
+        'outro' => 'Het kost maar even, en als je status hetzelfde is gebleven, verandert er voor jou niets.',
+    ],
+
+    'seller_data_reminder' => [
+        'subject' => 'Vul je verkopersgegevens aan',
+        'intro_first' => 'We missen nog gegevens die we van je nodig hebben als verkoper: :fields.',
+        'intro_second' => 'Tweede herinnering: we missen nog gegevens die we van je nodig hebben als verkoper: :fields.',
+        'consequence_withhold_payout' => 'Zijn ze op :date niet compleet, dan houden we je uitbetalingen vanaf die dag in tot ze dat wel zijn. Er gaat niets verloren: alles wat is ingehouden, wordt uitbetaald zodra je gegevens compleet zijn.',
+        'consequence_suspend_sales' => 'Zijn ze op :date niet compleet, dan wordt de verkoop vanaf die dag gepauzeerd tot ze dat wel zijn.',
+        'cta' => 'Vul je gegevens aan',
+        'outro' => 'Het kost maar even.',
+        'fields' => [
+            'seller_name' => 'je naam',
+            'seller_address' => 'je adres',
+            'payout_account' => 'je uitbetalingsrekening',
+            'payout_account_holder' => 'de houder van je uitbetalingsrekening',
+            'seller_tax_identifier' => 'je fiscaal identificatienummer',
+            'seller_register_number' => 'je inschrijvingsnummer in het handelsregister',
+            'seller_date_of_birth' => 'je geboortedatum',
+            'seller_vat_identifier' => 'je btw-identificatienummer',
+        ],
+    ],
+
     'suspension_warning' => [
         'subject' => 'Actie nodig: je toegang wordt opgeschort',
         'intro' => 'Je account heeft een achterstallig bedrag en je toegang wordt binnenkort opgeschort.',

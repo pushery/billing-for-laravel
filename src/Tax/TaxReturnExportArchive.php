@@ -82,11 +82,18 @@ final readonly class TaxReturnExportArchive
         return $stored->checksum === hash('sha256', $this->export->render($period, $lines));
     }
 
-    /** Every run of a period, oldest first, so a second run can be compared against the one before it. */
-    /** @return Collection<int, TaxReturnExportRecord> */
+    /**
+     * Every run of a period, oldest first, so a second run can be compared against the one before it.
+     *
+     * Only this return's: the recapitulative statement is kept in the same table, and one of its runs compared
+     * against a one-stop-shop run would disagree for no reason anybody could act on.
+     *
+     * @return Collection<int, TaxReturnExportRecord>
+     */
     public function runsFor(ReportingPeriod $period, string $currency): Collection
     {
         return TaxReturnExportRecord::model()::query()
+            ->where('return_type', TaxReturnExportRecord::ONE_STOP_SHOP)
             ->where('year', $period->year)
             ->where('quarter', $period->quarter)
             ->where('currency', strtoupper($currency))

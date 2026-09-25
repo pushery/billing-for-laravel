@@ -41,6 +41,35 @@ return [
         'outro' => 'Se questo non corrisponde alla tua situazione, faccelo sapere: possiamo correggerlo.',
     ],
 
+    'reattestation_due' => [
+        'subject' => 'La tua attestazione fiscale va rinnovata',
+        'intro_due' => 'È iniziato un nuovo anno, quindi la tua attestazione fiscale va rinnovata. Conferma la tua posizione fiscale entro il :date.',
+        'intro_last' => 'La tua attestazione fiscale scade il :date e non abbiamo ancora ricevuto il rinnovo.',
+        'consequence' => 'Se non viene rinnovata entro il :date, vendite e pagamenti si fermano da quel giorno finché non confermi di nuovo la tua posizione.',
+        'cta' => 'Conferma la tua posizione fiscale',
+        'outro' => 'Basta un momento, e se la tua posizione è rimasta la stessa per te non cambia nulla.',
+    ],
+
+    'seller_data_reminder' => [
+        'subject' => 'Completa i tuoi dati di venditore',
+        'intro_first' => 'Ci mancano ancora alcuni dati che ci servono da te come venditore: :fields.',
+        'intro_second' => 'Secondo promemoria: ci mancano ancora alcuni dati che ci servono da te come venditore: :fields.',
+        'consequence_withhold_payout' => 'Se non sono completi entro il :date, da quel giorno tratteniamo i tuoi pagamenti finché non lo saranno. Non si perde nulla: tutto ciò che viene trattenuto viene pagato non appena i tuoi dati sono completi.',
+        'consequence_suspend_sales' => 'Se non sono completi entro il :date, da quel giorno le vendite vengono sospese finché non lo saranno.',
+        'cta' => 'Completa i tuoi dati',
+        'outro' => 'Ci vuole solo un momento.',
+        'fields' => [
+            'seller_name' => 'il tuo nome',
+            'seller_address' => 'il tuo indirizzo',
+            'payout_account' => 'il tuo conto per i pagamenti',
+            'payout_account_holder' => 'l\'intestatario del tuo conto per i pagamenti',
+            'seller_tax_identifier' => 'il tuo codice fiscale',
+            'seller_register_number' => 'il tuo numero di iscrizione al registro delle imprese',
+            'seller_date_of_birth' => 'la tua data di nascita',
+            'seller_vat_identifier' => 'la tua partita IVA',
+        ],
+    ],
+
     'suspension_warning' => [
         'subject' => 'Azione necessaria: il tuo accesso verrà sospeso',
         'intro' => 'Il tuo account ha un saldo scaduto e l’accesso verrà sospeso a breve.',

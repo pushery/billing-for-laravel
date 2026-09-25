@@ -26,6 +26,8 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * @property ?int $business_founded_year
  * @property ?Carbon $attested_until
  * @property ?Carbon $hold_announced_at
+ * @property ?Carbon $reattestation_due_announced_at
+ * @property ?Carbon $expiry_reminded_at
  * @property ?Carbon $created_at
  */
 class CreatorTaxStatusRecord extends Model
@@ -38,6 +40,7 @@ class CreatorTaxStatusRecord extends Model
     protected $fillable = [
         'merchant_type', 'merchant_id', 'merchant_erased_at', 'status', 'effective_from', 'effective_to',
         'source', 'evidence_ref', 'business_founded_year', 'attested_until', 'hold_announced_at',
+        'reattestation_due_announced_at', 'expiry_reminded_at',
     ];
 
     /** @var array<string, string> */
@@ -52,6 +55,8 @@ class CreatorTaxStatusRecord extends Model
         'effective_to' => UtcDateTime::class,
         'attested_until' => UtcDateTime::class,
         'hold_announced_at' => UtcDateTime::class,
+        'reattestation_due_announced_at' => UtcDateTime::class,
+        'expiry_reminded_at' => UtcDateTime::class,
         'merchant_erased_at' => UtcDateTime::class,
     ];
 

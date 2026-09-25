@@ -78,6 +78,29 @@ final readonly class SellerRecordCompleteness
         return $missing;
     }
 
+    /**
+     * Which of these fields the values leave missing or failing their own check.
+     *
+     * For a catalog other than the reporting one, such as what a regime requires of a private seller of goods,
+     * judged by the same checks, so a field can never be satisfied for one purpose and missing for another.
+     *
+     * @param  list<SellerRecordField>  $fields
+     * @param  array<string, mixed>  $values
+     * @return list<string>
+     */
+    public function unsatisfied(array $fields, array $values): array
+    {
+        $missing = [];
+
+        foreach ($fields as $field) {
+            if (! $this->satisfied($field, $values[$field->name] ?? null)) {
+                $missing[] = $field->name;
+            }
+        }
+
+        return $missing;
+    }
+
     private function satisfied(SellerRecordField $field, mixed $value): bool
     {
         if (! is_string($value) || trim($value) === '') {

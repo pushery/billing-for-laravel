@@ -41,6 +41,35 @@ return [
         'outro' => 'If this does not match your situation, tell us — we can correct it.',
     ],
 
+    'reattestation_due' => [
+        'subject' => 'Your tax attestation is due for renewal',
+        'intro_due' => 'A new year has begun, so your tax attestation needs renewing. Please confirm your tax standing by :date.',
+        'intro_last' => 'Your tax attestation runs out on :date, and we have not received a renewal yet.',
+        'consequence' => 'If it is not renewed by :date, selling and payouts pause from that day until you confirm your standing again.',
+        'cta' => 'Confirm your tax standing',
+        'outro' => 'It takes a moment, and nothing changes for you if your standing is still the same.',
+    ],
+
+    'seller_data_reminder' => [
+        'subject' => 'Please complete your seller details',
+        'intro_first' => 'Some details we need from you as a seller are still missing: :fields.',
+        'intro_second' => 'This is a second reminder: some details we need from you as a seller are still missing: :fields.',
+        'consequence_withhold_payout' => 'If they are not complete by :date, your payouts are held back from that day until they are. Nothing is lost: everything held back is paid out once your details are complete.',
+        'consequence_suspend_sales' => 'If they are not complete by :date, selling pauses from that day until they are.',
+        'cta' => 'Complete your details',
+        'outro' => 'It only takes a moment.',
+        'fields' => [
+            'seller_name' => 'your name',
+            'seller_address' => 'your address',
+            'payout_account' => 'your payout account',
+            'payout_account_holder' => 'the holder of your payout account',
+            'seller_tax_identifier' => 'your tax identification number',
+            'seller_register_number' => 'your company registration number',
+            'seller_date_of_birth' => 'your date of birth',
+            'seller_vat_identifier' => 'your VAT identification number',
+        ],
+    ],
+
     'suspension_warning' => [
         'subject' => 'Action needed: your access will be suspended',
         'intro' => 'Your account has an overdue balance and access will soon be suspended.',

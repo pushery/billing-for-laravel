@@ -11,7 +11,9 @@ use Pushery\Billing\Contracts\DatevAccountResolver;
 use Pushery\Billing\Enums\CreditReason;
 use Pushery\Billing\Enums\DatevTransaction;
 use Pushery\Billing\Enums\ExchangeRateLayer;
+use Pushery\Billing\Enums\RecipientTaxStatus;
 use Pushery\Billing\Enums\SettlementDocumentType;
+use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\VoucherEvent;
 use Pushery\Billing\Exceptions\InvalidDatevBatch;
 use Pushery\Billing\Marketplace\MerchantLiabilityAccounts;
@@ -22,6 +24,7 @@ use Pushery\Billing\Tax\FrozenExchangeRate;
 use Pushery\Billing\Tax\UnionMembership;
 use Pushery\Billing\ValueObjects\CreditMovement;
 use Pushery\Billing\ValueObjects\DatevAccount;
+use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\VoucherMovement;
 
 /**
@@ -52,6 +55,9 @@ final readonly class DatevExport
 
     /** The field carrying the reverse-charge transaction key (1-based), and the rate that goes with it. */
     private const int TRANSACTION_KEY_FIELD = 43;
+
+    /** The field naming a recipient's member state and VAT id together, such as `ATU12345678` (1-based). */
+    private const int EU_VAT_ID_FIELD = 40;
 
     /**
      * The column captions, in field order, as far as this exporter can write.
@@ -488,10 +494,10 @@ final readonly class DatevExport
      * The booking row(s) a document produces.
      *
      * A self-billed settlement that carries its frozen fan gross is a commission-chain transaction and books
-     * the full THREE-part chain — the fan sale, the creator input, the payout — because those three legs
-     * belong to one transaction and only together do the margin and the VAT liability reconcile. Everything
-     * else — a fan invoice, a single-seller invoice, a settlement issued before this chain existed — books the
-     * single row it always has, so the shipped export stays byte-identical.
+     * its part of the chain — the creator input and the payout — while the buyer's receipt of the same
+     * transaction books the sale; only the three legs together make the margin and the VAT liability
+     * reconcile. Everything else — a fan invoice, a single-seller invoice, a settlement issued before this
+     * chain existed — books the single row it always has.
      *
      * @return list<list<string>>
      */
@@ -501,11 +507,72 @@ final readonly class DatevExport
             return $this->settlementChain($invoice);
         }
 
+        $parts = $this->ratePartsOf($invoice);
+
+        if ($parts !== null) {
+            return array_map(
+                fn (array $part): array => $this->booking($invoice, $part['amount'], $part['rate']),
+                $parts,
+            );
+        }
+
         return [$this->booking($invoice)];
     }
 
-    /** @return list<string> */
-    private function booking(InvoiceRecord $invoice): array
+    /**
+     * A collective settlement's input, split by the rate of the supplies it covers — or null to book it whole.
+     *
+     * One document settles a month, and the month can hold supplies at different rates. The header carries no
+     * rate on purpose, so an input account picked from it is the standard one for every month. Each line
+     * records the rate of its supply and its tax, and the parts add up to the document.
+     *
+     * A document whose lines do not record both was written before they did, and books as the one row it
+     * always was.
+     *
+     * @return ?list<array{rate: int, amount: int}>
+     */
+    private function ratePartsOf(InvoiceRecord $invoice): ?array
+    {
+        if (! $invoice->settlement_document_type instanceof SettlementDocumentType || $invoice->settlement_period === null) {
+            return null;
+        }
+
+        $lines = $invoice->getAttribute('lines');
+
+        if (! is_array($lines) || $lines === []) {
+            return null;
+        }
+
+        /** @var array<int, int> $amounts */
+        $amounts = [];
+
+        foreach ($lines as $line) {
+            if (! is_array($line)
+                || ! is_int($line['supply_rate_bps'] ?? null)
+                || ! is_int($line['tax_minor'] ?? null)
+                || ! is_int($line['net_minor'] ?? null)) {
+                return null;
+            }
+
+            $amounts[$line['supply_rate_bps']] = ($amounts[$line['supply_rate_bps']] ?? 0) + $line['net_minor'] + $line['tax_minor'];
+        }
+
+        $parts = [];
+
+        foreach ($amounts as $rate => $amount) {
+            $parts[] = ['rate' => $rate, 'amount' => $amount];
+        }
+
+        return $parts;
+    }
+
+    /**
+     * @param  ?int  $amountMinor  a part of the document rather than all of it, for a collective settlement
+     *                             booked by rate
+     * @param  ?int  $rate  the rate of the supplies that part covers
+     * @return list<string>
+     */
+    private function booking(InvoiceRecord $invoice, ?int $amountMinor = null, ?int $rate = null): array
     {
         $reference = $invoice->number ?? (string) $invoice->id;
         $date = $invoice->issued_at ?? $invoice->created_at ?? Carbon::now();
@@ -526,10 +593,10 @@ final readonly class DatevExport
         // empty either way — every account these resolve to is an Automatikkonto that derives its VAT from the
         // posting, and setting a BU-Schlüssel would cancel that (the classic import error). Position is fixed;
         // only these two values change with the role.
-        [$konto, $gegenkonto] = $this->accountsFor($invoice);
+        [$konto, $gegenkonto] = $this->accountsFor($invoice, $rate);
 
         return $this->row(
-            $this->amount($invoice),
+            $amountMinor === null ? $this->amount($invoice) : str_replace('.', ',', Money::of(abs($amountMinor), $invoice->currency)->toDecimal()),
             $marker,
             $invoice->currency,
             $konto->number,
@@ -546,16 +613,54 @@ final readonly class DatevExport
                 $this->correctsTag($invoice),
             ]),
             $this->dueDateField($invoice),
-            $this->transactionKeyOf($invoice, $konto),
+            $this->transactionKeyOf($invoice, $konto, $rate),
             $this->documentRate($invoice),
+            $this->euVatIdOf($invoice),
         );
+    }
+
+    /**
+     * Which of the two cross-border business routes a buyer-side document books to, or null for neither.
+     *
+     * The union route is the document's own answer ({@see InvoiceRecord::isUnionReverseChargeSale()}), which
+     * the recapitulative statement asks as well, so the booking and the statement cannot disagree about
+     * which sales they are about. What is left over is a sale to a business outside the union: by the frozen
+     * recipient status, or a reverse charge whose buyer sits in a third country. A settlement never gets
+     * here: it books the creator's input, and only a buyer-side document is booked to a revenue account.
+     */
+    private function crossBorderBusinessTransaction(InvoiceRecord $invoice): ?DatevTransaction
+    {
+        if ($invoice->isUnionReverseChargeSale()) {
+            return DatevTransaction::FanRevenueEuReverseCharge;
+        }
+
+        return $invoice->recipient_tax_status === RecipientTaxStatus::NonUnionBusiness || $invoice->reverse_charge
+            ? DatevTransaction::FanRevenueThirdCountry
+            : null;
+    }
+
+    /**
+     * The recipient's VAT id for field 40, on a reverse-charged sale to a business in another member state.
+     *
+     * The id carries its member state as a prefix, which is the form the field takes. Written only where the
+     * document names one; without it the booking keeps the narrow record it always had, because an id this
+     * export made up would be worse than a field left for the accountant.
+     */
+    private function euVatIdOf(InvoiceRecord $invoice): ?string
+    {
+        if (! $this->chartSelected() || ! $invoice->isUnionReverseChargeSale()) {
+            return null;
+        }
+
+        return $invoice->buyerVatId();
     }
 
     /**
      * One booking row as its fields, in order.
      *
-     * The row is narrow unless it carries a reverse-charge transaction key, which sits far to the right: only
-     * then does it reach that far, and only then does the whole batch widen with it.
+     * The row is narrow unless it carries something far to the right: a recipient's VAT id in field 40, or a
+     * reverse-charge transaction key in fields 43 and 44. Only then does it reach that far, and only then does
+     * the whole batch widen with it.
      *
      * @param  array{0: int, 1: int}|null  $transactionKey  the key and the rate that qualifies it
      * @return list<string>
@@ -572,6 +677,7 @@ final readonly class DatevExport
         string $dueDate = '',
         ?array $transactionKey = null,
         ?FrozenExchangeRate $rate = null,
+        ?string $euVatId = null,
     ): array {
         $row = [
             $amount,
@@ -605,16 +711,30 @@ final readonly class DatevExport
             $this->quote($text),
         ];
 
-        if ($transactionKey === null) {
+        // The fields beyond the narrow record, by their 1-based position. Kept as a map rather than appended in
+        // turn, because two of them can come apart: a later field must not shift an earlier one.
+        $beyond = [];
+
+        if ($euVatId !== null) {
+            $beyond[self::EU_VAT_ID_FIELD] = $this->quote($euVatId);
+        }
+
+        if ($transactionKey !== null) {
+            $beyond[self::TRANSACTION_KEY_FIELD] = (string) $transactionKey[0];
+            $beyond[self::TRANSACTION_KEY_FIELD + 1] = (string) $transactionKey[1];
+        }
+
+        if ($beyond === []) {
             return $row;
         }
 
-        return [
-            ...$row,
-            ...array_fill(0, self::TRANSACTION_KEY_FIELD - 1 - count($row), ''),
-            (string) $transactionKey[0],
-            (string) $transactionKey[1],
-        ];
+        $wide = array_pad($row, max(array_keys($beyond)), '');
+
+        foreach ($beyond as $field => $value) {
+            $wide[$field - 1] = $value;
+        }
+
+        return array_values($wide);
     }
 
     /**
@@ -627,31 +747,39 @@ final readonly class DatevExport
      *
      * @return array{0: int, 1: int}|null
      */
-    private function transactionKeyOf(InvoiceRecord $invoice, DatevAccount $account): ?array
+    private function transactionKeyOf(InvoiceRecord $invoice, DatevAccount $account, ?int $rate = null): ?array
     {
         if (! $invoice->reverse_charge || $account->reverseChargeTransactionKey === null) {
             return null;
         }
 
         // The rate as the field states it: hundredths of a percent become whole tenths of a percent, so 19%
-        // is 190. A settlement with no frozen rate has nothing to qualify the key with, and a key without its
-        // rate is refused by the import — so the pair stays out together.
-        $rate = $invoice->tax_rate_bps;
+        // is 190. It is the rate of the SUPPLY, which the recipient self-assesses at: a reverse-charged
+        // settlement states no rate of its own. A settlement with no frozen rate has nothing to qualify the
+        // key with, and a key without its rate is refused by the import — so the pair stays out together.
+        $rate ??= $invoice->supply_rate_bps ?? $invoice->tax_rate_bps;
 
         return $rate === null || $rate <= 0 ? null : [$account->reverseChargeTransactionKey, intdiv($rate, 10)];
     }
 
     /**
-     * The three-part commission-chain booking of one settled transaction.
+     * The settlement's part of the commission-chain booking of one settled transaction.
      *
-     *   (1) fan sale    money-transit  an  fan revenue     — the fan's gross, output VAT on the revenue account
+     *   (1) fan sale    money-transit  an  fan revenue     — booked from the BUYER'S RECEIPT, not from here
      *   (2) creator input  input account  an  creditor      — the payout GROSS; the input expense is its net
      *   (3) payout       creditor       an  money-transit   — the payout leaves the account
      *
+     * The sale to the buyer is the receipt's to book. It is the document that states that sale — its rate,
+     * its destination, whether the buyer self-assesses the tax — and a period batch carries it next to this
+     * settlement. Booked here as well, the sale entered the revenue account twice, and a leg read off a
+     * settlement knows none of what decides the account: it books a sale to France as a domestic one. The
+     * collective settlement never booked it, so both now follow one rule.
+     *
      * The creditor nets to zero per transaction (+payout in, −payout out); the money-transit does NOT — it
      * keeps the margin plus the VAT liability, which is the point. Every row is a debit of its Konto ("S") in
-     * the ordinary case; a correction reverses the whole chain (a general reversal), which is a separate
-     * concern. All three carry the sale-month date (the two fictional supplies are simultaneous).
+     * the ordinary case; a correction reverses both legs at once (a general reversal), and the buyer's side
+     * is reversed by the correction of the receipt. Both carry the sale-month date (the two fictional
+     * supplies are simultaneous).
      *
      * @return list<list<string>>
      */
@@ -664,18 +792,16 @@ final readonly class DatevExport
         $creator = $this->creatorTag($invoice);
         $corrects = $this->correctsTag($invoice);
 
-        // A correction reverses the WHOLE chain, every leg at once. Reversing one of them moves the margin
-        // permanently: the sale comes back and the input stays, or the other way round, and the difference
-        // sits in the books as a profit or a loss that nothing ever caused.
+        // A correction reverses both legs at once. Reversing one of them moves the margin permanently: the
+        // input comes back and the payout stays, or the other way round, and the difference sits in the books
+        // as a profit or a loss that nothing ever caused.
         $marker = $invoice->isCorrection() ? 'H' : 'S';
 
         $moneyTransit = $this->accounts->resolve(DatevTransaction::MoneyTransit);
-        $fanRevenue = $this->fanRevenueAccount($invoice);
         $creatorInput = $this->accounts->resolve($this->creatorInputTransaction($invoice));
         $liabilities = $this->liabilityAccountFor($invoice);
 
         return [
-            $this->chainRow((int) $invoice->fan_gross_minor, $currency, $moneyTransit, $fanRevenue->number, $date, $reference, ['Fan-Umsatz', $reference, $creator, $corrects], marker: $marker),
             // The creator-input leg is the one the reverse charge sits on: it is the platform's input side,
             // and the transaction key qualifies THAT booking, not the fan sale and not the payout.
             $this->chainRow($payout, $currency, $creatorInput, $liabilities, $date, $reference, ['Gutschrift', $reference, $creator, $corrects], $this->transactionKeyOf($invoice, $creatorInput), $marker),
@@ -711,6 +837,15 @@ final readonly class DatevExport
 
         if ((bool) $invoice->oss && is_string($country) && $country !== '' && $this->chartSelected()) {
             return $this->accounts->resolve(DatevTransaction::OssRevenue, $country);
+        }
+
+        // A tax-free sale to a business across a border has its own account in the chart, and resolving it
+        // refuses where the chart has none: booked on the standard account, the automatic function would
+        // derive domestic tax from it and the sale would reconcile while being wrong.
+        $crossBorder = $this->chartSelected() ? $this->crossBorderBusinessTransaction($invoice) : null;
+
+        if ($crossBorder instanceof DatevTransaction) {
+            return $this->accounts->resolve($crossBorder);
         }
 
         return $this->accounts->resolve(
@@ -759,6 +894,8 @@ final readonly class DatevExport
      *
      * A fan invoice is unchanged: receivables (the configured customer account) against fan revenue, which
      * with no chart selected resolves to the single-seller revenue account — byte-for-byte as shipped. A
+     * buyer's receipt in the commission chain books the same revenue against money in transit instead: the
+     * provider collected the buyer's money for the platform, and this is the booking of that sale. A
      * self-billed settlement (a Gutschrift or settlement note) is the platform's INPUT side: the creator's
      * input account (its VAT treatment carried by the account itself) against the collective creator-liability
      * account. The person-account model (a single collective vs. individual creditors) is a separate concern;
@@ -766,10 +903,14 @@ final readonly class DatevExport
      *
      * @return array{0: DatevAccount, 1: string} [Konto, Gegenkonto]
      */
-    private function accountsFor(InvoiceRecord $invoice): array
+    private function accountsFor(InvoiceRecord $invoice, ?int $rate = null): array
     {
         if (! $invoice->settlement_document_type instanceof SettlementDocumentType) {
             $revenue = $this->fanRevenueAccount($invoice);
+
+            if ($invoice->supply_regime === SupplyRegime::CommissionChain) {
+                return [$this->accounts->resolve(DatevTransaction::MoneyTransit), $revenue->number];
+            }
 
             // A receivables account is not resolved from the chart — it is the configured customer account,
             // and it carries no reverse-charge key of its own: the fan side of a sale is never a reverse
@@ -777,7 +918,7 @@ final readonly class DatevExport
             return [new DatevAccount($this->number('customer_account')), $revenue->number];
         }
 
-        $input = $this->accounts->resolve($this->creatorInputTransaction($invoice));
+        $input = $this->accounts->resolve($this->creatorInputTransaction($invoice, $rate));
 
         return [$input, $this->liabilityAccountFor($invoice)];
     }
@@ -797,14 +938,17 @@ final readonly class DatevExport
      * measures the missing account rather than the rate and would have passed with no reduced-rate branch at
      * all. The refusal is now carried by CreatorInputDeReduced, which ships unmapped on purpose.
      */
-    private function creatorInputTransaction(InvoiceRecord $invoice): DatevTransaction
+    private function creatorInputTransaction(InvoiceRecord $invoice, ?int $rate = null): DatevTransaction
     {
         if ($invoice->tax_exempt) {
             return DatevTransaction::CreatorInputExempt;
         }
 
         if ($invoice->reverse_charge) {
-            $reduced = $invoice->tax_rate_bps === 700;
+            // The rate the supply is taxable at, not a stated one: a reverse-charged document states no tax
+            // and names no rate, while the recipient self-assesses at the supply's rate. A row written before
+            // that rate was recorded has only the stated column to offer.
+            $reduced = ($rate ?? $invoice->supply_rate_bps ?? $invoice->tax_rate_bps) === 700;
             $seller = $invoice->getAttribute('seller');
             $country = is_array($seller) && is_string($seller['country'] ?? null) ? $seller['country'] : null;
 
@@ -822,7 +966,7 @@ final readonly class DatevExport
         // The fourth place this exporter has to know the reduced rate, and the one that used to fall
         // through. `creator_input_de_reduced` ships unmapped, so this resolves to a refusal unless the
         // operator has confirmed an account — which is what the paragraph above always claimed happened.
-        return $invoice->tax_rate_bps === 700
+        return ($rate ?? $invoice->tax_rate_bps) === 700
             ? DatevTransaction::CreatorInputDeReduced
             : DatevTransaction::CreatorInputDeStandard;
     }

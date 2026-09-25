@@ -120,6 +120,7 @@ final readonly class OrderTaxBasis
         }
 
         $gross = Money::of($order->total_minor, $order->currency);
+        $buyer = $this->buyerOf($order, $country);
 
         // Priced GROSS, because that is how the cycle was charged: the customer paid the order total and
         // the tax is the part of it that belongs to the state. Determining from a net would mean inventing
@@ -127,7 +128,7 @@ final readonly class OrderTaxBasis
         $facts = $this->taxes->decideOnGross(
             $archetype,
             $gross,
-            $this->buyerOf($order, $country),
+            $buyer,
             $period,
             $order->processed_at === null ? null : CarbonImmutable::parse($order->processed_at->toIso8601String()),
         );
@@ -151,6 +152,12 @@ final readonly class OrderTaxBasis
                 destinationSubdivision: $this->evidence->subdivisionFor(self::placeReferenceFor($subscription)),
             ),
             period: $period,
+            recipient: $facts->placement->recipient,
+            // The ID the placement was decided on, and its country, travel to the document together. A
+            // reverse charge names the buyer's ID on the invoice, and the ID stated there has to be the one
+            // the zero rate rests on rather than whatever the customer record says later.
+            buyerVatId: $buyer->vatIdValid ? $buyer->vatId : null,
+            buyerCountry: $buyer->vatIdValid ? $buyer->countryCode : null,
         );
     }
 

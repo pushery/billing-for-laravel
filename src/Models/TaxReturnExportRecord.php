@@ -15,6 +15,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * A return file that was produced, as the evidence it is.
  *
  * @property int $id
+ * @property string $return_type
  * @property int $year
  * @property int $quarter
  * @property string $period_label
@@ -34,11 +35,26 @@ class TaxReturnExportRecord extends Model
     use AppendOnly;
     use Replaceable;
 
+    /** A run of the consumer one-stop-shop return. */
+    public const string ONE_STOP_SHOP = 'one_stop_shop';
+
+    /** A run of the recapitulative statement of reverse-charged sales to businesses in other member states. */
+    public const string RECAPITULATIVE_STATEMENT = 'recapitulative_statement';
+
     protected $table = 'billing_tax_return_exports';
+
+    /**
+     * The schema's default, so a row just created reads like one read back.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'return_type' => self::ONE_STOP_SHOP,
+    ];
 
     /** @var list<string> */
     protected $fillable = [
-        'year', 'quarter', 'period_label', 'currency', 'generated_at',
+        'return_type', 'year', 'quarter', 'period_label', 'currency', 'generated_at',
         'line_count', 'net_minor', 'tax_minor', 'checksum', 'contents', 'written_to',
     ];
 

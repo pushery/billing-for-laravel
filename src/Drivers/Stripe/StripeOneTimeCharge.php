@@ -443,6 +443,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *     gross: Money,
      *     platformFee: Money,
      *     policy: PlatformFee,
+     *     archetype: ?TaxArchetype,
      * }
      */
     private function tipRouting(Model $merchant, Money $chosen): array
@@ -476,6 +477,8 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             'gross' => $chosen,
             'platformFee' => $platformFee,
             'policy' => $policy,
+            // A tip is its own kind of sale, and never goods: it must not count towards a seller's goods trading.
+            'archetype' => TaxArchetype::Tip,
         ];
     }
 
@@ -542,6 +545,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *     gross: Money,
      *     platformFee: Money,
      *     policy: PlatformFee,
+     *     archetype: ?TaxArchetype,
      * }
      */
     private function routing(Model $merchant, string $priceId, ?TaxArchetype $archetype = null): array
@@ -566,6 +570,8 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // whose taxation is unknown, and goods of a seller outside the Union are never intermediated.
         $this->sellers()->assertTaxStandingEstablished($merchant);
         $this->sellers()->assertPostureCarriesTheSupply($merchant, $this->context->posture(), $archetype);
+        $this->sellers()->assertTradingStandingDeclared($merchant, $this->context->posture(), $archetype);
+        $this->sellers()->assertGoodsSellerRecordComplete($merchant, $this->context->posture(), $archetype);
 
         $price = $this->stripe->prices->retrieve($priceId);
         $unitAmount = $price->unit_amount;
@@ -593,6 +599,9 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             'gross' => $gross,
             'platformFee' => $platformFee,
             'policy' => $policy,
+            // What is being sold, so the recorded sale says so. Under intermediation that row is the only
+            // record of it the package writes.
+            'archetype' => $archetype,
         ];
     }
 
@@ -679,6 +688,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *     gross: Money,
      *     platformFee: Money,
      *     policy: PlatformFee,
+     *     archetype: ?TaxArchetype,
      * }  $routed
      */
     private function recordPendingSale(
@@ -744,6 +754,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // What was sold, from the lane that opened the checkout. A tip is the reason this is passed
             // rather than derived later: nothing else persists that it was one.
             purpose: $purpose,
+            taxArchetype: $routed['archetype'],
         );
     }
 

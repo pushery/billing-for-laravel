@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Invoicing;
 
-use Illuminate\Contracts\Config\Repository;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Contracts\BuyerPartyResolver;
 use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\OrderItem;
-use Pushery\Billing\Support\InvoiceNumberSequence;
 use Throwable;
 
 /**
@@ -58,6 +61,15 @@ use Throwable;
  * back to `total_minor - (tax_minor ?? 0)`, and the e-invoice path in {@see Concerns\NormalizesInvoiceModel}
  * sums the frozen lines whenever there are any — which this issuer always writes.
  *
+ * ## The buyer is frozen like the lines
+ *
+ * Every document this raised used to name nobody, because nothing here asked who the customer was. For a
+ * consumer that is often enough; for a business it is not, and a reverse-charged invoice without the buyer's
+ * VAT ID states a zero rate it cannot support. So the buyer is snapshotted when the invoice is raised: the
+ * name and address the application gives through {@see BuyerPartyResolver}, and the VAT ID and country the
+ * tax was decided on. The rendered document and the e-invoice both read the snapshot, so they name the same
+ * buyer.
+ *
  * ## A basis that fails must never cost the document
  *
  * The determination runs in its own try/catch, and a throw leaves the document without tax rather than
@@ -67,8 +79,7 @@ use Throwable;
 final readonly class OrderInvoiceIssuer
 {
     public function __construct(
-        private InvoiceNumberSequence $numbers,
-        private Repository $config,
+        private InvoiceNumber $numbers,
         /**
          * REQUIRED, and it was optional for about an hour.
          *
@@ -83,6 +94,8 @@ final readonly class OrderInvoiceIssuer
          * constructor that will not build without one.
          */
         private OrderTaxBasis $basis,
+        /** Required for the same reason: a default here would never be resolved. */
+        private BuyerPartyResolver $buyers,
     ) {}
 
     /**
@@ -122,7 +135,7 @@ final readonly class OrderInvoiceIssuer
             'owner_id' => $order->owner_id,
             'provider' => $order->provider,
             'order_id' => $order->getKey(),
-            'number' => $this->number($issuedAt),
+            'number' => $this->numbers->next($issuedAt),
             'total_minor' => $order->total_minor,
             // The net, and ONLY where one was established. Null otherwise, for the same reason `tax_minor`
             // is null there: a subtotal equal to the total is not the absence of a claim, it is the claim
@@ -149,9 +162,76 @@ final readonly class OrderInvoiceIssuer
         ]);
 
         $invoice->fill($this->taxAttributes($tax));
+        $invoice->fill($this->buyerAttributes($invoice, $tax));
         $invoice->save();
 
         return $invoice;
+    }
+
+    /**
+     * The buyer as the document freezes it, or nothing where there is nothing to say.
+     *
+     * Two sources, and neither is enough alone. The application knows the customer's name and address and
+     * says so through {@see BuyerPartyResolver}. The package knows the tax facts it decided the supply on:
+     * the VAT ID a register confirmed and the country that ID registers the buyer in. A reverse-charged
+     * invoice without the buyer's ID is not a reverse-charged invoice, so the ID and its country come from
+     * the tax facts and win over the resolver's, which may describe the customer record as it stands today.
+     *
+     * Nothing at all is written when neither source says anything, so a consumer's invoice under the default
+     * binding is the document it always was.
+     *
+     * @return array<string, mixed>
+     */
+    private function buyerAttributes(InvoiceRecord $invoice, ?DeterminedOrderTax $tax): array
+    {
+        $snapshot = $this->resolvedParty($invoice)?->toArray() ?? [];
+
+        if ($tax instanceof DeterminedOrderTax && $tax->buyerVatId !== null && $tax->buyerCountry !== null) {
+            $snapshot['vat_id'] = $tax->buyerVatId;
+            $snapshot['country'] = $tax->buyerCountry;
+        }
+
+        return $snapshot === [] ? [] : ['buyer' => $snapshot];
+    }
+
+    /**
+     * What the application says about this customer, or null where it says nothing or cannot be asked.
+     *
+     * A resolver that throws is the application's defect, and it must not cost a document for money that
+     * already moved: it is reported and the invoice is raised with the tax facts alone.
+     */
+    private function resolvedParty(InvoiceRecord $invoice): ?Party
+    {
+        $type = $invoice->getAttribute('owner_type');
+
+        if (! is_string($type) || ! class_exists(Relation::getMorphedModel($type) ?? $type)) {
+            return null;
+        }
+
+        try {
+            $owner = $invoice->owner;
+
+            return $owner instanceof Model ? $this->buyers->partyFor($owner) : null;
+        } catch (Throwable $exception) {
+            $this->report($exception);
+
+            return null;
+        }
+    }
+
+    /**
+     * Hand a failure to the application's exception handler, where one is bound.
+     *
+     * Through the contract rather than Foundation's `report()` helper, which exists only inside a full
+     * application: this package requires `illuminate/contracts`, not `laravel/framework`.
+     */
+    private function report(Throwable $failure): void
+    {
+        $container = Container::getInstance();
+
+        if ($container->bound(ExceptionHandler::class)) {
+            $container->make(ExceptionHandler::class)->report($failure);
+        }
     }
 
     /**
@@ -198,6 +278,7 @@ final readonly class OrderInvoiceIssuer
             'tax_exemption_reason' => $supply->exemptionReason,
             'destination_country' => $supply->destinationCountry,
             'destination_subdivision' => $supply->destinationSubdivision,
+            'recipient_tax_status' => $tax->recipient,
             // Both inclusive, and the end is a day earlier than the subscription's own period end — see
             // OrderTaxBasis::periodOf(), which is the one place that conversion is made.
             'service_period_start' => $tax->period->from,
@@ -227,21 +308,5 @@ final readonly class OrderInvoiceIssuer
             'currency' => $item->currency,
             'type' => $item->type->value,
         ])->all());
-    }
-
-    /**
-     * A number in the shape a real document carries: prefix, year, running part.
-     *
-     * Scoped per year so the running part restarts, which is what makes a number readable rather than an
-     * ever-growing integer. Gaps are harmless — a sequence that skipped a number is not a defect — but a
-     * number issued twice is unrecoverable, which is why the sequence locks rather than counts rows.
-     */
-    private function number(Carbon $issuedAt): string
-    {
-        $prefix = $this->config->get('billing.invoices.number_prefix', 'INV');
-        $prefix = is_string($prefix) && $prefix !== '' ? $prefix : 'INV';
-        $year = $issuedAt->format('Y');
-
-        return sprintf('%s-%s-%07d', $prefix, $year, $this->numbers->next("invoice:{$prefix}:{$year}"));
     }
 }

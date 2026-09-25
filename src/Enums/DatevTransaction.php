@@ -28,6 +28,18 @@ enum DatevTransaction: string
     /** OSS revenue, resolved per destination country (a list, not one account). */
     case OssRevenue = 'oss_revenue';
 
+    /**
+     * Revenue from a service to a business in another member state, whose tax the recipient owes.
+     *
+     * Tax-free here, and never on the standard revenue account: that one is an Automatikkonto, and it would
+     * derive domestic tax from a posting that carries none. The booking names the recipient's VAT id in the
+     * EU field, which is what the recapitulative statement is read from.
+     */
+    case FanRevenueEuReverseCharge = 'fan_revenue_eu_reverse_charge';
+
+    /** Revenue from a service to a business outside the union, which is not taxable here at all. */
+    case FanRevenueThirdCountry = 'fan_revenue_third_country';
+
     /** Commission / fee revenue (regime V), a buyer fee posted as a sub-account. */
     case CommissionRevenue = 'commission_revenue';
 

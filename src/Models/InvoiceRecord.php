@@ -40,6 +40,7 @@ use Pushery\Billing\Invoicing\Guards\SellerMatchesPostureGuard;
 use Pushery\Billing\Invoicing\Guards\TaxWithoutBasisGuard;
 use Pushery\Billing\Marketplace\DocumentRoleGuard;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Tax\UnionMembership;
 use Pushery\Billing\ValueObjects\CountingPeriod;
 use Pushery\Billing\ValueObjects\Invoice;
 use Pushery\Billing\ValueObjects\Money;
@@ -59,6 +60,7 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?int $credited_invoice_id
  * @property ?string $credited_invoice_number
  * @property ?int $reissue_of_invoice_id
+ * @property ?int $restates_invoice_id the settlement this one was issued in place of, after that one was canceled
  * @property int $total_minor
  * @property string $currency
  * @property InvoiceStatus $status
@@ -85,6 +87,8 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?PlaceOfSupplyRule $place_of_supply_rule
  * @property ?TaxRateCategory $tax_rate_category
  * @property ?int $tax_rate_bps
+ * @property ?int $supply_rate_bps the rate the supply is taxable at, whoever supplies it; set on a settlement even where
+ *                                 the document states no tax, null on every other document
  * @property ?bool $platform_reporting
  * @property ?string $rate_matrix_version
  * @property ?RecipientTaxStatus $recipient_tax_status
@@ -126,11 +130,11 @@ class InvoiceRecord extends Model
     /** @var list<string> */
     protected $fillable = [
         'owner_type', 'owner_id', 'provider', 'provider_id', 'order_id', 'number', 'pdf_path', 'total_minor', 'currency',
-        'status', 'issued_at', 'due_at', 'credited_invoice_id', 'credited_invoice_number', 'reissue_of_invoice_id',
+        'status', 'issued_at', 'due_at', 'credited_invoice_id', 'credited_invoice_number', 'reissue_of_invoice_id', 'restates_invoice_id',
         'refund_attempt_id',
         'buyer', 'subtotal_minor',
         'tax_minor', 'reverse_charge', 'tax_exempt', 'tax_exemption_reason', 'buyer_reference', 'vat_note', 'oss', 'destination_country', 'destination_subdivision', 'oss_rate',
-        'tax_archetype', 'sold_alongside_archetype', 'place_of_supply_rule', 'tax_rate_category', 'tax_rate_bps', 'platform_reporting',
+        'tax_archetype', 'sold_alongside_archetype', 'place_of_supply_rule', 'tax_rate_category', 'tax_rate_bps', 'supply_rate_bps', 'platform_reporting',
         'rate_matrix_version', 'recipient_tax_status', 'taxation_basis', 'margin_minor', 'supply_regime', 'seller_posture', 'seller',
         'settlement_document_type', 'document_series', 'receipt_tier', 'settlement_period',
         'service_period_start', 'service_period_end', 'delivered_on',
@@ -166,7 +170,7 @@ class InvoiceRecord extends Model
         // let a settled tip be re-pointed at a different product and silently change whether the
         // seller behind it has to be reported at all.
         'tax_archetype', 'sold_alongside_archetype', 'place_of_supply_rule', 'tax_rate_category', 'tax_rate_bps',
-        'platform_reporting', 'rate_matrix_version', 'recipient_tax_status', 'taxation_basis', 'margin_minor',
+        'supply_rate_bps', 'platform_reporting', 'rate_matrix_version', 'recipient_tax_status', 'taxation_basis', 'margin_minor',
         // The shape of the sale and who it named as seller. Re-classifying a settled transaction
         // does not adjust a number: it makes every document already issued about it describe a
         // transaction that did not happen. The only correct path is to cancel and re-issue.
@@ -195,7 +199,34 @@ class InvoiceRecord extends Model
         // attempt would restate what a past document was about, and the join exists precisely so a reader
         // can trust that pairing — an editable link answers a different question every time it is read.
         'refund_attempt_id',
+        // Which settlement this one was issued in place of. It decided at creation that this document
+        // claims no charge of its own, and a link that could be moved afterwards would re-point a numbered
+        // document at a supply it never replaced.
+        'restates_invoice_id',
         'commission_bps', 'commission_flat_minor', 'commission_residual',
+    ];
+
+    /**
+     * The columns that say how a supply was taxed, which every correction of it shares.
+     *
+     * A correction reduces a supply that was taxed one way, and it is taxed the same way: the same rate and
+     * category, the same country, the same exemption and the same party accounting for the tax. Deciding any
+     * of that again for the correction would be a second opinion about a question settled when the original
+     * was issued. Two correction writers did exactly that by omission: they carried the rate and the
+     * one-stop-shop fields and left the rest behind, so a credit note against a reverse-charged sale to a
+     * business in another member state read as a domestic sale in the booking export, the e-invoice and the
+     * recapitulative statement.
+     *
+     * All of them are frozen on the document as well; a column that could change after issue could not be
+     * shared with a correction issued later.
+     *
+     * @var list<string>
+     */
+    public const array TAX_POSITION = [
+        'reverse_charge', 'tax_exempt', 'tax_exemption_reason', 'oss', 'destination_country', 'destination_subdivision',
+        'oss_rate', 'tax_archetype', 'sold_alongside_archetype', 'place_of_supply_rule', 'tax_rate_category', 'tax_rate_bps',
+        'supply_rate_bps', 'platform_reporting', 'rate_matrix_version', 'recipient_tax_status', 'taxation_basis',
+        'supply_regime', 'seller_posture',
     ];
 
     /**
@@ -239,6 +270,7 @@ class InvoiceRecord extends Model
         'place_of_supply_rule' => PlaceOfSupplyRule::class,
         'tax_rate_category' => TaxRateCategory::class,
         'tax_rate_bps' => 'integer',
+        'supply_rate_bps' => 'integer',
         'commission_bps' => 'integer',
         'commission_flat_minor' => 'integer',
         'platform_reporting' => 'boolean',
@@ -336,6 +368,7 @@ class InvoiceRecord extends Model
                 coversAPeriod: $invoice->settlement_period !== null,
                 isReissue: $invoice->reissue_of_invoice_id !== null,
                 isCorrection: $invoice->credited_invoice_id !== null,
+                isReplacement: $invoice->restates_invoice_id !== null,
             ));
         });
 
@@ -401,6 +434,69 @@ class InvoiceRecord extends Model
     public function locallyGenerated(): bool
     {
         return $this->provider_id === null;
+    }
+
+    /**
+     * Whether this is a sale to a business in another member state that accounts for the tax itself.
+     *
+     * The one population both the booking export and the recapitulative statement are about, decided here
+     * so they cannot disagree about it. Only a document issued to the buyer: on a self-billed settlement
+     * `reverse_charge` describes the creator's supply to the platform, not a sale. The frozen recipient
+     * status answers first, where the document carries one; a document copied from a provider carries none,
+     * and there the reverse-charge flag decides, split by the buyer's country. A reverse charge is the
+     * union's mechanism, so a buyer whose country is unknown stays in the union.
+     */
+    public function isUnionReverseChargeSale(): bool
+    {
+        if ($this->settlement_document_type instanceof SettlementDocumentType) {
+            return false;
+        }
+
+        if ($this->recipient_tax_status === RecipientTaxStatus::NonUnionBusiness || ! $this->reverse_charge) {
+            return false;
+        }
+
+        $country = $this->buyerDetail('country');
+
+        return $country === null || UnionMembership::isMember($country);
+    }
+
+    /**
+     * The buyer's VAT id as the document froze it, in the form a return takes: capitals, no spaces.
+     *
+     * The id carries its member state as a prefix. Null where the document names none; a caller that needs
+     * one has to say so rather than make one up.
+     */
+    public function buyerVatId(): ?string
+    {
+        $vatId = $this->buyerDetail('vat_id');
+
+        return $vatId === null ? null : strtoupper((string) preg_replace('/\s+/', '', $vatId));
+    }
+
+    /** A non-empty string detail of the document's frozen buyer, or null. */
+    private function buyerDetail(string $key): ?string
+    {
+        $buyer = $this->getAttribute('buyer');
+        $value = is_array($buyer) ? ($buyer[$key] ?? null) : null;
+
+        return is_string($value) && trim($value) !== '' ? trim($value) : null;
+    }
+
+    /**
+     * How this document's supply was taxed, as the columns a correction of it carries over.
+     *
+     * @return array<model-property<self>, mixed>
+     */
+    public function taxPosition(): array
+    {
+        $position = [];
+
+        foreach (self::TAX_POSITION as $column) {
+            $position[$column] = $this->getAttribute($column);
+        }
+
+        return $position;
     }
 
     /**

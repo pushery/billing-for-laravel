@@ -41,6 +41,35 @@ return [
         'outro' => 'Se isto não corresponder à tua situação, diz-nos — podemos corrigir.',
     ],
 
+    'reattestation_due' => [
+        'subject' => 'A tua atestação fiscal tem de ser renovada',
+        'intro_due' => 'Começou um novo ano, por isso a tua atestação fiscal tem de ser renovada. Confirma a tua situação fiscal até :date.',
+        'intro_last' => 'A tua atestação fiscal expira a :date e ainda não recebemos a renovação.',
+        'consequence' => 'Se não for renovada até :date, as vendas e os pagamentos param a partir desse dia, até voltares a confirmar a tua situação.',
+        'cta' => 'Confirmar a tua situação fiscal',
+        'outro' => 'Leva só um momento, e se a tua situação se mantiver igual, nada muda para ti.',
+    ],
+
+    'seller_data_reminder' => [
+        'subject' => 'Completa os teus dados de vendedor',
+        'intro_first' => 'Ainda nos faltam alguns dados de que precisamos de ti como vendedor: :fields.',
+        'intro_second' => 'Segundo lembrete: ainda nos faltam alguns dados de que precisamos de ti como vendedor: :fields.',
+        'consequence_withhold_payout' => 'Se não estiverem completos até :date, os teus pagamentos ficam retidos a partir desse dia, até estarem. Nada se perde: tudo o que ficar retido é pago assim que os teus dados estiverem completos.',
+        'consequence_suspend_sales' => 'Se não estiverem completos até :date, as vendas param a partir desse dia, até estarem.',
+        'cta' => 'Completar os teus dados',
+        'outro' => 'Leva só um momento.',
+        'fields' => [
+            'seller_name' => 'o teu nome',
+            'seller_address' => 'a tua morada',
+            'payout_account' => 'a tua conta de pagamento',
+            'payout_account_holder' => 'o titular da tua conta de pagamento',
+            'seller_tax_identifier' => 'o teu número de identificação fiscal',
+            'seller_register_number' => 'o teu número de registo comercial',
+            'seller_date_of_birth' => 'a tua data de nascimento',
+            'seller_vat_identifier' => 'o teu número de IVA',
+        ],
+    ],
+
     'suspension_warning' => [
         'subject' => 'Ação necessária: o teu acesso vai ser suspenso',
         'intro' => 'A tua conta tem um valor em dívida e o teu acesso vai ser suspenso em breve.',

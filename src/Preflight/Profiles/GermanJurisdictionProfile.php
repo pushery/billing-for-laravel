@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Preflight\Profiles;
 
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
@@ -15,6 +16,8 @@ use Pushery\Billing\Contracts\SuppliesArchetypeRegimes;
 use Pushery\Billing\Contracts\SuppliesDistanceSaleThreshold;
 use Pushery\Billing\Contracts\SuppliesExchangeRateBasis;
 use Pushery\Billing\Contracts\SuppliesMarginSchemeWording;
+use Pushery\Billing\Contracts\SuppliesMonthlyRecapitulativeStatement;
+use Pushery\Billing\Contracts\SuppliesRecapitulativeStatementDeadline;
 use Pushery\Billing\Contracts\SuppliesReportingExchangeRateBasis;
 use Pushery\Billing\Contracts\SuppliesTaxRates;
 use Pushery\Billing\Enums\ExchangeRateBasis;
@@ -23,6 +26,7 @@ use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxationBasis;
 use Pushery\Billing\Preflight\Checkpoints\AttestedCheckpoint;
+use Pushery\Billing\ValueObjects\ReportingPeriod;
 
 /**
  * The German jurisdiction profile: what a platform established in Germany owes before its first routed sale.
@@ -38,7 +42,7 @@ use Pushery\Billing\Preflight\Checkpoints\AttestedCheckpoint;
  * deliberate act with a real cost to every operator — which is the correct cost for "the obligation
  * changed".
  */
-final readonly class GermanJurisdictionProfile implements JurisdictionProfile, RequiresElectronicInvoicing, RequiresTaxStatusHold, SuppliesArchetypeRegimes, SuppliesDistanceSaleThreshold, SuppliesExchangeRateBasis, SuppliesMarginSchemeWording, SuppliesReportingExchangeRateBasis, SuppliesTaxRates
+final readonly class GermanJurisdictionProfile implements JurisdictionProfile, RequiresElectronicInvoicing, RequiresTaxStatusHold, SuppliesArchetypeRegimes, SuppliesDistanceSaleThreshold, SuppliesExchangeRateBasis, SuppliesMarginSchemeWording, SuppliesMonthlyRecapitulativeStatement, SuppliesRecapitulativeStatementDeadline, SuppliesReportingExchangeRateBasis, SuppliesTaxRates
 {
     /**
      * The revision of the marketplace terms package an operator must have published. It moves whenever the
@@ -197,6 +201,38 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
     public function documentExchangeRateBasis(): ExchangeRateBasis
     {
         return ExchangeRateBasis::CentralBankMonthlyAverage;
+    }
+
+    /**
+     * The 25th day after the quarter ends.
+     *
+     * § 18a Abs. 2 Satz 1 UStG sets it for the services a buyer in another member state accounts for, and
+     * § 18a Abs. 1 Satz 2 UStG for supplies of goods that stay within the limit below.
+     */
+    #[Override]
+    public function recapitulativeStatementDueOn(ReportingPeriod $period): CarbonImmutable
+    {
+        return $period->endsOn()->startOfDay()->addDays(25)->endOfDay();
+    }
+
+    /**
+     * 50,000 euros of intra-community supplies of goods in a quarter.
+     *
+     * § 18a Abs. 1 Satz 2 UStG: the statement may be filed for the quarter only where these supplies stay
+     * within 50,000 euros in the current quarter and in each of the four before it. Otherwise § 18a Abs. 1
+     * Satz 1 UStG makes each calendar month the period.
+     */
+    #[Override]
+    public function recapitulativeStatementMonthlyThresholdMinor(): int
+    {
+        return 5_000_000;
+    }
+
+    /** The 25th day after the month ends, § 18a Abs. 1 Satz 1 UStG. */
+    #[Override]
+    public function recapitulativeStatementMonthDueOn(int $year, int $month): CarbonImmutable
+    {
+        return CarbonImmutable::createStrict($year, $month, 1)->endOfMonth()->startOfDay()->addDays(25)->endOfDay();
     }
 
     /**

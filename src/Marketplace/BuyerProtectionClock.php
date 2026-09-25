@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Marketplace;
 
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use DateTimeInterface;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
@@ -12,6 +14,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Enums\BuyerProtectionState;
+use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Events\BuyerProtectionHoldRefunded;
 use Pushery\Billing\Events\BuyerProtectionHoldReleased;
 use Pushery\Billing\Events\BuyerProtectionResolutionRequired;
@@ -91,6 +94,12 @@ final readonly class BuyerProtectionClock
          * no transfer to reverse. Nullable for the same reason as the seams above.
          */
         private ?RoutedChargeLedger $ledger = null,
+        /**
+         * Whether the merchant's payouts are withheld, asked before a released share moves.
+         *
+         * Null where nothing is asked, which is how a hand-built clock behaves.
+         */
+        private ?MerchantPayoutGate $payouts = null,
     ) {}
 
     /**
@@ -362,6 +371,26 @@ final readonly class BuyerProtectionClock
         }
 
         $charge = MerchantCharge::model()::query()->where('charge_reference', $hold->charge_reference)->first();
+
+        // Moved already, by the retry of a failed transfer or by the release of a withheld share. Both move the
+        // SALE, under its own key, and a hold released after them must not instruct a second transfer: the key
+        // only protects inside the provider's replay window, and a sale is paid once.
+        if ($charge instanceof MerchantCharge && $charge->settlement_state !== SettlementState::Pending) {
+            return true;
+        }
+
+        // Withheld payouts wait on the sale, where the release of withheld shares finds them, and the hold
+        // stays `ReleasePending` as it does after a failed transfer. Only where the sale's row exists: it is
+        // the row that says why the share waits and that is moved when the reason ends.
+        $withheld = $charge instanceof MerchantCharge
+            ? $this->payouts?->withheldBecause($merchant, $charge->created_at instanceof DateTimeInterface ? CarbonImmutable::instance($charge->created_at) : CarbonImmutable::now())
+            : null;
+
+        if ($charge instanceof MerchantCharge && $withheld !== null) {
+            $this->ledger?->recordWithholding($charge, $withheld);
+
+            return false;
+        }
 
         try {
             $moved = $this->transfers->transferShare(

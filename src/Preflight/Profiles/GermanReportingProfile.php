@@ -6,6 +6,8 @@ namespace Pushery\Billing\Preflight\Profiles;
 
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\ClassifiesReportability;
+use Pushery\Billing\Contracts\EscalatesMissingSellerData;
+use Pushery\Billing\Contracts\RecordsPrivateGoodsSellers;
 use Pushery\Billing\Contracts\ReportingProfile;
 use Pushery\Billing\Enums\ReportabilityReason;
 use Pushery\Billing\Enums\SellerFieldBasis;
@@ -29,7 +31,7 @@ use Pushery\Billing\ValueObjects\SellerRecordField;
  * it is entitled to that choice. The fields that are needed anyway — where to send the document, where to
  * send the money — are never precautionary and never switch off.
  */
-final readonly class GermanReportingProfile implements ClassifiesReportability, ReportingProfile
+final readonly class GermanReportingProfile implements ClassifiesReportability, EscalatesMissingSellerData, RecordsPrivateGoodsSellers, ReportingProfile
 {
     public function __construct(private Repository $config) {}
 
@@ -66,6 +68,23 @@ final readonly class GermanReportingProfile implements ClassifiesReportability, 
         return $fields;
     }
 
+    /**
+     * What a platform must hold about a private individual before they sell goods through it.
+     *
+     * Name, address and date of birth, all required and never precautionary: the platform answers for the tax
+     * on goods sold through it unless it can name the seller, and a date of birth is what tells two people of
+     * the same name apart. The same fields as the reporting record, from the same catalog, so the seller fills
+     * in one form.
+     */
+    public function fieldsForPrivateGoodsSeller(): array
+    {
+        return [
+            new SellerRecordField('seller_name', SellerFieldBasis::Required),
+            new SellerRecordField('seller_address', SellerFieldBasis::Required),
+            new SellerRecordField('seller_date_of_birth', SellerFieldBasis::Required, sensitive: true),
+        ];
+    }
+
     private function collectsPrecautionary(): bool
     {
         return (bool) $this->config->get('billing.marketplace.seller_record.collect_precautionary', true);
@@ -85,12 +104,14 @@ final readonly class GermanReportingProfile implements ClassifiesReportability, 
      * anyone to them. "When in doubt, report" is not caution — it is the second error, and it is the one
      * that looks responsible while it happens.
      *
-     * ## The exemption is cumulative, and its upper edge is INCLUSIVE
+     * ## The exemption is cumulative, and both of its edges are STRICT
      *
-     * Few enough sales AND a small enough amount. One alone exempts nobody. And the amount test is "does not
-     * exceed" — a seller at exactly the figure is left out by the law, so a strict comparison here would
-     * report somebody the statute exempts. That is precisely the over-reporting the paragraph above is
-     * about, arrived at through an operator rather than a policy.
+     * Few enough sales AND a small enough amount. One alone exempts nobody. And the German statute words
+     * both edges as "less than": § 4 Abs. 5 Satz 1 Nr. 4 PStTG exempts a seller with fewer than 30 sales of
+     * goods who received "weniger als 2 000 Euro" for them. The directive it implements reads "did not
+     * exceed EUR 2 000" (DAC7, Annex V, Section I, B.4(d)), which would also exempt the seller sitting
+     * exactly on the figure. A German platform files under the German statute, so this profile reports that
+     * seller, and leaving them out would be the under-reporting the paragraph above names first.
      *
      * ## The exemption belongs to the goods branch alone
      *
@@ -118,9 +139,10 @@ final readonly class GermanReportingProfile implements ClassifiesReportability, 
     /**
      * Whether a goods seller stays under BOTH edges of the exemption.
      *
-     * The operators are configurable, not the comparison written into the code, because the upper one is
-     * exactly where this went wrong once: a strict "less than" reports the seller sitting on the figure the
-     * law lets go. A consumer whose statute reads differently changes the operator rather than the class.
+     * The operators are configurable, not the comparison written into the code, because the two texts
+     * behind the upper edge disagree on exactly one amount: the German statute exempts less than the
+     * figure, the directive the figure itself as well. A consumer whose statute reads differently changes
+     * the operator rather than the class.
      */
     private function withinDeMinimis(SellerActivity $activity): bool
     {
@@ -143,9 +165,9 @@ final readonly class GermanReportingProfile implements ClassifiesReportability, 
 
     private function compensationOperator(): string
     {
-        // Inclusive by default: the statute exempts the seller who "does not exceed" the figure, and a
-        // strict comparison would report the one sitting exactly on it.
-        return $this->operator('compensation_operator', '<=');
+        // Strict by default, as the German statute words it: "weniger als 2 000 Euro". The directive's "did
+        // not exceed" would exempt the seller sitting exactly on the figure; this profile reports them.
+        return $this->operator('compensation_operator', '<');
     }
 
     private function operator(string $key, string $default): string
