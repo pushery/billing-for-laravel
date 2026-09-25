@@ -26,6 +26,7 @@ return [
     'reverse_charge_note' => 'Autoliquidation : le preneur est redevable de la TVA.',
     'small_business_note' => 'Exonéré de TVA en application du régime des petites entreprises (§ 19 UStG).',
     'union_small_business_note' => 'Exonéré de TVA en application du régime des petites entreprises de l\'État membre du fournisseur.',
+    'not_consideration_note' => 'Hors champ de la TVA : indemnité, et non contrepartie d’une opération.',
     'margin_scheme_note' => 'Régime de la marge bénéficiaire — biens d’occasion',
     'margin_scheme_note_works_of_art' => 'Régime de la marge bénéficiaire — objets d’art',
     'margin_scheme_note_collectors_items' => 'Régime de la marge bénéficiaire — objets de collection et antiquités',

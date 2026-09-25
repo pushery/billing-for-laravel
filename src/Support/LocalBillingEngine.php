@@ -7,6 +7,7 @@ namespace Pushery\Billing\Support;
 use Carbon\CarbonInterface;
 use DateTimeInterface;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
@@ -446,6 +447,14 @@ final readonly class LocalBillingEngine implements BillingEngine
             ->first();
 
         if (! $order instanceof Order) {
+            // Not a cycle. A late fee in flight is the other order this engine charges, and it closes on its own
+            // terms: paid and documented, with no period to advance.
+            $fee = $this->lateFeeInFlight($paymentReference);
+
+            if ($fee instanceof Order) {
+                $this->closeLateFee($fee, $paymentReference);
+            }
+
             return;
         }
 
@@ -521,6 +530,10 @@ final readonly class LocalBillingEngine implements BillingEngine
             ->first();
 
         if (! $order instanceof Order) {
+            // A refused late fee is open again for the next paid cycle, and nobody is dunned for it. The reference
+            // goes, so the next attempt is a charge of its own and a claim that dies before it reads as abandoned.
+            $this->lateFeeInFlight($paymentReference)?->update(['status' => OrderStatus::Open, 'payment_reference' => null]);
+
             return;
         }
 
@@ -594,7 +607,11 @@ final readonly class LocalBillingEngine implements BillingEngine
                 ? $this->returnSpentCredit($subscription, $locked)
                 : $this->returnSpentCreditTo($this->ownerFor($locked->owner_type, $locked->owner_id), $locked);
 
-            $locked->update(['status' => OrderStatus::Failed, 'processed_at' => Carbon::now()]);
+            // A late fee goes back to open rather than to failed: failed is where a cycle waits for its retry, and
+            // a fee is retried by being open when the next cycle is paid.
+            $locked->update($locked->isLateFee()
+                ? ['status' => OrderStatus::Open]
+                : ['status' => OrderStatus::Failed, 'processed_at' => Carbon::now()]);
 
             return true;
         });
@@ -1121,6 +1138,133 @@ final readonly class LocalBillingEngine implements BillingEngine
         $this->invoices?->issue($order->fresh() ?? $order);
 
         Event::dispatch(new PaymentSucceeded((string) $subscription->owner_id, $amount, $reference ?? (string) $order->id));
+
+        // After the cycle, never inside it: the cycle is collected and recorded whatever becomes of a fee.
+        $this->collectLateFees($subscription);
+    }
+
+    /**
+     * Collect the owner's open late fees, each as a payment of its own, now that a cycle of theirs has been paid.
+     *
+     * NOT BEFORE, and that is the whole timing. A fee is opened while the owner is in arrears, which is when their
+     * mandate has just been refused; charging it then adds a second refusal to the first. Once a cycle is paid the
+     * mandate has just worked, and the fee follows it.
+     *
+     * A refused fee goes back to open and waits for the next paid cycle. It never starts dunning of its own: a
+     * ladder climbed for a fee would add a fee for the fee, on a subscription that is paid up.
+     *
+     * Each fee is claimed by moving it from open to processing in one statement, so two ticks paying two cycles of
+     * the same owner cannot both charge it. A charge call that throws leaves its claim where it is, as it does for
+     * a cycle: whether money moved is then not known, and releasing it is an operator's decision.
+     */
+    private function collectLateFees(Subscription $subscription): void
+    {
+        $fees = Order::model()::query()
+            ->where('owner_type', $subscription->owner_type)
+            ->where('owner_id', $subscription->owner_id)
+            ->where('provider', $this->provider)
+            ->where('status', OrderStatus::Open)
+            ->whereNull('subscription_id')
+            ->whereHas('items', static fn (Builder $query): Builder => $query->where('type', OrderItemType::LateFee))
+            ->orderBy('id')
+            ->get();
+
+        if ($fees->isEmpty()) {
+            return;
+        }
+
+        $mandate = PaymentMandate::defaultFor($subscription->owner_type, $subscription->owner_id, $this->provider);
+
+        if (! $mandate instanceof PaymentMandate || ! $this->chargeableOffSession($mandate)) {
+            return;
+        }
+
+        foreach ($fees as $fee) {
+            $this->collectLateFee($fee, $mandate);
+        }
+    }
+
+    /** Claim one open late fee and charge it, leaving it paid, in flight, or open again. */
+    private function collectLateFee(Order $fee, PaymentMandate $mandate): void
+    {
+        $claimed = Order::model()::query()
+            ->whereKey($fee->getKey())
+            ->where('status', OrderStatus::Open)
+            ->update(['status' => OrderStatus::Processing]);
+
+        if ($claimed !== 1) {
+            return;
+        }
+
+        $fee->refresh();
+
+        try {
+            $result = $this->rails->offSessionCharge(
+                $fee->total(),
+                $mandate->toReference(),
+                (string) $fee->id,
+                null,
+                new ChargeNarrative($this->lateFeeDescription($fee)),
+            );
+        } catch (Throwable $failure) {
+            Log::error('billing: a late fee could not be charged', [
+                'order' => $fee->getKey(),
+                'provider' => $this->provider,
+                'exception' => $failure,
+            ]);
+
+            return;
+        }
+
+        if ($result->successful) {
+            $this->closeLateFee($fee, $result->reference);
+
+            return;
+        }
+
+        // In flight, like a bank debit on a cycle: settled or refused later by the webhook.
+        if (! $result->failed()) {
+            $fee->update(['payment_reference' => $result->reference]);
+
+            return;
+        }
+
+        $fee->update(['status' => OrderStatus::Open]);
+    }
+
+    /** What the charge says it is for: the fee's own line, which names the rung that raised it. */
+    private function lateFeeDescription(Order $fee): string
+    {
+        $line = $fee->items()->where('type', OrderItemType::LateFee)->first();
+        $description = $line instanceof OrderItem ? trim($line->description) : '';
+
+        return $description !== '' ? $description : 'Late fee';
+    }
+
+    /** Book a late fee as paid and raise its document, which is outside the scope of VAT. */
+    private function closeLateFee(Order $fee, ?string $reference): void
+    {
+        $fee->update([
+            'status' => OrderStatus::Paid,
+            'processed_at' => Carbon::now(),
+            'payment_reference' => $reference,
+        ]);
+
+        $this->invoices?->issue($fee->fresh() ?? $fee);
+    }
+
+    /** The late fee whose charge is in flight under this reference, or null for anything else. */
+    private function lateFeeInFlight(string $paymentReference): ?Order
+    {
+        $fee = Order::model()::query()
+            ->where('provider', $this->provider)
+            ->where('payment_reference', $paymentReference)
+            ->where('status', OrderStatus::Processing)
+            ->whereNull('subscription_id')
+            ->whereHas('items', static fn (Builder $query): Builder => $query->where('type', OrderItemType::LateFee))
+            ->first();
+
+        return $fee instanceof Order ? $fee : null;
     }
 
     /**

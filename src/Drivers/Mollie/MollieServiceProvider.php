@@ -10,7 +10,9 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
 use Mollie\Api\MollieApiClient;
 use Override;
+use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\BillingDriver;
+use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\CardPresentPayments;
 use Pushery\Billing\Contracts\CreditSync;
 use Pushery\Billing\Contracts\CustomerDirectory;
@@ -46,15 +48,15 @@ use Pushery\Billing\Drivers\NullHostedPortal;
 use Pushery\Billing\Drivers\NullMeterInspector;
 use Pushery\Billing\Drivers\Stripe\StripeCustomerDirectory;
 use Pushery\Billing\Dunning\ConfigDunningLadder;
-use Pushery\Billing\Dunning\NullLateFees;
+use Pushery\Billing\Dunning\LocalLateFees;
 use Pushery\Billing\Events\MandateEstablished;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
-use Pushery\Billing\Exceptions\LateFeesUnsupported;
 use Pushery\Billing\Exceptions\MollieNotConfigured;
 use Pushery\Billing\Invoicing\LocalInvoices;
 use Pushery\Billing\Invoicing\OrderInvoiceIssuer;
 use Pushery\Billing\Invoicing\ProrationCreditCorrectionIssuer;
+use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Proration\CreditBalanceProrationStrategy;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\CheckoutUrls;
@@ -167,15 +169,21 @@ final class MollieServiceProvider extends ServiceProvider
         $this->app->bind(UpcomingInvoice::class, static fn (Container $app): UpcomingInvoice => new LocalUpcomingInvoice(self::engine($app), 'mollie'));
         // Seats live on the local subscription, and the cycle bills each quantity for the days it held.
         $this->app->bind(SeatBilling::class, static fn (): SeatBilling => new LocalSeatBilling('mollie'));
-        // A late fee is added to an invoice item on Stripe, and this engine has no line for one yet. It is bound to
-        // what charges nothing, and an app whose dunning ladder carries a fee is refused at boot, so a fee never
-        // reaches Stripe and is never announced without being collected.
-        $this->app->bind(LateFees::class, NullLateFees::class);
-        $this->refuseWhatThisEngineCannotBill();
-        // An add-on is bought through the provider's hosted checkout on Stripe, and this driver has no such checkout
-        // yet. Taken out of the container, as the dispute step is, so the subscription screen can ask whether it is
-        // bound and offers no add-on it cannot sell.
-        $this->app->offsetUnset(OneTimeCharge::class);
+        // A late fee is an open order of its own here, collected once a cycle of the owner has been paid. It cannot
+        // be a line of the cycle: its document is outside the scope of VAT, and that category shares a document
+        // with no other.
+        $this->app->bind(LateFees::class, static fn (): LateFees => new LocalLateFees('mollie'));
+        // An add-on is bought on Mollie's hosted checkout, as a `oneoff` payment for the catalog's price. The order it
+        // writes is what the invoice is raised from once Mollie confirms the payment, because Mollie issues none.
+        $this->app->bind(OneTimeCharge::class, static fn (Container $app): OneTimeCharge => new MollieOneTimeCharge(
+            $app->make(MollieApiClient::class),
+            $app->make(AddonCatalog::class),
+            $app->make(MollieCustomers::class),
+            $app->make(CanTransactMoney::class),
+            $app->make(MarketplaceSaleContext::class),
+            $app->make(CheckoutUrls::class),
+            self::webhookUrl($app->make(Repository::class)),
+        ));
         // Erasing an owner deletes their customer at the provider only where the app asked for it, as on Stripe.
         $this->app->bind(CustomerRegistry::class, static fn (Container $app): CustomerRegistry => (bool) $app->make(Repository::class)->get('billing.erasure.forget_customer', false)
             ? $app->make(MollieCustomers::class)
@@ -279,22 +287,6 @@ final class MollieServiceProvider extends ServiceProvider
             MollieCapabilities::make(),
             $app->make(ProrationCreditCorrectionIssuer::class),
         );
-    }
-
-    /**
-     * Refuse to boot an app that configured what this engine cannot bill yet.
-     *
-     * A late fee is configured by a dunning rung that carries one. On this driver it is bound to what charges
-     * nothing, so an app left running would climb the ladder and announce a fee that nothing collects. The
-     * metering and tax guards refuse at boot for the same reason.
-     */
-    private function refuseWhatThisEngineCannotBill(): void
-    {
-        foreach ($this->app->make(ConfigDunningLadder::class)->levels() as $level) {
-            if ($level->hasFee()) {
-                throw LateFeesUnsupported::forDriver('mollie', $level->label);
-            }
-        }
     }
 
     private function isActive(): bool

@@ -81,6 +81,7 @@ use Pushery\Billing\Webhooks\Effects\DebitCreditAppliedByProvider;
 use Pushery\Billing\Webhooks\Effects\DocumentInPersonSale;
 use Pushery\Billing\Webhooks\Effects\FlushUpcomingUsage;
 use Pushery\Billing\Webhooks\Effects\GrantPurchasedContent;
+use Pushery\Billing\Webhooks\Effects\InvoiceLocalPurchase;
 use Pushery\Billing\Webhooks\Effects\IssueDocumentForRoutedHostedPurchase;
 use Pushery\Billing\Webhooks\Effects\IssueLocalCreditNote;
 use Pushery\Billing\Webhooks\Effects\MarkMerchantDeauthorized;
@@ -293,6 +294,10 @@ final class StripeServiceProvider extends ServiceProvider
         // different lifetimes, and folded together a failure in either half would roll back the other —
         // leaving a buyer charged, credited, and without the row saying they own what they paid for.
         $registry->on(AddonPurchased::class, GrantPurchasedContent::class);
+        // The invoice of a purchase a LOCAL engine sold, raised from the order it wrote when the checkout opened.
+        // Neutral like the credit note further down: it acts only where such an order exists, which a Stripe
+        // purchase never has, so on this driver it passes every event through untouched.
+        $registry->on(AddonPurchased::class, InvoiceLocalPurchase::class);
         // The routed subscription cycle, and the one sale the money ledger never saw. A routed subscription
         // is priced with a RATE, so its commission exists once per cycle and only at the provider — which is
         // why this is the first effect in the package that reads from one. It asks the local subscription

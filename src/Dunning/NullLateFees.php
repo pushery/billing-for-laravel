@@ -6,6 +6,7 @@ namespace Pushery\Billing\Dunning;
 
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\LateFees;
+use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -16,7 +17,7 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final class NullLateFees implements LateFees
 {
-    public function apply(Model $owner, Money $fee, string $reference, string $description): void
+    public function apply(Model $owner, Money $fee, string $reference, string $description, ?Subscription $subscription = null): void
     {
         // No fee is charged.
     }

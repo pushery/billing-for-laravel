@@ -4,6 +4,34 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.42.0] - 2026-09-25
+
+### Added
+
+- **A reversal that comes back short is announced.** When the provider took back less of a merchant's share than a refund or a lost chargeback asked for, the difference was recorded on the refund attempt and nothing said so, so the platform carried it unnoticed. `MerchantReversalCameBackShort` now carries the difference once per attempt, and a consumer whose terms put it on the merchant charges it with `MerchantSubLedger::chargeShortfall()`. The package books no debt of its own, because whether the merchant owes it is the operator's terms. Nothing is announced where the provider was not asked to reverse, as on a separate transfer: `RoutedChargeLedger::completeRefund()` takes that as a new last parameter, `$reversalRequested`, which the admin refund sets.
+
+- **A Mollie install sells add-ons.** Buying an add-on opens Mollie's hosted checkout as a one-off payment for the catalog's price, and the subscription screen offers the add-ons again. Mollie issues no invoice, so the package writes an order when the checkout opens and raises the invoice from it once Mollie confirms the payment, with the tax of where the buyer is. An add-on that credits money is a multi-purpose voucher by default, and its invoice states no tax, because the tax falls where the credit is spent. A refund reverses the purchase and issues a credit note against that invoice. Before this release `OneTimeCharge` was not bound on Mollie, and the screen offered no add-on.
+
+- **A Mollie install collects late fees.** A rung of `billing.dunning` that carries a fee no longer refuses to boot on Mollie. The dunning advance opens the fee as an order of its own, once per rung however often the advance runs, and the engine charges it as a separate payment once a cycle of the owner has been paid, because until then the mandate has just failed. A refused fee stays open for the next paid cycle and never starts dunning of its own. The fee's document states no tax, since a late fee compensates the delay rather than paying for a supply, its e-invoice carries category O, and the DATEV export books it as other income. The migration adds a `reference` column to `billing_orders`.
+
+### Changed (breaking — pre-1.0)
+
+- **`LateFees::apply()` takes the subscription in arrears as a new last parameter.** An implementation of your own declares it; the dunning advance passes it, so a driver can bill the fee on that subscription.
+
+### Removed
+
+- **`LateFeesUnsupported`.** It was thrown only by a Mollie install whose dunning ladder carried a fee, which now boots and collects it.
+
+### Fixed
+
+- **A late fee on Stripe is no longer taxed or discounted.** The fee went onto the next invoice as an item without a tax code, so under the provider tax mode Stripe Tax taxed it with the account's preset code, like the plan, although a late fee compensates a delay and pays for no supply. The item was discountable too, so a coupon on the subscription reduced the fee, and it could land on the invoice of another of the customer's subscriptions. It now carries Stripe's nontaxable code under that mode, is never discountable, and is added to the subscription in arrears.
+
+- **An add-on can be bought on an install that set no checkout URL.** The configuration reference says an unset `billing.checkout.success_url` falls back to the account hub, and the subscription checkout does. Buying an add-on refused instead, while the subscription screen offered the add-ons anyway, so the buyer got an error page. A purchase now returns to the add-ons on the plan screen, and an abandoned one to the plan screen. Where neither a URL nor the account hub is there it still refuses, and now before a customer is created at the provider.
+
+- **A tip checkout on Stripe with no return URL refuses before a customer exists there.** It resolved the buyer's Stripe customer first, which creates one for an owner Stripe does not know yet, and only then refused over the missing `billing.checkout.success_url`, so every refused tip could leave a customer behind. The return URLs are now read first, as the add-on checkout reads them.
+
+- **The DATEV export books the goods of an intermediated sale as passing through.** The buyer's receipt of an intermediated sale states the goods beside the platform's fee, and the export booked its whole total to the revenue account. On an automatic account that derived VAT from the goods as well, money that belongs to the seller: 12.77 on an 80.00 sale whose receipt states 0.80. The receipt now books as two rows, the fee to revenue and the goods to the chart's transit account, which `RegimeBookingGate` names for the regime. Without a chart of accounts there is no transit account, and the export refuses the receipt instead of booking the goods as revenue.
+
 ## [0.41.0] - 2026-09-25
 
 ### Added
@@ -7120,7 +7148,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.41.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.42.0...HEAD
+[0.42.0]: https://github.com/pushery/billing-for-laravel/compare/v0.41.0...v0.42.0
 [0.41.0]: https://github.com/pushery/billing-for-laravel/compare/v0.40.0...v0.41.0
 [0.40.0]: https://github.com/pushery/billing-for-laravel/compare/v0.39.0...v0.40.0
 [0.39.0]: https://github.com/pushery/billing-for-laravel/compare/v0.38.0...v0.39.0

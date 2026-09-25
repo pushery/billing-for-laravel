@@ -171,6 +171,7 @@ trait NormalizesInvoiceModel
             TaxExemptionReason::ReverseCharge => Lang::get('billing::invoice.reverse_charge_note'),
             TaxExemptionReason::DomesticSmallBusiness => Lang::get('billing::invoice.small_business_note'),
             TaxExemptionReason::UnionSmallBusinessScheme => Lang::get('billing::invoice.union_small_business_note'),
+            TaxExemptionReason::NotConsideration => Lang::get('billing::invoice.not_consideration_note'),
             default => null,
         };
 

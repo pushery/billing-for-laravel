@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
+use Pushery\Billing\Enums\OrderItemType;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\Money;
@@ -35,6 +36,7 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?Carbon $period_end
  * @property ?Carbon $processed_at
  * @property ?string $payment_reference
+ * @property ?string $reference the order's own key, unique where set: a late fee's dunning reference
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at when this row last moved — how a charge that has been in flight too long is spotted
  */
@@ -58,7 +60,7 @@ class Order extends Model
     /** @var list<string> */
     protected $fillable = [
         'owner_type', 'owner_id', 'provider', 'subscription_id', 'total_minor', 'currency',
-        'status', 'period_start', 'period_end', 'processed_at', 'payment_reference',
+        'status', 'period_start', 'period_end', 'processed_at', 'payment_reference', 'reference',
     ];
 
     /**
@@ -100,6 +102,18 @@ class Order extends Model
     public function total(): Money
     {
         return Money::of($this->total_minor, $this->currency);
+    }
+
+    /**
+     * Whether this order is a late fee: no subscription behind it, and a late-fee line in it.
+     *
+     * One answer for the engine that collects the fee and the issuer that documents it, because the two decide
+     * opposite things from it: the engine that no period is advanced, the issuer that no tax is stated.
+     */
+    public function isLateFee(): bool
+    {
+        return $this->subscription_id === null
+            && $this->items()->where('type', OrderItemType::LateFee)->exists();
     }
 
     /**

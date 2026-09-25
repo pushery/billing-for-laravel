@@ -28,6 +28,7 @@ use Pushery\Billing\Marketplace\CreditTopUpVolume;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Marketplace\SellerSaleGate;
+use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
@@ -148,6 +149,13 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             throw new InvalidArgumentException("Add-on '{$addonKey}' is not purchasable (no provider price configured).");
         }
 
+        // Where the buyer comes back to, finished or abandoned. Resolved before the provider is written to:
+        // `resolve()` can create a customer at Stripe, and an install with nowhere to return to would keep that
+        // customer behind its refusal.
+        $urls = new CheckoutUrls($this->config);
+        $successUrl = $urls->purchaseReturnUrl();
+        $cancelUrl = $urls->cancelUrl();
+
         $customerId = $this->customers->resolve($billable);
 
         $merchant = $this->context->routedMerchant();
@@ -215,8 +223,8 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
                 'withdrawal_declaration' => $declarationReference,
                 'caller_reference' => $callerReference,
             ], static fn (?string $value): bool => $value !== null && $value !== ''),
-            'success_url' => $this->returnUrl('success_url'),
-            'cancel_url' => $this->returnUrl('cancel_url'),
+            'success_url' => $successUrl,
+            'cancel_url' => $cancelUrl,
             // Absent for a single-seller install, so the session it opens is byte-identical to before.
             //
             // WITH A BUYER FEE THE APPLICATION FEE RISES BY IT, and that is the whole correctness of this
@@ -329,6 +337,11 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             throw MarketplaceUnsupported::noMerchantToRouteTo();
         }
 
+        // Read before anything is written at Stripe. Resolving the customer creates one there when the owner has
+        // none yet, and a tip with no page to return to is refused anyway, so it must not leave one behind.
+        $successUrl = $this->returnUrl('success_url');
+        $cancelUrl = $this->returnUrl('cancel_url');
+
         $customerId = $this->customers->resolve($billable);
         $merchantKey = $merchant->getKey();
         $routed = $this->tipRouting($merchant, $chosen);
@@ -370,8 +383,8 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
                 'tip_merchant' => is_scalar($merchantKey) ? (string) $merchantKey : '',
                 'withdrawal_declaration' => $declarationReference,
             ], static fn (?string $value): bool => $value !== null && $value !== ''),
-            'success_url' => $this->returnUrl('success_url'),
-            'cancel_url' => $this->returnUrl('cancel_url'),
+            'success_url' => $successUrl,
+            'cancel_url' => $cancelUrl,
             'payment_intent_data' => $routed['intent'],
         ]);
 

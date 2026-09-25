@@ -153,6 +153,7 @@ final readonly class BillingAdmin
                     $result->reversedTransferReference === null
                         ? new Money(0, $amount->currency)
                         : $result->transferReversed,
+                    reversalRequested: $result->reversedTransferReference !== null,
                 )
                 : $this->routed->failRefund($attempt, 'The provider refused an admin-initiated refund.');
         }

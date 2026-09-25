@@ -26,6 +26,7 @@ return [
     'reverse_charge_note' => 'Inversión del sujeto pasivo: el destinatario es responsable del IVA.',
     'small_business_note' => 'Exento de IVA en virtud del régimen de pequeñas empresas (§ 19 UStG).',
     'union_small_business_note' => 'Exento de IVA en virtud del régimen de pequeñas empresas del Estado miembro del proveedor.',
+    'not_consideration_note' => 'No sujeto a IVA: indemnización, no contraprestación de una operación.',
     'margin_scheme_note' => 'Régimen del margen de beneficio — bienes de ocasión',
     'margin_scheme_note_works_of_art' => 'Régimen del margen de beneficio — objetos de arte',
     'margin_scheme_note_collectors_items' => 'Régimen del margen de beneficio — objetos de colección y antigüedades',

@@ -69,7 +69,7 @@ final class AdvanceDunningCommand extends Command
                     $notifier->suspensionWarning($owner, $next->fee);
 
                     if ($next->hasFee()) {
-                        $fees->apply($owner, $next->fee, "dunning:{$subscription->id}:{$next->position}", "Late fee ({$next->label})");
+                        $fees->apply($owner, $next->fee, "dunning:{$subscription->id}:{$next->position}", "Late fee ({$next->label})", $subscription);
                     }
 
                     $subscription->forceFill(['dunning_level' => $next->position])->save();

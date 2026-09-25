@@ -26,6 +26,7 @@ return [
     'reverse_charge_note' => 'Inversione contabile: l’imposta è dovuta dal destinatario.',
     'small_business_note' => 'Esente da IVA ai sensi del regime delle piccole imprese (§ 19 UStG).',
     'union_small_business_note' => 'Esente da IVA ai sensi del regime delle piccole imprese dello Stato membro del fornitore.',
+    'not_consideration_note' => 'Fuori campo IVA: risarcimento, non corrispettivo di un’operazione.',
     'margin_scheme_note' => 'Regime del margine — beni usati',
     'margin_scheme_note_works_of_art' => 'Regime del margine — oggetti d’arte',
     'margin_scheme_note_collectors_items' => 'Regime del margine — oggetti da collezione e di antiquariato',
