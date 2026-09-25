@@ -12,6 +12,7 @@ use Mollie\Api\Resources\Payment;
 use Mollie\Api\Types\PaymentStatus;
 use Pushery\Billing\Contracts\DerivesDeliveryKey;
 use Pushery\Billing\Contracts\WebhookEventMapper;
+use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\Events\InPersonSaleCanceled;
@@ -19,6 +20,7 @@ use Pushery\Billing\Events\InPersonSalePaid;
 use Pushery\Billing\Events\MandateEstablished;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
+use Pushery\Billing\ValueObjects\Money;
 use Throwable;
 
 /**
@@ -116,7 +118,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
         return is_string($id) && trim($id) !== '' ? trim($id) : null;
     }
 
-    /** @return iterable<AddonRefunded|ChargebackReceived|InPersonSaleCanceled|InPersonSalePaid|MandateEstablished|PaymentFailed|PaymentSucceeded> */
+    /** @return iterable<AddonPurchased|AddonRefunded|ChargebackReceived|InPersonSaleCanceled|InPersonSalePaid|MandateEstablished|PaymentFailed|PaymentSucceeded> */
     public function map(Request $request): iterable
     {
         // Answered BEFORE the id is looked at, because the id cannot answer it. A next-generation delivery
@@ -154,6 +156,8 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
 
         if ($payment->isPaid()) {
             yield new PaymentSucceeded($customer, $amount, (string) $payment->id);
+
+            yield from $this->addonPurchaseOf($payment, $customer, $amount);
 
             yield from $this->mandateOf($payment, $customer);
 
@@ -342,6 +346,47 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
         // mandate was granted — and it is the only thing that says which request this answers. A customer
         // adding a second card establishes a mandate too; without the reference the two are the same event.
         yield new MandateEstablished($customer, trim($mandateId), 'mollie', $method, (string) $payment->id);
+    }
+
+    /**
+     * The add-on this payment bought, where it bought one.
+     *
+     * {@see MollieOneTimeCharge} writes the add-on key onto the payment, and a confirmed payment that carries it is a
+     * purchase: the credit, the grant and the invoice all follow from this event. A payment without the key, or one
+     * whose customer is unknown, bought no add-on this package sold, and yields nothing.
+     *
+     * The payment id is both references. A refund names the same payment, which is how the purchase is reversed, and
+     * it is also what the purchase's order was written under.
+     *
+     * @return iterable<AddonPurchased>
+     */
+    private function addonPurchaseOf(Payment $payment, string $customer, Money $amount): iterable
+    {
+        $metadata = $payment->metadata;
+        $key = is_object($metadata) ? ($metadata->{MollieOneTimeCharge::ADDON_KEY} ?? null) : null;
+
+        if (! is_string($key) || $key === '' || $customer === '') {
+            return;
+        }
+
+        yield new AddonPurchased(
+            $customer,
+            $key,
+            $amount,
+            (string) $payment->id,
+            paymentReference: (string) $payment->id,
+            declarationReference: $this->stringOf($metadata, 'withdrawal_declaration'),
+            provider: 'mollie',
+            callerReference: $this->stringOf($metadata, 'caller_reference'),
+        );
+    }
+
+    /** A string out of the payment's metadata, or null where it is absent or empty. */
+    private function stringOf(object $metadata, string $key): ?string
+    {
+        $value = $metadata->{$key} ?? null;
+
+        return is_string($value) && $value !== '' ? $value : null;
     }
 
     /**

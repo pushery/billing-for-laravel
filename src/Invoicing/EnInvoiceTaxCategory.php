@@ -146,6 +146,17 @@ final readonly class EnInvoiceTaxCategory
             return new self('O', null, 'Services outside scope of tax');
         }
 
+        // A payment that buys nothing is outside the scope for another reason than an export, and lands in the
+        // same exclusive category. A late fee is the case the package raises; a taxed band beside it is refused
+        // for the reason above, with a message that names the payment rather than an export.
+        if ($exemption === TaxExemptionReason::NotConsideration) {
+            if ($rate > 0) {
+                throw ContradictoryExemption::taxedPaymentOutsideTheScope($rate);
+            }
+
+            return new self('O', null, 'Not subject to VAT');
+        }
+
         // A small-business relief is E, like any other exemption, and carries NO VATEX code on purpose.
         // BR-E-10 accepts the reason text alone, and the text is where the ground actually gets named —
         // a code guessed from the published list would be a claim about which article relieves this

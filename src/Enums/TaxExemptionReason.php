@@ -58,4 +58,19 @@ enum TaxExemptionReason: string
      * for them, wrongly — and they never wrote the document to correct it.
      */
     case UnionSmallBusinessScheme = 'union_small_business_scheme';
+
+    /**
+     * The payment is not the consideration for any supply, so it is outside the scope of VAT altogether.
+     *
+     * A late fee is the case the package raises: it compensates the delay of a price already owed and buys the
+     * customer nothing. Germany says so in so many words (UStAE 1.3 (6): dunning fees a business charges its
+     * defaulting payers are not the consideration for a separate supply). Whether a payment is consideration is
+     * a question of union law, answered the same in every member state (CJEU C-90/20, Apcoa Parking Danmark);
+     * the control fee in that case was consideration because the motorist had used the car park, and a late fee
+     * has no such use behind it.
+     *
+     * Not an exemption in the sense of the other cases: nothing is relieved, because no tax ever reached the
+     * payment. The document states category O, which EN 16931 lets no other category share.
+     */
+    case NotConsideration = 'not_consideration';
 }

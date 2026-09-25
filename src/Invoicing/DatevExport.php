@@ -14,9 +14,11 @@ use Pushery\Billing\Enums\ExchangeRateLayer;
 use Pushery\Billing\Enums\RecipientTaxStatus;
 use Pushery\Billing\Enums\SettlementDocumentType;
 use Pushery\Billing\Enums\SupplyRegime;
+use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Enums\VoucherEvent;
 use Pushery\Billing\Exceptions\InvalidDatevBatch;
 use Pushery\Billing\Marketplace\MerchantLiabilityAccounts;
+use Pushery\Billing\Marketplace\RegimeBookingGate;
 use Pushery\Billing\Models\InvoiceExchangeRate;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\ProviderFee;
@@ -507,6 +509,12 @@ final readonly class DatevExport
             return $this->settlementChain($invoice);
         }
 
+        $goods = $this->goodsInTransitOf($invoice);
+
+        if ($goods > 0) {
+            return $this->intermediatedBookings($invoice, $goods);
+        }
+
         $parts = $this->ratePartsOf($invoice);
 
         if ($parts !== null) {
@@ -517,6 +525,49 @@ final readonly class DatevExport
         }
 
         return [$this->booking($invoice)];
+    }
+
+    /**
+     * What an intermediated receipt states beyond the platform's own fee: the goods, which pass through.
+     *
+     * The receipt states the goods so it matches what the buyer paid, while its taxable base and its tax are the
+     * fee alone. Whatever the total holds beyond them is the seller's money. Zero for every other document,
+     * including the commission invoice a seller receives, whose total is its fee.
+     */
+    private function goodsInTransitOf(InvoiceRecord $invoice): int
+    {
+        if ($invoice->supply_regime !== SupplyRegime::Intermediation
+            || $invoice->settlement_document_type instanceof SettlementDocumentType
+            || $invoice->subtotal_minor === null
+            || $invoice->tax_minor === null) {
+            return 0;
+        }
+
+        return max(0, abs($invoice->total_minor) - abs($invoice->subtotal_minor + $invoice->tax_minor));
+    }
+
+    /**
+     * An intermediated receipt as the two things it holds: the fee on the account every sale books to, and the
+     * goods on the account the regime names for money passing through.
+     *
+     * Booked whole to a revenue account, the goods became the platform's turnover, and an automatic revenue
+     * account derived tax from them that nobody charged. The regime decides the account through the gate
+     * rather than here, so no booking path can name a revenue account for a goods leg.
+     *
+     * @return list<list<string>>
+     */
+    private function intermediatedBookings(InvoiceRecord $invoice, int $goodsMinor): array
+    {
+        $gate = new RegimeBookingGate;
+        $transaction = $gate->goodsTransaction(SupplyRegime::Intermediation);
+        $gate->assertPermitted(SupplyRegime::Intermediation, $transaction);
+
+        $goodsAccounts = [new DatevAccount($this->number('customer_account')), $this->accounts->resolve($transaction)->number];
+        $feeMinor = abs($invoice->total_minor) - $goodsMinor;
+
+        return $feeMinor > 0
+            ? [$this->booking($invoice, $feeMinor), $this->booking($invoice, $goodsMinor, accounts: $goodsAccounts)]
+            : [$this->booking($invoice, $goodsMinor, accounts: $goodsAccounts)];
     }
 
     /**
@@ -570,9 +621,11 @@ final readonly class DatevExport
      * @param  ?int  $amountMinor  a part of the document rather than all of it, for a collective settlement
      *                             booked by rate
      * @param  ?int  $rate  the rate of the supplies that part covers
+     * @param  ?array{0: DatevAccount, 1: string}  $accounts  the Konto and Gegenkonto, where the document's role
+     *                                                        does not decide them
      * @return list<string>
      */
-    private function booking(InvoiceRecord $invoice, ?int $amountMinor = null, ?int $rate = null): array
+    private function booking(InvoiceRecord $invoice, ?int $amountMinor = null, ?int $rate = null, ?array $accounts = null): array
     {
         $reference = $invoice->number ?? (string) $invoice->id;
         $date = $invoice->issued_at ?? $invoice->created_at ?? Carbon::now();
@@ -593,7 +646,7 @@ final readonly class DatevExport
         // empty either way — every account these resolve to is an Automatikkonto that derives its VAT from the
         // posting, and setting a BU-Schlüssel would cancel that (the classic import error). Position is fixed;
         // only these two values change with the role.
-        [$konto, $gegenkonto] = $this->accountsFor($invoice, $rate);
+        [$konto, $gegenkonto] = $accounts ?? $this->accountsFor($invoice, $rate);
 
         return $this->row(
             $amountMinor === null ? $this->amount($invoice) : str_replace('.', ',', Money::of(abs($amountMinor), $invoice->currency)->toDecimal()),
@@ -833,6 +886,12 @@ final readonly class DatevExport
      */
     private function fanRevenueAccount(InvoiceRecord $invoice): DatevAccount
     {
+        // A late fee is compensation, not a sale: no tax reached it, so it books as other income, which carries
+        // none, as an expired voucher does. On a revenue account the automatic function would derive tax from it.
+        if ($invoice->tax_exemption_reason === TaxExemptionReason::NotConsideration) {
+            return $this->accounts->resolve(DatevTransaction::OtherIncome);
+        }
+
         $country = $invoice->destination_country;
 
         if ((bool) $invoice->oss && is_string($country) && $country !== '' && $this->chartSelected()) {

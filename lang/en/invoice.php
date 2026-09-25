@@ -26,6 +26,7 @@ return [
     'reverse_charge_note' => 'Reverse charge: the recipient is liable for the VAT.',
     'small_business_note' => 'Exempt from VAT under the small business scheme (§ 19 UStG).',
     'union_small_business_note' => 'Exempt from VAT under the small business scheme of the supplier\'s member state.',
+    'not_consideration_note' => 'Not subject to VAT: compensation, not the consideration for a supply.',
     'margin_scheme_note' => 'Margin scheme — second-hand goods',
     'margin_scheme_note_works_of_art' => 'Margin scheme — works of art',
     'margin_scheme_note_collectors_items' => 'Margin scheme — collectors’ items and antiques',

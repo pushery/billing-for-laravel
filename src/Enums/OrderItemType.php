@@ -28,4 +28,12 @@ enum OrderItemType: string
 
     /** An offset drawn from the customer's credit balance (a negative line). */
     case Credit = 'credit';
+
+    /**
+     * A late fee from the dunning ladder: compensation for the delay, not the price of anything supplied.
+     *
+     * It stands in an order of its own. Its document is outside the scope of VAT, and EN 16931 lets a document
+     * that states that category state no other (BR-O-11), so the fee cannot share an invoice with a cycle.
+     */
+    case LateFee = 'late_fee';
 }

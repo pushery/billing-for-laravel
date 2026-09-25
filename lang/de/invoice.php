@@ -26,6 +26,7 @@ return [
     'reverse_charge_note' => 'Reverse Charge: Die Steuerschuld geht auf den Leistungsempfänger über.',
     'small_business_note' => 'Steuerfrei nach § 19 UStG (Kleinunternehmerregelung).',
     'union_small_business_note' => 'Steuerfrei nach der Kleinunternehmerregelung des Ansässigkeitsstaats des Leistenden.',
+    'not_consideration_note' => 'Nicht steuerbar: Schadensersatz, kein Entgelt für eine Leistung.',
     'margin_scheme_note' => 'Gebrauchtgegenstände/Sonderregelung',
     'margin_scheme_note_works_of_art' => 'Kunstgegenstände/Sonderregelung',
     'margin_scheme_note_collectors_items' => 'Sammlungsstücke und Antiquitäten/Sonderregelung',

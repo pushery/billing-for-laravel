@@ -53,6 +53,20 @@ final class ContradictoryExemption extends RuntimeException
     }
 
     /**
+     * A payment frozen as no consideration at all, on a document that also states tax.
+     *
+     * A late fee is the case: it compensates a delay and buys nothing, so category O applies, and O is exclusive.
+     */
+    public static function taxedPaymentOutsideTheScope(float $rate): self
+    {
+        return new self(
+            'This document is frozen as a payment that is not the consideration for any supply, such as a late fee '
+            ."— EN 16931 category O, outside the scope of VAT — but carries a band taxed at {$rate}%. Category O is "
+            .'exclusive (BR-O-11) and may not state a tax rate or amount. The payment belongs on its own document.'
+        );
+    }
+
+    /**
      * A document frozen as taxed on the margin that also names an exemption.
      *
      * A margin-taxed supply is not exempt: the tax is due and contained in the margin, and only stating it is

@@ -26,6 +26,7 @@ return [
     'reverse_charge_note' => 'Btw verlegd: de afnemer is de btw verschuldigd.',
     'small_business_note' => 'Vrijgesteld van btw op grond van de kleineondernemersregeling (§ 19 UStG).',
     'union_small_business_note' => 'Vrijgesteld van btw op grond van de kleineondernemersregeling van de lidstaat van de leverancier.',
+    'not_consideration_note' => 'Buiten de btw-heffing: schadevergoeding, geen vergoeding voor een levering of dienst.',
     'margin_scheme_note' => 'Margeregeling — gebruikte goederen',
     'margin_scheme_note_works_of_art' => 'Margeregeling — kunstvoorwerpen',
     'margin_scheme_note_collectors_items' => 'Margeregeling — voorwerpen voor verzamelingen en antiquiteiten',

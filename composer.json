@@ -74,7 +74,7 @@
         "mollie/mollie-api-php": "^3.13",
         "nikic/php-parser": "^5.8",
         "orchestra/testbench": "^11.0",
-        "orchestra/testbench-core": "^11.0",
+        "orchestra/testbench-core": "^11.3.5",
         "pestphp/pest": "^5.0",
         "pestphp/pest-plugin-browser": "^5.0",
         "pestphp/pest-plugin-evals": "^5.0",
@@ -83,6 +83,8 @@
         "pestphp/pest-plugin-type-coverage": "^5.0",
         "phpstan/phpstan": "2.2.15",
         "rector/rector": "2.6.7",
+        "setasign/fpdf": "^1.8.2",
+        "smalot/pdfparser": "^2.0",
         "spaze/phpstan-disallowed-calls": "4.14.0"
     },
     "suggest": {

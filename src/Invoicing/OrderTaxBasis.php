@@ -5,10 +5,15 @@ declare(strict_types=1);
 namespace Pushery\Billing\Invoicing;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Contracts\Config\Repository;
+use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Contracts\TierCatalog;
+use Pushery\Billing\Enums\OrderItemType;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxIdVerificationStatus;
+use Pushery\Billing\Enums\VoucherInstrumentType;
+use Pushery\Billing\Marketplace\CreditTopUpVolume;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Models\TaxIdVerification;
@@ -43,6 +48,9 @@ use Pushery\Billing\ValueObjects\TaxContext;
  * 2. the tier carries an archetype — see below;
  * 3. the subscription's place of supply was established and recorded — see below;
  * 4. the cycle covers a period — a document with no period states no supply.
+ *
+ * A one-time purchase the engine sold answers the same four questions its own way, see `forPurchase()`: the
+ * add-on catalog classifies it, the buyer's subscription places it, and the day it was paid dates it.
  *
  * A null answer leaves `tax_minor` null, which is exactly the state before this class existed. Null says
  * "nobody established this"; zero says "none was due". They are different claims and only one of them is
@@ -81,6 +89,8 @@ final readonly class OrderTaxBasis
         private SupplyPlaceDecision $places,
         private PlaceEvidenceStore $evidence,
         private TierCatalog $tiers,
+        private AddonCatalog $addons,
+        private Repository $config,
     ) {}
 
     /**
@@ -108,17 +118,111 @@ final readonly class OrderTaxBasis
         $subscription = $order->subscription;
 
         if (! $subscription instanceof Subscription) {
-            return null;
+            return $this->forPurchase($order);
         }
 
         $archetype = $this->archetypeOf($subscription);
         $period = $this->periodOf($order);
-        $country = $this->places->countryFor(self::placeReferenceFor($subscription));
+        $reference = self::placeReferenceFor($subscription);
+        $country = $this->places->countryFor($reference);
 
         if (! $archetype instanceof TaxArchetype || ! $period instanceof ServicePeriod || $country === null) {
             return null;
         }
 
+        return $this->determined($order, $archetype, $period, $country, $reference);
+    }
+
+    /**
+     * The tax of a one-time purchase this engine sold, or null where its basis is not establishable.
+     *
+     * A purchase is not a cycle, so three of the four questions are asked differently. The archetype comes from
+     * the add-on catalog, which classifies what it sells as the tier catalog does. The place is the one recorded
+     * for the buyer's own subscription: the evidence says where the customer is, it was collected when they signed
+     * up, and a purchase made later has nothing fresher to read. The supply is the day the payment was confirmed,
+     * because an add-on is supplied when it is paid for. Any of the three missing refuses, as for a cycle.
+     *
+     * A MONEY CREDIT IS A VOUCHER, and under a multi-purpose instrument no tax falls when it is sold: it falls on
+     * what the balance later pays for. Stating a rate here would tax the same money twice, so that case refuses
+     * rather than claiming either a figure or zero. `billing.marketplace.vouchers.instrument_type` decides it, the
+     * setting the provider-driven checkout reads for the same question.
+     *
+     * A loose order that carries no add-on line is still not a sale this package can place, and refuses.
+     */
+    private function forPurchase(Order $order): ?DeterminedOrderTax
+    {
+        $key = $this->addonKeyOf($order);
+        $processed = $order->processed_at;
+
+        if ($key === null || $processed === null || ! $this->addons instanceof SuppliesProductArchetypes) {
+            return null;
+        }
+
+        if (CreditTopUpVolume::isMoneyCredit($this->addons, $key)
+            && ! VoucherInstrumentType::fromConfigured($this->config->get(VoucherInstrumentType::CONFIG_KEY))->taxedAtIssue()) {
+            return null;
+        }
+
+        $archetype = $this->addons->archetypeFor($key);
+        $reference = $this->placedReferenceOf($order);
+        $country = $reference === null ? null : $this->places->countryFor($reference);
+
+        if (! $archetype instanceof TaxArchetype || $reference === null || $country === null) {
+            return null;
+        }
+
+        $day = CarbonImmutable::parse($processed->toDateString());
+
+        return $this->determined(
+            $order,
+            $archetype,
+            new ServicePeriod($day, $day, Money::of($order->total_minor, $order->currency)),
+            $country,
+            $reference,
+        );
+    }
+
+    /** The add-on a purchase order sold, read off its add-on line, or null where it has none. */
+    private function addonKeyOf(Order $order): ?string
+    {
+        $line = $order->items()->where('type', OrderItemType::Addon)->first();
+        $key = $line?->metadata['addon_key'] ?? null;
+
+        return is_string($key) && $key !== '' ? $key : null;
+    }
+
+    /**
+     * The place reference of the buyer's newest subscription that has one recorded, or null where none has.
+     *
+     * Newest first, because a customer who subscribed again did so from where they are now.
+     */
+    private function placedReferenceOf(Order $order): ?string
+    {
+        $subscriptions = Subscription::model()::query()
+            ->where('owner_type', $order->owner_type)
+            ->where('owner_id', $order->owner_id)
+            ->orderByDesc('id')
+            ->get();
+
+        foreach ($subscriptions as $subscription) {
+            $reference = self::placeReferenceFor($subscription);
+
+            if ($this->places->countryFor($reference) !== null) {
+                return $reference;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * The determination itself, the same for a cycle and a purchase once each has answered its own questions.
+     *
+     * One method rather than two copies, because the gross, the buyer and the document fields are the half that
+     * must not differ between the two: an invoice for a purchase and one for a cycle are read by the same reader.
+     */
+    private function determined(Order $order, TaxArchetype $archetype, ServicePeriod $period, string $country, string $reference): DeterminedOrderTax
+    {
         $gross = Money::of($order->total_minor, $order->currency);
         $buyer = $this->buyerOf($order, $country);
 
@@ -149,7 +253,7 @@ final readonly class OrderTaxBasis
                 // stating a delivery date in the future on a document dated before it is worse than
                 // stating none — the period columns already say what is covered.
                 destinationCountry: $facts->country,
-                destinationSubdivision: $this->evidence->subdivisionFor(self::placeReferenceFor($subscription)),
+                destinationSubdivision: $this->evidence->subdivisionFor($reference),
             ),
             period: $period,
             recipient: $facts->placement->recipient,

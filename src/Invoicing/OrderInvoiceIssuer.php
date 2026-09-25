@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\BuyerPartyResolver;
 use Pushery\Billing\Enums\InvoiceStatus;
+use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\OrderItem;
@@ -121,7 +122,8 @@ final readonly class OrderInvoiceIssuer
         }
 
         $issuedAt = Carbon::now();
-        $tax = $this->determined($order);
+        $lateFee = $order->isLateFee();
+        $tax = $lateFee ? null : $this->determined($order);
 
         // Filled in two passes rather than created from one spread literal, and the reason is a type
         // rather than a taste: the model's own property list is what makes a create() literal checkable,
@@ -154,18 +156,40 @@ final readonly class OrderInvoiceIssuer
             // with a destination country, and `InvoiceCrossBorderSalesCounter` selects on a non-empty
             // `destination_country`. Both columns are part of the basis block, so a document without a
             // basis is outside both — which is why dropping the net here cannot understate a filed return.
-            'subtotal_minor' => $tax?->net->minorUnits,
+            'subtotal_minor' => $lateFee ? $order->total_minor : $tax?->net->minorUnits,
             'currency' => $order->currency,
             'status' => InvoiceStatus::Paid,
             'issued_at' => $issuedAt,
             'lines' => $this->frozenLines($order),
         ]);
 
-        $invoice->fill($this->taxAttributes($tax));
+        $invoice->fill($lateFee ? $this->outsideTheScope() : $this->taxAttributes($tax));
         $invoice->fill($this->buyerAttributes($invoice, $tax));
         $invoice->save();
 
         return $invoice;
+    }
+
+    /**
+     * The tax columns of a late fee's document: no tax, because none ever reached the payment.
+     *
+     * Stated rather than left null, and that is the difference to a document without a basis. Null says nobody
+     * determined the tax; here it is determined, and the answer is that the payment is outside the scope of VAT
+     * ({@see TaxExemptionReason::NotConsideration}, which carries the sources). The e-invoice renders category O
+     * from the reason, and O states no rate.
+     *
+     * @return array<string, mixed>
+     */
+    private function outsideTheScope(): array
+    {
+        return [
+            'tax_minor' => 0,
+            'tax_rate_bps' => 0,
+            'reverse_charge' => false,
+            'tax_exempt' => false,
+            'oss' => false,
+            'tax_exemption_reason' => TaxExemptionReason::NotConsideration,
+        ];
     }
 
     /**

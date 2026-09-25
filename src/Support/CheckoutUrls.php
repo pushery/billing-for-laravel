@@ -27,6 +27,26 @@ final readonly class CheckoutUrls
             ?? throw new RuntimeException('Configure billing.checkout.success_url, or enable the account hub so its checkout-return route exists.');
     }
 
+    /**
+     * Where the provider returns a completed one-time purchase: the add-ons on the plan screen, where it was
+     * bought, unless the install pinned `success_url`. Not the checkout-return route, which reconciles a
+     * SUBSCRIPTION and shows the overview as activating until one is recorded; a buyer of an add-on would wait
+     * there for something that is not coming.
+     */
+    public function purchaseReturnUrl(): string
+    {
+        $configured = $this->configured('success_url');
+
+        if ($configured !== null) {
+            return $configured;
+        }
+
+        $plan = $this->route('billing.account.plan')
+            ?? throw new RuntimeException('Configure billing.checkout.success_url, or enable the account hub so its plan route exists.');
+
+        return $plan.'#addons';
+    }
+
     /** Where the provider returns an abandoned checkout — back to the plan screen by default. */
     public function cancelUrl(): string
     {

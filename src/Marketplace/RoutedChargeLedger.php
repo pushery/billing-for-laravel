@@ -17,6 +17,7 @@ use Pushery\Billing\Enums\ReversalCause;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Enums\TaxArchetype;
+use Pushery\Billing\Events\MerchantReversalCameBackShort;
 use Pushery\Billing\Events\MerchantShareNotMoved;
 use Pushery\Billing\Events\MerchantTransferReversed;
 use Pushery\Billing\Models\MerchantCharge;
@@ -407,11 +408,22 @@ final readonly class RoutedChargeLedger
      * second confirmation that moved nothing would tell a consumer to reverse its ledger a second time —
      * the exact double-reversal the caps above exist to prevent, reintroduced one layer higher.
      *
+     * ## What came back short is announced, not booked
+     *
+     * When the provider takes back less of the merchant's share than was asked, the platform carries the
+     * difference unless something puts it on the merchant. Whether the merchant owes it is a matter of the
+     * operator's terms, so this books no debt; `MerchantReversalCameBackShort` says how much, once per attempt,
+     * and a consumer whose terms put it on the merchant charges it to `MerchantSubLedger`.
+     *
+     * Only where the provider was asked to reverse, which `$reversalRequested` says. On the separate-transfer
+     * lane a refund leaves the share where it is and the reversal is the consumer's to issue, so the figure
+     * there is everything not yet asked for rather than anything the merchant failed to give back.
+     *
      * @return array{refunded: int, reversed: int, fee: int} what each total actually moved by
      */
-    public function completeRefund(RefundAttempt $attempt, ?Money $actuallyReversed = null): array
+    public function completeRefund(RefundAttempt $attempt, ?Money $actuallyReversed = null, bool $reversalRequested = true): array
     {
-        /** @var array{0: ?MerchantCharge, 1: array{refunded: int, reversed: int, fee: int}} $result */
+        /** @var array{0: ?MerchantCharge, 1: array{refunded: int, reversed: int, fee: int}, 2: ?int} $result */
         $result = DB::transaction(function () use ($attempt, $actuallyReversed): array {
             $nothing = ['refunded' => 0, 'reversed' => 0, 'fee' => 0];
 
@@ -422,11 +434,11 @@ final readonly class RoutedChargeLedger
                 ->first();
 
             if (! $charge instanceof MerchantCharge) {
-                return [null, $nothing];
+                return [null, $nothing, null];
             }
 
             if ($attempt->status === RefundAttemptStatus::Succeeded) {
-                return [null, $nothing];
+                return [null, $nothing, null];
             }
 
             $refunded = min($attempt->amount_minor, $charge->refundableMinor());
@@ -478,13 +490,17 @@ final readonly class RoutedChargeLedger
                 'transfer_reversal_short_minor' => $shortfall,
             ])->save();
 
-            return [$charge, ['refunded' => $refunded, 'reversed' => $reversed, 'fee' => $feeRefunded]];
+            return [$charge, ['refunded' => $refunded, 'reversed' => $reversed, 'fee' => $feeRefunded], $shortfall];
         });
 
-        [$charge, $moved] = $result;
+        [$charge, $moved, $shortfall] = $result;
 
         if ($charge instanceof MerchantCharge && ($moved['reversed'] > 0 || $moved['fee'] > 0)) {
             $this->announceReversal($attempt, $charge, $moved['reversed'], $moved['fee']);
+        }
+
+        if ($charge instanceof MerchantCharge && $reversalRequested && $shortfall !== null && $shortfall > 0) {
+            $this->announceShortfall($attempt, $charge, $shortfall);
         }
 
         return $moved;
@@ -511,6 +527,34 @@ final readonly class RoutedChargeLedger
      * quietly beyond that: an unresolvable merchant is a real problem, but it is a problem about the
      * consumer's own model map, and this is not the operation that should surface it.
      */
+    /**
+     * Tell a consumer how much less came back than the reversal asked for.
+     *
+     * Read and guarded like the announcement below, and for the same reason: the reversal has happened, and
+     * a merchant model that no longer resolves must not turn it into a failure. The difference then stays on
+     * the attempt row, where `transfer_reversal_short_minor` records it either way.
+     */
+    private function announceShortfall(RefundAttempt $attempt, MerchantCharge $charge, int $shortfall): void
+    {
+        if (! $this->merchantClassExists($charge)) {
+            return;
+        }
+
+        $merchant = $charge->merchant;
+
+        if (! $merchant instanceof Model) {
+            return;
+        }
+
+        ($this->events ?? Container::getInstance()->make(Dispatcher::class))->dispatch(new MerchantReversalCameBackShort(
+            merchant: $merchant,
+            provider: $charge->provider,
+            chargeReference: $charge->charge_reference,
+            shortfall: new Money($shortfall, $charge->currency),
+            cause: $attempt->cause ?? ReversalCause::Refund,
+        ));
+    }
+
     private function announceReversal(RefundAttempt $attempt, MerchantCharge $charge, int $reversed, int $feeReturned): void
     {
         if (! $this->merchantClassExists($charge)) {
