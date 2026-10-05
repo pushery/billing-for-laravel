@@ -22,11 +22,11 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## Why there are no merchant_type / merchant_id columns here
  *
- * The subscription table carries `nullableMorphs('merchant')` beside its sentinel, and this table
- * deliberately does not follow it. `morphs()` types the id column as `bigint`, so an application whose
- * merchant model is keyed by UUID or ULID cannot write it at all — every insert fails on the binding. That
- * is a known limitation of the subscription table; reproducing it in a column added today would be
- * shipping a second instance of it on purpose.
+ * The subscription table carries morph columns for its merchant beside its sentinel, and this table
+ * deliberately does not follow it. A morph id column has to match the type of the host's keys, which the
+ * migrations take from `billing.schema.host_key_type` when they run, so a pair added here would be one
+ * more column that setting had to be right for before the first migration, and nothing in a coupon would
+ * read it.
  *
  * Nothing is lost by leaving them out. The sentinel is `m:<type>#<id>` and is therefore lossless: the type
  * and the key can be read back out of it, and MerchantScope is what does that. The morph columns on the

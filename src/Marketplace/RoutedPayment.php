@@ -13,6 +13,7 @@ use InvalidArgumentException;
 use Pushery\Billing\Contracts\BillingDriver;
 use Pushery\Billing\Contracts\CanReceiveMoney;
 use Pushery\Billing\Contracts\MovesMerchantShare;
+use Pushery\Billing\Contracts\RoutesMoney;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
@@ -24,6 +25,7 @@ use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\ValueObjects\ArchetypeClassification;
 use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
+use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
 use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
@@ -111,10 +113,10 @@ final readonly class RoutedPayment
          * finds unreferenced classes scans the shipped tree for the NAME, so writing it would clear a class
          * that still has no caller.
          *
-         * Checked rather than re-derived, deliberately. Deriving would mean taking the destination and the
-         * fee away from the caller, which is a different and much larger change to a public method; the
-         * pairing is the part that is unsafe to accept on trust, because an incompatible one decides who
-         * carries a dispute and the provider will not object.
+         * Checked rather than re-derived, deliberately: the pairing is the part that is unsafe to accept on
+         * trust, because an incompatible one decides who carries a dispute and the provider will not object.
+         * Of the rest of the routing, the fee is the commission charge() computes, and the destination is
+         * compared with the merchant's account where this installation knows it.
          */
         private ChargeRoutingConsistencyGuard $pairing,
         /** Which side is seller of record, resolved here rather than accepted, so a caller cannot legalize its own pairing. */
@@ -337,6 +339,25 @@ final readonly class RoutedPayment
             $transfers = $this->transfers;
         }
 
+        // Where this sale's share is to wait under buyer protection, the protection is asked before the provider
+        // as well. An arrangement that cannot hold a payout is refused before the buyer is charged, rather than at
+        // the hold, where the payment would stand with no hold, no transfer and nothing that retries it.
+        if ($routesSeparately && $this->protectionHolds()) {
+            $this->protection?->assertOperable();
+        }
+
+        // The commission, decided once, here. The row records it, and on a destination charge the provider
+        // keeps it as the application fee, so the routing goes on with this figure in place of the one it
+        // arrived with: two figures for one fee would let the row and the provider disagree about what the
+        // platform kept.
+        $platformFee = $this->commissionOn($gross, $fee, $taxBps);
+        $routing = new ChargeRouting($routing->destination, $platformFee, $routing->type, $routing->onBehalfOf);
+
+        // Every gate above vouched for $merchant, and the money goes to the routing's destination. Where this
+        // installation knows the merchant's account, the two have to be the same account, or a stale or
+        // swapped routing pays somebody no gate has seen while the row names the merchant that passed.
+        $this->assertDestinationIsTheMerchant($merchant, $routing);
+
         // The provider first. A row written before the charge would describe a payment that may never
         // happen, and the reversal caps would then be willing to give back money nobody ever took.
         //
@@ -356,7 +377,7 @@ final readonly class RoutedPayment
             return $result;
         }
 
-        $charge = $this->record($merchant, $result, $gross, $fee, $taxBps, $routing->type, $posture, $archetype);
+        $charge = $this->record($merchant, $result, $gross, $fee, $platformFee, $taxBps, $routing->type, $posture, $archetype);
 
         // A settled payment is settled NOW, from what the provider just said — not later, from a webhook
         // re-deriving it. The result already carries the transfer reference on a destination charge,
@@ -410,6 +431,10 @@ final readonly class RoutedPayment
         if ($withheld !== null) {
             $this->ledger->recordWithholding($charge, $withheld);
         } elseif ($transfers instanceof MovesMerchantShare) {
+            // Before the provider is asked, as on every lane that moves a share: a run that stops before the
+            // answer leaves only this time behind, and the retry finds the sale by it.
+            $this->ledger->recordTransferRequested($charge);
+
             try {
                 $moved = $this->moveMerchantShare($transfers, $charge, $routing);
             } catch (Throwable $caught) {
@@ -634,29 +659,53 @@ final readonly class RoutedPayment
     }
 
     /**
+     * The platform's commission on a sale, taken on its net.
+     *
+     * The configuration has said so in as many words since the fee was introduced: "it is applied to the
+     * transaction's net, not to what the buyer paid". On 119.00 at 19% with a 10% rate that is 10.00, not
+     * 11.90, which would be a commission on the buyer's tax. The two bases coincide exactly when the fee is
+     * rate-only and the creator's inbound rate equals the outbound one; a flat component, a small-business
+     * creator, a reverse-charge creator or a cross-border rate each tell them apart.
+     */
+    private function commissionOn(Money $gross, PlatformFee $fee, int $taxBps): Money
+    {
+        return $fee->of($gross->baseFromMarkup($taxBps)[0]);
+    }
+
+    /**
+     * Refuse a routing whose destination is not the merchant's account, where this installation knows it.
+     *
+     * A driver that routes money keeps a directory of the accounts its merchants hold. When the directory
+     * names one for this merchant, the destination has to be that account. When it names none, there is
+     * nothing to compare with here, and the receiving gate is what asks whether the merchant can be paid.
+     */
+    private function assertDestinationIsTheMerchant(Model $merchant, ChargeRouting $routing): void
+    {
+        if (! $this->driver instanceof RoutesMoney) {
+            return;
+        }
+
+        $account = $this->driver->marketplaceRails()->accounts()->accountFor($merchant);
+
+        if ($account instanceof MerchantAccountReference && $account->accountId !== $routing->destination->accountId) {
+            throw new InvalidArgumentException(sprintf(
+                'The routing sends this sale to %s, and the merchant it is recorded for holds %s. Every check '
+                .'before the charge was made for that merchant, so the money would reach an account none of them saw.',
+                $routing->destination->accountId,
+                $account->accountId,
+            ));
+        }
+    }
+
+    /**
      * Write the routed sale down, once.
      *
      * Idempotent through the ledger's own claim on the provider reference, so a retried intent that reaches
      * the same charge converges on the row it already wrote rather than starting a second one with all its
      * reversal totals back at zero.
      */
-    private function record(Model $merchant, ChargeResult $result, Money $gross, PlatformFee $fee, int $taxBps, ChargeType $chargeType, SellerOfRecordPosture $posture, ?TaxArchetype $archetype): MerchantCharge
+    private function record(Model $merchant, ChargeResult $result, Money $gross, PlatformFee $fee, Money $platformFee, int $taxBps, ChargeType $chargeType, SellerOfRecordPosture $posture, ?TaxArchetype $archetype): MerchantCharge
     {
-        // THE COMMISSION IS TAKEN ON THE NET. The configuration has said so in as many words since the fee
-        // was introduced -- "it is applied to the transaction's net, not to what the buyer paid" -- and the
-        // pricing path obeys it. This path did not, and it is the one that decides what is actually kept:
-        // the figure goes into the row, and on a destination charge it goes to the provider as the
-        // application fee. On 119.00 at 19% with a 10% rate it kept 11.90 instead of 10.00, which is a
-        // commission on the buyer's tax.
-        //
-        // Nothing looked wrong because the two bases coincide exactly when the fee is rate-only AND the
-        // creator's inbound rate equals the outbound one -- the case the golden test runs. A flat
-        // component, a small-business creator, a reverse-charge creator or a cross-border rate each break
-        // the coincidence, and each of them quietly.
-        $commissionBase = $gross->baseFromMarkup($taxBps)[0];
-
-        $platformFee = $fee->of($commissionBase);
-
         // What the merchant receives is still the whole payment less the commission -- the buyer's tax
         // travels WITH the merchant's share, because on this lane it is the merchant who owes it. Computed
         // as the difference rather than as a second split, so the two sides sum back to the payment exactly.

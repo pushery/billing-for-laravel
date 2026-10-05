@@ -6,17 +6,24 @@ namespace Pushery\Billing\Console\Commands;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
+use Illuminate\Contracts\Config\Repository;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\LazyCollection;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\JurisdictionProfile;
 use Pushery\Billing\Contracts\SuppliesMonthlyRecapitulativeStatement;
 use Pushery\Billing\Contracts\SuppliesRecapitulativeStatementDeadline;
+use Pushery\Billing\Contracts\SuppliesRecapitulativeStatementExchangeRateBasis;
+use Pushery\Billing\Enums\ExchangeRateLayer;
 use Pushery\Billing\Exceptions\RecapitulativeStatementIncomplete;
+use Pushery\Billing\Exceptions\ReportingRateMissing;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Tax\RecapitulativeStatement;
 use Pushery\Billing\Tax\RecapitulativeStatementArchive;
+use Pushery\Billing\Tax\ReportingConversion;
 use Pushery\Billing\ValueObjects\RecapitulativeStatementPeriod;
 use Pushery\Billing\ValueObjects\ReportingPeriod;
 
@@ -38,6 +45,9 @@ use Pushery\Billing\ValueObjects\ReportingPeriod;
  */
 final class RecapitulativeStatementExportCommand extends Command
 {
+    /** How many documents one read of a window holds. */
+    private const int PAGE = 500;
+
     protected $signature = 'billing:recapitulative-statement:export
         {--year= : The year to export (defaults to the quarter that has just ended)}
         {--quarter= : The quarter, 1 to 4}
@@ -52,6 +62,7 @@ final class RecapitulativeStatementExportCommand extends Command
         RecapitulativeStatementArchive $archive,
         CheckpointRegistry $profiles,
         Filesystem $files,
+        Repository $config,
     ): int {
         $period = $this->period();
 
@@ -63,21 +74,46 @@ final class RecapitulativeStatementExportCommand extends Command
 
         $currency = strtoupper((string) $this->option('currency'));
         $profile = $profiles->profile();
+        $reporting = $config->get('billing.currency');
+        $reporting = is_string($reporting) && $reporting !== '' ? strtoupper($reporting) : 'EUR';
 
-        if (! $period->isMonthly() && $profile instanceof SuppliesMonthlyRecapitulativeStatement) {
-            $refusal = $this->monthlyInstead($statement, $period->inQuarter(), $currency, $profile->recapitulativeStatementMonthlyThresholdMinor());
+        // In the currency the statement is filed in, every reverse-charged sale belongs in it, at the rate the
+        // statement froze for it. Without a rule to convert under, a sale in another currency is refused rather
+        // than left out: a statement short by a sale reconciles with nothing that was sold.
+        $conversion = $currency === $reporting && $profile instanceof SuppliesRecapitulativeStatementExchangeRateBasis
+            ? new ReportingConversion($currency, ExchangeRateLayer::RecapitulativeStatement, ReportingRateMissing::inStatement(...))
+            : null;
 
-            if ($refusal !== null) {
-                $this->components->error($refusal);
+        if (! $conversion instanceof ReportingConversion && $currency === $reporting) {
+            $elsewhere = $this->reverseChargedElsewhere($period->startsOn(), $period->endsOn(), $currency);
+
+            if ($elsewhere > 0) {
+                $this->components->error(sprintf(
+                    '%d reverse-charged sale(s) of %s are in another currency, and the active jurisdiction profile names no rate to state them in %s at. Leaving them out would file a statement short by those sales.',
+                    $elsewhere,
+                    $period->label(),
+                    $currency,
+                ));
 
                 return self::FAILURE;
             }
         }
 
         try {
-            $lines = $statement->linesFor($this->documentsIn($period->startsOn(), $period->endsOn(), $currency));
-        } catch (RecapitulativeStatementIncomplete $e) {
-            // Refused, not dropped: a sale left off the statement looks exactly like one that never happened.
+            if (! $period->isMonthly() && $profile instanceof SuppliesMonthlyRecapitulativeStatement) {
+                $refusal = $this->monthlyInstead($statement, $period->inQuarter(), $currency, $profile->recapitulativeStatementMonthlyThresholdMinor(), $conversion);
+
+                if ($refusal !== null) {
+                    $this->components->error($refusal);
+
+                    return self::FAILURE;
+                }
+            }
+
+            $lines = $statement->linesFor($this->documentsIn($period->startsOn(), $period->endsOn(), $currency, $conversion), $conversion);
+        } catch (RecapitulativeStatementIncomplete|ReportingRateMissing $e) {
+            // Refused, not dropped: a sale left off the statement looks exactly like one that never happened, and
+            // a sale stated without its rate would state an amount nobody converted.
             $this->components->error($e->getMessage());
 
             return self::FAILURE;
@@ -135,16 +171,17 @@ final class RecapitulativeStatementExportCommand extends Command
      * The limit is stated in euros, so it is measured on the euro documents; a statement in another currency
      * is not held to it here.
      */
-    private function monthlyInstead(RecapitulativeStatement $statement, ReportingPeriod $quarter, string $currency, int $limitMinor): ?string
+    private function monthlyInstead(RecapitulativeStatement $statement, ReportingPeriod $quarter, string $currency, int $limitMinor, ?ReportingConversion $conversion = null): ?string
     {
         if ($currency !== 'EUR') {
             return null;
         }
 
-        // The quarter itself and the four before it, the window Article 263 of the Directive names.
+        // The quarter itself and the four before it, the window Article 263 of the Directive names. With a
+        // conversion the goods sold in another currency count too, at the statement's rate.
         for ($back = 0; $back <= 4; $back++) {
             $window = ReportingPeriod::containing($quarter->startsOn()->subMonthsNoOverflow(3 * $back));
-            $goods = $statement->goodsNetMinor($this->documentsIn($window->startsOn(), $window->endsOn(), 'EUR'));
+            $goods = $statement->goodsNetMinor($this->documentsIn($window->startsOn(), $window->endsOn(), 'EUR', $conversion), $conversion);
 
             if ($goods > $limitMinor) {
                 return sprintf(
@@ -175,21 +212,36 @@ final class RecapitulativeStatementExportCommand extends Command
     }
 
     /**
-     * The documents issued in the window and in the currency being reported, corrections included.
+     * The reverse-charged documents issued in the window, corrections included: in the currency being reported,
+     * or in every currency where a conversion states them in it.
      *
-     * @return list<InvoiceRecord>
+     * Only a reverse-charged document can be on the statement, so the others are left in the database rather
+     * than loaded to be skipped. The statement still asks each document itself, because its own rule has more
+     * to it than the flag. What is read comes a page at a time, with each page's frozen rates: a large platform's
+     * quarter held in memory as a whole ran out of it on the day the statement was due, and the threshold check
+     * reads five quarters.
+     *
+     * @return LazyCollection<int, InvoiceRecord>
      */
-    private function documentsIn(CarbonImmutable $from, CarbonImmutable $until, string $currency): array
+    private function documentsIn(CarbonImmutable $from, CarbonImmutable $until, string $currency, ?ReportingConversion $conversion = null): LazyCollection
     {
-        /** @var list<InvoiceRecord> $rows */
-        $rows = InvoiceRecord::model()::query()
-            ->where('currency', $currency)
+        return InvoiceRecord::model()::query()
+            ->when(! $conversion instanceof ReportingConversion, fn (Builder $query): Builder => $query->where('currency', $currency))
+            ->with('exchangeRates')
+            ->where('reverse_charge', true)
             ->whereBetween('issued_at', [$from, $until])
             ->orderBy('issued_at')
             ->orderBy('id')
-            ->get()
-            ->all();
+            ->lazy(self::PAGE);
+    }
 
-        return $rows;
+    /** How many reverse-charged documents of the window are in a currency other than the one being reported. */
+    private function reverseChargedElsewhere(CarbonImmutable $from, CarbonImmutable $until, string $currency): int
+    {
+        return InvoiceRecord::model()::query()
+            ->where('reverse_charge', true)
+            ->whereBetween('issued_at', [$from, $until])
+            ->where('currency', '!=', $currency)
+            ->count();
     }
 }

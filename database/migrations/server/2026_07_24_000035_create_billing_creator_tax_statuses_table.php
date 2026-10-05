@@ -38,8 +38,10 @@ return new class extends Migration
 
             $table->string('status');
             $table->timestamp('effective_from');
-            // Null is an OPEN interval — the state that still applies. Exactly one row per creator may
-            // carry it, which is what the partial-index guard in the model layer holds.
+            // Null is an OPEN interval — the state that still applies. The ledger closes the interval a new
+            // start falls into and opens the new one in one transaction, under a lock on the creator's rows,
+            // so its own writes leave one. Nothing in the schema holds that: a correction made by hand can
+            // leave two, and every reader takes the newest interval that covers the moment it asks about.
             $table->timestamp('effective_to')->nullable();
 
             $table->string('source');

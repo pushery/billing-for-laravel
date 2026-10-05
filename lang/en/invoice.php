@@ -23,6 +23,7 @@ return [
     'vat_reverse_charge' => 'VAT (reverse charge)',
     'total' => 'Total',
     'total_including_vat' => 'Total including :rate VAT',
+    'collected_on_behalf' => 'Collected in the name and on behalf of the seller',
     'reverse_charge_note' => 'Reverse charge: the recipient is liable for the VAT.',
     'small_business_note' => 'Exempt from VAT under the small business scheme (§ 19 UStG).',
     'union_small_business_note' => 'Exempt from VAT under the small business scheme of the supplier\'s member state.',

@@ -19,6 +19,7 @@ use Pushery\Billing\Exceptions\SubscriptionWithdrawalUnavailable;
 use Pushery\Billing\Exceptions\WithdrawalWindowClosed;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Models\AccessGrant;
+use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingAdmin;
@@ -144,6 +145,19 @@ final readonly class ConsumerWithdrawal
         ?string $reason = null,
         ?Model $actor = null,
     ): WithdrawalSettlement {
+        // A retried withdrawal is the ordinary case: a provider timeout, an operator clicking twice. Where an earlier
+        // declaration's refund already moved, it is not made again, whatever today's pro-rata says, and the rest of
+        // the withdrawal runs, each part of which keeps its own count. The right was exercised in time then, so the
+        // window is not asked again.
+        $refunded = $this->refundedForWithdrawal($owner, $chargeReference, $periodGross->currency);
+
+        if ($refunded instanceof Money) {
+            $this->returnBuyerFee($owner, $chargeReference, $type, $reason, $actor);
+            $this->endOwnership($chargeReference, true);
+
+            return new WithdrawalSettlement($periodGross, $periodGross->minus($refunded), $refunded, refundRefused: false, chargeReference: $chargeReference);
+        }
+
         $this->assertWindowIsOpen($chargeReference);
 
         $settlement = $this->settlementFor($type, $periodGross, $elapsedDays, $periodDays);
@@ -325,34 +339,6 @@ final readonly class ConsumerWithdrawal
     }
 
     /**
-     * Refuse to record a statutory withdrawal after the buyer's window has closed.
-     *
-     * ## It refuses the CLASSIFICATION, never the money
-     *
-     * A platform may refund out of goodwill whenever it likes, and that path is untouched. What must not
-     * happen is the two being booked as one event: `RefundKind::StatutoryWithdrawal` says the buyer
-     * exercised a RIGHT, and after the window that is false. Same money, different event — and telling
-     * them apart is the entire reason the kind exists.
-     *
-     * ## Checked BEFORE anything moves
-     *
-     * A refusal after the refund would be the worst of both: money gone and the record saying it never
-     * happened. So this sits at the top of the method, ahead of the settlement.
-     *
-     * ## Null and missing both pass, and each for its own reason
-     *
-     * Most sales have no grant at all — a subscription is not a content purchase — and turning "nothing to
-     * compare against" into "too late" would refuse the ordinary case rather than the exotic one.
-     *
-     * A grant whose window is null is the more interesting pass. Null means no honest date exists, and one
-     * of the four ways to get there is a right that EXTINGUISHED on delivery: refusing on it would say "too
-     * late" about a sale where the right ended immediately — a true sentence with the wrong reason on it.
-     * Whether that sale should be a statutory withdrawal at all is a question about the TYPE, and it is
-     * answered where the type is.
-     *
-     * @throws WithdrawalWindowClosed
-     */
-    /**
      * End the ownership rows this purchase created, with the reason the buyer actually had.
      *
      * ## The trail that could not tell two things apart
@@ -410,6 +396,60 @@ final readonly class ConsumerWithdrawal
         $revocations->revokePurchase($chargeReference, RevokeReason::Withdrawal);
     }
 
+    /**
+     * The refund an earlier declaration of this sale's withdrawal moved, or null when none did.
+     *
+     * The refund of a pro-rata withdrawal depends on the day it is computed, and the refund's idempotency key on its
+     * amount, so a retry on a later day would reach the provider as a second refund of the same sale. What moved is
+     * read from the refunds recorded for the owner, the record a later refund of the same sale is summed from as well.
+     * A refund the provider refused moved nothing and is recorded as such, so a retry of that withdrawal refunds.
+     */
+    private function refundedForWithdrawal(Model $owner, string $chargeReference, string $currency): ?Money
+    {
+        $moved = BillingEvent::model()::query()
+            ->where('type', 'admin.refund')
+            ->where('subject_type', $owner->getMorphClass())
+            ->where('subject_id', $owner->getKey())
+            ->pluck('payload')
+            ->filter(static fn (mixed $payload): bool => is_array($payload)
+                && ($payload['charge'] ?? null) === $chargeReference
+                && ($payload['kind'] ?? null) === RefundKind::StatutoryWithdrawal->value
+                && ($payload['currency'] ?? null) === $currency
+                && ($payload['successful'] ?? null) === true
+                && is_int($payload['amount'] ?? null))
+            ->sum(static fn (array $payload): int => $payload['amount']);
+
+        return $moved > 0 ? new Money($moved, $currency) : null;
+    }
+
+    /**
+     * Refuse to record a statutory withdrawal after the buyer's window has closed.
+     *
+     * ## It refuses the CLASSIFICATION, never the money
+     *
+     * A platform may refund out of goodwill whenever it likes, and that path is untouched. What must not
+     * happen is the two being booked as one event: `RefundKind::StatutoryWithdrawal` says the buyer
+     * exercised a RIGHT, and after the window that is false. Same money, different event — and telling
+     * them apart is the entire reason the kind exists.
+     *
+     * ## Checked BEFORE anything moves
+     *
+     * A refusal after the refund would be the worst of both: money gone and the record saying it never
+     * happened. So this sits at the top of the method, ahead of the settlement.
+     *
+     * ## Null and missing both pass, and each for its own reason
+     *
+     * Most sales have no grant at all — a subscription is not a content purchase — and turning "nothing to
+     * compare against" into "too late" would refuse the ordinary case rather than the exotic one.
+     *
+     * A grant whose window is null is the more interesting pass. Null means no honest date exists, and one
+     * of the four ways to get there is a right that EXTINGUISHED on delivery: refusing on it would say "too
+     * late" about a sale where the right ended immediately — a true sentence with the wrong reason on it.
+     * Whether that sale should be a statutory withdrawal at all is a question about the TYPE, and it is
+     * answered where the type is.
+     *
+     * @throws WithdrawalWindowClosed
+     */
     private function assertWindowIsOpen(string $chargeReference): void
     {
         $window = AccessGrant::model()::query()
@@ -471,6 +511,12 @@ final readonly class ConsumerWithdrawal
 
         if (! $type instanceof WithdrawalType) {
             throw SubscriptionWithdrawalUnavailable::unclassifiedTier($tierKey);
+        }
+
+        // No window to read and no right to settle. Read on, a type without a window would pass as one that is still
+        // open, and the whole period would be refunded as if a consumer had withdrawn.
+        if ($type === WithdrawalType::NotApplicable) {
+            throw SubscriptionWithdrawalUnavailable::noConsumerRight($tierKey);
         }
 
         return $type;

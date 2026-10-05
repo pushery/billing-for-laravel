@@ -7,12 +7,17 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\LazyCollection;
 use InvalidArgumentException;
+use Pushery\Billing\Enums\ExchangeRateLayer;
 use Pushery\Billing\Exceptions\CorrectionOutsideWindow;
+use Pushery\Billing\Exceptions\ReportingRateMissing;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Tax\PeriodicTaxReturn;
+use Pushery\Billing\Tax\ReportingConversion;
 use Pushery\Billing\Tax\TaxReturnExportArchive;
 use Pushery\Billing\ValueObjects\ReportingPeriod;
 
@@ -33,6 +38,9 @@ use Pushery\Billing\ValueObjects\ReportingPeriod;
  */
 final class TaxReturnExportCommand extends Command
 {
+    /** How many documents one read of the period holds. */
+    private const int PAGE = 500;
+
     protected $signature = 'billing:tax-return:export
         {--year= : The year to export (defaults to the quarter that has just ended)}
         {--quarter= : The quarter, 1 to 4}
@@ -57,11 +65,24 @@ final class TaxReturnExportCommand extends Command
 
         $currency = strtoupper((string) $this->option('currency'));
         $window = $config->get('billing.tax_oss.correction_window_years');
+        $reporting = $config->get('billing.currency');
+        $reporting = is_string($reporting) && $reporting !== '' ? strtoupper($reporting) : 'EUR';
+
+        // In the currency the return is filed in, every sale of the period belongs in it, whatever currency it was
+        // issued in, at the reporting rate frozen onto it. Scoped to that currency alone, a sale in SEK was left out
+        // of the EUR return and stood in a SEK file no one-stop-shop portal takes.
+        $conversion = $currency === $reporting ? new ReportingConversion($reporting, ExchangeRateLayer::Reporting, ReportingRateMissing::on(...)) : null;
 
         try {
-            $lines = $return->linesFor($period, $this->salesIn($period, $currency), is_int($window) ? $window : 3);
-        } catch (CorrectionOutsideWindow $e) {
-            // Refused, not dropped: a correction that vanishes looks exactly like one that was never owed.
+            $lines = $return->linesFor(
+                $period,
+                $this->salesIn($period, $conversion instanceof ReportingConversion ? null : $currency),
+                is_int($window) ? $window : 3,
+                $conversion,
+            );
+        } catch (CorrectionOutsideWindow|ReportingRateMissing $e) {
+            // Refused, not dropped: a correction that vanishes looks exactly like one that was never owed, and a
+            // sale left out for want of a rate looks exactly like one that was never made.
             $this->components->error($e->getMessage());
 
             return self::FAILURE;
@@ -107,21 +128,22 @@ final class TaxReturnExportCommand extends Command
     }
 
     /**
-     * The documents of the period — issued in it, in the currency being reported.
+     * The documents of the period — issued in it, in the currency being reported, or in any with none named.
      *
-     * @return list<InvoiceRecord>
+     * Read a page at a time rather than all at once. A document carries its frozen lines and buyer, and a large
+     * platform's quarter held in memory as a whole ran out of it on the day the return was due. The pages keep
+     * the order the lines are written in.
+     *
+     * @return LazyCollection<int, InvoiceRecord>
      */
-    private function salesIn(ReportingPeriod $period, string $currency): array
+    private function salesIn(ReportingPeriod $period, ?string $currency): LazyCollection
     {
-        /** @var list<InvoiceRecord> $rows */
-        $rows = InvoiceRecord::model()::query()
-            ->where('currency', $currency)
+        return InvoiceRecord::model()::query()
+            ->when($currency !== null, fn (Builder $query): Builder => $query->where('currency', $currency))
+            ->with('exchangeRates')
             ->whereBetween('issued_at', [$period->startsOn(), $period->endsOn()])
             ->orderBy('issued_at')
             ->orderBy('id')
-            ->get()
-            ->all();
-
-        return $rows;
+            ->lazy(self::PAGE);
     }
 }

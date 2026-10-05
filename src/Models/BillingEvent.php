@@ -50,16 +50,6 @@ class BillingEvent extends Model
     /** @var array<string,string> */
     protected $casts = ['payload' => 'array', 'source' => AuditSource::class];
 
-    /**
-     * Run a deliberate purge (the retention prune, the owner erasure) with the append-only guard lifted, so
-     * those — and only those — may delete audit rows. Restores the guard afterwards, even on an exception.
-     *
-     * @template T
-     *
-     * @param  callable(): T  $callback
-     * @return T
-     */
-
     /** @return MorphTo<Model,$this> */
     public function subject(): MorphTo
     {

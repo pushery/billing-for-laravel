@@ -9,8 +9,10 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Lang;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Url;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\UpcomingInvoice;
@@ -40,8 +42,10 @@ final class SubscriptionOverview extends AccountScreen
      * True once a cancellation has been armed and is waiting for its second click.
      *
      * Public because the view renders from it, and reset on every path that leaves the flow so a screen
-     * left half-way does not stay armed for the next visit.
+     * left half-way does not stay armed for the next visit. Locked, because only the first click may arm it:
+     * a request that set it itself would reach cancel() already armed and skip the step.
      */
+    #[Locked]
     public bool $confirmingCancel = false;
 
     use DegradesGracefully;
@@ -59,6 +63,11 @@ final class SubscriptionOverview extends AccountScreen
     /** The optional free-text detail, used only when the reason is "other". */
     public ?string $cancelDetail = null;
 
+    protected function headingKey(): string
+    {
+        return 'billing::account.subscription.heading';
+    }
+
     public function render(): View
     {
         $state = $this->currentState($this->activating);
@@ -72,9 +81,9 @@ final class SubscriptionOverview extends AccountScreen
         return $this->view('billing::livewire.subscription-overview', [
             'state' => $state,
             // Post-checkout the state is "activating" until the webhook lands, so a bounded poll refreshes
-            // until it settles, then stops (never a permanent poll). NOT conditional on broadcasting, and
-            // this comment used to say it was: a broadcast notifies the owner rather than re-rendering this
-            // screen, so a poll gated on it would leave the activating state with no refresh at all.
+            // until it settles, then stops (never a permanent poll). NOT conditional on broadcasting: a
+            // broadcast notifies the owner rather than re-rendering this screen, so a poll gated on it would
+            // leave the activating state with no refresh at all.
             // {@see PollsWhileActivating}, which states the rule and the reason for both screens.
             'poll' => $this->activationPoll($state === SubscriptionState::Activating),
             // The next-invoice preview is the one live provider read on this screen. Only an active or
@@ -193,7 +202,7 @@ final class SubscriptionOverview extends AccountScreen
 
         $reason = CancellationReason::from($this->cancelReason);
 
-        $detail = $this->cancelDetail !== null && trim($this->cancelDetail) !== '' ? $this->cancelDetail : null;
+        $detail = $this->cancelDetail !== null && Str::trim($this->cancelDetail) !== '' ? $this->cancelDetail : null;
 
         if ($reason->detailRequired() && $detail === null) {
             throw ValidationException::withMessages([

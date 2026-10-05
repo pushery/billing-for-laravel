@@ -57,7 +57,15 @@ final class SmeOnTheWebExemptionValidator implements SmallBusinessExemptionValid
     public function validate(?string $registrationId, string $memberState): VatIdValidation
     {
         $state = $this->registerCode($memberState);
-        $number = strtoupper(preg_replace('/\s+/', '', $registrationId ?? '') ?? '');
+        $normalized = preg_replace('/\s+/u', '', $registrationId ?? '');
+
+        // Text that is not UTF-8 is no number the register could know, and escaped for the request it would turn
+        // into an empty one, which the register answers as a question it refuses. So it is judged here.
+        if ($normalized === null) {
+            return VatIdValidation::Invalid;
+        }
+
+        $number = strtoupper($normalized);
 
         if ($number === '') {
             return VatIdValidation::Unavailable;

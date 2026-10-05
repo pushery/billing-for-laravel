@@ -34,11 +34,16 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * made, and the resulting document would still add up. That is the whole reason those fields are frozen, and
  * this is the caller they were frozen for.
  *
- * ## Idempotent because the amount is, not because a flag says so
+ * ## Idempotent because the amount is, where the ledger capped it
  *
- * The refund passed in is what actually moved, which the routed ledger reports after capping it against what
- * is left. A redelivered webhook moves nothing, so there is nothing to correct and no document is issued —
- * no separate claim to keep in step with the money.
+ * For a refund that went through the provider, the amount passed in is what actually moved, which the routed
+ * ledger reports after capping it against what is left. A redelivered webhook moves nothing, so there is nothing
+ * to correct and no document is issued — no separate claim to keep in step with the money.
+ *
+ * That holds only for a caller whose amount the ledger capped. A prepaid term cancellation moves nothing through
+ * the ledger and passes an amount it computed, so the same call twice would correct twice. Such a caller names
+ * the event in a correction key instead: the documents carry it, and a unique index over it and the corrected
+ * document refuses a second correction of the same document for the same event.
  */
 final readonly class RoutedRefundCorrector
 {
@@ -66,6 +71,10 @@ final readonly class RoutedRefundCorrector
      * because two of the three paths that correct a chain genuinely have none: a prepaid term cancellation
      * opens no attempt, and the chargeback effect runs in a different unit of work from the reversal. Passing
      * null there records that honestly rather than leaving a link nobody can tell apart from an unset one.
+     *
+     * The correction key names the event where no attempt does, and only a caller that has no capped amount
+     * passes one. Both documents carry it, so a second call for the same event is refused at the database even
+     * where the caller's own check did not run.
      */
     public function correct(
         MerchantCharge $charge,
@@ -74,6 +83,7 @@ final readonly class RoutedRefundCorrector
         CarbonImmutable $correctedOn,
         TaxBaseChangeReason $reason = TaxBaseChangeReason::Repaid,
         ?RefundAttempt $attempt = null,
+        ?string $correctionKey = null,
     ): array {
         if (! $refunded->isPositive()) {
             return [null, null, null];
@@ -140,10 +150,10 @@ final readonly class RoutedRefundCorrector
 
         return [
             $correction,
-            $this->issuer->issue($settlement, $correction, $correctedOn, $reason, $attempt),
+            $this->issuer->issue($settlement, $correction, $correctedOn, $reason, $attempt, $correctionKey),
             // ON ONE LINE for the same reason as SubscriptionOverview: the continuation line of a
             // multi-line ternary is counted executable by php-code-coverage 14 and never recorded hit.
-            $receipt instanceof InvoiceRecord ? $this->issuer->issueForBuyer($receipt, $correction, $correctedOn, $reason, $attempt) : null,
+            $receipt instanceof InvoiceRecord ? $this->issuer->issueForBuyer($receipt, $correction, $correctedOn, $reason, $attempt, $correctionKey) : null,
         ];
     }
 
@@ -153,8 +163,7 @@ final readonly class RoutedRefundCorrector
      * Not recomputed from the payout and a rate: the fan gross is the one figure that says what the buyer
      * actually handed over, and reconstructing it would reintroduce the rounding the settlement already
      * resolved once.
-     */
-    /**
+     *
      * @param  array<array-key, mixed>|null  $line  the settlement line this charge is, where one names it
      */
     private function saleGross(InvoiceRecord $settlement, string $currency, ?array $line = null): Money
@@ -181,19 +190,6 @@ final readonly class RoutedRefundCorrector
         return new Money(max(0, $charge->refunded_minor - $refunded->minorUnits), $refunded->currency);
     }
 
-    /**
-     * The commission terms the sale was priced under.
-     *
-     * A settlement written before those were frozen carries none, and a zero commission is the honest read:
-     * it recomputes the remainder as if the platform took nothing, which understates the clawback rather
-     * than inventing a rate the sale may never have had.
-     *
-     * The rounding direction is read from the document too, for the same reason the rate is. It used to be
-     * assumed, and on an installation that hands the odd minor unit the other way the correction came back a
-     * cent off the sale it was correcting — on every uneven split, with both documents adding up. An older
-     * settlement that never recorded it falls back to what this installation does today, which is the
-     * closest thing to the truth still available.
-     */
     /**
      * Whether a settlement line carries every input the correction reads off it.
      *
@@ -238,6 +234,18 @@ final readonly class RoutedRefundCorrector
     }
 
     /**
+     * The commission terms the sale was priced under.
+     *
+     * A settlement written before those were frozen carries none, and a zero commission is the honest read:
+     * it recomputes the remainder as if the platform took nothing, which understates the clawback rather
+     * than inventing a rate the sale may never have had.
+     *
+     * The rounding direction is read from the document too, for the same reason the rate is. It used to be
+     * assumed, and on an installation that hands the odd minor unit the other way the correction came back a
+     * cent off the sale it was correcting — on every uneven split, with both documents adding up. An older
+     * settlement that never recorded it falls back to what this installation does today, which is the
+     * closest thing to the truth still available.
+     *
      * @param  array<array-key, mixed>|null  $line  the settlement line this charge is, where one names it
      */
     private function frozenCommission(InvoiceRecord $settlement, ?array $line = null): PlatformFee
@@ -265,11 +273,11 @@ final readonly class RoutedRefundCorrector
      *
      * Only reached for a settlement written before the direction was recorded. It is a guess, but it is the
      * closest one still available — and it is a far better guess than a constant, which would be wrong on
-     * every installation configured the other way.
+     * every installation configured the other way. The charge side falls back through the same
+     * `RoundingResidual::forReconstruction()`, so the two halves of one correction agree.
      */
     private function configuredResidual(): RoundingResidual
     {
-        return RoundingResidual::fromConfigured($this->config->get('billing.marketplace.fee.rounding'))
-            ?? RoundingResidual::ToPortion;
+        return RoundingResidual::forReconstruction($this->config->get('billing.marketplace.fee.rounding'));
     }
 }

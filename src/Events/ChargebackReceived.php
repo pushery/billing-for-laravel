@@ -61,11 +61,10 @@ final readonly class ChargebackReceived implements BillingDomainEvent, Identifie
         /**
          * The provider's own reference for the DISPUTE, as distinct from the charge it was raised against.
          *
-         * They are not interchangeable, and treating them as one cost the second fee. A charge can carry more
-         * than one dispute — the provider's SDK says so in as many words, because only part of an order may be
-         * disputed — so a fee claimed on the charge reference finds the first dispute's row and writes
-         * nothing for the second. That is real money the platform paid, missing as an expense and as its
-         * reverse-charge position.
+         * They are not interchangeable: a fee belongs to the dispute it was charged for. Where a charge is
+         * disputed more than once, a fee claimed on the charge reference finds the first dispute's row and
+         * writes nothing for the next, and that is real money the platform paid, missing as an expense and as
+         * its reverse-charge position.
          *
          * Everything else on this event is deliberately about the CHARGE: the correcting documents and the
          * clawback both act on the sale, not on the dispute, and for them the charge reference is right.

@@ -160,9 +160,9 @@
             @endif
         </div>
         <div aria-live="assertive" role="alert">
-            @if ($cancelResult === 'not_found')
+            @if ($cancelResult === 'not_found' || $cancelResult === 'nothing_running')
                 <div class="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
-                    {{ __('billing::admin.cancel.not_found') }}
+                    {{ __('billing::admin.cancel.'.$cancelResult) }}
                 </div>
             @endif
         </div>

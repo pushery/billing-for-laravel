@@ -38,7 +38,15 @@ final readonly class RoutedChargeAbandoned implements BillingDomainEvent
 {
     public function __construct(
         public string $provider,
-        /** The provider's id for the payment — the same value recorded when the charge was made. */
+        /**
+         * The provider's id for the payment — the same value recorded when the charge was made. For a hosted
+         * checkout that lapsed before the buyer confirmed, no payment exists, and this is the sale's own reference.
+         */
         public string $paymentReference,
+        /**
+         * The package's own reference for a hosted sale, carried on the payment's and the session's metadata.
+         * Null for a payment that carries none.
+         */
+        public ?string $saleReference = null,
     ) {}
 }

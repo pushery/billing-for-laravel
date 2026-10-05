@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
@@ -36,6 +38,9 @@ use Pushery\Billing\ValueObjects\DisputeRate;
  */
 final readonly class DisputeRates
 {
+    /** Mastercard's line for monitoring a seller, below both networks' lines for an excessive one. */
+    private const float DEFAULT_WARNING_THRESHOLD = 0.01;
+
     /** The rate of one merchant's sales. */
     public function forMerchant(Model $merchant, CarbonImmutable $from, CarbonImmutable $to): DisputeRate
     {
@@ -77,12 +82,35 @@ final readonly class DisputeRates
         );
     }
 
+    /**
+     * The configured warning threshold, `billing.marketplace.dispute_rate.warn_at`, as a share of payments.
+     *
+     * @throws InvalidArgumentException when the configured value is not a share above zero and at most one
+     */
+    public function warningThreshold(): float
+    {
+        $configured = Container::getInstance()->make(Repository::class)
+            ->get('billing.marketplace.dispute_rate.warn_at', self::DEFAULT_WARNING_THRESHOLD);
+
+        if (! is_numeric($configured) || (float) $configured <= 0.0 || (float) $configured > 1.0) {
+            throw new InvalidArgumentException('billing.marketplace.dispute_rate.warn_at is a share of payments above zero and at most one, such as 0.01 for one percent; it is '.(json_encode($configured) ?: get_debug_type($configured)).'.');
+        }
+
+        return (float) $configured;
+    }
+
+    /** Whether a rate has reached the configured warning threshold. */
+    public function reachesWarningThreshold(DisputeRate $rate): bool
+    {
+        return $rate->reaches($this->warningThreshold());
+    }
+
     /** @return Builder<Dispute> */
     private function disputes(CarbonImmutable $from, CarbonImmutable $to): Builder
     {
         return Dispute::model()::query()
-            ->where('opened_at', '>=', $from)
-            ->where('opened_at', '<', $to);
+            ->where('opened_at', '>=', $from->utc())
+            ->where('opened_at', '<', $to->utc());
     }
 
     /** @return Builder<MerchantCharge> */
@@ -90,8 +118,8 @@ final readonly class DisputeRates
     {
         return MerchantCharge::model()::query()
             ->where('settlement_state', SettlementState::Settled)
-            ->where('settled_at', '>=', $from)
-            ->where('settled_at', '<', $to);
+            ->where('settled_at', '>=', $from->utc())
+            ->where('settled_at', '<', $to->utc());
     }
 
     private function assertWindow(CarbonImmutable $from, CarbonImmutable $to): void

@@ -23,6 +23,7 @@ return [
     'vat_reverse_charge' => 'IVA (autoliquidação)',
     'total' => 'Total',
     'total_including_vat' => 'Total com IVA de :rate incluído',
+    'collected_on_behalf' => 'Cobrado em nome e por conta do vendedor',
     'reverse_charge_note' => 'Autoliquidação: o adquirente é responsável pelo IVA.',
     'small_business_note' => 'Isento de IVA ao abrigo do regime das pequenas empresas (§ 19 UStG).',
     'union_small_business_note' => 'Isento de IVA ao abrigo do regime das pequenas empresas do Estado-Membro do fornecedor.',

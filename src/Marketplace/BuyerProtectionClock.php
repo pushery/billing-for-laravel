@@ -6,11 +6,11 @@ namespace Pushery\Billing\Marketplace;
 
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Closure;
 use DateTimeInterface;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Enums\BuyerProtectionState;
@@ -21,8 +21,10 @@ use Pushery\Billing\Events\BuyerProtectionResolutionRequired;
 use Pushery\Billing\Exceptions\BuyerProtectionMisconfigured;
 use Pushery\Billing\Models\BuyerProtectionHold;
 use Pushery\Billing\Models\MerchantCharge;
+use Pushery\Billing\Support\OwnerOfRecord;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\TransferResult;
 use Throwable;
 
 /**
@@ -162,7 +164,8 @@ final readonly class BuyerProtectionClock
     /** The buyer says they got what they bought. Nothing waits after that. */
     public function confirm(BuyerProtectionHold $hold): BuyerProtectionHold
     {
-        return $this->settleAsRelease($hold);
+        // A confirmation of a hold somebody already decided changes nothing and answers with the hold as it stands.
+        return $this->settleAsRelease($hold) ?? $hold->refresh();
     }
 
     /**
@@ -170,30 +173,43 @@ final readonly class BuyerProtectionClock
      *
      * A dispute raised on the last day would otherwise be overtaken by an auto-release hours later, and the
      * objection would have changed nothing.
+     *
+     * A finished hold is refused, as resolve() refuses it. Its state is the only thing that says the money
+     * has moved, and a released hold put back to `Disputed` could be refunded on top of the payout. So is a
+     * release still waiting on its transfer: the share is owed, and the retry of unmoved shares moves it.
      */
     public function dispute(BuyerProtectionHold $hold): BuyerProtectionHold
     {
-        $hold->state = BuyerProtectionState::Disputed;
-        $hold->save();
+        if ($this->decided($hold)) {
+            throw BuyerProtectionMisconfigured::alreadySettled($hold->charge_reference, $hold->state->value);
+        }
 
-        return $hold;
+        $disputed = $this->decideUnderLock($hold, static function (BuyerProtectionHold $locked): void {
+            $locked->state = BuyerProtectionState::Disputed;
+        });
+
+        return $disputed ?? $this->refuseDecided($hold);
     }
 
     /**
      * Somebody decided. The package never gets here on its own.
      *
      * A hold that is already finished is refused rather than moved again: releasing or refunding twice sends
-     * the same money twice, and the second instruction looks exactly like the first.
+     * the same money twice, and the second instruction looks exactly like the first. A release still waiting on
+     * its transfer is refused as well. It was decided, its share is owed and moves through the retry of unmoved
+     * shares, and a refund decided over it would pay the buyer back money the merchant is being paid.
      */
     public function resolve(BuyerProtectionHold $hold, bool $releaseToSeller, ?Money $refund = null): BuyerProtectionHold
     {
-        if ($hold->state->settled()) {
+        if ($this->decided($hold)) {
             throw BuyerProtectionMisconfigured::alreadySettled($hold->charge_reference, $hold->state->value);
         }
 
-        return $releaseToSeller
+        $settled = $releaseToSeller
             ? $this->settleAsRelease($hold)
             : $this->settleAsRefund($hold, $refund ?? Money::of($hold->charge_minor, $hold->currency));
+
+        return $settled ?? $this->refuseDecided($hold);
     }
 
     /**
@@ -221,7 +237,8 @@ final readonly class BuyerProtectionClock
                 : $this->settleAsRelease($hold);
         }
 
-        return $moved;
+        // A hold somebody decided while the sweep was on its way is not one the sweep moved.
+        return array_values(array_filter($moved, static fn (?BuyerProtectionHold $hold): bool => $hold instanceof BuyerProtectionHold));
     }
 
     /**
@@ -277,27 +294,37 @@ final readonly class BuyerProtectionClock
         return $rows;
     }
 
-    private function settleAsRelease(BuyerProtectionHold $hold): BuyerProtectionHold
+    /**
+     * Release the seller's share, or nothing where the hold was decided first.
+     *
+     * Already decided: a sweep that runs twice, an overlapping cron, a retried confirmation, or a refund issued
+     * while the sweep was on its way. Paying a merchant a second time, or paying for money the buyer got back, is
+     * the expensive direction, so the guard is here rather than in each of the four callers that can reach this,
+     * and it reads the row under its lock rather than the copy the caller loaded.
+     *
+     * One decided hold is taken up again: a release that stopped on a failed transfer. The payout then asks the
+     * provider for a transfer the failed attempt may have made before it makes one (`releaseStopped()`).
+     */
+    private function settleAsRelease(BuyerProtectionHold $hold): ?BuyerProtectionHold
     {
-        // Already settled: a sweep that runs twice, an overlapping cron, a retried confirmation. Paying a
-        // merchant a second time is the expensive direction, so the guard is here rather than in each of
-        // the four callers that can reach this.
-        if ($hold->settled_at !== null) {
-            return $hold;
-        }
-
-        // The seller gets what is left after the platform's own fee. The three figures are written together
-        // and always sum to the charge, so no end state can quietly lose or invent a cent.
-        $hold->seller_net_minor = $hold->charge_minor - $hold->platform_fee_minor;
-        $hold->buyer_refund_minor = 0;
-
         // RELEASE PENDING, before the money moves. The state existed and nothing ever set it, and this is
         // the moment it describes: the platform has decided, the provider has not confirmed. A row that went
         // straight to `Released` would claim a payment that had not happened yet — and if the transfer
         // throws, that claim is what an operator would be left reading.
-        $hold->state = BuyerProtectionState::ReleasePending;
-        $hold->save();
+        $hold = $this->decideUnderLock($hold, static function (BuyerProtectionHold $locked): void {
+            // The seller gets what is left after the platform's own fee. The three figures are written together
+            // and always sum to the charge, so no end state can quietly lose or invent a cent.
+            $locked->seller_net_minor = $locked->charge_minor - $locked->platform_fee_minor;
+            $locked->buyer_refund_minor = 0;
+            $locked->state = BuyerProtectionState::ReleasePending;
+        }, $this->releaseStopped(...));
 
+        if (! $hold instanceof BuyerProtectionHold) {
+            return null;
+        }
+
+        // Outside the lock: the provider is asked after the decision is committed, and a release that is
+        // pending is one every other decision now refuses.
         $moved = $this->payOut($hold);
 
         // `ReleasePending` is left behind only when the transfer actually happened — or when there was
@@ -306,20 +333,117 @@ final readonly class BuyerProtectionClock
         // operator has to see. A row that said `Released` after a failed transfer would be a payment claimed
         // and not made.
         if ($moved) {
-            $hold->state = BuyerProtectionState::Released;
-            $hold->settled_at = $hold->freshTimestamp();
-            $hold->save();
-
-            $this->announce(new BuyerProtectionHoldReleased(
-                $hold->charge_reference,
-                $hold->merchant_type,
-                $hold->merchant_id,
-                Money::of($hold->seller_net_minor, $hold->currency),
-                $hold->state,
-            ));
+            $this->markReleased($hold);
         }
 
         return $hold;
+    }
+
+    /**
+     * Finish a release whose share moved after the release itself had stopped.
+     *
+     * A release whose transfer failed, or whose merchant's payouts were withheld, leaves its hold `ReleasePending`,
+     * and the share moves later through the retry of unmoved shares, which settles the sale. Nothing finished the
+     * hold over it: the balance went on reporting the paid share as held, and the release was never announced.
+     * The retry calls this once it has settled the sale. A hold in any other state is left as it is, because only
+     * a decided release waits on a transfer.
+     */
+    public function shareMoved(string $chargeReference): ?BuyerProtectionHold
+    {
+        $hold = BuyerProtectionHold::model()::query()
+            ->where('charge_reference', $chargeReference)
+            ->where('state', BuyerProtectionState::ReleasePending->value)
+            ->whereNull('settled_at')
+            ->first();
+
+        if (! $hold instanceof BuyerProtectionHold) {
+            return null;
+        }
+
+        $this->markReleased($hold);
+
+        return $hold;
+    }
+
+    /** The release is complete: the hold says so, and the outcome is announced. */
+    private function markReleased(BuyerProtectionHold $hold): void
+    {
+        $hold->state = BuyerProtectionState::Released;
+        $hold->settled_at = $hold->freshTimestamp();
+        $hold->save();
+
+        $this->announce(new BuyerProtectionHoldReleased(
+            $hold->charge_reference,
+            $hold->merchant_type,
+            $hold->merchant_id,
+            Money::of($hold->seller_net_minor, $hold->currency),
+            $hold->state,
+        ));
+    }
+
+    /**
+     * Change a hold under its row lock, and only if nobody decided it first.
+     *
+     * Every decision here starts from a hold somebody loaded earlier: the sweep loads the holds it will move before
+     * it moves any, and a person decides from the hold a screen showed. Another decision can land in between, a
+     * refund issued while the release run was on its way, and a change written from the loaded copy then wrote the
+     * release over the refund and paid the merchant money the buyer got back. The row is read again under its lock,
+     * and a hold that is decided by then is left as it is: null says so, unless `$resumes` takes it up again.
+     *
+     * @param  Closure(BuyerProtectionHold): void  $change
+     * @param  (Closure(BuyerProtectionHold): bool)|null  $resumes  which decided hold this decision may take up again
+     */
+    private function decideUnderLock(BuyerProtectionHold $hold, Closure $change, ?Closure $resumes = null): ?BuyerProtectionHold
+    {
+        return $hold->getConnection()->transaction(function () use ($hold, $change, $resumes): ?BuyerProtectionHold {
+            $locked = BuyerProtectionHold::model()::query()->whereKey($hold->getKey())->lockForUpdate()->first();
+
+            if (! $locked instanceof BuyerProtectionHold) {
+                return null;
+            }
+
+            if ($this->decided($locked) && (! $resumes instanceof Closure || ! $resumes($locked))) {
+                return null;
+            }
+
+            $change($locked);
+            $locked->save();
+
+            return $locked;
+        });
+    }
+
+    /**
+     * Whether a release still pending stopped on a failed transfer, so that the next release may take it up.
+     *
+     * The failed attempt may have reached the provider and lost its answer, and the payout asks for that transfer
+     * before it makes one. A release still on its way has recorded no failure: a second confirmation that took it
+     * up would ask the provider for the same share while the first request is open. That one is left to finish,
+     * and a release stopped without a failure, a killed worker, is moved by the retry of unmoved shares.
+     */
+    private function releaseStopped(BuyerProtectionHold $hold): bool
+    {
+        if ($hold->state !== BuyerProtectionState::ReleasePending || $hold->settled_at !== null) {
+            return false;
+        }
+
+        $charge = MerchantCharge::model()::query()->where('charge_reference', $hold->charge_reference)->first();
+
+        return $charge instanceof MerchantCharge && $charge->transfer_failed_at !== null;
+    }
+
+    /** Refuse a person's decision over a hold that was decided while they were deciding. */
+    private function refuseDecided(BuyerProtectionHold $hold): never
+    {
+        $hold->refresh();
+
+        throw BuyerProtectionMisconfigured::alreadySettled($hold->charge_reference, $hold->state->value);
+    }
+
+    /** Whether the hold's outcome is decided: finished either way, or a release still waiting on its transfer. */
+    private function decided(BuyerProtectionHold $hold): bool
+    {
+        return $hold->state->settled() || $hold->state === BuyerProtectionState::ReleasePending || $hold->settled_at !== null;
     }
 
     /**
@@ -347,16 +471,11 @@ final readonly class BuyerProtectionClock
             return true;
         }
 
-        // Resolved from the morph columns rather than through a relation the model does not declare, and
-        // by hand rather than lazily: a class that no longer exists — deleted, renamed, never migrated — is
-        // an ordinary answer here and must not take a sweep down for one row.
-        $class = Relation::getMorphedModel((string) $hold->merchant_type) ?? (string) $hold->merchant_type;
-
-        if (! class_exists($class) || ! is_a($class, Model::class, true)) {
-            return false;
-        }
-
-        $merchant = $class::query()->find($hold->merchant_id);
+        // Resolved from the morph columns rather than through a relation the model does not declare: a class that
+        // no longer exists — deleted, renamed, never migrated — is an ordinary answer here and must not take a sweep
+        // down for one row. And the share is owed for a sale that already happened, so a merchant the application
+        // has soft-deleted or scoped away since is still the one it is owed to.
+        $merchant = OwnerOfRecord::find((string) $hold->merchant_type, $hold->merchant_id);
 
         if (! $merchant instanceof Model) {
             return false;
@@ -392,6 +511,31 @@ final readonly class BuyerProtectionClock
             return false;
         }
 
+        // An earlier release may have reached the provider and lost its answer. Its transfer is taken where the
+        // provider still has it, rather than made a second time under a key the provider may have dropped.
+        if ($charge instanceof MerchantCharge && $this->ledger instanceof RoutedChargeLedger) {
+            try {
+                $earlier = $this->ledger->earlierTransfer($charge, $this->transfers, $destination);
+            } catch (Throwable $failure) {
+                $this->ledger->recordTransferFailure($charge, $merchant, $failure);
+
+                throw $failure;
+            }
+
+            if ($earlier instanceof TransferResult) {
+                $this->ledger->settle($charge, $earlier->reference, $earlier->moved);
+
+                return true;
+            }
+        }
+
+        // Written before the provider is asked. A run that stops before the answer, a killed worker or a deploy,
+        // reaches neither the `catch` below nor the settlement, and this time is then the only trace that lets the
+        // doctor count the sale and the retry move it.
+        if ($charge instanceof MerchantCharge) {
+            $this->ledger?->recordTransferRequested($charge);
+        }
+
         try {
             $moved = $this->transfers->transferShare(
                 $destination,
@@ -423,17 +567,22 @@ final readonly class BuyerProtectionClock
         $this->events?->dispatch($event);
     }
 
-    private function settleAsRefund(BuyerProtectionHold $hold, Money $refund): BuyerProtectionHold
+    private function settleAsRefund(BuyerProtectionHold $hold, Money $refund): ?BuyerProtectionHold
     {
-        $hold->state = BuyerProtectionState::Refunded;
-        $hold->buyer_refund_minor = $refund->minorUnits;
-        // What the buyer did not get back is what the platform and the seller keep between them, and the fee
-        // is the platform's part of it. A refund that left the fee standing against a smaller remainder would
-        // make the three figures stop summing to the charge.
-        $hold->platform_fee_minor = min($hold->platform_fee_minor, $hold->charge_minor - $refund->minorUnits);
-        $hold->seller_net_minor = $hold->charge_minor - $refund->minorUnits - $hold->platform_fee_minor;
-        $hold->settled_at = $hold->freshTimestamp();
-        $hold->save();
+        $hold = $this->decideUnderLock($hold, static function (BuyerProtectionHold $locked) use ($refund): void {
+            $locked->state = BuyerProtectionState::Refunded;
+            $locked->buyer_refund_minor = $refund->minorUnits;
+            // What the buyer did not get back is what the platform and the seller keep between them, and the fee
+            // is the platform's part of it. A refund that left the fee standing against a smaller remainder would
+            // make the three figures stop summing to the charge.
+            $locked->platform_fee_minor = min($locked->platform_fee_minor, $locked->charge_minor - $refund->minorUnits);
+            $locked->seller_net_minor = $locked->charge_minor - $refund->minorUnits - $locked->platform_fee_minor;
+            $locked->settled_at = $locked->freshTimestamp();
+        });
+
+        if (! $hold instanceof BuyerProtectionHold) {
+            return null;
+        }
 
         $this->announce(new BuyerProtectionHoldRefunded(
             $hold->charge_reference,
@@ -446,10 +595,15 @@ final readonly class BuyerProtectionClock
         return $hold;
     }
 
-    private function markResolutionRequired(BuyerProtectionHold $hold): BuyerProtectionHold
+    private function markResolutionRequired(BuyerProtectionHold $hold): ?BuyerProtectionHold
     {
-        $hold->state = BuyerProtectionState::ResolutionRequired;
-        $hold->save();
+        $hold = $this->decideUnderLock($hold, static function (BuyerProtectionHold $locked): void {
+            $locked->state = BuyerProtectionState::ResolutionRequired;
+        });
+
+        if (! $hold instanceof BuyerProtectionHold) {
+            return null;
+        }
 
         // The one outcome that NEEDS somebody to hear it: the package has deliberately not decided, and if
         // nothing is listening the hold sits in that state indefinitely with a buyer's money in it.
@@ -467,8 +621,9 @@ final readonly class BuyerProtectionClock
     /**
      * Refuse an arrangement that cannot do what it claims.
      *
-     * Checked where a hold is created rather than only at boot, because the two failures it catches are both
-     * about money already taken from a buyer — and a configuration can change after boot.
+     * Asked three times, because the two failures it catches are both about money taken from a buyer and a
+     * configuration can change after boot: at boot, through the go-live checklist, while the marketplace is on;
+     * before a sale whose share is to wait under protection charges the buyer; and where a hold is created.
      */
     public function assertOperable(): void
     {

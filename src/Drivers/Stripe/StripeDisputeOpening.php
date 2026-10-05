@@ -49,7 +49,7 @@ final readonly class StripeDisputeOpening
         return new self(
             dispute: $dispute,
             payment: $payment,
-            amount: Money::of(is_int($amount) ? $amount : 0, strtoupper($currency)),
+            amount: StripeAmount::toMoney(is_int($amount) ? $amount : 0, strtoupper($currency)),
             reason: DisputeReason::fromProvider($reason),
             reasonCode: $reason,
             evidenceDueBy: self::dueBy($object),

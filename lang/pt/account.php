@@ -181,13 +181,14 @@ return [
 
     'reconfirm' => [
         'prompt' => 'Confirma a tua palavra-passe para continuar.',
+        'prompt_email' => 'Confirma o endereço de e-mail da tua conta para continuar.',
         'wrong' => 'Não corresponde. Tenta novamente.',
         'throttled' => 'Demasiadas tentativas. Tenta novamente dentro de :seconds segundos.',
     ],
 
     'danger' => [
         'heading' => 'Zona de perigo',
-        'explanation' => 'Cancelar agora interrompe a faturação de imediato, sem período de tolerância.',
+        'explanation' => 'Se cancelares agora, a tua subscrição termina de imediato, sem período de tolerância. Os dias que já usaste e ainda não pagaste continuam a ser faturados.',
         'cancel_now' => 'Interromper a faturação agora',
         'confirm_question' => 'Isto não pode ser desfeito. Interromper a faturação de imediato?',
         'confirm_yes' => 'Sim, interromper agora',

@@ -80,7 +80,8 @@ class ReportingFindingAcknowledgement extends Model
     #[Override]
     protected static function appendOnlyDeleteRefusal(): string
     {
-        return 'This row carries a statutory retention window; retention removes it on its schedule, '
-            .'inside purging(). A caller does not delete it.';
+        return 'An acknowledgement is the record of what somebody decided, and a plain delete is refused. No '
+            .'retention rule removes it. To withdraw one, delete it inside purging() and answer the finding '
+            .'again.';
     }
 }

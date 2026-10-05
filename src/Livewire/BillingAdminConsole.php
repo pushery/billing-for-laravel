@@ -14,7 +14,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\View as ViewFacade;
+use Illuminate\Support\Str;
 use Illuminate\View\View as ConcreteView;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Pushery\Billing\Exceptions\DatevTransactionUnresolvable;
 use Pushery\Billing\Exceptions\InvalidDatevBatch;
@@ -93,8 +95,11 @@ final class BillingAdminConsole extends Component
      *
      * Held per period rather than per session, and cleared whenever a bound moves: an acknowledgement
      * carried across a change of dates would hand somebody a different unbalanced month in silence, which
-     * is precisely the outcome the first refusal existed to prevent.
+     * is precisely the outcome the first refusal existed to prevent. Locked, because only exportDatevAnyway()
+     * may set it, after the figures were shown: set by the request itself, it would wave a month through that
+     * nobody looked at.
      */
+    #[Locked]
     public bool $datevImbalanceAcknowledged = false;
 
     public function mount(): void
@@ -132,7 +137,7 @@ final class BillingAdminConsole extends Component
     {
         $this->authorizeAdmin();
 
-        $tier = trim($this->compTier);
+        $tier = Str::trim($this->compTier);
 
         // Validate the tier BEFORE touching the owner, exactly as GrantTierCommand does: existence in the
         // catalog, not resolvability (the priced-free tier is a valid target). Without this an empty or
@@ -182,9 +187,9 @@ final class BillingAdminConsole extends Component
             return;
         }
 
-        Container::getInstance()->make(BillingAdmin::class)->cancel($owner, 'admin console', Auth::user());
-
-        $this->cancelResult = 'canceled';
+        $this->cancelResult = Container::getInstance()->make(BillingAdmin::class)->cancel($owner, 'admin console', Auth::user())
+            ? 'canceled'
+            : 'nothing_running';
         $this->reset('cancelOwnerId');
     }
 
@@ -206,7 +211,7 @@ final class BillingAdminConsole extends Component
     private function resolveOwner(string $ownerId): ?Model
     {
         $model = Config::get('billing.customer.model');
-        $id = trim($ownerId);
+        $id = Str::trim($ownerId);
 
         if (! is_string($model) || ! is_a($model, Model::class, true) || $id === '') {
             return null;

@@ -30,11 +30,14 @@ use Pushery\Billing\Enums\TaxArchetype;
  * An unclassified entry returns null rather than a default. A guessed archetype is a guessed tax treatment
  * and a guessed withdrawal right, and both are wrong quietly.
  *
- * What a null MEANS is the caller's decision, and today exactly one caller makes it: the content-grant
- * effect reads it as "nothing to gate" — **regardless of the consumer-rights profile**, because the gate is
- * never reached on a null type. So classifying is what arms the withdrawal gate for a work, and a profile
- * alone does not. Implement this contract and leave a work unclassified and that work is provided without a
- * recorded consent; `billing:doctor` reports the combination.
+ * What a null MEANS is each caller's decision, and they decide differently. The tax basis of an order
+ * freezes nothing for an unclassified add-on. A withdrawal question has no answer for an unclassified
+ * add-on, while a tier without a key reads as a plain subscription. The content-grant effect reads a null
+ * as "nothing to gate" — **regardless of the consumer-rights profile**, because the gate is never reached
+ * on a null type. So classifying is what arms the withdrawal gate for a work and what gives its sale a
+ * frozen tax basis, and a profile alone does neither. Implement this contract and leave a work
+ * unclassified and that work is provided without a recorded consent; `billing:doctor` reports the
+ * combination.
  */
 interface SuppliesProductArchetypes
 {

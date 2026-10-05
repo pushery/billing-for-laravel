@@ -11,6 +11,7 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\SellerDataEscalationStage;
 use Pushery\Billing\Enums\SellerDataMeasure;
+use Pushery\Billing\Support\LocalizedDate;
 
 /**
  * A seller's record is still missing something, and the notice names what.
@@ -56,7 +57,7 @@ final class SellerDataReminderNotification extends BillingNotification
                     SellerDataMeasure::WithholdPayout => 'billing::notifications.seller_data_reminder.consequence_withhold_payout',
                     SellerDataMeasure::SuspendSales => 'billing::notifications.seller_data_reminder.consequence_suspend_sales',
                 },
-                ['date' => $this->measureFrom->toDateString()],
+                ['date' => LocalizedDate::long($this->measureFrom)],
             ));
         }
 

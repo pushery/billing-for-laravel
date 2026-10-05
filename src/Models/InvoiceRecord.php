@@ -6,13 +6,16 @@ namespace Pushery\Billing\Models;
 
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Config;
 use Override;
 use Pushery\Billing\Casts\UtcDateTime;
@@ -63,6 +66,7 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?int $restates_invoice_id the settlement this one was issued in place of, after that one was canceled
  * @property int $total_minor
  * @property string $currency
+ * @property ?string $locale
  * @property InvoiceStatus $status
  * @property ?Carbon $issued_at
  * @property ?Carbon $due_at
@@ -88,7 +92,8 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?TaxRateCategory $tax_rate_category
  * @property ?int $tax_rate_bps
  * @property ?int $supply_rate_bps the rate the supply is taxable at, whoever supplies it; set on a settlement even where
- *                                 the document states no tax, null on every other document
+ *                                 the document states no tax, and on a document the package bills itself as the
+ *                                 statutory rate it was taxed at; null on every other document
  * @property ?bool $platform_reporting
  * @property ?string $rate_matrix_version
  * @property ?RecipientTaxStatus $recipient_tax_status
@@ -100,6 +105,8 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?TaxBaseChangeReason $tax_base_change_reason
  * @property ?string $settled_charge_reference
  * @property ?int $refund_attempt_id the reversal this correcting document documents, when one was recorded
+ * @property ?string $correction_key the event this correcting document corrects, where the event has no row of
+ *                                   its own; unique together with the corrected document
  * @property ?RefundAttempt $refundAttempt
  * @property ?string $charge_claim_key `provider|reference` for the document that claims a settled charge
  *                                     as the sale's FIRST one; null on a reissue, on every correction and
@@ -117,6 +124,7 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?Carbon $service_period_end
  * @property ?Carbon $delivered_on
  * @property ?Carbon $invoice_effect_revoked_at
+ * @property ?Carbon $write_off_recovered_at when a later payment reopened this write-off; null while it stands
  * @property ?string $invoice_effect_revoked_channel
  * @property ?int $fan_gross_minor
  * @property ?array<int,array<string,mixed>> $lines
@@ -129,16 +137,16 @@ class InvoiceRecord extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'owner_type', 'owner_id', 'provider', 'provider_id', 'order_id', 'number', 'pdf_path', 'total_minor', 'currency',
+        'owner_type', 'owner_id', 'provider', 'provider_id', 'order_id', 'number', 'pdf_path', 'total_minor', 'currency', 'locale',
         'status', 'issued_at', 'due_at', 'credited_invoice_id', 'credited_invoice_number', 'reissue_of_invoice_id', 'restates_invoice_id',
-        'refund_attempt_id',
+        'refund_attempt_id', 'correction_key',
         'buyer', 'subtotal_minor',
         'tax_minor', 'reverse_charge', 'tax_exempt', 'tax_exemption_reason', 'buyer_reference', 'vat_note', 'oss', 'destination_country', 'destination_subdivision', 'oss_rate',
         'tax_archetype', 'sold_alongside_archetype', 'place_of_supply_rule', 'tax_rate_category', 'tax_rate_bps', 'supply_rate_bps', 'platform_reporting',
         'rate_matrix_version', 'recipient_tax_status', 'taxation_basis', 'margin_minor', 'supply_regime', 'seller_posture', 'seller',
         'settlement_document_type', 'document_series', 'receipt_tier', 'settlement_period',
         'service_period_start', 'service_period_end', 'delivered_on',
-        'invoice_effect_revoked_at', 'invoice_effect_revoked_channel', 'fan_gross_minor', 'correction_kind', 'tax_base_change_reason', 'settled_charge_reference',
+        'invoice_effect_revoked_at', 'invoice_effect_revoked_channel', 'write_off_recovered_at', 'fan_gross_minor', 'correction_kind', 'tax_base_change_reason', 'settled_charge_reference',
         'commission_bps', 'commission_flat_minor', 'commission_residual', 'lines',
     ];
 
@@ -199,11 +207,18 @@ class InvoiceRecord extends Model
         // attempt would restate what a past document was about, and the join exists precisely so a reader
         // can trust that pairing — an editable link answers a different question every time it is read.
         'refund_attempt_id',
+        // Which event a correction corrects, where no reversal row names it. It holds a unique index with the
+        // corrected document, so an update that cleared it would hand the event's slot back and let a second
+        // correction be written for it.
+        'correction_key',
         // Which settlement this one was issued in place of. It decided at creation that this document
         // claims no charge of its own, and a link that could be moved afterwards would re-point a numbered
         // document at a supply it never replaced.
         'restates_invoice_id',
         'commission_bps', 'commission_flat_minor', 'commission_residual',
+        // The language the document is written in. The readable document renders in it, so a document whose
+        // language could change would read differently to everybody who had already been given it.
+        'locale',
     ];
 
     /**
@@ -286,6 +301,7 @@ class InvoiceRecord extends Model
         'receipt_tier' => FanReceiptTier::class,
         'tax_base_change_reason' => TaxBaseChangeReason::class,
         'invoice_effect_revoked_at' => UtcDateTime::class,
+        'write_off_recovered_at' => UtcDateTime::class,
         'buyer' => 'array',
         'seller' => 'array',
         'lines' => 'array',
@@ -297,13 +313,6 @@ class InvoiceRecord extends Model
         'delivered_on' => 'date',
     ];
 
-    /**
-     * GoBD immutability: an issued invoice's CONTENT must not change once recorded. The status (the payment
-     * state — open → paid → …) may still transition, and the buyer / credited-invoice links are allowed to
-     * reconcile (a credit note persisted before its original is stored later backfills the original's frozen
-     * buyer and local id). But the number, the amounts, the currency, the tax treatment, the issue date and
-     * the line items are frozen: any code path that dirties one of them on an EXISTING row is rejected.
-     */
     /**
      * What this document was converted at, one row per conversion layer.
      *
@@ -335,6 +344,13 @@ class InvoiceRecord extends Model
         return $this->belongsTo(RefundAttempt::model(), 'refund_attempt_id');
     }
 
+    /**
+     * GoBD immutability: an issued invoice's CONTENT must not change once recorded. The status (the payment
+     * state — open → paid → …) may still transition, and the buyer / credited-invoice links are allowed to
+     * reconcile (a credit note persisted before its original is stored later backfills the original's frozen
+     * buyer and local id). But the number, the amounts, the currency, the tax treatment, the issue date and
+     * the line items are frozen: any code path that dirties one of them on an EXISTING row is rejected.
+     */
     #[Override]
     protected static function booted(): void
     {
@@ -406,6 +422,12 @@ class InvoiceRecord extends Model
             new MarginStatesNoTaxGuard()->assertStatesNoTax($invoice);
         });
 
+        // The language the document is written in, decided once, when it is created: its owner's preferred language
+        // where the owner names one, the application's otherwise. A caller that knows better passes its own.
+        self::creating(static function (self $invoice): void {
+            $invoice->forceFill(['locale' => $invoice->locale ?? self::languageOfANewDocument($invoice)]);
+        });
+
         // And what an issued document may no longer change.
         self::updating(static function (self $invoice): void {
             new ImmutableIssuedInvoiceGuard()->assertUnchanged($invoice);
@@ -471,7 +493,7 @@ class InvoiceRecord extends Model
     {
         $vatId = $this->buyerDetail('vat_id');
 
-        return $vatId === null ? null : strtoupper((string) preg_replace('/\s+/', '', $vatId));
+        return $vatId === null ? null : strtoupper((string) preg_replace('/\s+/u', '', $vatId));
     }
 
     /** A non-empty string detail of the document's frozen buyer, or null. */
@@ -558,7 +580,7 @@ class InvoiceRecord extends Model
             return null;
         }
 
-        $issued = self::query()->whereKey($this->credited_invoice_id)->first()?->issued_at;
+        $issued = static::model()::query()->whereKey($this->credited_invoice_id)->first()?->issued_at;
 
         return $issued instanceof Carbon ? CarbonImmutable::parse($issued->toIso8601String()) : null;
     }
@@ -608,6 +630,23 @@ class InvoiceRecord extends Model
     public function owner(): MorphTo
     {
         return $this->morphTo();
+    }
+
+    /**
+     * The language a new document is written in: its owner's preferred one, or the application's.
+     *
+     * The owner is read only where its model can state a preference at all, so creating a document for any other
+     * owner, or for an owner type that names no model as a platform's own documents do, reads nothing.
+     */
+    private static function languageOfANewDocument(self $invoice): string
+    {
+        $type = $invoice->getAttribute('owner_type');
+        $class = is_string($type) ? (Relation::getMorphedModel($type) ?? $type) : null;
+        $prefers = is_string($class) && is_subclass_of($class, Model::class) && is_subclass_of($class, HasLocalePreference::class);
+        $owner = $prefers ? $invoice->owner()->first() : null;
+        $preferred = $owner instanceof HasLocalePreference ? $owner->preferredLocale() : null;
+
+        return is_string($preferred) && $preferred !== '' ? $preferred : App::getLocale();
     }
 
     /**
@@ -683,8 +722,9 @@ class InvoiceRecord extends Model
      */
     public function scopePlacedIn(Builder $query, CountingPeriod $period, ReversalAttribution $attribution): Builder
     {
-        $from = $period->from->toDateTimeString();
-        $until = $period->until->toDateTimeString();
+        // In UTC, the zone `issued_at` holds: the period's bounds are local midnights (see UtcDateTime).
+        $from = $period->from->utc()->toDateTimeString();
+        $until = $period->until->utc()->toDateTimeString();
 
         return $query
             ->whereNotNull('issued_at')

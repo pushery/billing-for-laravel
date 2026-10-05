@@ -9,16 +9,14 @@ use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Response;
-use Illuminate\Support\Facades\Storage;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\HostedPortal;
 use Pushery\Billing\Contracts\Invoices;
 use Pushery\Billing\Invoicing\InvoiceDocumentRenderer;
-use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\Invoicing\KeptInvoicePdf;
+use Pushery\Billing\Invoicing\LocalInvoices;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\LocalBillingEngine;
 use Pushery\Billing\Support\SafeExternalUrl;
@@ -113,14 +111,19 @@ final class BillingController
         }
 
         $owner = Container::getInstance()->make(BillingEntityResolver::class)->ownerFor($actor);
-        $document = Container::getInstance()->make(Invoices::class)->download($owner, $invoiceId);
+        $reader = $this->invoiceReader();
+        $document = $reader->download($owner, $invoiceId);
 
-        // A provider that hosts its own PDFs (Stripe) answers here. A local-engine driver has none,
-        // so the package renders the stored invoice itself — a foreign invoice is refused (403), an absent one
-        // is a 404, so one owner can never pull another's document by guessing an id.
-        $document ??= $this->renderLocalInvoice($owner, $invoiceId);
+        // A provider that hosts its own PDFs (Stripe) answers here. For an invoice it does not host, the
+        // package serves its own stored one. A reader that IS the package's own table has already looked at
+        // that row, kept file included, so its answer is the whole answer. A foreign invoice and an absent one
+        // are both a 404, so one owner can neither pull another's document nor learn that it exists by
+        // guessing an id.
+        if (! $document instanceof InvoiceDownload && ! $reader instanceof LocalInvoices) {
+            $document = $this->renderLocalInvoice($owner, $invoiceId);
+        }
 
-        if ($document === null) {
+        if (! $document instanceof InvoiceDownload) {
             throw new NotFoundHttpException;
         }
 
@@ -135,96 +138,47 @@ final class BillingController
     }
 
     /**
-     * Render one of the package's OWN stored invoices as a document — the local path for a driver without
-     * hosted PDFs. The invoice is looked up by id and ownership-checked here: a row belonging to another
-     * owner is refused (403), so a shared id space cannot leak one owner's document to another.
+     * Render one of the package's OWN stored invoices as a document — the local path for an invoice the
+     * provider does not host. The invoice is looked up among the owner's own rows, so a row belonging to
+     * another owner reads as absent: a shared id space can neither leak one owner's document to another nor
+     * confirm that it exists.
      *
-     * The KEPT file wins over a fresh render where there is one. That is not an optimization: everything
-     * under a renderer moves over the years an invoice must stay readable — a corrected rate table, an
-     * updated address, an improved writer — so a re-render years later resembles the document the recipient
-     * holds without being it, and the disagreement surfaces in a dispute, where the other party is the one
-     * holding the original. It is the same reasoning `DocumentArtifactStore` applies to the XML forms; this
-     * is the human-readable half, which only the consumer can keep.
+     * The KEPT file wins over a fresh render where there is one, for the reason `KeptInvoicePdf` gives.
+     *
+     * Without a kept file and without a PDF renderer, the shipped default, there is no document to hand over,
+     * and the route answers 404 as it does for an invoice that is not there. A missing optional dependency is
+     * not an error page.
      */
     private function renderLocalInvoice(Model $owner, string $invoiceId): ?InvoiceDownload
     {
-        $invoice = InvoiceRecord::model()::query()->find($invoiceId);
+        $invoice = Container::getInstance()->make(LocalInvoices::class)->record($owner, $invoiceId);
 
         if ($invoice === null) {
-            return null; // absent → 404
-        }
-
-        $ownerKey = $owner->getKey();
-        $sameOwner = $invoice->owner_type === $owner->getMorphClass()
-            && is_scalar($ownerKey)
-            && (string) $invoice->owner_id === (string) $ownerKey;
-
-        if (! ($sameOwner)) {
-            throw new HttpException(403);
+            return null; // not this owner's, or no invoice at all → 404 either way
         }
 
         $number = $invoice->number ?? (string) $invoice->id;
-        $kept = $this->keptPdf($invoice);
+        $kept = Container::getInstance()->make(KeptInvoicePdf::class)->contents($invoice);
 
         if ($kept !== null) {
             return new InvoiceDownload("invoice-{$number}.pdf", $kept);
         }
 
-        $pdf = Container::getInstance()->make(InvoiceDocumentRenderer::class)->pdf($invoice);
+        $renderer = Container::getInstance()->make(InvoiceDocumentRenderer::class);
 
-        return new InvoiceDownload("invoice-{$number}.pdf", $pdf);
+        if (! $renderer->rendersPdf()) {
+            return null;
+        }
+
+        return new InvoiceDownload("invoice-{$number}.pdf", $renderer->pdf($invoice));
     }
 
     /**
-     * The issued PDF as it was kept, or null when there is none to serve.
-     *
-     * Null covers three DIFFERENT situations on purpose, and only one of them is quiet:
-     *
-     *  - **No path recorded.** Nobody kept a PDF. Nothing to say — this is the shipped default and the
-     *    route renders exactly as it always has.
-     *  - **A path recorded but no disk configured.** The consumer wrote where they keep files and never
-     *    told the package which disk that is. Logged as a warning: the value is being ignored, and an
-     *    operator who set one and not the other should learn it from something other than a support case.
-     *  - **A path recorded, a disk configured, and the file GONE.** Logged as an ERROR, because the row
-     *    promises an archived document and the archive did not keep it. That is an incident.
-     *
-     * It renders rather than 404s in every one of them, deliberately. Refusing would lock an owner out of
-     * their own invoice to make a point about an archive they do not control, and the document the package
-     * can still produce is worth more to them than a dead link. What must not happen is the substitution
-     * going UNRECORDED — so the divergence is loud in the log and invisible in the response, which is the
-     * right way round: the reader gets their invoice, the operator gets the incident.
+     * The invoice reader the driver binds, typed as the contract it is: a provider's reader under Stripe, the
+     * package's own table under a local-engine driver, and the download treats the two differently.
      */
-    private function keptPdf(InvoiceRecord $invoice): ?string
+    private function invoiceReader(): Invoices
     {
-        $path = $invoice->pdf_path;
-
-        if (! is_string($path) || trim($path) === '') {
-            return null;
-        }
-
-        $disk = Config::get('billing.invoices.pdf_disk');
-
-        if (! is_string($disk) || trim($disk) === '') {
-            Log::warning('An invoice records a kept PDF but billing.invoices.pdf_disk is not configured, so the stored file cannot be served and the document is being re-rendered instead.', [
-                'invoice' => $invoice->number ?? $invoice->id,
-                'pdf_path' => $path,
-            ]);
-
-            return null;
-        }
-
-        $filesystem = Storage::disk($disk);
-
-        if (! $filesystem->exists($path)) {
-            Log::error('An invoice records a kept PDF that is not on the configured disk. The document served is a fresh render and may differ from the one its recipient holds.', [
-                'invoice' => $invoice->number ?? $invoice->id,
-                'pdf_path' => $path,
-                'disk' => $disk,
-            ]);
-
-            return null;
-        }
-
-        return $filesystem->get($path);
+        return Container::getInstance()->make(Invoices::class);
     }
 }

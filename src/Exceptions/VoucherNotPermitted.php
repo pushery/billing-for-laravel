@@ -39,6 +39,30 @@ final class VoucherNotPermitted extends RuntimeException
         );
     }
 
+    public static function notAPositiveAmount(string $code, int $requested): self
+    {
+        return new self(
+            "Voucher {$code} was asked to pay {$requested}. A redemption pays a positive amount: a negative one "
+            .'would put value back on the voucher, which is a top-up, and a voucher here can never be topped up.'
+        );
+    }
+
+    public static function foreignCurrency(string $code, string $held, string $asked): self
+    {
+        return new self(
+            "Voucher {$code} holds {$held}, and the redemption names {$asked}. Spending one currency's minor "
+            .'units as another\'s would pay for a sale with value nobody put on the voucher.'
+        );
+    }
+
+    public static function pastItsTerm(string $code, string $expiresAt): self
+    {
+        return new self(
+            "Voucher {$code} ran out on {$expiresAt}. Its remaining value is due to be taken to income, and "
+            .'spending it after that would take that income back without any document saying so.'
+        );
+    }
+
     public static function alreadyExpired(string $code): self
     {
         return new self(

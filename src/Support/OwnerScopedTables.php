@@ -23,7 +23,8 @@ use Pushery\Billing\ValueObjects\ErasureAxis;
  *
  * SCRUBBED — the stored webhook deliveries. The delivery record is what makes a failed effect replayable
  * and is the package's own account of what the provider sent, so the row stays; the raw payload inside it
- * carries the customer's email, name, billing address and card last four, so that goes.
+ * carries the customer's email, name, billing address and card last four, so that goes, and so does the error
+ * recorded beside it, which can quote that payload.
  *
  * CASCADED — a table keyed to a PARENT row rather than to the owner. It cannot go in the lists above,
  * because the eraser and exporter filter on `owner_type`/`owner_id` and those columns do not exist on it;
@@ -41,14 +42,13 @@ final class OwnerScopedTables
         'billing_usage_reservations',
         'billing_usage_events',
         'billing_credit_balances',
-        // The movements behind that balance. They go with it rather than outliving it: an explanation of a
-        // balance that no longer exists preserves personal data with nothing left to justify it, and the
-        // money any of them touched lives on the retained invoice or add-on purchase, not here.
-        'billing_credit_ledger_entries',
         // Stored mandates. A mandate is an instruction to take money from somebody who no longer exists,
         // so keeping one past an erasure is not a record — it is a live authorization with no holder. The
         // money any of them collected lives on the retained invoice.
         'billing_payment_mandates',
+        // The row an owner's mandate storing locks per provider so that two of them take turns. It holds nothing
+        // but the owner's key and the provider, and goes with the mandates it serialized.
+        'billing_payment_mandate_anchors',
         // Prepaid units are an entitlement, not a financial record: the money that bought them lives on the
         // (retained) add-on purchase and its invoice. Once the person is gone there is nobody left to spend
         // them, so the balance goes with them.
@@ -85,6 +85,11 @@ final class OwnerScopedTables
     public const array RETAINED = [
         'billing_invoices',
         'billing_addon_purchases',
+        // The movements behind a credit balance. The balance goes with the owner, its movements do not: a paid
+        // top-up books money in transit against the credit liability and a spend books the liability against the
+        // customer account, so each movement is a booking record, and the batch of its period reads it from here.
+        // Deleted with the owner, a batch built after the erasure lacked them while it kept the top-up's invoice.
+        'billing_credit_ledger_entries',
         // A creator's own invoice, submitted through the fallback lane and reconciled before payout. It is a
         // financial document in the same sense as any invoice — it is the basis on which a payout was
         // released — so it outlives the person named on it, unlinked rather than deleted.
@@ -117,7 +122,8 @@ final class OwnerScopedTables
 
         // What a tax authority's register said about a buyer's tax ID, one row per answer. It records when the
         // platform could first have known that a reverse-charged sale went to a number the register does not
-        // know, and it supports invoices that are kept for years, so it follows them: unlinked, never deleted.
+        // know, and it supports invoices that are kept for years, so it follows them: unlinked rather than
+        // deleted.
         'billing_tax_id_verifications',
     ];
 
@@ -185,6 +191,10 @@ final class OwnerScopedTables
         // reason. A notification receipt justifies nothing. Keeping it would mean holding somebody's
         // identity to remember an email.
         'billing_tax_hold_warnings',
+
+        // The row a merchant's tax status recordings lock so that they take turns. It holds nothing but the
+        // merchant's key, and once the merchant is gone there is nothing left to record for them.
+        'billing_creator_tax_status_anchors',
     ];
 
     /** @var list<string> */
@@ -246,7 +256,7 @@ final class OwnerScopedTables
 
         // The merchant's standing agreement that the platform may self-bill them. It is the evidence that
         // the self-billed documents about them were valid invoices, and those documents are kept for years —
-        // so it is retained and unlinked, never deleted, exactly like the tax standing it sits beside.
+        // so it is retained and unlinked rather than deleted, exactly like the tax standing it sits beside.
         'billing_self_billing_agreements',
     ];
 
@@ -277,9 +287,16 @@ final class OwnerScopedTables
             purged: self::PURGED,
             retained: self::RETAINED,
             // The delivery row survives — it is the dedup that keeps a redelivery from being processed
-            // twice, and what makes a failed effect replayable. Only the payload inside it is personal.
-            scrubbed: [self::SCRUBBED => ['payload']],
+            // twice, and what makes a failed effect replayable. Only the payload inside it is personal, and the
+            // error a consumer's own effect recorded beside it, which can quote that payload.
+            scrubbed: [self::SCRUBBED => ['payload', 'last_error']],
             cascaded: self::CASCADED,
+            // Stamped, because a redelivery fills in a payload that was never kept. Without the stamp it could
+            // not tell a scrubbed one from those, and would write the erased person's data back.
+            scrubbedAt: [self::SCRUBBED => 'payload_removed_at'],
+            // The booking batch replays a spend over the movements of the balance it came out of, so the kept
+            // movements of one erased owner stay together under a key that names nobody.
+            erasedKeys: ['billing_credit_ledger_entries' => 'erased_owner_key'],
         );
     }
 

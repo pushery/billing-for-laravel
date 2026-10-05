@@ -17,6 +17,7 @@ use Pushery\Billing\Marketplace\BuyerProtectionClock;
 use Pushery\Billing\Marketplace\UnmovedMerchantShares;
 use Pushery\Billing\Models\BuyerProtectionHold;
 use Pushery\Billing\Models\MerchantCharge;
+use Pushery\Billing\Support\Concerns\BacksOffBetweenAttempts;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -49,6 +50,7 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final class MoveMerchantShareOnConfirmation implements ShouldQueueAfterCommit
 {
+    use BacksOffBetweenAttempts;
     use InteractsWithQueue;
     use Queueable;
 

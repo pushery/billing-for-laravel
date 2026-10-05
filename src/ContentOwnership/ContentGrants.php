@@ -17,6 +17,7 @@ use Pushery\Billing\Enums\GrantStatus;
 use Pushery\Billing\Enums\WithdrawalType;
 use Pushery\Billing\Exceptions\WithdrawalConsentMissing;
 use Pushery\Billing\Models\AccessGrant;
+use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\ValueObjects\ContentReference;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\WithdrawalConsent;
@@ -45,6 +46,7 @@ final readonly class ContentGrants
         private WithdrawalGate $withdrawal,
         private BundleContents $bundles,
         private Repository $config,
+        private BillingEventLog $log,
     ) {}
 
     /**
@@ -53,6 +55,9 @@ final readonly class ContentGrants
      * Idempotent on the purchase reference: a redelivered webhook returns the row it already wrote rather
      * than a second one. That matters more here than for most ledgers, because two grants for one work are
      * two revocation targets and revoking one leaves the other granting.
+     *
+     * A later purchase of the same work, after the earlier one was refunded or ran out, renews that row for
+     * itself: the buyer paid again and holds the work again, and a refund of the new purchase finds it.
      */
     public function grantPurchase(
         Model $owner,
@@ -176,10 +181,13 @@ final readonly class ContentGrants
         // Whether this buyer already holds part of THIS bundle is the only thing that tells a first purchase
         // apart from a top-up, and the two must behave differently. Counting what this call has written so
         // far would not do it: on a first purchase everything after the first work would look like a top-up.
+        // Holds, not held: after a refund ended every grant of an earlier purchase, buying the bundle again is
+        // a first purchase, and counted as a top-up it would renew nothing.
         $topUp = AccessGrant::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('bundle_ref', $bundleReference)
+            ->where('status', GrantStatus::Active->value)
             ->exists();
 
         $granted = [];
@@ -187,7 +195,7 @@ final readonly class ContentGrants
         foreach ($this->bundles->worksIn($bundleReference) as $work) {
             $existing = $this->existingGrant($owner, $work, $merchant);
 
-            if ($existing instanceof AccessGrant) {
+            if ($existing instanceof AccessGrant && $this->answers($existing, $sourceReference)) {
                 $granted[] = $existing;
 
                 continue;
@@ -256,9 +264,11 @@ final readonly class ContentGrants
      * settle which one wins — so the loser re-reads instead of surfacing a constraint violation to a caller
      * whose only mistake was being retried.
      *
-     * Deliberately NOT wrapped in a transaction: on PostgreSQL a constraint violation poisons the whole
-     * transaction, so catching one inside it and continuing is not something you can do. One statement,
-     * caught outside, is the shape that works on every engine.
+     * The insert runs in a transaction of its own, which inside a caller's transaction is a savepoint, and the
+     * purchase path writes grants from a webhook effect, which runs in one. On PostgreSQL a constraint
+     * violation aborts the transaction it happens in; rolling back to the savepoint is what leaves the
+     * caller's transaction usable for the re-read. The re-read locks, because on MySQL a plain read inside a
+     * transaction answers from the snapshot of its first read, taken before the other delivery committed.
      */
     private function record(
         Model $owner,
@@ -286,7 +296,7 @@ final readonly class ContentGrants
     ): AccessGrant {
         $existing = $this->existingGrant($owner, $content, $merchant);
 
-        if ($existing instanceof AccessGrant) {
+        if ($existing instanceof AccessGrant && $this->answers($existing, $sourceReference)) {
             return $existing;
         }
 
@@ -333,10 +343,14 @@ final readonly class ContentGrants
             'merchant_id' => $scope->id,
         ];
 
+        if ($existing instanceof AccessGrant) {
+            return $this->renew($existing, $owner, $attributes);
+        }
+
         try {
-            return AccessGrant::model()::query()->create($attributes);
+            return $this->insertBehindASavepoint($attributes);
         } catch (UniqueConstraintViolationException $collision) {
-            $raced = $this->existingGrant($owner, $content, $merchant);
+            $raced = $this->existingGrant($owner, $content, $merchant, locking: true);
 
             // Re-thrown rather than papered over: if the row is not there after a uniqueness violation, some
             // OTHER constraint fired, and quietly returning something plausible would hide a real defect
@@ -349,14 +363,78 @@ final readonly class ContentGrants
         }
     }
 
-    private function existingGrant(Model $owner, ContentReference $content, ?MerchantScope $merchant): ?AccessGrant
+    /**
+     * Whether the row already there is the answer to this grant: the one this sale wrote, or one that still stands.
+     *
+     * A row that ended, revoked by a refund or past its term, is no answer to ANOTHER sale. Handed back, a buyer
+     * who paid again stayed locked out, a second rental extended nothing, and a refund of the second purchase found
+     * no row. A grant without a reference, a comp, is no sale to recognize, so only a standing row answers it.
+     */
+    private function answers(AccessGrant $existing, ?string $sourceReference): bool
     {
-        return AccessGrant::model()::query()
+        if ($sourceReference !== null && $existing->source_reference === $sourceReference) {
+            return true;
+        }
+
+        return $existing->status === GrantStatus::Active
+            && (! $existing->expires_at instanceof Carbon || $existing->expires_at->isFuture());
+    }
+
+    /**
+     * Turn a row that ended into the grant of a new sale.
+     *
+     * One row per owner, work and merchant is the guard against double ownership, so a later sale of the same work
+     * renews the row instead of writing another. What the row said until now goes to the audit log first, so the
+     * earlier sale and how it ended stay on record: nothing is deleted, it moves to the ledger that keeps it.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    private function renew(AccessGrant $grant, Model $owner, array $attributes): AccessGrant
+    {
+        $this->log->record('content.grant_renewed', $owner, [
+            'grant_id' => $grant->getKey(),
+            'content_type' => $grant->content_type,
+            'content_ref' => $grant->content_ref,
+            'previous_source' => $grant->source->value,
+            'previous_source_reference' => $grant->source_reference,
+            'previous_status' => $grant->status->value,
+            'previous_revoked_reason' => $grant->revoked_reason?->value,
+            'previous_revoked_at' => $grant->revoked_at?->toIso8601String(),
+            'previous_acquired_at' => $grant->acquired_at->toIso8601String(),
+            'previous_expires_at' => $grant->expires_at?->toIso8601String(),
+            'source_reference' => $attributes['source_reference'],
+        ]);
+
+        $grant->forceFill([...$attributes, 'revoked_at' => null, 'revoked_reason' => null])->save();
+
+        return $grant;
+    }
+
+    private function existingGrant(Model $owner, ContentReference $content, ?MerchantScope $merchant, bool $locking = false): ?AccessGrant
+    {
+        $query = AccessGrant::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->where('content_type', $content->type)
             ->where('content_ref', $content->reference)
-            ->where('merchant_uid', ($merchant ?? MerchantScope::platform())->uid())
-            ->first();
+            ->where('merchant_uid', ($merchant ?? MerchantScope::platform())->uid());
+
+        if ($locking) {
+            $query->lockForUpdate();
+        }
+
+        return $query->first();
+    }
+
+    /**
+     * Insert the row in a transaction of its own, which inside a caller's transaction is a savepoint.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    private function insertBehindASavepoint(array $attributes): AccessGrant
+    {
+        $query = AccessGrant::model()::query();
+
+        return $query->getModel()->getConnection()->transaction(static fn (): AccessGrant => $query->create($attributes));
     }
 }

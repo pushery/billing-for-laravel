@@ -28,8 +28,8 @@ use Illuminate\Support\Facades\Schema;
  * collides at sequence 0, and two people racing to file correction 1 collide at 1.
  *
  * Expressing the same rule as "unique where corrects_filing_id is null" would need a partial index, which
- * neither MySQL nor SQLite has — and a plain unique over a nullable column enforces nothing at all on any
- * of the three, because all of them treat NULLs in a unique index as distinct from one another. That would
+ * MySQL does not have — and a plain unique over a nullable column enforces nothing at all on any of the
+ * three engines, because all of them treat NULLs in a unique index as distinct from one another. That would
  * be a constraint that reads as a guard and permits exactly the thing it names.
  *
  * ## One export is filed at most once

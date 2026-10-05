@@ -94,7 +94,7 @@ final readonly class SellerActivity
             TaxArchetype::Tip => $this->soldAlongside,
             TaxArchetype::Download, TaxArchetype::Subscription, TaxArchetype::Ebook,
             TaxArchetype::BundleWithAudioVideo, TaxArchetype::Livestream, TaxArchetype::CustomOneToOne,
-            TaxArchetype::Voucher, TaxArchetype::ConsumerGoods => $this->archetype,
+            TaxArchetype::Voucher, TaxArchetype::ConsumerGoods, TaxArchetype::Support => $this->archetype,
             // Nobody said what this was. A reference cannot rescue that: it says what the payment accompanied,
             // not what the payment was, and the two are only the same question for an archetype that delegates.
             null => null,
@@ -139,7 +139,7 @@ final readonly class SellerActivity
             TaxArchetype::CustomOneToOne => true,
             TaxArchetype::Download, TaxArchetype::Subscription, TaxArchetype::Ebook,
             TaxArchetype::BundleWithAudioVideo, TaxArchetype::Livestream, TaxArchetype::Tip,
-            TaxArchetype::Voucher, TaxArchetype::ConsumerGoods => false,
+            TaxArchetype::Voucher, TaxArchetype::ConsumerGoods, TaxArchetype::Support => false,
             // No archetype at all is not "not commissioned" — it is "nobody said". It reads as false here
             // because the flag above is how a caller says otherwise, and inventing a commission from an
             // absence would report a seller on no evidence.

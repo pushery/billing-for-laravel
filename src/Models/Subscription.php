@@ -17,6 +17,7 @@ use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\MerchantScope;
+use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
 
 /**
@@ -52,6 +53,7 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * @property ?int $seat_quantity
  * @property ?Carbon $seat_quantity_since
  * @property int $seat_days_accrued
+ * @property int $tier_adjustment_accrued
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
@@ -65,10 +67,10 @@ class Subscription extends Model
     protected $fillable = [
         'owner_type', 'owner_id', 'type', 'provider', 'provider_id', 'status', 'tier_key',
         'scheduled_tier_key', 'scheduled_swap_at',
-        'trial_ends_at', 'ends_at', 'delinquent_since', 'dunning_level', 'payment_reminded_on', 'synced_event_at',
+        'trial_ends_at', 'ends_at', 'terminated_at', 'delinquent_since', 'dunning_level', 'payment_reminded_on', 'synced_event_at',
         'current_period_start', 'current_period_end', 'scheduled_processing_at',
         'merchant_uid', 'merchant_type', 'merchant_id', 'declaration_reference', 'started_at',
-        'seat_quantity', 'seat_quantity_since', 'seat_days_accrued',
+        'seat_quantity', 'seat_quantity_since', 'seat_days_accrued', 'tier_adjustment_accrued',
     ];
 
     /**
@@ -88,6 +90,7 @@ class Subscription extends Model
         // before anyone re-reads. Held against the migration by ModelSchemaDefaultsTest.
         'merchant_uid' => 'platform',
         'seat_days_accrued' => 0,
+        'tier_adjustment_accrued' => 0,
     ];
 
     /** @var array<string,string> */
@@ -112,6 +115,7 @@ class Subscription extends Model
         'seat_quantity' => 'integer',
         'seat_quantity_since' => UtcDateTime::class,
         'seat_days_accrued' => 'integer',
+        'tier_adjustment_accrued' => 'integer',
     ];
 
     public function onTrial(): bool
@@ -389,6 +393,28 @@ class Subscription extends Model
     }
 
     /**
+     * The states a local engine's run collects, read by {@see self::scopeDueForProcessing()} and by an owner's own
+     * request to end now, which can only be billed in a state the run will collect.
+     *
+     * @var list<string>
+     */
+    public const array COLLECTED_STATES = [
+        SubscriptionState::Active->value,
+        SubscriptionState::Grace->value,
+        SubscriptionState::PastDue->value,
+        // TRIALING BELONGS HERE, and it was missing for as long as nothing in this package created
+        // a local trialing subscription. Under a provider that drives its own cycle the trial ends
+        // at the provider and arrives as an event, so the sweep never had to see one.
+        //
+        // A local-engine trial is scheduled at its own END, so it is due exactly once: at the
+        // moment the free period stops. Without it on this list the row was invisible to the run
+        // that collects — no charge, no state change, no log line, and a customer keeping their
+        // access indefinitely for nothing. The date is what keeps a RUNNING trial untouched, and
+        // it is the same mechanism that keeps every other state from being collected early.
+        SubscriptionState::Trialing->value,
+    ];
+
+    /**
      * The rows a local engine should act on now: scheduled at or before the moment, in a state that may be
      * charged.
      *
@@ -414,21 +440,7 @@ class Subscription extends Model
 
         $query->whereNotNull('scheduled_processing_at')
             ->where('scheduled_processing_at', '<=', $moment->utc())
-            ->whereIn('status', [
-                SubscriptionState::Active->value,
-                SubscriptionState::Grace->value,
-                SubscriptionState::PastDue->value,
-                // TRIALING BELONGS HERE, and it was missing for as long as nothing in this package created
-                // a local trialing subscription. Under a provider that drives its own cycle the trial ends
-                // at the provider and arrives as an event, so the sweep never had to see one.
-                //
-                // A local-engine trial is scheduled at its own END, so it is due exactly once: at the
-                // moment the free period stops. Without it on this list the row was invisible to the run
-                // that collects — no charge, no state change, no log line, and a customer keeping their
-                // access indefinitely for nothing. The date is what keeps a RUNNING trial untouched, and
-                // it is the same mechanism that keeps every other state from being collected early.
-                SubscriptionState::Trialing->value,
-            ]);
+            ->whereIn('status', self::COLLECTED_STATES);
     }
 
     /**
@@ -450,7 +462,7 @@ class Subscription extends Model
      */
     public static function ownerHasHadATrial(Model $owner): bool
     {
-        return self::query()
+        return static::model()::query()
             ->forOwner($owner)
             ->ofDefaultType()
             ->forMerchant(null)
@@ -495,7 +507,7 @@ class Subscription extends Model
     public function advanceCycle(BillingInterval $interval): void
     {
         $start = $this->current_period_end ?? Carbon::now()->utc();
-        $end = $interval->advance($start);
+        $end = $interval->advance($start, $this->cycleAnchor());
 
         $this->update([
             'current_period_start' => $start,
@@ -504,7 +516,28 @@ class Subscription extends Model
             // The seats in force carry into the new period, which has billed none of them yet.
             'seat_quantity_since' => $start,
             'seat_days_accrued' => 0,
+            // So does the tier: every day of the new period is at the tier in force now.
+            'tier_adjustment_accrued' => 0,
         ]);
+    }
+
+    /**
+     * The moment this subscription's cycles are counted from: the end of its trial where it had one, its start
+     * otherwise, and null for a row that records neither.
+     *
+     * A trial counts only where it ends after this subscription started. A row taken over by a returning
+     * customer keeps the trial end of the subscription before, as the evidence that trial was used, and that
+     * moment says nothing about where this one's cycles fall.
+     */
+    private function cycleAnchor(): ?CarbonInterface
+    {
+        if ($this->started_at === null) {
+            return null;
+        }
+
+        return $this->trial_ends_at !== null && $this->trial_ends_at->greaterThan($this->started_at)
+            ? $this->trial_ends_at
+            : $this->started_at;
     }
 
     /**
@@ -541,10 +574,40 @@ class Subscription extends Model
      */
     public function changeSeatQuantity(int $quantity, CarbonInterface $from): void
     {
+        // Two changes for one owner at once, from queued workers that each read the subscription before the other
+        // wrote, would each count the days from the row as they read it, and the later write would drop the days the
+        // earlier one counted. So the row is read again under a lock, and the days are counted from what it holds.
+        $this->getConnection()->transaction(function () use ($quantity, $from): void {
+            $current = $this->newQueryWithoutScopes()->whereKey($this->getKey())->lockForUpdate()->toBase()->first();
+
+            if ($current !== null) {
+                $this->setRawAttributes((array) $current, true);
+            }
+
+            $this->update([
+                'seat_days_accrued' => $this->seatDaysUntil($from),
+                'seat_quantity' => $quantity,
+                'seat_quantity_since' => $from,
+            ]);
+        });
+    }
+
+    /**
+     * Record a move to another tier, for a driver that bills the period when it closes.
+     *
+     * The cycle that closes the period prices it at the tier in force then. The tier being left held the seat-days
+     * of the period up to the move, so the difference between its price and the new one, times those seat-days, is
+     * added to `tier_adjustment_accrued`, and the cycle adds that to the plan charge. Each tier is then billed for
+     * the days it held. A move after the period end counts the period's days and no more.
+     */
+    public function accrueTierChange(Money $from, Money $to, CarbonInterface $at): void
+    {
+        $until = $this->current_period_end instanceof CarbonInterface && $at->greaterThan($this->current_period_end)
+            ? $this->current_period_end
+            : $at;
+
         $this->update([
-            'seat_days_accrued' => $this->seatDaysUntil($from),
-            'seat_quantity' => $quantity,
-            'seat_quantity_since' => $from,
+            'tier_adjustment_accrued' => $this->tier_adjustment_accrued + $from->minus($to)->minorUnits * $this->seatDaysUntil($until),
         ]);
     }
 

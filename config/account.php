@@ -79,7 +79,7 @@ return [
     */
 
     'csp' => [
-        'enabled' => env('BILLING_ACCOUNT_CSP', true),
+        'enabled' => (bool) env('BILLING_ACCOUNT_CSP', true),
         'additional' => [],
     ],
 
@@ -100,6 +100,8 @@ return [
     |  (b) Standalone: keep the package's self-contained layout and point this at a
     |      compiled Tailwind stylesheet you serve (a CDN build, or your own
     |      published asset). Leave it null and the standalone layout ships unstyled.
+    |      A stylesheet on another origin is allowed by the hub's scoped CSP
+    |      without an entry under "additional".
     |
     */
 

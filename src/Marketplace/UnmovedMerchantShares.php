@@ -8,12 +8,13 @@ use Carbon\CarbonImmutable;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Models\MerchantCharge;
+use Pushery\Billing\Support\OwnerOfRecord;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
+use Pushery\Billing\ValueObjects\TransferResult;
 use RuntimeException;
 use Throwable;
 
@@ -29,8 +30,8 @@ use Throwable;
  *
  * A transfer whose answer was lost may well have happened, and a new key would pay the merchant twice. The
  * price is that a provider which keeps the result of a failed request replays that failure for the same key
- * until it forgets it, Stripe for 24 hours, so a retry inside that window can fail again for a cause that is
- * already fixed.
+ * until it forgets it, Stripe after 24 hours at the earliest, so a retry inside that window can fail again for
+ * a cause that is already fixed.
  *
  * ## Where the destination comes from
  *
@@ -40,6 +41,14 @@ use Throwable;
  */
 final readonly class UnmovedMerchantShares
 {
+    /**
+     * How long a requested transfer may go unanswered before it counts as abandoned.
+     *
+     * A provider answers a transfer in seconds, so a quarter of an hour is far beyond any run still waiting,
+     * and short enough that the doctor run after a killed release already names the sale.
+     */
+    private const int ANSWER_WAIT_MINUTES = 15;
+
     public function __construct(
         private RoutedChargeLedger $ledger,
         /** Null where the driver cannot move a share at all, and then nothing here can move one either. */
@@ -48,6 +57,8 @@ final readonly class UnmovedMerchantShares
         private ?MerchantAccountDirectory $accounts = null,
         /** Null where nothing is asked before a share moves, which is how a hand-built instance behaves. */
         private ?MerchantPayoutGate $payouts = null,
+        /** Null where no release waits on a share here, which is how a hand-built instance behaves. */
+        private ?BuyerProtectionClock $protection = null,
     ) {}
 
     public function count(): int
@@ -113,6 +124,28 @@ final readonly class UnmovedMerchantShares
             return 'skipped';
         }
 
+        // An earlier attempt may have reached the provider and lost its answer. Its transfer is taken where the
+        // provider still has it, rather than made a second time under a key the provider may have dropped.
+        try {
+            $earlier = $this->ledger->earlierTransfer($charge, $this->transfers, $destination);
+        } catch (Throwable $failure) {
+            $this->ledger->recordTransferFailure($charge, $merchant, $failure);
+
+            return 'failed';
+        }
+
+        if ($earlier instanceof TransferResult) {
+            if ($this->ledger->settle($charge, $earlier->reference, $earlier->moved)) {
+                $this->protection?->shareMoved($charge->charge_reference);
+            }
+
+            return 'moved';
+        }
+
+        // Before the provider is asked, for the reason the release gives: a run that stops before the answer leaves
+        // only this behind.
+        $this->ledger->recordTransferRequested($charge);
+
         try {
             $moved = $this->transfers->transferShare($destination, $charge->net(), $charge->charge_reference, $charge->transferIdempotencyKey());
         } catch (Throwable $failure) {
@@ -121,7 +154,11 @@ final readonly class UnmovedMerchantShares
             return 'failed';
         }
 
-        $this->ledger->settle($charge, $moved->reference, $moved->moved);
+        // A release that stopped at this transfer left its hold waiting. The sale is settled now, and only the run
+        // that settled it finishes the hold, so a retry racing another announces the release once.
+        if ($this->ledger->settle($charge, $moved->reference, $moved->moved)) {
+            $this->protection?->shareMoved($charge->charge_reference);
+        }
 
         return 'moved';
     }
@@ -142,28 +179,37 @@ final readonly class UnmovedMerchantShares
         }
     }
 
-    /** @return Builder<MerchantCharge> */
+    /**
+     * The pending sales whose share failed to move, or was asked of the provider so long ago that the run asking
+     * cannot still be waiting for the answer.
+     *
+     * The second kind is a run that stopped between asking and hearing back. Whether the transfer arrived is not
+     * known, which is the case of a lost answer the retry is built for: it asks again under the sale's key.
+     *
+     * @return Builder<MerchantCharge>
+     */
     private function unmoved(): Builder
     {
+        // In UTC, like the column: the builder binds a moment in its own zone without converting it.
+        $abandoned = CarbonImmutable::now()->utc()->subMinutes(self::ANSWER_WAIT_MINUTES);
+
         return MerchantCharge::model()::query()
             ->where('settlement_state', SettlementState::Pending->value)
-            ->whereNotNull('transfer_failed_at');
+            ->where(static fn (Builder $query): Builder => $query
+                ->whereNotNull('transfer_failed_at')
+                ->orWhere('transfer_requested_at', '<=', $abandoned));
     }
 
     /**
      * The merchant the row names, or null where that model is gone.
      *
      * Resolved from the morph columns and checked before touching them, the way `BuyerProtectionClock` does it:
-     * a stored class that no longer exists is an ordinary answer here and must not stop the run for one row.
+     * a stored class that no longer exists is an ordinary answer here and must not stop the run for one row. A
+     * merchant the application has soft-deleted or scoped away since is still found, because the share is owed for
+     * a sale that already happened.
      */
     public function merchantOf(MerchantCharge $charge): ?Model
     {
-        $class = Relation::getMorphedModel($charge->merchant_type) ?? $charge->merchant_type;
-
-        if (! class_exists($class) || ! is_a($class, Model::class, true)) {
-            return null;
-        }
-
-        return $class::query()->find($charge->merchant_id);
+        return OwnerOfRecord::find($charge->merchant_type, $charge->merchant_id);
     }
 }

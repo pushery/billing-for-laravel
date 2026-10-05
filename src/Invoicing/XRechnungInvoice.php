@@ -10,7 +10,6 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\EInvoice;
 use Pushery\Billing\Contracts\SellerPartyResolver;
-use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Invoicing\Concerns\NormalizesInvoiceModel;
 use Pushery\Billing\Marketplace\ConfigSellerPartyResolver;
 use Pushery\Billing\Models\InvoiceRecord;
@@ -36,7 +35,14 @@ final readonly class XRechnungInvoice implements EInvoice
 
     private const string CBC = 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2';
 
-    private const string CUSTOMIZATION = 'urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_3.0';
+    /**
+     * The specification identifier of XRechnung 3.0 (BT-24), as KoSIT's own rules define it. The `xoev-de` form named
+     * the versions up to 2.3; a 3.0 document carrying it matched no XRechnung scenario of the validator.
+     */
+    private const string CUSTOMIZATION = 'urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0';
+
+    /** UNTDID 4461 code 58, a SEPA credit transfer: the payment means a configured account is paid by. */
+    private const string SEPA_CREDIT_TRANSFER = '58';
 
     private SellerPartyResolver $sellerResolver;
 
@@ -69,6 +75,12 @@ final readonly class XRechnungInvoice implements EInvoice
         $this->el($doc, $root, 'cbc:CustomizationID', self::CUSTOMIZATION);
         $this->el($doc, $root, 'cbc:ID', $reference);
         $this->el($doc, $root, 'cbc:IssueDate', ($invoice->issued_at ?? Carbon::now())->format('Y-m-d'));
+
+        // BT-9, for a document that still has an amount due (BR-CO-25). UBL orders it right after the issue date.
+        // A settled document states its amount as paid instead, below, and is due nothing.
+        if (! $this->settled($invoice)) {
+            $this->el($doc, $root, 'cbc:DueDate', $this->dueDateOf($invoice));
+        }
         // BT-3 Type code: 380 invoice, 381 cancellation, 384 amendment, 389 self-billed invoice — derived
         // once in the shared concern so UBL and CII never disagree. The code, not a negative amount, carries
         // the correcting meaning, so the amounts below stay positive.
@@ -109,7 +121,9 @@ final readonly class XRechnungInvoice implements EInvoice
             $root->appendChild($this->billingReference($doc, $invoice->credited_invoice_number));
         }
 
-        $root->appendChild($this->party($doc, 'cac:AccountingSupplierParty', $this->seller($invoice)));
+        $seller = $this->seller($invoice);
+
+        $root->appendChild($this->party($doc, 'cac:AccountingSupplierParty', $seller));
         $root->appendChild($this->party($doc, 'cac:AccountingCustomerParty', $this->buyer($invoice)));
 
         // BT-72 the date the supply was actually made. Written ONLY from the recorded date, never derived
@@ -122,6 +136,14 @@ final readonly class XRechnungInvoice implements EInvoice
             $root->appendChild($delivery);
         }
 
+        // BG-16 Payment instructions, which XRechnung makes mandatory (BR-DE-1). The account the seller is paid on comes
+        // with the seller, so a document keeps the instructions it was issued with. UBL orders cac:PaymentMeans after
+        // cac:Delivery and before the tax total. A seller with no account configured gets none, and its document is
+        // short of BR-DE-1 rather than carrying an instruction nobody gave.
+        if ($seller->iban !== null) {
+            $root->appendChild($this->paymentMeans($doc, $seller));
+        }
+
         // How this document is taxed, derived ONCE. An intra-EU B2B reverse charge makes every band and line
         // VAT category AE at 0% with an exemption reason on the document band — not the zero-rated Z a 0%
         // rate would otherwise get, which a conformant EN 16931 validator rejects here.
@@ -132,7 +154,13 @@ final readonly class XRechnungInvoice implements EInvoice
         $treatment = $this->taxTreatmentFor($invoice);
 
         $root->appendChild($this->taxTotal($doc, $currency, $treatment));
-        $root->appendChild($this->monetaryTotal($doc, $treatment->net, $treatment->tax, $currency));
+        $root->appendChild($this->monetaryTotal(
+            $doc,
+            $treatment->net,
+            $treatment->tax,
+            $this->settled($invoice) ? $treatment->net + $treatment->tax : 0,
+            $currency,
+        ));
 
         foreach ($treatment->lines as $index => $line) {
             $root->appendChild($this->line($doc, $index + 1, $line, $currency, $treatment));
@@ -141,11 +169,11 @@ final readonly class XRechnungInvoice implements EInvoice
         return (string) $doc->saveXML();
     }
 
-    /** Create a text element under a parent (text-node escaped, never string-concatenated). */
+    /** Create a text element under a parent (text-node escaped, never string-concatenated), as XML 1.0 can carry it. */
     private function el(DOMDocument $doc, DOMElement $parent, string $name, string $text): DOMElement
     {
         $element = $doc->createElement($name);
-        $element->appendChild($doc->createTextNode($text));
+        $element->appendChild($doc->createTextNode($this->xmlText($text)));
         $parent->appendChild($element);
 
         return $element;
@@ -196,6 +224,46 @@ final readonly class XRechnungInvoice implements EInvoice
         $this->el($doc, $legal, 'cbc:RegistrationName', $party->name);
         $partyNode->appendChild($legal);
 
+        // BG-6 Seller contact, which XRechnung makes mandatory with all three terms (BR-DE-2, BR-DE-5 to 7); the same
+        // group is the buyer's BG-9. UBL orders cac:Contact after cac:PartyLegalEntity, and its terms Name, Telephone,
+        // ElectronicMail.
+        if ($party->hasContact()) {
+            $contact = $doc->createElement('cac:Contact');
+
+            foreach (['cbc:Name' => $party->contactName, 'cbc:Telephone' => $party->contactPhone, 'cbc:ElectronicMail' => $party->contactEmail] as $term => $value) {
+                if ($value !== null) {
+                    $this->el($doc, $contact, $term, $value);
+                }
+            }
+
+            $partyNode->appendChild($contact);
+        }
+
+        return $node;
+    }
+
+    /**
+     * BG-16 with BG-17: a SEPA credit transfer to the seller's account (BT-81 code 58, BT-84 the IBAN, BT-85 the
+     * account name, BT-86 the BIC). XRechnung requires the account for code 58 (BR-DE-23-a) and no card or mandate
+     * beside it (BR-DE-23-b).
+     */
+    private function paymentMeans(DOMDocument $doc, Party $seller): DOMElement
+    {
+        $node = $doc->createElement('cac:PaymentMeans');
+        $this->el($doc, $node, 'cbc:PaymentMeansCode', self::SEPA_CREDIT_TRANSFER);
+
+        $account = $doc->createElement('cac:PayeeFinancialAccount');
+        $this->el($doc, $account, 'cbc:ID', (string) $seller->iban);
+        $this->el($doc, $account, 'cbc:Name', $seller->name);
+
+        if ($seller->bic !== null) {
+            $branch = $doc->createElement('cac:FinancialInstitutionBranch');
+            $this->el($doc, $branch, 'cbc:ID', $seller->bic);
+            $account->appendChild($branch);
+        }
+
+        $node->appendChild($account);
+
         return $node;
     }
 
@@ -223,13 +291,22 @@ final readonly class XRechnungInvoice implements EInvoice
         return $node;
     }
 
-    private function monetaryTotal(DOMDocument $doc, int $net, int $tax, string $currency): DOMElement
+    /**
+     * The document totals (BG-22). What was already paid (BT-113) is stated where there is any, between the
+     * total and the amount due, and the amount due (BT-115) is what remains (BR-CO-16).
+     */
+    private function monetaryTotal(DOMDocument $doc, int $net, int $tax, int $prepaid, string $currency): DOMElement
     {
         $node = $doc->createElement('cac:LegalMonetaryTotal');
         $this->money($doc, $node, 'cbc:LineExtensionAmount', $net, $currency);
         $this->money($doc, $node, 'cbc:TaxExclusiveAmount', $net, $currency);
         $this->money($doc, $node, 'cbc:TaxInclusiveAmount', $net + $tax, $currency);
-        $this->money($doc, $node, 'cbc:PayableAmount', $net + $tax, $currency);
+
+        if ($prepaid !== 0) {
+            $this->money($doc, $node, 'cbc:PrepaidAmount', $prepaid, $currency);
+        }
+
+        $this->money($doc, $node, 'cbc:PayableAmount', $net + $tax - $prepaid, $currency);
 
         return $node;
     }
@@ -242,39 +319,29 @@ final readonly class XRechnungInvoice implements EInvoice
      * require. The line-level ClassifiedTaxCategory carries the code + rate only; the reason lives once, on
      * the band. UBL order inside cac:TaxCategory: ID, Percent, TaxExemptionReasonCode/Reason, TaxScheme.
      */
-    private function taxCategory(DOMDocument $doc, string $name, float $rate, EnInvoiceTaxTreatment $treatment, bool $withReason = false): DOMElement
+    private function taxCategory(DOMDocument $doc, string $name, ?float $rate, EnInvoiceTaxTreatment $treatment, bool $withReason = false): DOMElement
     {
-        $invoice = $treatment->invoice;
-        $reverseCharge = $treatment->reverseCharge;
-        $exempt = $treatment->exempt;
-
         $category = $doc->createElement($name);
 
         // Decided by the shared authority rather than here. Both writers used to carry their own copy of this
         // rule, and two copies of a rule are two places it can drift — with no symptom, because each document
         // stays internally consistent and only a reader comparing a UBL and a CII rendering of the SAME
         // invoice would ever see them disagree.
-        $resolved = EnInvoiceTaxCategory::for(
-            $invoice->tax_exemption_reason ?? ($reverseCharge ? TaxExemptionReason::ReverseCharge : null),
-            $invoice->tax_archetype,
-            $exempt,
-            $rate,
-            $invoice->destination_country,
-            $invoice->taxation_basis,
-        );
+        $resolved = EnInvoiceTaxCategory::forDocument($treatment->invoice, $rate);
 
         $this->el($doc, $category, 'cbc:ID', $resolved->code);
-        $this->el($doc, $category, 'cbc:Percent', $this->rate($reverseCharge || $exempt ? 0.0 : $rate));
+        $this->el($doc, $category, 'cbc:Percent', $this->rate($treatment->reverseCharge || $treatment->exempt || $rate === null ? 0.0 : $rate));
 
         if ($withReason && $resolved->needsReason()) {
             // AE, K and G each carry their own VATEX code, and so does a margin-taxed resale (E, VATEX-EU-F); any
             // other exempt supply (E) needs only its reason text (BR-E-10 accepts the text alone). BT-120 is the derived reason (from vat_note), falling back to
-            // the wording that belongs to the category — never hardcoded past that fallback.
+            // the wording that belongs to the category — never hardcoded past that fallback. An amount collected on
+            // behalf of another party keeps its own wording: the document's note is about the document's own supply.
             if ($resolved->vatexCode !== null) {
                 $this->el($doc, $category, 'cbc:TaxExemptionReasonCode', $resolved->vatexCode);
             }
 
-            $this->el($doc, $category, 'cbc:TaxExemptionReason', $treatment->exemptionReason ?? $resolved->reason);
+            $this->el($doc, $category, 'cbc:TaxExemptionReason', $resolved->isCollectedOnBehalf() ? $resolved->reason : ($treatment->exemptionReason ?? $resolved->reason));
         }
 
         $scheme = $doc->createElement('cac:TaxScheme');

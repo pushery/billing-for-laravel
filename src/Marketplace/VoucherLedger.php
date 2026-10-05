@@ -101,16 +101,51 @@ final readonly class VoucherLedger
             throw VoucherNotPermitted::alreadyExpired($voucher->code);
         }
 
+        // The term decides, not whether a sweep has run since: nothing in this package calls expire().
+        if ($voucher->expires_at !== null && $at->greaterThanOrEqualTo($voucher->expires_at)) {
+            throw VoucherNotPermitted::pastItsTerm($voucher->code, $voucher->expires_at->toDateString());
+        }
+
+        if ($amount->minorUnits <= 0) {
+            throw VoucherNotPermitted::notAPositiveAmount($voucher->code, $amount->minorUnits);
+        }
+
+        foreach ([$amount, $saleGross] as $money) {
+            if ($money->currency !== $voucher->currency) {
+                throw VoucherNotPermitted::foreignCurrency($voucher->code, $voucher->currency, $money->currency);
+            }
+        }
+
         if ($amount->minorUnits > $voucher->remaining_minor) {
             throw VoucherNotPermitted::overRemainingValue($voucher->code, $amount->minorUnits, $voucher->remaining_minor);
         }
 
-        $voucher->remaining_minor -= $amount->minorUnits;
-        $voucher->save();
+        // Built before anything is written: the movement refuses a redemption larger than the sale it pays
+        // towards, and that refusal has to leave the balance as it was.
+        $movement = new VoucherMovement(VoucherEvent::Redeemed, $amount, $voucher->code, $at, saleGross: $saleGross);
 
-        return $this->record(
-            new VoucherMovement(VoucherEvent::Redeemed, $amount, $voucher->code, $at, saleGross: $saleGross),
-        );
+        // The lower balance and the movement that books it are one fact, written together or not at all.
+        return $voucher->getConnection()->transaction(function () use ($voucher, $amount, $movement): VoucherMovement {
+            // Decided on the row as it stands, locked, not on the copy the caller loaded: two redemptions of one
+            // voucher loaded side by side would otherwise both pass and both spend the same value.
+            $current = Voucher::model()::query()->whereKey($voucher->getKey())->lockForUpdate()->firstOrFail();
+
+            if ($current->expired_at !== null) {
+                throw VoucherNotPermitted::alreadyExpired($current->code);
+            }
+
+            if ($amount->minorUnits > $current->remaining_minor) {
+                throw VoucherNotPermitted::overRemainingValue($current->code, $amount->minorUnits, $current->remaining_minor);
+            }
+
+            $current->remaining_minor -= $amount->minorUnits;
+            $current->save();
+
+            // The caller's instance follows the row, so whatever it does next with this voucher sees the new balance.
+            $voucher->setRawAttributes($current->getAttributes(), true);
+
+            return $this->record($movement);
+        });
     }
 
     /**
@@ -170,7 +205,7 @@ final readonly class VoucherLedger
     {
         $total = Voucher::model()::query()
             ->where('currency', $currency)
-            ->where('issued_at', '>=', $since)
+            ->where('issued_at', '>=', Carbon::instance($since)->utc())
             ->sum('face_value_minor');
 
         return Money::of((int) $total, $currency);

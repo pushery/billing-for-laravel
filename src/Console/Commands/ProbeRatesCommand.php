@@ -22,10 +22,10 @@ use Pushery\Billing\Tax\TedbRateSource;
  *
  * ## Three exit codes, and the third is the whole point
  *
- * 0 agreement · 1 a difference was found · **2 the source could not be asked**. Collapsing 2 into 1 is how a
- * probe becomes noise: a DNS failure reported as "your rates are wrong" teaches an operator to dismiss the
- * one signal that matters, and then a real drift arrives looking exactly like the noise they learned to
- * ignore.
+ * 0 agreement · 1 a difference was found · **2 nothing was learned**, because the source could not be asked or
+ * its answer compared no shipped country. Collapsing 2 into 1 is how a probe becomes noise: a DNS failure
+ * reported as "your rates are wrong" teaches an operator to dismiss the one signal that matters, and then a
+ * real drift arrives looking exactly like the noise they learned to ignore.
  *
  * ## No ext-soap
  *
@@ -85,6 +85,15 @@ final class ProbeRatesCommand extends Command
 
         if ($report->unreachable) {
             $this->components->warn('The source could not be asked, so nothing was learned about the rates.');
+
+            return;
+        }
+
+        if ($report->comparedNothing()) {
+            $this->components->warn(
+                'The source answered, but not one shipped country could be compared from it, so nothing was '
+                .'learned about the rates.'
+            );
 
             return;
         }

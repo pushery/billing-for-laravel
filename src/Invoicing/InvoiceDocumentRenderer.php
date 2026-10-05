@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace Pushery\Billing\Invoicing;
 
 use Illuminate\Contracts\View\Factory as ViewFactory;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Lang;
+use Illuminate\Support\Traits\Localizable;
 use Pushery\Billing\Contracts\PdfRenderer;
 use Pushery\Billing\Contracts\SellerPartyResolver;
 use Pushery\Billing\Enums\TaxationBasis;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\Support\LocalizedMoney;
+use Pushery\Billing\Support\LocalizedNumber;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -23,6 +27,8 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final readonly class InvoiceDocumentRenderer
 {
+    use Localizable;
+
     public function __construct(
         private ViewFactory $views,
         private PdfRenderer $pdf,
@@ -38,16 +44,33 @@ final readonly class InvoiceDocumentRenderer
         return $key === null ? null : (string) Lang::get($key);
     }
 
-    /** The invoice as a complete HTML document — deterministic, browser-free, and testable as a snapshot. */
+    /**
+     * The invoice as a complete HTML document — deterministic, browser-free, and testable as a snapshot.
+     *
+     * Rendered in the language the document was written in, whoever opens it and in whatever language they use the
+     * rest of the application. A document from before that language was kept renders in the current one.
+     */
     public function html(InvoiceRecord $invoice): string
     {
-        return $this->views->make('billing::invoice', $this->data($invoice))->render();
+        $render = fn (): string => $this->views->make('billing::invoice', $this->data($invoice))->render();
+
+        if ($invoice->locale === null) {
+            return $render();
+        }
+
+        return $this->withLocale($invoice->locale, $render);
     }
 
     /** The invoice as PDF bytes, via the bound PdfRenderer. Throws PdfRendererUnavailable if none is bound. */
     public function pdf(InvoiceRecord $invoice): string
     {
         return $this->pdf->render($this->html($invoice));
+    }
+
+    /** Whether a PDF toolchain is bound at all, so a screen can offer a download before anybody asks for one. */
+    public function rendersPdf(): bool
+    {
+        return ! $this->pdf instanceof UnavailablePdfRenderer;
     }
 
     /**
@@ -60,9 +83,15 @@ final readonly class InvoiceDocumentRenderer
     private function data(InvoiceRecord $invoice): array
     {
         $currency = $invoice->currency;
-        $lines = $this->lines($invoice, $currency);
+        // The language the document is written in, which html() has made the current one. Its labels and its
+        // `lang` attribute come from the same locale, so every amount and rate on it is written in that language too.
+        $locale = App::getLocale();
+        $lines = $this->lines($invoice, $currency, $locale);
 
-        $subtotal = $invoice->subtotal_minor ?? ($invoice->total_minor - ($invoice->tax_minor ?? 0));
+        // An amount collected on behalf of another party is part of what was paid and none of the issuer's supply, so
+        // the rate and the tax are stated over the rest, and the amount stands apart between them and the total.
+        $collected = $this->collectedMinor($invoice);
+        $subtotal = $invoice->subtotal_minor ?? ($invoice->total_minor - ($invoice->tax_minor ?? 0) - $collected);
         $tax = $invoice->tax_minor ?? 0;
 
         // A short receipt states the gross with its rate in ONE sum and names nobody. Splitting it into net
@@ -98,7 +127,7 @@ final readonly class InvoiceDocumentRenderer
             'buyer' => $itemised && is_array($invoice->buyer) ? $invoice->buyer : [],
             'itemisesTax' => $itemised,
             // No rate at all on a margin document: naming the rate is itself a statement of tax.
-            'taxRate' => $margin ? null : $this->rateLabel($invoice),
+            'taxRate' => $margin ? null : $this->rateLabel($invoice, $locale),
             'number' => $invoice->number ?? (string) $invoice->id,
             'issuedAt' => $invoice->issued_at ?? $invoice->created_at,
             'isCorrection' => $invoice->isCorrection(),
@@ -110,24 +139,53 @@ final readonly class InvoiceDocumentRenderer
             'reverseCharge' => (bool) $invoice->reverse_charge,
             'vatNote' => is_string($invoice->vat_note) ? $invoice->vat_note : null,
             'lines' => $lines,
-            'subtotal' => Money::of($subtotal, $currency)->format(),
-            'tax' => Money::of($tax, $currency)->format(),
-            'total' => Money::of($invoice->total_minor, $currency)->format(),
+            'subtotal' => LocalizedMoney::format(Money::of($subtotal, $currency), $locale),
+            'tax' => LocalizedMoney::format(Money::of($tax, $currency), $locale),
+            'total' => LocalizedMoney::format(Money::of($invoice->total_minor, $currency), $locale),
+            'collected' => $collected === 0 ? null : LocalizedMoney::format(Money::of($collected, $currency), $locale),
+            'supplyTotal' => LocalizedMoney::format(Money::of($invoice->total_minor - $collected, $currency), $locale),
         ];
     }
 
+    /**
+     * What the document's lines collected on behalf of another party, in minor units, where the document states it apart.
+     *
+     * Apart exactly where the e-invoice of the same document states it in a band of its own. On a document that is
+     * exempt, margin-taxed or outside the scope as a whole the amount belongs to the document's one band, and the page
+     * says no more than the machine-readable half does.
+     */
+    private function collectedMinor(InvoiceRecord $invoice): int
+    {
+        $raw = $invoice->getAttribute('lines');
+        $collected = 0;
+
+        foreach (is_array($raw) ? $raw : [] as $line) {
+            $parsed = is_array($line) ? Line::fromArray($line) : null;
+
+            if ($parsed?->collectedOnBehalf() === true) {
+                $collected += $parsed->netMinor;
+            }
+        }
+
+        if ($collected === 0 || ! EnInvoiceTaxCategory::forDocument($invoice, null)->isCollectedOnBehalf()) {
+            return 0;
+        }
+
+        return $collected;
+    }
+
     /** The single rate a short receipt states beside its gross, or null where the document itemises. */
-    private function rateLabel(InvoiceRecord $invoice): ?string
+    private function rateLabel(InvoiceRecord $invoice, string $locale): ?string
     {
         $bps = $invoice->tax_rate_bps;
 
-        return $bps === null ? null : rtrim(rtrim(number_format($bps / 100, 2, '.', ''), '0'), '.').'%';
+        return $bps === null ? null : LocalizedNumber::percent($bps / 100, $locale);
     }
 
     /**
      * @return list<array{description: string, quantity: string, unitPrice: string, net: string, rate: string}>
      */
-    private function lines(InvoiceRecord $invoice, string $currency): array
+    private function lines(InvoiceRecord $invoice, string $currency, string $locale): array
     {
         $raw = $invoice->getAttribute('lines');
         $out = [];
@@ -141,16 +199,16 @@ final readonly class InvoiceDocumentRenderer
             $out[] = [
                 'description' => $parsed->description,
                 'quantity' => $parsed->quantity,
-                'unitPrice' => Money::of($parsed->unitPriceMinor, $currency)->format(),
-                'net' => Money::of($parsed->netMinor, $currency)->format(),
-                'rate' => rtrim(rtrim(number_format($parsed->taxRate, 2, '.', ''), '0'), '.').'%',
+                'unitPrice' => LocalizedMoney::format(Money::of($parsed->unitPriceMinor, $currency), $locale),
+                'net' => LocalizedMoney::format(Money::of($parsed->netMinor, $currency), $locale),
+                // A dash where the line has no rate: an amount collected on behalf of another party is not taxed at 0 %.
+                'rate' => $parsed->taxRate === null ? '—' : LocalizedNumber::percent($parsed->taxRate, $locale),
             ];
         }
 
         return $out;
     }
 
-    /** @return array<array-key, mixed> */
     /**
      * The seller named on this document, resolved the way the XML writers resolve it.
      *

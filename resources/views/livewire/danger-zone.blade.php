@@ -17,10 +17,10 @@
             {{-- Re-confirm identity before the irreversible cancel. A wrong secret / throttle lockout blocks it. --}}
             <div class="mt-3">
                 <label for="reconfirm" class="block text-sm font-medium text-red-900 dark:text-red-100">
-                    {{ __('billing::account.reconfirm.prompt') }}
+                    {{ $prompt }}
                 </label>
                 <input id="reconfirm" type="password" wire:model="credential" autocomplete="off"
-                    class="mt-1 w-full max-w-sm rounded-lg border border-red-300 px-3 py-2 text-sm dark:border-red-800 dark:bg-gray-900"
+                    class="mt-1 w-full max-w-sm rounded-lg border border-red-300 px-3 py-2 text-base sm:text-sm dark:border-red-800 dark:bg-gray-900"
                     aria-describedby="reconfirm-error">
                 @error('credential')
                     <p id="reconfirm-error" role="alert" class="mt-1 text-sm font-medium text-red-700 dark:text-red-300">{{ $message }}</p>

@@ -58,13 +58,15 @@ final readonly class TaxCalculatorFactory
          * acquire its own copy.
          */
         private ?ShippedTaxRates $shipped = null,
+        /** The coverage map the host bound, or null where it bound none, which leaves pricing as it is. */
+        private ?CoverageMap $coverage = null,
     ) {}
 
     public function make(): TaxCalculator
     {
         return match ($this->config->get('billing.tax', 'none')) {
             // The seller's own country drives the domestic-vs-cross-border reverse-charge decision.
-            'eu_oss' => new EuOssTaxCalculator($this->sellerCountry(), $this->rateMatrix(), $this->shipped, $this->rateHistory()),
+            'eu_oss' => new EuOssTaxCalculator($this->sellerCountry(), $this->rateMatrix(), $this->shipped, $this->rateHistory(), $this->coverage),
             'provider', 'stripe' => new StripeTaxCalculator,
             default => new NoTaxCalculator,
         };
@@ -123,10 +125,55 @@ final readonly class TaxCalculatorFactory
             );
         }
 
-        /** @var array<string, array<string, int>> $rates */
-        $rates = $matrix['rates'];
+        return new TaxRateMatrix($this->rateTable($matrix['rates']), Carbon::parse($matrix['valid_from']));
+    }
 
-        return new TaxRateMatrix($rates, Carbon::parse($matrix['valid_from']));
+    /**
+     * The configured rates, read as strictly as the history beside them.
+     *
+     * A country code comes back in upper case, the case the table is asked in: written `de`, it priced no
+     * sale into Germany, and every reduced-rate supply there fell back to the shipped standard rate. A band
+     * that is not a rate category, a rate that is not a whole number of basis points and two spellings of
+     * one country are refused, because each of them leaves a supply at a rate nobody configured.
+     *
+     * @param  array<array-key, mixed>  $configured
+     * @return array<string, array<string, int>>
+     */
+    private function rateTable(array $configured): array
+    {
+        $rates = [];
+
+        foreach ($configured as $country => $bands) {
+            if (! is_string($country) || ! is_array($bands)) {
+                throw InvalidBillingConfig::forKey('billing.tax_matrix.rates', $this->ratesShape());
+            }
+
+            $code = strtoupper($country);
+
+            if (isset($rates[$code])) {
+                throw InvalidBillingConfig::forKey('billing.tax_matrix.rates', "names {$code} twice, in two spellings, and one country has one table");
+            }
+
+            $rates[$code] = [];
+
+            foreach ($bands as $band => $bps) {
+                if (! TaxRateCategory::tryFrom((string) $band) instanceof TaxRateCategory || ! is_int($bps)) {
+                    throw InvalidBillingConfig::forKey('billing.tax_matrix.rates', $this->ratesShape());
+                }
+
+                $rates[$code][(string) $band] = $bps;
+            }
+        }
+
+        return $rates;
+    }
+
+    /** The shape the rates have to have, written once because two refusals above quote it. */
+    private function ratesShape(): string
+    {
+        $bands = implode(', ', array_map(static fn (TaxRateCategory $band): string => '"'.$band->value.'"', TaxRateCategory::cases()));
+
+        return "a map of country code to a map of rate band ({$bands}) to a whole number of basis points";
     }
 
     /**

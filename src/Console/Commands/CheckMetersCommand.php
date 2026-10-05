@@ -107,6 +107,15 @@ final class CheckMetersCommand extends Command
             $problems++;
         }
 
+        // Usage is reported raw, so a price without a free first tier bills from the first unit, whatever the
+        // gauge shows. That is no allowance of a different size; it is none at all.
+        if ($component->included !== null && $component->included > 0 && $facts->firstTierUpTo === null) {
+            $this->components->error(
+                "Price '{$price}' ({$component->key}) gives away no free units, but the tier promises {$component->included} — the customer is billed from the first unit while they are shown an allowance."
+            );
+            $problems++;
+        }
+
         return $problems;
     }
 }

@@ -12,7 +12,6 @@ use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\ValueObjects\Invoice;
 use Pushery\Billing\ValueObjects\InvoiceDownload;
 use Pushery\Billing\ValueObjects\InvoicePage;
-use Pushery\Billing\ValueObjects\Money;
 use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\RateLimitException;
 use Stripe\Invoice as StripeInvoice;
@@ -21,7 +20,8 @@ use Stripe\StripeClient;
 /**
  * Read access to a billable's Stripe invoices, hydrated into package Invoice DTOs so views render a
  * neutral shape. `download` streams the hosted PDF only after confirming the invoice belongs to the
- * billable's Stripe customer — an invoice id for another customer resolves to null, never a leak.
+ * billable's Stripe customer — an invoice id for another customer resolves to null, never a leak. A PDF host
+ * that answers with an error throws rather than handing its error page over as the invoice.
  */
 final readonly class StripeInvoices implements InvoicesContract
 {
@@ -102,9 +102,12 @@ final readonly class StripeInvoices implements InvoicesContract
 
         $number = $invoice->number ?? null;
 
+        // The HTTP client returns a 404 or a 503 like a success, and its body would go to the customer as the
+        // invoice, named after it, with status 200. An outage is not "no such invoice", which is what null
+        // says here, so it throws and reaches the exception handler, as a rate limit above does.
         return new InvoiceDownload(
             filename: ($number ?? $invoiceId).'.pdf',
-            contents: Http::get($url)->body(),
+            contents: Http::get($url)->throw()->body(),
         );
     }
 
@@ -113,7 +116,7 @@ final readonly class StripeInvoices implements InvoicesContract
         return new Invoice(
             id: $id,
             date: new DateTimeImmutable('@'.$invoice->created),
-            total: Money::of($invoice->total, strtoupper($invoice->currency)),
+            total: StripeAmount::toMoney($invoice->total, strtoupper($invoice->currency)),
             status: $this->mapStatus($invoice->status),
             number: $invoice->number ?? null,
             downloadUrl: $invoice->invoice_pdf ?? null,

@@ -9,6 +9,11 @@ namespace Pushery\Billing\Invoicing;
  * EN 16931 line needs: a name, a quantity + unit, the net unit price, the net line amount and the VAT
  * rate. Missing fields degrade to safe defaults (quantity 1, unit "C62" = one piece, zero amounts).
  *
+ * A line whose rate is stored as null has no rate at all, which is not a rate of zero. Zero says the tax reached
+ * the amount and came to nothing; no rate says the amount is not the issuer's supply: it was collected in the name
+ * and on behalf of another party, and is stated so the document reconciles with what was paid. A line that does not
+ * name a rate keeps the default of zero.
+ *
  * The service period is optional and appended, and it is what makes a subscription billable as what it is:
  * each billing cycle is a separately agreed and separately invoiced part of the whole, so each carries its
  * own period. Without one, a subscription invoice does not say what it is for — the reader sees an amount
@@ -23,7 +28,8 @@ final readonly class Line
         public string $unit,
         public int $unitPriceMinor,
         public int $netMinor,
-        public float $taxRate,
+        /** The VAT rate as a percentage, or null where the amount was collected on behalf of another party. */
+        public ?float $taxRate,
         /** The first day of the period this line covers, as YYYY-MM-DD. */
         public ?string $periodStart = null,
         /** The last day of it. Inclusive: a month billed on the 1st ends on its last day, not the next 1st. */
@@ -40,6 +46,12 @@ final readonly class Line
          */
         public ?string $periodKey = null,
     ) {}
+
+    /** Whether this line is an amount collected on behalf of another party, which carries no rate. */
+    public function collectedOnBehalf(): bool
+    {
+        return $this->taxRate === null;
+    }
 
     /** Whether this line states the period it covers. */
     public function hasPeriod(): bool
@@ -65,7 +77,9 @@ final readonly class Line
     public static function fromArray(array $data): self
     {
         $quantity = $data['quantity'] ?? 1;
-        $rate = $data['tax_rate'] ?? 0;
+        // Null only where the line names its rate as null. A missing rate defaults to zero like every missing field:
+        // only the writer of a document can say that an amount on it was not its supply.
+        $rate = array_key_exists('tax_rate', $data) && $data['tax_rate'] === null ? null : ($data['tax_rate'] ?? 0);
 
         return new self(
             description: is_string($data['description'] ?? null) ? $data['description'] : '',
@@ -73,7 +87,7 @@ final readonly class Line
             unit: is_string($data['unit'] ?? null) ? $data['unit'] : 'C62',
             unitPriceMinor: is_int($data['unit_price_minor'] ?? null) ? $data['unit_price_minor'] : 0,
             netMinor: is_int($data['net_minor'] ?? null) ? $data['net_minor'] : 0,
-            taxRate: is_int($rate) || is_float($rate) ? $rate : 0.0,
+            taxRate: $rate === null ? null : (is_int($rate) || is_float($rate) ? (float) $rate : 0.0),
             // Both ends or neither: half a period is not a period, and rendering one bound would produce a
             // document claiming a service that started and never finished.
             periodStart: self::date($data, 'period_start', $data['period_end'] ?? null),

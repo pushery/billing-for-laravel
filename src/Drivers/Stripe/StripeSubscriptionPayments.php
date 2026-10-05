@@ -110,6 +110,6 @@ final readonly class StripeSubscriptionPayments implements ReadsSubscriptionPaym
         $amount = $invoice['amount_paid'] ?? 0;
         $currency = $invoice['currency'] ?? '';
 
-        return Money::of(is_int($amount) ? $amount : 0, strtoupper(is_string($currency) ? $currency : ''));
+        return StripeAmount::toMoney(is_int($amount) ? $amount : 0, strtoupper(is_string($currency) ? $currency : ''));
     }
 }

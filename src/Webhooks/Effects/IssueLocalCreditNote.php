@@ -6,11 +6,15 @@ namespace Pushery\Billing\Webhooks\Effects;
 
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Pushery\Billing\Contracts\DedupesOnReference;
 use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Events\AddonRefunded;
+use Pushery\Billing\Events\BillingDomainEvent;
+use Pushery\Billing\Invoicing\CorrectionTax;
 use Pushery\Billing\Invoicing\CreditNoteNumber;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\Order;
+use RuntimeException;
 
 /**
  * Issues the credit note for money refunded against a LOCALLY raised invoice.
@@ -46,7 +50,7 @@ use Pushery\Billing\Models\Order;
  * manual adjustment out of band, or an invoice reissued smaller — is capped rather than trusted. Credit
  * notes summing beyond their invoice is the one shape an auditor reads as fabricated.
  */
-final readonly class IssueLocalCreditNote
+final readonly class IssueLocalCreditNote implements DedupesOnReference
 {
     public function __construct(private CreditNoteNumber $numbers) {}
 
@@ -60,17 +64,20 @@ final readonly class IssueLocalCreditNote
 
         // ONE transaction holding the invoice row, because the delta below is a read-modify-write over an
         // aggregate and the effect backbone does not serialize this for us. Two genuinely different refunds
-        // against one payment arrive as two events with two different ids, so they get two different claims
+        // against one payment arrive with two different cumulative figures, so they get two different claims
         // and run in two parallel transactions: under READ COMMITTED neither sees the other's uncommitted
         // note, both read nothing credited yet, and both state their own cumulative figure. 7.50 then 20.00
         // against a 20.00 invoice is 27.50 again — the exact sum the delta exists to prevent, arriving
         // through concurrency instead of through arithmetic, and the differing keys cannot catch it.
         //
         // The INVOICE is the mutex, not the notes: the notes are what is being counted, and a lock over
-        // rows that do not exist yet holds nothing back. The row's contents are not read for anything.
+        // rows that do not exist yet holds nothing back. The row's contents are not read for anything. The
+        // notes are read under a lock afterwards all the same, for what that read sees rather than for what it
+        // holds back: see alreadyCredited().
         //
-        // Dedup on the payment reference would serialize them too, and would be wrong: a handled claim is
-        // never re-claimed, so the second refund would be dropped rather than credited.
+        // Dedup on the payment reference alone would serialize them too, and would be wrong: a handled claim is
+        // never re-claimed, so the second refund would be dropped rather than credited. The claim names the
+        // cumulative figure as well for that reason (see dedupReference()).
         //
         // `HandleWebhookEffect` already runs every effect inside a transaction, and nested this is a
         // savepoint — the OUTER transaction then owns the lock and releases it when the note commits, which
@@ -99,6 +106,8 @@ final readonly class IssueLocalCreditNote
         if ($credited <= 0) {
             return;
         }
+
+        $split = CorrectionTax::of($invoice, $credited);
 
         // Keyed on the CUMULATIVE figure, not the delta. That is what a redelivery repeats — the same
         // cumulative total arriving twice is the same news — while two genuinely different refunds that
@@ -130,7 +139,11 @@ final readonly class IssueLocalCreditNote
                 'credited_invoice_id' => $invoice->id,
                 'credited_invoice_number' => $invoice->number,
                 'total_minor' => $credited,
-                'subtotal_minor' => $credited,
+                // The refund reduces a gross amount, so the note states its net and its tax at the rate of the
+                // invoice it corrects. Stated as net alone, it told the return to reduce the base by the gross
+                // and the tax by nothing.
+                'subtotal_minor' => $split?->net,
+                'tax_minor' => $split?->tax,
                 'currency' => $event->cumulativeRefunded->currency,
                 // THE FROZEN TAX POSITION OF THE SUPPLY BEING REDUCED, COPIED RATHER THAN LEFT NULL.
                 //
@@ -156,10 +169,11 @@ final readonly class IssueLocalCreditNote
                 'lines' => [[
                     'description' => sprintf('Refund of %s', $invoice->number ?? 'invoice'),
                     'quantity' => 1,
-                    'unit_price_minor' => $credited,
+                    'unit_price_minor' => $split->net ?? $credited,
                     'total_minor' => $credited,
                     'currency' => $event->cumulativeRefunded->currency,
                     'type' => 'credit',
+                    ...($split instanceof CorrectionTax ? ['net_minor' => $split->net, 'tax_rate' => $split->rate] : []),
                 ]],
             ],
         ]);
@@ -171,12 +185,22 @@ final readonly class IssueLocalCreditNote
      * Read from the notes themselves rather than tracked on the invoice: the notes ARE the record, an
      * issued one cannot change, and a counter beside them would be a second version of the same fact that
      * drifts the first time one is written by anything else.
+     *
+     * Read under a lock, row by row, and added up here. On MySQL, whose default isolation is REPEATABLE READ,
+     * a plain read answers from the snapshot taken at the transaction's first plain read, which came before
+     * the wait for the invoice: a note another refund committed during that wait would be missing from the
+     * sum. A locking read sees it. PostgreSQL refuses `FOR UPDATE` beside an aggregate, so the rows come back
+     * rather than their sum.
      */
     private function alreadyCredited(InvoiceRecord $invoice): int
     {
-        return (int) InvoiceRecord::model()::query()
-            ->where('credited_invoice_id', $invoice->id)
-            ->sum('total_minor');
+        $credited = 0;
+
+        foreach (InvoiceRecord::model()::query()->where('credited_invoice_id', $invoice->id)->lockForUpdate()->get(['total_minor']) as $note) {
+            $credited += $note->total_minor;
+        }
+
+        return $credited;
     }
 
     /**
@@ -209,5 +233,23 @@ final readonly class IssueLocalCreditNote
     private function number(Carbon $issuedAt): string
     {
         return $this->numbers->next($issuedAt);
+    }
+
+    /**
+     * Once per refunded state of the payment: the payment, its cumulative refunded total and why it came back.
+     *
+     * The event carries the cumulative figure, so a redelivery repeats it and a further refund raises it. Keyed on
+     * the delivery instead, a provider that pings every change to a payment under one key had its second refund
+     * dropped as a duplicate of the first: Mollie does, because a refund leaves the payment `paid`. The reversal,
+     * the credit note and the access revocation name the state with the same expression, so the three effects on
+     * this event agree about what "the same refund" means.
+     */
+    public function dedupReference(BillingDomainEvent $event): string
+    {
+        if (! $event instanceof AddonRefunded) {
+            throw new RuntimeException('IssueLocalCreditNote only handles AddonRefunded events.');
+        }
+
+        return sprintf('%s:refunded:%d:%s:%s', $event->paymentReference, $event->cumulativeRefunded->minorUnits, $event->cumulativeRefunded->currency, $event->reason ?? 'refund');
     }
 }

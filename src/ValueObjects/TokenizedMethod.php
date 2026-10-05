@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Pushery\Billing\ValueObjects;
 
 /**
- * A freshly tokenised payment method returned by PaymentRails::tokenize(). Carries the driver token
- * plus optional display hints and whether it can be charged off-session.
+ * A payment method the provider holds, as PaymentRails::tokenize() describes it: the driver token, optional
+ * display hints, and whether it can be charged off-session.
  */
 final readonly class TokenizedMethod
 {

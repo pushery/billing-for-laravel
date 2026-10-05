@@ -15,8 +15,8 @@ use Pushery\Billing\Support\BillingSchema;
  * would mean either skipping the collection or blocking on a call that may never return. The mandate the
  * engine charges against is therefore a row read.
  *
- * Provider-neutral by name, which is load-bearing rather than tidy: Adyen's driver stores its tokens here
- * too, and a `mollie_mandate_id` column would have forced a second table for the same concept — after
+ * Provider-neutral by name, which is load-bearing rather than tidy: every local driver stores its tokens here,
+ * and a `mollie_mandate_id` column would have forced a second table for the same concept — after
  * which "which mandate does this owner pay with" would have had two answers.
  *
  * There is no partial unique index on the default flag, though one would express the rule exactly. MySQL

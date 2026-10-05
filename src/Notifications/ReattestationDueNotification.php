@@ -9,6 +9,7 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Support\LocalizedDate;
 
 /**
  * A creator's tax declaration is due for renewal, and the notice says by when.
@@ -31,7 +32,7 @@ final class ReattestationDueNotification extends BillingNotification
 
     public function toMail(object $notifiable): MailMessage
     {
-        $date = ['date' => $this->holdFrom->toDateString()];
+        $date = ['date' => LocalizedDate::long($this->holdFrom)];
 
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.reattestation_due.subject'))

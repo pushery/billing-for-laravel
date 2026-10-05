@@ -41,6 +41,10 @@ final readonly class GermanWithdrawalPolicy implements ConsumerWithdrawalPolicy,
     /**
      * Fourteen days from PROVISION — § 355 Abs. 2 BGB — where a window exists at all.
      *
+     * Counted as days on the German calendar: the window ends when the fourteenth day after provision has ended, and
+     * a last day on a Saturday, a Sunday or a public holiday gives way to the next working day. How, and why every
+     * state's holidays count, is in {@see GermanWithdrawalPeriod}.
+     *
      * ## Provision, not purchase and not payment
      *
      * For a pre-ordered work those are three different days, and only one of them can start a clock: the
@@ -68,7 +72,7 @@ final readonly class GermanWithdrawalPolicy implements ConsumerWithdrawalPolicy,
             return null;
         }
 
-        return $providedAt->toImmutable()->addDays(14);
+        return GermanWithdrawalPeriod::endsAfter($providedAt);
     }
 
     public function valueForUse(WithdrawalType $type, Money $periodGross, int $elapsedDays, int $periodDays): Money

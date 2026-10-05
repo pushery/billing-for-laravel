@@ -9,7 +9,7 @@ use Pushery\Billing\ValueObjects\InvoiceCorrectionSnapshot;
 
 /**
  * @deprecated Renamed to {@see InvoiceCorrected}. The old name conflated this correcting document (a
- * cancellation or amendment of an invoice) with a self-billing credit note (§ 14 Abs. 2 S. 5 UStG, type
+ * cancellation or amendment of an invoice) with a self-billed invoice (§ 14 Abs. 2 S. 5 UStG, type
  * code 389), which is a different document. This class remains for one deprecation window: `InvoiceCorrected`
  * fires it through the framework dispatcher too, so an existing `Event::listen(InvoiceCredited::class)`
  * keeps being called. Migrate to `InvoiceCorrected` and read `$event->correction`; this class and the alias

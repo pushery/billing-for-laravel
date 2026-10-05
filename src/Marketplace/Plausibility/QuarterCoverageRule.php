@@ -70,11 +70,14 @@ final readonly class QuarterCoverageRule implements ReportingPlausibilityRule
                 $quarterlyCount += $figures->transactions;
             }
 
-            $annualGross = $this->inflow->countedIn($report->seller, $currency, $window)
-                ->plus($this->intermediated->countedIn($report->seller, $currency, $window));
-            $annualFees = $this->intermediated->feesIn($report->seller, $currency, $window);
-            $annualCount = $this->inflow->transactionsIn($report->seller, $currency, $window)
-                + $this->intermediated->transactionsIn($report->seller, $currency, $window);
+            // One reading of the year per counter, as the quarters are read: the same figures asked one by one
+            // read the seller's documents twice and their sales three times.
+            $settled = $this->inflow->figuresIn($report->seller, $currency, $window);
+            $arranged = $this->intermediated->figuresIn($report->seller, $currency, $window);
+
+            $annualGross = $settled['gross']->plus($arranged['gross']);
+            $annualFees = $arranged['fees'];
+            $annualCount = $settled['transactions'] + $arranged['transactions'];
 
             if ($quarterlyGross->minorUnits !== $annualGross->minorUnits) {
                 $mismatches[] = 'gross inflow '.$quarterlyGross->minorUnits.' vs '.$annualGross->minorUnits;

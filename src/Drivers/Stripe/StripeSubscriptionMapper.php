@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
+use Illuminate\Container\Container;
 use Pushery\Billing\Catalogs\TierPriceIndex;
 use Pushery\Billing\Catalogs\TierPriceIndexFactory;
 use Pushery\Billing\Enums\SubscriptionState;
@@ -22,7 +23,11 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  */
 final readonly class StripeSubscriptionMapper
 {
-    public function __construct(private TierPriceIndexFactory $indexes) {}
+    public function __construct(
+        private TierPriceIndexFactory $indexes,
+        /** Reads the discounts a payload names only by id; resolved from the container when none was given. */
+        private ?StripeDiscountCoupons $discounts = null,
+    ) {}
 
     /**
      * @param  array<array-key, mixed>  $subscription
@@ -262,7 +267,7 @@ final readonly class StripeSubscriptionMapper
      *
      * Read off the coupon's own `metadata`, where {@see StripePlatformCouponProvisioner} writes
      * `billing_coupon_code` when it mints. So the mapping back is one the package laid down itself on the
-     * way out -- no lookup, no query, and no rebuilding a local row from a provider id.
+     * way out -- no query of ours, and no rebuilding a local row from a provider id.
      *
      * THE NULL IS AS MEANINGFUL AS THE VALUE, and that is why this reads metadata rather than the coupon id.
      * A CATALOG coupon (`billing.coupons.<code>.stripe_coupon`) was created by a human at the provider, with
@@ -270,34 +275,77 @@ final readonly class StripeSubscriptionMapper
      * to book. Such a coupon carries no `billing_coupon_code`, so it answers null -- correctly. Keying on the
      * id would have made both look alike and invited a consumer to book a redemption nobody is counting.
      *
-     * Both shapes are read because the provider moved this field: `discount` is the older single object,
-     * `discounts` the list that replaced it. Reading only one of them would answer null on half the API
-     * versions, which is the failure mode this package has already paid for once on an invoice field.
+     * Every shape is read because the provider moved this field twice: `discount` is the older single object,
+     * `discounts` the list that replaced it, and on the pinned version a discount names its coupon under
+     * `source.coupon`. Reading only one of them would answer null on the other API versions, which is the
+     * failure mode this package has already paid for once on an invoice field.
+     *
+     * On the pinned version a webhook names the discounts by id and expands none of them, so nothing in the
+     * payload can answer. Where no code can be read and something in it is unexpanded, the subscription's
+     * discounts are read back once, expanded. A payload whose code can be read costs no request.
      *
      * @param  array<array-key, mixed>  $subscription
      */
     private function mintedCouponCode(array $subscription): ?string
     {
-        $candidates = [];
+        $discounts = $this->discountsOf($subscription);
+        $code = $this->codeAmong($discounts);
+        $id = $subscription['id'] ?? null;
 
-        $single = $subscription['discount'] ?? null;
-
-        if (is_array($single)) {
-            $candidates[] = $single;
+        if ($code === null && is_string($id) && $this->carriesUnexpanded($discounts)) {
+            return $this->codeAmong(($this->discounts ?? Container::getInstance()->make(StripeDiscountCoupons::class))->expandedFor($id));
         }
 
+        return $code;
+    }
+
+    /**
+     * The discounts the payload names, expanded or not, from the single field and the list alike.
+     *
+     * @param  array<array-key, mixed>  $subscription
+     * @return list<mixed>
+     */
+    private function discountsOf(array $subscription): array
+    {
         $many = $subscription['discounts'] ?? null;
 
-        if (is_array($many)) {
-            foreach ($many as $discount) {
-                if (is_array($discount)) {
-                    $candidates[] = $discount;
-                }
-            }
+        return [
+            ...(isset($subscription['discount']) ? [$subscription['discount']] : []),
+            ...(is_array($many) ? array_values($many) : []),
+        ];
+    }
+
+    /** A discount's coupon, under either the field the older versions used or the one the pinned version uses. */
+    private function couponOf(mixed $discount): mixed
+    {
+        if (! is_array($discount)) {
+            return null;
         }
 
-        foreach ($candidates as $discount) {
-            $coupon = $discount['coupon'] ?? null;
+        $source = $discount['source'] ?? null;
+
+        return $discount['coupon'] ?? (is_array($source) ? ($source['coupon'] ?? null) : null);
+    }
+
+    /**
+     * Whether a discount is named only by id, or names its coupon only by id, so that the payload cannot answer.
+     *
+     * @param  list<mixed>  $discounts
+     */
+    private function carriesUnexpanded(array $discounts): bool
+    {
+        return array_any($discounts, fn (mixed $discount): bool => is_string($discount) || is_string($this->couponOf($discount)));
+    }
+
+    /**
+     * The first minted code among these discounts, or null.
+     *
+     * @param  list<mixed>  $discounts
+     */
+    private function codeAmong(array $discounts): ?string
+    {
+        foreach ($discounts as $discount) {
+            $coupon = $this->couponOf($discount);
 
             if (! is_array($coupon)) {
                 continue;

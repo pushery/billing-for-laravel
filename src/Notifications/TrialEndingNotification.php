@@ -5,8 +5,12 @@ declare(strict_types=1);
 namespace Pushery\Billing\Notifications;
 
 use DateTimeInterface;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Enums\BillingAction;
+use Pushery\Billing\Support\LocalizedDate;
+use Pushery\Billing\Support\TrialCallouts;
 
 /**
  * The reminder sent as a free trial nears its end. Localized via the publishable
@@ -24,20 +28,19 @@ final class TrialEndingNotification extends BillingNotification
     {
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.trial_ending.subject'))
-            ->line(Lang::get('billing::notifications.trial_ending.intro'))
-            ->line($this->trialEndsAt->format('Y-m-d'))
+            ->line(Lang::get('billing::notifications.trial_ending.intro', ['date' => LocalizedDate::long($this->trialEndsAt)]))
             ->line(Lang::get('billing::notifications.trial_ending.outro'));
 
         // Where the reader is sent depends on what they already have. Somebody with a card on file needs the
         // plan screen — they are choosing whether to continue. Somebody without one needs the screen that
         // takes a card, which is the action this mail's own text asks for. Sending both to the same place
         // makes one of the two do a second hop for no reason.
-        $hasCard = is_string($notifiable->pm_type ?? null) && ($notifiable->pm_type ?? '') !== '';
+        $hasCard = $notifiable instanceof Model && TrialCallouts::hasPaymentMethod($notifiable);
 
         return $this->withAction(
             $mail,
             Lang::get('billing::notifications.trial_ending.cta'),
-            $this->actionUrl($hasCard ? 'billing.account.plan' : 'billing.account.payment-methods'),
+            $this->actionFor($notifiable, $hasCard ? BillingAction::Plan : BillingAction::PaymentMethods),
         );
     }
 

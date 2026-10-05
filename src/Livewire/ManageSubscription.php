@@ -8,6 +8,8 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
 use Pushery\Billing\Catalogs\ConfigAddonCatalog;
 use Pushery\Billing\Consumer\PurchaseDeclarations;
@@ -19,7 +21,11 @@ use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Enums\SwapTiming;
 use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\Support\BuyerAudiences;
+use Pushery\Billing\Support\CatalogLabel;
 use Pushery\Billing\Support\LinkOut;
+use Pushery\Billing\Support\LocalizedDate;
+use Pushery\Billing\Support\LocalizedMoney;
 use Pushery\Billing\Support\PlanSwapPlanner;
 use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\Support\TrialCallouts;
@@ -29,6 +35,7 @@ use Pushery\Billing\ValueObjects\Plan;
 use Pushery\Billing\ValueObjects\TierIdentity;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 
 /**
  * The account-hub plan-change screen — the in-app upgrade/downgrade that replaces delegating plan
@@ -63,6 +70,11 @@ final class ManageSubscription extends AccountScreen
      */
     public string $couponCode = '';
 
+    protected function headingKey(): string
+    {
+        return 'billing::account.manage.heading';
+    }
+
     public function render(): View
     {
         $tiers = Container::getInstance()->make(TierCatalog::class);
@@ -72,7 +84,7 @@ final class ManageSubscription extends AccountScreen
         // on the zero tier must always be able to reach checkout — never a blank screen.
         $current = $tiers->find($key) ?? new TierIdentity(key: $key, label: $tiers->label($key));
 
-        $plans = Container::getInstance()->make(PlanCatalog::class)->options($current);
+        $plans = $this->offeredPlans($current);
 
         $trialPolicy = Container::getInstance()->make(TrialPolicy::class);
 
@@ -88,7 +100,7 @@ final class ManageSubscription extends AccountScreen
         }
 
         return $this->view('billing::livewire.manage-subscription', [
-            'currentLabel' => $tiers->label($key),
+            'currentLabel' => CatalogLabel::translate($tiers->label($key)),
             // When an external merchant of record owns billing (config billing.link_out), the hub links OUT to
             // its portal instead of offering the in-app checkout below — the app is not the merchant of record.
             'linkOut' => Container::getInstance()->make(LinkOut::class)->url(),
@@ -115,8 +127,8 @@ final class ManageSubscription extends AccountScreen
             'addons' => $this->addonOptions(),
             'options' => array_map(static fn (Plan $plan): array => [
                 'key' => $plan->key,
-                'label' => $tiers->label($plan->key),
-                'price' => $plan->amount->format(),
+                'label' => CatalogLabel::translate($tiers->label($plan->key)),
+                'price' => LocalizedMoney::format($plan->amount),
                 'interval' => $plan->interval->value,
             ], $plans),
         ]);
@@ -156,13 +168,19 @@ final class ManageSubscription extends AccountScreen
         }
 
         $catalog = Container::getInstance()->make(ConfigAddonCatalog::class);
+        $audiences = Container::getInstance()->make(BuyerAudiences::class);
+        $owner = $this->owner();
         $out = [];
 
         foreach ($catalog->all() as $key) {
+            if (! $audiences->mayBuyAddon($owner, $key)) {
+                continue;
+            }
+
             $price = $catalog->priceFor($key);
 
             if ($price instanceof Money) {
-                $out[] = ['key' => $key, 'label' => $catalog->label($key), 'price' => $price->format()];
+                $out[] = ['key' => $key, 'label' => CatalogLabel::translate($catalog->label($key)), 'price' => LocalizedMoney::format($price)];
             }
         }
 
@@ -186,7 +204,16 @@ final class ManageSubscription extends AccountScreen
             return;
         }
 
-        $coupon = trim($this->couponCode);
+        // The key comes from the client, so it is held against the plans the screen lists, as swap() and preview()
+        // hold it: a crafted request for a tier the screen does not offer, an untouchable one among them, opens nothing.
+        $this->refuseATierNotOffered($tierKey);
+
+        // An offer only businesses may buy is not shown to anybody else, so it is not sold to them either.
+        if (! Container::getInstance()->make(BuyerAudiences::class)->mayBuyTier($this->owner(), $tierKey)) {
+            throw new NotFoundHttpException;
+        }
+
+        $coupon = Str::trim($this->couponCode);
         $coupon = $coupon !== '' ? $coupon : null;
 
         // BEFORE the provider is asked for anything, for the reasons purchaseAddon() below gives. Silent without
@@ -233,6 +260,11 @@ final class ManageSubscription extends AccountScreen
             throw new NotFoundHttpException;
         }
 
+        // The same answer for an add-on only businesses may buy, which this owner was never shown.
+        if (! Container::getInstance()->make(BuyerAudiences::class)->mayBuyAddon($this->owner(), $addonKey)) {
+            throw new NotFoundHttpException;
+        }
+
         // BEFORE the provider is asked for anything. The gate at provision already refuses a work whose
         // right of withdrawal has not been safely extinguished, but by then the buyer has paid — the
         // operator is left refunding a sale the package could have declined for free. Same rule, both ends.
@@ -273,7 +305,7 @@ final class ManageSubscription extends AccountScreen
      */
     private function couponStatus(): ?string
     {
-        $code = trim($this->couponCode);
+        $code = Str::trim($this->couponCode);
 
         if ($code === '') {
             return null;
@@ -289,6 +321,9 @@ final class ManageSubscription extends AccountScreen
      */
     public function preview(string $tierKey): void
     {
+        $this->refuseATierNotOffered($tierKey);
+        $this->throttle('swap-preview', [60 => 10, 3600 => 60, 86400 => 240]);
+
         $plan = Container::getInstance()->make(PlanCatalog::class)->planFor($tierKey);
 
         $amount = $plan instanceof Plan
@@ -296,13 +331,15 @@ final class ManageSubscription extends AccountScreen
             : null;
 
         $this->previewTierKey = $tierKey;
-        $this->previewAmount = $amount instanceof Money ? $amount->format() : null;
+        $this->previewAmount = $amount instanceof Money ? LocalizedMoney::format($amount) : null;
     }
 
     public function swap(string $tierKey): void
     {
         $this->denyInAppCheckout();
         $this->ensureEligible();
+        $this->refuseATierNotOffered($tierKey);
+        $this->throttle('swap', [60 => 5]);
 
         $subscription = $this->subscription();
         $timing = $subscription instanceof Subscription
@@ -334,22 +371,13 @@ final class ManageSubscription extends AccountScreen
             $subscription->scheduleSwap($tierKey, $subscription->current_period_end ?? Carbon::now()->utc());
             $this->audit('subscription.swap_scheduled', ['tier' => $tierKey]);
         } else {
-            $plan = Container::getInstance()->make(PlanCatalog::class)->planFor($tierKey);
-
-            // The proration is applied BEFORE the provider is asked to swap, and the order is not a
-            // preference. `applySwap` prices the unused remainder against the tier the resolver answers with
-            // RIGHT NOW; run it afterwards and that is already the new tier, so the credit would be computed
-            // against the price the customer is moving to. It would look entirely reasonable and be wrong.
+            // The screen books no proration of its own. `SubscriptionActions::swap()` prorates unless told
+            // otherwise: the local driver through the bound strategy, priced against the tier being left before
+            // the tier moves, and Stripe at Stripe. A booking here as well would count the same days twice.
             //
-            // Wrapped so a provider that refuses the swap leaves no credit behind. Before this, the two ran
-            // in neither order: nothing in the package called `applySwap` at all, so an install on the
-            // credit-balance strategy showed a customer their proration in the preview and then booked
-            // nothing — the promise was on screen and the money never moved.
-            DB::transaction(function () use ($tierKey, $plan, $subscription): void {
-                if ($plan instanceof Plan) {
-                    Container::getInstance()->make(ProrationStrategy::class)->applySwap($this->owner(), $plan);
-                }
-
+            // Wrapped so a swap that fails leaves nothing behind, neither the proration the driver booked nor
+            // the pending downgrade the upgrade would have superseded.
+            DB::transaction(function () use ($tierKey, $subscription): void {
                 Container::getInstance()->make(SubscriptionActions::class)->swap($this->owner(), $tierKey);
 
                 // An immediate upgrade supersedes any pending downgrade — the customer just chose to move up now.
@@ -361,6 +389,82 @@ final class ManageSubscription extends AccountScreen
 
         $this->previewTierKey = null;
         $this->previewAmount = null;
+    }
+
+    /**
+     * Refuse an owner who has used this action more often in a window than a customer clicking through the plans
+     * ever would.
+     *
+     * One Livewire request may carry up to 50 calls on each of up to 200 component entries, the framework's
+     * `payload.max_calls` and `max_components`, and a preview asks the provider twice on the platform's account.
+     * Without a limit, a single request drives thousands of provider calls. The refusal ends the request rather than
+     * answering each further call with nothing, so the rest of the batch never runs.
+     *
+     * A minute alone does not bound a month. The provider allots an account its reads per month, and ten previews a
+     * minute held all month come to over 400,000 reads for one owner, so the preview also carries an hour and a day.
+     *
+     * @param  array<int, int>  $limits  how many calls each window allows, keyed by the window's length in seconds
+     */
+    private function throttle(string $action, array $limits): void
+    {
+        $owner = $this->owner();
+        $id = $owner->getKey();
+        $key = 'billing:'.$action.':'.$owner->getMorphClass().':'.(is_scalar($id) ? (string) $id : '');
+
+        foreach ($limits as $seconds => $allowed) {
+            if (RateLimiter::tooManyAttempts("{$key}:{$seconds}", $allowed)) {
+                throw new TooManyRequestsHttpException(RateLimiter::availableIn("{$key}:{$seconds}"));
+            }
+        }
+
+        foreach (array_keys($limits) as $seconds) {
+            RateLimiter::hit("{$key}:{$seconds}", $seconds);
+        }
+    }
+
+    /**
+     * The plans this owner is offered: the catalog's options, less any tier only businesses may buy where the owner
+     * is not one. The screen lists these and a swap or a preview is refused for anything else, so both read one list.
+     *
+     * @return list<Plan>
+     */
+    private function offeredPlans(TierIdentity $current): array
+    {
+        $audiences = Container::getInstance()->make(BuyerAudiences::class);
+        $owner = $this->owner();
+
+        return array_values(array_filter(
+            Container::getInstance()->make(PlanCatalog::class)->options($current),
+            static fn (Plan $plan): bool => $audiences->mayBuyTier($owner, $plan->key),
+        ));
+    }
+
+    /**
+     * Refuse a tier key the screen does not offer, the way an unknown add-on key is refused.
+     *
+     * The key comes from the client, so it is held against the set the screen offers before anything is previewed,
+     * scheduled or swapped. A tier outside that set ranks as a downgrade and would be scheduled for the period end,
+     * where no run can apply it. The owner's own tier passes: a second submit of the same swap finds the owner on it
+     * already, and that is a no-op rather than an error.
+     */
+    private function refuseATierNotOffered(string $tierKey): void
+    {
+        $key = $this->currentTierKey();
+
+        if ($tierKey === $key) {
+            return;
+        }
+
+        $tiers = Container::getInstance()->make(TierCatalog::class);
+        $current = $tiers->find($key) ?? new TierIdentity(key: $key, label: $tiers->label($key));
+
+        foreach ($this->offeredPlans($current) as $plan) {
+            if ($plan->key === $tierKey) {
+                return;
+            }
+        }
+
+        throw new NotFoundHttpException;
     }
 
     /**
@@ -380,8 +484,8 @@ final class ManageSubscription extends AccountScreen
         $tierKey = $subscription->scheduled_tier_key ?? '';
 
         return [
-            'tierLabel' => Container::getInstance()->make(TierCatalog::class)->label($tierKey),
-            'date' => ($subscription->scheduled_swap_at ?? Carbon::now())->toFormattedDateString(),
+            'tierLabel' => CatalogLabel::translate(Container::getInstance()->make(TierCatalog::class)->label($tierKey)),
+            'date' => (string) LocalizedDate::long($subscription->scheduled_swap_at ?? Carbon::now()),
         ];
     }
 

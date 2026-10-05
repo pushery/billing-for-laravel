@@ -4,23 +4,15 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Webhooks\Effects;
 
-use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Bus;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Contracts\DedupesOnReference;
-use Pushery\Billing\Contracts\SubscriptionActions;
-use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\MarketAccess;
-use Pushery\Billing\Enums\RefundKind;
 use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Events\SaleCountryReported;
-use Pushery\Billing\Events\SaleIntoClosedMarketReversed;
+use Pushery\Billing\Jobs\ReverseClosedMarketSale;
 use Pushery\Billing\Marketplace\MarketAllowlist;
-use Pushery\Billing\Models\Subscription;
-use Pushery\Billing\Support\BillingAdmin;
-use Pushery\Billing\Support\BillingEventLog;
-use Pushery\Billing\ValueObjects\MerchantScope;
-use Pushery\Billing\ValueObjects\RefundResult;
 use RuntimeException;
 
 /**
@@ -31,8 +23,8 @@ use RuntimeException;
  * provider's page, the provider cannot restrict its country, and without a registration there it computes zero
  * tax and takes the payment. So this is the second line, run on what the provider reports afterwards.
  *
- * A subscription is ended first and its payment refunded second. The other order leaves a refunded subscription
- * that bills again whenever the refund is the step that succeeds and the cancellation the one that fails.
+ * This effect decides, and {@see ReverseClosedMarketSale} acts once its run has committed: it ends the subscription
+ * first and refunds its payment second, at the provider, where nothing a rollback does can reach.
  *
  * Inert until an operator configures markets, like the allowlist itself. A sale without consideration raises no
  * tax and is left alone, unless it starts a subscription that would charge later. A country the report does not
@@ -44,10 +36,6 @@ final readonly class ReverseSaleIntoClosedMarket implements DedupesOnReference
     public function __construct(
         private MarketAllowlist $markets,
         private CustomerDirectory $directory,
-        private SubscriptionActions $subscriptions,
-        private BillingAdmin $admin,
-        private BillingEventLog $log,
-        private Dispatcher $events,
     ) {}
 
     public function __invoke(SaleCountryReported $event): void
@@ -75,37 +63,20 @@ final readonly class ReverseSaleIntoClosedMarket implements DedupesOnReference
             return; // a customer this app does not own
         }
 
+        // Asked here as well as by the job, so a subscription whose row has not arrived yet fails this run, where
+        // a retry and an operator find it, rather than a job nobody reads.
         if ($event->subscriptionReference !== null) {
-            $this->subscriptions->cancelNow($owner, $this->scopeOf($event->subscriptionReference));
+            ReverseClosedMarketSale::scopeOf($event->subscriptionReference);
         }
 
-        $refund = $chargeReference === null ? null : $this->admin->refund(
-            $owner,
-            $chargeReference,
-            $event->amount,
-            reason: 'The provider taxed this sale in ['.($country ?? 'unknown').'], a market that is not open (state: '.$state->value.').',
-            idempotencyKey: 'closed-market:'.$chargeReference,
-            kind: RefundKind::ClosedMarket,
-        );
-
-        $this->log->record('market.sale_reversed', $owner, [
-            'country' => $country ?? 'unknown',
-            'state' => $state->value,
-            'sale' => $event->saleReference,
-            'subscription' => $event->subscriptionReference,
-            'charge' => $chargeReference,
-            'refunded' => $refund instanceof RefundResult ? $refund->successful : null,
-            'amount' => $refund instanceof RefundResult ? $event->amount->minorUnits : 0,
-            'currency' => $event->amount->currency,
-        ], AuditSource::Webhook);
-
-        $this->events->dispatch(new SaleIntoClosedMarketReversed(
-            $owner,
+        Bus::dispatch(new ReverseClosedMarketSale(
+            $event->customerReference,
             $country ?? 'unknown',
             $state,
             $event->saleReference,
-            subscriptionEnded: $event->subscriptionReference !== null,
-            refund: $refund,
+            $event->subscriptionReference,
+            $chargeReference,
+            $event->amount,
         ));
     }
 
@@ -120,25 +91,5 @@ final readonly class ReverseSaleIntoClosedMarket implements DedupesOnReference
         }
 
         return $event->saleReference.':'.($event->paid ? 'paid' : 'open');
-    }
-
-    /**
-     * The scope the subscription was sold in, read from the row this package keeps for it.
-     *
-     * Throws while that row is missing instead of assuming the platform scope. The invoice and the subscription
-     * arrive as separate deliveries, and ending the owner's subscription in the wrong scope would end one the buyer
-     * may keep. The throw retries the job, and by then the subscription delivery has written the row.
-     */
-    private function scopeOf(string $subscriptionReference): ?MerchantScope
-    {
-        $subscription = Subscription::model()::query()->where('provider_id', $subscriptionReference)->first();
-
-        if (! $subscription instanceof Subscription) {
-            throw new RuntimeException("Subscription [{$subscriptionReference}] has no local row yet, so the scope to end it in is unknown. The job retries.");
-        }
-
-        $merchant = $subscription->merchant;
-
-        return $merchant instanceof Model ? MerchantScope::forMerchant($merchant) : null;
     }
 }

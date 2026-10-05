@@ -11,6 +11,7 @@ use Pushery\Billing\Contracts\GoLiveCheckpoint;
 use Pushery\Billing\Contracts\JurisdictionProfile;
 use Pushery\Billing\Exceptions\DuplicateGoLiveCheckpoint;
 use Pushery\Billing\Exceptions\UnknownJurisdictionProfile;
+use Pushery\Billing\Preflight\Checkpoints\BuyerProtectionCheckpoint;
 use Pushery\Billing\Preflight\Checkpoints\CustodyAttestationCheckpoint;
 use Pushery\Billing\Preflight\Checkpoints\DuplicateBuyerReceiptCheckpoint;
 use Pushery\Billing\Preflight\Checkpoints\FeeRefundPolicyCheckpoint;
@@ -32,8 +33,8 @@ use Pushery\Billing\Preflight\Profiles\GermanJurisdictionProfile;
  *
  * The package's own points are deliberately few. A checkpoint is only worth arming when it has a subject
  * that exists today; one written against machinery that has not been built yet can never fail, and a check
- * that cannot fail reads exactly like a check that passed. Later milestones add their own points here as
- * the machinery they describe becomes real.
+ * that cannot fail reads exactly like a check that passed. A point is added here once the machinery it
+ * describes is real.
  */
 final class CheckpointRegistry implements GoLiveChecklist
 {
@@ -144,6 +145,7 @@ final class CheckpointRegistry implements GoLiveChecklist
             $this->container->make(FeeRefundPolicyCheckpoint::class),
             $this->container->make(TaxStatusHoldCheckpoint::class),
             $this->container->make(DuplicateBuyerReceiptCheckpoint::class),
+            $this->container->make(BuyerProtectionCheckpoint::class),
         ];
     }
 }

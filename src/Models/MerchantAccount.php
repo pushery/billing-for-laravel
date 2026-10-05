@@ -32,6 +32,7 @@ use Pushery\Billing\ValueObjects\MerchantAccountReference;
  * @property bool $details_submitted
  * @property ?Carbon $deauthorized_at
  * @property ?Carbon $capabilities_refreshed_at
+ * @property ?int $capabilities_event_at
  */
 class MerchantAccount extends Model
 {
@@ -43,6 +44,7 @@ class MerchantAccount extends Model
     protected $fillable = [
         'merchant_type', 'merchant_id', 'provider', 'account_reference', 'status', 'status_reason', 'status_changed_at',
         'charges_enabled', 'payouts_enabled', 'details_submitted', 'deauthorized_at', 'capabilities_refreshed_at',
+        'capabilities_event_at',
     ];
 
     /**
@@ -73,6 +75,8 @@ class MerchantAccount extends Model
         // app.timezone, which would report a refresh as hours older or newer than it was.
         'capabilities_refreshed_at' => UtcDateTime::class,
         'deauthorized_at' => UtcDateTime::class,
+        // The provider's own stamp of the report the flags were last taken from, in Unix seconds.
+        'capabilities_event_at' => 'integer',
     ];
 
     /** @return MorphTo<Model, $this> */

@@ -46,7 +46,7 @@ final readonly class RegimeBookingGate
     /** Whether a booking of the goods leg is permitted under this regime. */
     public function permits(SupplyRegime $regime, DatevTransaction $transaction): bool
     {
-        return $regime !== SupplyRegime::Intermediation || ! $this->isRevenue($transaction);
+        return $regime !== SupplyRegime::Intermediation || $this->holdsMoneyPassingThrough($transaction);
     }
 
     /**
@@ -62,20 +62,19 @@ final readonly class RegimeBookingGate
     }
 
     /**
-     * Whether an account kind represents the platform's own income.
+     * Whether an account kind holds money passing through the platform: the only kinds the goods leg of an
+     * arranged sale may be booked to.
      *
-     * Listed as what revenue IS rather than what it is not: a new account kind added later defaults to "not
-     * revenue", which is the direction that fails safe — a transit booking misfiled as revenue is the error
-     * this class exists to prevent, and it would slip through a deny-list the day somebody adds a case.
+     * Listed as what may take the goods rather than as what may not. An account kind added later is then refused
+     * for the goods leg until it is named here, which is the direction that fails safe: every revenue account,
+     * the cross-border ones and the exchange gains included, is refused without having to be listed.
      */
-    private function isRevenue(DatevTransaction $transaction): bool
+    private function holdsMoneyPassingThrough(DatevTransaction $transaction): bool
     {
         return in_array($transaction, [
-            DatevTransaction::FanRevenueStandard,
-            DatevTransaction::FanRevenueReduced,
-            DatevTransaction::OssRevenue,
-            DatevTransaction::CommissionRevenue,
-            DatevTransaction::OtherIncome,
+            DatevTransaction::TransitItems,
+            DatevTransaction::MoneyTransit,
+            DatevTransaction::CreatorLiabilities,
         ], true);
     }
 }

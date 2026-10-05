@@ -14,10 +14,10 @@ use Pushery\Billing\Tax\FrozenExchangeRate;
  *
  * ## Why a contract rather than a lookup
  *
- * Seven EU member states that are not geo-blocked settle in their own currency, and OSS reaches all of
- * them. So a package that books money in one currency and reports tax in another needs a rate — and the
- * moment it has one, the interesting question is not the number but where it came from and which day it
- * belongs to. A float answers neither, and a float is what every convenient API returns.
+ * The EU member states outside the euro area that are not geo-blocked settle in their own currency, and OSS
+ * reaches all of them. So a package that books money in one currency and reports tax in another needs a
+ * rate — and the moment it has one, the interesting question is not the number but where it came from and
+ * which day it belongs to. A float answers neither, and a float is what every convenient API returns.
  *
  * The answer is therefore a {@see FrozenExchangeRate}: the rate as scaled integer, the date the PUBLISHER
  * stated, the source, and the rule that made it the correct one. That object already refuses the two ways

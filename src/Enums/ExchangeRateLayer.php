@@ -31,4 +31,13 @@ enum ExchangeRateLayer: string
 
     /** What the money actually moved at when the merchant was paid. */
     case Payout = 'payout';
+
+    /**
+     * What the recapitulative statement reports for a reverse-charged sale.
+     *
+     * Its own layer because the statement is a national declaration that converts under the national rule,
+     * where the one-stop-shop return converts under the union one: in Germany the ministry's average for the
+     * month of the supply, against the central bank's rate on the last day of the quarter.
+     */
+    case RecapitulativeStatement = 'recapitulative_statement';
 }

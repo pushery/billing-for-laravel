@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\AnnualEarningsCounter;
 use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Models\MerchantCharge;
+use Pushery\Billing\ValueObjects\CountingPeriod;
 
 /**
  * The German § 19 evaluation: it reads the three limits from config (never a code literal — they are the
@@ -51,8 +52,9 @@ final readonly class SmallBusinessThresholdMonitor
             return null;
         }
 
-        $start = sprintf('%04d-01-01 00:00:00', $year);
-        $end = sprintf('%04d-01-01 00:00:00', $year + 1);
+        // The calendar year in the application's zone, bound in UTC, the zone `settled_at` holds (see UtcDateTime).
+        $start = CountingPeriod::year($year)->from->utc()->toDateTimeString();
+        $end = CountingPeriod::year($year + 1)->from->utc()->toDateTimeString();
 
         $charges = MerchantCharge::model()::query()
             ->where('merchant_type', $creator->getMorphClass())
@@ -120,8 +122,8 @@ final readonly class SmallBusinessThresholdMonitor
             ->where('currency', strtoupper($currency))
             ->where('settlement_state', SettlementState::Settled->value)
             // Both years a verdict reads: this one for the running total, last one for the prior-year limit.
-            ->where('settled_at', '>=', sprintf('%04d-01-01 00:00:00', $year - 1))
-            ->where('settled_at', '<', sprintf('%04d-01-01 00:00:00', $year + 1))
+            ->where('settled_at', '>=', CountingPeriod::year($year - 1)->from->utc()->toDateTimeString())
+            ->where('settled_at', '<', CountingPeriod::year($year + 1)->from->utc()->toDateTimeString())
             ->exists();
     }
 

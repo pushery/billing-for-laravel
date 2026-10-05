@@ -45,7 +45,7 @@ final readonly class StripeCreditSync implements CreditSync
 
         $this->stripe->customers->createBalanceTransaction($customerId, [
             // Inverted: package positive-is-credit → Stripe negative-is-credit.
-            'amount' => -$signedDelta->minorUnits,
+            'amount' => -StripeAmount::of($signedDelta),
             'currency' => strtolower($signedDelta->currency),
             'description' => 'Billing credit adjustment',
         ], ['idempotency_key' => 'credit:'.$reference]);

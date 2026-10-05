@@ -23,8 +23,8 @@ use Pushery\Billing\ValueObjects\InvoiceCorrectionSnapshot;
  * the local engine builds it from its own. The effect that persists it never sees a provider
  * object.
  *
- * Renamed from `InvoiceCredited` (the old name conflated this correcting document with a self-billing
- * credit note). For one deprecation window it still fires under the old name for host listeners — see
+ * Renamed from `InvoiceCredited` (the old name conflated this correcting document with a self-billed
+ * invoice). For one deprecation window it still fires under the old name for host listeners — see
  * {@see HasDeprecatedAlias}.
  */
 final readonly class InvoiceCorrected implements BillingDomainEvent, HasDeprecatedAlias, IdentifiesCustomer

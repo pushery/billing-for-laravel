@@ -45,7 +45,23 @@ final class UnknownTaxCountry extends RuntimeException
             "No tax treatment is recorded for '{$country}'. It is neither covered by a known rate nor "
             .'classified as outside the tax area, so pricing stops here rather than charging zero — a zero '
             .'for an unclassified country reads as a relief on every document that carries it. Classify it '
-            .'in the jurisdiction profile: either give it a rate, or record that it is deliberately untaxed.'
+            .'in the CoverageMap you bind: either cover it and give it a rate, or record that it is deliberately '
+            .'untaxed.'
+        );
+    }
+
+    /**
+     * A country the bound coverage map covers, for which no rate table carries a rate.
+     *
+     * Covering a country is a claim that a rate is known and can be defended. With no rate behind it the claim
+     * has nothing to price from, and a zero would be the very relief nobody decided.
+     */
+    public static function coveredWithoutRate(string $country): self
+    {
+        return new self(
+            "The CoverageMap covers '{$country}', and no rate table carries a rate for it, so pricing stops "
+            .'here rather than charging zero. Give it its rates in billing.tax_matrix, or record that it is '
+            .'deliberately untaxed.'
         );
     }
 

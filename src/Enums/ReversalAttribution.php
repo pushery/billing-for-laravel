@@ -12,16 +12,14 @@ use Pushery\Billing\Exceptions\InvalidBillingConfig;
  *
  * ## Why this is a setting and not an answer
  *
- * Two tickets specify this counter and they say opposite things. One asks for the period the reversal
- * happened in, on the reasoning that a counter is a record of movements and a movement has a date. The other
- * asks for the original period, warning in as many words that applying the tax-booking rule ("ex nunc", the
- * month it happened) mechanically to the COUNTER is the mistake — a booking and a count answer different
- * questions about the same event.
+ * The counter has two defensible readings. One counts the period the reversal happened in, on the reasoning
+ * that a counter is a record of movements and a movement has a date. The other counts the original period,
+ * because applying the tax-booking rule ("ex nunc", the month it happened) mechanically to the COUNTER is the
+ * mistake — a booking and a count answer different questions about the same event.
  *
- * Neither is obviously right and only one may hold, so the choice belonged to whoever owns the reporting
- * obligation. IT HAS BEEN MADE (owner, 2026-07-29): a reversal reduces the period of the document it
- * corrects, AND a crossing that has already happened is final. The two halves ship together because only
- * the pair is safe — see below.
+ * Neither is obviously right and only one may hold, so the choice belongs to whoever owns the reporting
+ * obligation. The default: a reversal reduces the period of the document it corrects, AND a crossing that
+ * has already happened is final. The two halves ship together because only the pair is safe — see below.
  *
  * ## What hangs on it
  *

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Events;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 use Pushery\Billing\Enums\ReversalCause;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -24,6 +25,8 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final readonly class MerchantReversalCameBackShort implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public function __construct(
         public Model $merchant,
         public string $provider,

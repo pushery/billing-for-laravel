@@ -29,7 +29,11 @@ interface SubscriptionStateReader
      */
     public function activeOn(Model $customer, ?MerchantScope $merchant = null, ?int $atLevel = null, ?CarbonInterface $at = null): bool;
 
-    /** The customer's grant on the merchant, or null when there is no subscription there. */
+    /**
+     * The customer's grant on the merchant, or null when there is no subscription there. A lapsed or blocked
+     * subscription still answers with its grant, whose state and window say so; `activeOn()` is the question
+     * of access at a moment.
+     */
     public function grantOn(Model $customer, ?MerchantScope $merchant = null, ?CarbonInterface $at = null): ?SubscriptionGrant;
 
     /**

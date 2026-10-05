@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
+use DateTimeInterface;
+use Pushery\Billing\Contracts\FindsMovedShare;
 use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Contracts\NamesPaymentTransfer;
 use Pushery\Billing\Contracts\ReportsMovedShares;
@@ -54,7 +56,7 @@ use Stripe\Transfer;
  * key and a second transfer. The caller holds stable local state (a row id) and is the only party that can
  * key this safely.
  */
-final readonly class StripeMerchantTransfers implements MovesMerchantShare, NamesPaymentTransfer, ReportsMovedShares, ReversesMerchantShare
+final readonly class StripeMerchantTransfers implements FindsMovedShare, MovesMerchantShare, NamesPaymentTransfer, ReportsMovedShares, ReversesMerchantShare
 {
     public function __construct(private StripeClient $stripe) {}
 
@@ -66,7 +68,7 @@ final readonly class StripeMerchantTransfers implements MovesMerchantShare, Name
     ): TransferResult {
         $transfer = $this->stripe->transfers->create(
             [
-                'amount' => $amount->minorUnits,
+                'amount' => StripeAmount::of($amount),
                 'currency' => strtolower($amount->currency),
                 'destination' => $destination->accountId,
                 // Funded by THIS payment, never by the platform balance. See the class docblock.
@@ -82,6 +84,38 @@ final readonly class StripeMerchantTransfers implements MovesMerchantShare, Name
             (string) $transfer->id,
             new Money((int) $transfer->amount, strtoupper((string) $transfer->currency)),
         );
+    }
+
+    /**
+     * The transfer to a merchant that a sale's payment funded, read from the merchant's transfers.
+     *
+     * Stripe lists transfers by destination and creation time, not by the charge that funds them, so the merchant's
+     * transfers since $notBefore are read until one names the sale's charge as its `source_transaction`. A sale's share
+     * moves in one transfer, so that one is it. A payment with no charge behind it refuses, as it does for a transfer:
+     * nothing can have been funded from it.
+     */
+    public function transferOf(MerchantAccountReference $destination, string $sourceCharge, DateTimeInterface $notBefore): ?TransferResult
+    {
+        $charge = $this->fundingChargeOf($sourceCharge);
+
+        $transfers = $this->stripe->transfers->all([
+            'destination' => $destination->accountId,
+            'created' => ['gte' => $notBefore->getTimestamp()],
+            'limit' => 100,
+        ]);
+
+        foreach ($transfers->autoPagingIterator() as $transfer) {
+            $source = $transfer->source_transaction ?? null;
+
+            if (($source instanceof Charge ? $source->id : $source) === $charge) {
+                return new TransferResult(
+                    (string) $transfer->id,
+                    new Money((int) $transfer->amount, strtoupper((string) $transfer->currency)),
+                );
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -194,7 +228,7 @@ final readonly class StripeMerchantTransfers implements MovesMerchantShare, Name
         // without this a marketplace on the shipped default could pay a merchant and claw back nothing.
         $reversal = $this->stripe->transfers->createReversal(
             $transferReference,
-            ['amount' => $amount->minorUnits],
+            ['amount' => StripeAmount::of($amount)],
             $idempotencyKey === null ? [] : ['idempotency_key' => $idempotencyKey],
         );
 

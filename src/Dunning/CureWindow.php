@@ -29,15 +29,16 @@ final readonly class CureWindow
     /**
      * The window in days.
      *
-     * Floors at one. A window of zero would put the reminder and the expiry on the same day, so the customer
-     * would be told they could still fix it and lose the subscription in the same breath — a formality, not
-     * a chance. The default is the owner's decision rather than a round number: one week.
+     * Floors at one: a smaller number is raised to one day. A window of zero would put the reminder and the
+     * expiry on the same day, so the customer would be told they could still fix it and lose the subscription
+     * in the same breath — a formality, not a chance. The default, for a value that is not a number at all, is
+     * the owner's decision rather than a round number: one week.
      */
     public function days(): int
     {
         $configured = $this->config->get('billing.dunning_cure_window_days');
 
-        return is_int($configured) && $configured >= 1 ? $configured : 7;
+        return is_numeric($configured) ? max(1, (int) $configured) : 7;
     }
 
     /**

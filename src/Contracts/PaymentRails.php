@@ -58,7 +58,12 @@ interface PaymentRails
      */
     public function createMandate(string $customerReference, string $token): MandateReference;
 
-    /** Tokenise raw payment data captured by the front-end element. */
+    /**
+     * Describe a payment method the front end already created with the provider, from its id.
+     *
+     * Nothing is created here, and no raw payment data reaches this method: card details belong in the
+     * browser talking to the provider, and the id it hands back is what arrives here.
+     */
     public function tokenize(string $paymentData): TokenizedMethod;
 
     /**

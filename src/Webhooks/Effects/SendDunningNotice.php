@@ -47,7 +47,7 @@ final readonly class SendDunningNotice implements DedupesOnReference
 
         // The toast rides with the mail, under the SAME once-per-invoice claim — never on its own schedule.
         // Dunning is the one message a customer must not receive twice, and a second delivery path with its
-        // own dedup would be a second chance to get that wrong.
+        // own dedup would be a second chance to get that wrong. Both leave only once the run commits.
         $this->toasts->notify($owner, 'billing::account.toast.payment_failed', ToastLevel::Danger);
 
         $this->log->record('dunning.notice_sent', $owner, [

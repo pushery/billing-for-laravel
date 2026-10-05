@@ -83,6 +83,31 @@ final readonly class InPersonReceiptIssuer
     }
 
     /**
+     * The buyer with the street under `address`, the key every reader of a party takes it from.
+     *
+     * `line1` is taken as the same field, because this method was documented with it. It was checked and then
+     * stored as given, so no document showed the street: the page, XRechnung and ZUGFeRD all read `address`, and
+     * the business the invoice was issued for could not deduct its tax from it.
+     *
+     * @param  array<string, mixed>  $buyer
+     * @return array<string, mixed>
+     */
+    private function withStreetAsAddress(array $buyer): array
+    {
+        foreach (['address', 'line1'] as $key) {
+            $street = $buyer[$key] ?? null;
+
+            if (is_string($street) && trim($street) !== '') {
+                unset($buyer['line1']);
+
+                return [...$buyer, 'address' => $street];
+            }
+        }
+
+        return $buyer;
+    }
+
+    /**
      * The full invoice a buyer at the counter asked for, restating a receipt they already hold.
      *
      * A business needs its name and address on the document to deduct the tax, and any buyer may ask for more
@@ -106,7 +131,9 @@ final readonly class InPersonReceiptIssuer
             throw new InvalidArgumentException("Invoice {$receipt->number} is already the full invoice for a receipt from the counter. Send it again instead of restating the sale twice.");
         }
 
-        foreach (['name', 'line1', 'postcode', 'city', 'country'] as $field) {
+        $buyer = $this->withStreetAsAddress($buyer);
+
+        foreach (['name', 'address', 'postcode', 'city', 'country'] as $field) {
             if (! is_string($buyer[$field] ?? null) || trim($buyer[$field]) === '') {
                 throw new InvalidArgumentException("A full invoice names its recipient with a name and an address, and the buyer's {$field} is missing.");
             }
@@ -120,17 +147,32 @@ final readonly class InPersonReceiptIssuer
             }
         }
 
-        return InvoiceRecord::model()::query()->create([
-            ...$carried,
-            'owner_type' => $receipt->owner_type,
-            'owner_id' => $receipt->owner_id,
-            'number' => $this->numbers->next($requestedOn),
-            'status' => $receipt->status,
-            'receipt_tier' => FanReceiptTier::FullInvoice,
-            'reissue_of_invoice_id' => $receipt->id,
-            'buyer' => $buyer,
-            'lines' => $receipt->lines,
-        ]);
+        // One full invoice per receipt, as FanReceiptIssuer keeps it: a second request is answered with the
+        // invoice the first issued, serialized on the receipt's row.
+        return $receipt->getConnection()->transaction(function () use ($receipt, $carried, $buyer, $requestedOn): InvoiceRecord {
+            InvoiceRecord::model()::query()->whereKey($receipt->getKey())->lockForUpdate()->first();
+
+            $issued = InvoiceRecord::model()::query()->where('reissue_of_invoice_id', $receipt->getKey())->first();
+
+            if ($issued instanceof InvoiceRecord) {
+                return $issued;
+            }
+
+            return InvoiceRecord::model()::query()->create([
+                ...$carried,
+                'owner_type' => $receipt->owner_type,
+                'owner_id' => $receipt->owner_id,
+                'number' => $this->numbers->next($requestedOn),
+                // Issued on the day it is asked for, with the day of the sale kept as the date of supply.
+                'issued_at' => $requestedOn,
+                'delivered_on' => FanReceiptIssuer::restatedSupplyDate($receipt),
+                'status' => $receipt->status,
+                'receipt_tier' => FanReceiptTier::FullInvoice,
+                'reissue_of_invoice_id' => $receipt->id,
+                'buyer' => $buyer,
+                'lines' => $receipt->lines,
+            ]);
+        });
     }
 
     /** A simplified invoice up to and including the threshold, a payment record above it. */

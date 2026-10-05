@@ -34,10 +34,6 @@ final readonly class PlaceOfSupplyResolver
     /**
      * @param  ?string  $sellerCountry  the seller's own country, for the cross-border test. Unknown means
      *                                  cross-border cannot be PROVEN, and an unproven shift never happens.
-     */
-    /**
-     * @param  ?string  $sellerCountry  the seller's own country, for the cross-border test. Unknown means
-     *                                  cross-border cannot be PROVEN, and an unproven shift never happens.
      * @param  ?list<string>  $unionMembers  which countries share the seller's tax union. Null takes the
      *                                       shipped membership; a consumer elsewhere supplies their own.
      */
@@ -46,15 +42,6 @@ final readonly class PlaceOfSupplyResolver
         private ?array $unionMembers = null,
     ) {}
 
-    /**
-     * Whether a country shares the seller's tax union.
-     *
-     * This is the question the consumer-scheme flag turns on, and it was the one nobody asked: "consumer,
-     * taxed at destination, cross-border" is true of a sale to any country on earth. Without this test a
-     * sale to a buyer outside the union lands in a return written for members only — which makes the
-     * return's POPULATION wrong rather than one of its numbers, the same failure this class already refuses
-     * to commit for a business buyer.
-     */
     /** The country the seller is established in, where the installation states one. */
     public function sellerCountry(): ?string
     {
@@ -73,11 +60,23 @@ final readonly class PlaceOfSupplyResolver
         return $this->sharesUnion($country);
     }
 
+    /**
+     * Whether a country shares the seller's tax union.
+     *
+     * This is the question the consumer-scheme flag turns on, and it was the one nobody asked: "consumer,
+     * taxed at destination, cross-border" is true of a sale to any country on earth. Without this test a
+     * sale to a buyer outside the union lands in a return written for members only — which makes the
+     * return's POPULATION wrong rather than one of its numbers, the same failure this class already refuses
+     * to commit for a business buyer.
+     *
+     * The code is resolved first, so a place a member folds into itself for VAT is inside the union as that
+     * member, as the calculator prices it.
+     */
     private function sharesUnion(string $country): bool
     {
         $members = $this->unionMembers ?? UnionMembership::members();
 
-        return in_array(strtoupper($country), array_map(strtoupper(...), $members), true);
+        return in_array(UnionMembership::territoryOf($country), array_map(strtoupper(...), $members), true);
     }
 
     public function place(PlaceOfSupplyRule $productRule, TaxContext $context): SupplyPlacement
@@ -96,8 +95,9 @@ final readonly class PlaceOfSupplyResolver
             );
         }
 
-        $buyerCountry = strtoupper($context->countryCode);
-        $seller = $this->sellerCountry !== null ? strtoupper($this->sellerCountry) : null;
+        // Resolved as the calculator resolves them: a buyer in Monaco is in France, and so is a seller there.
+        $buyerCountry = UnionMembership::territoryOf($context->countryCode);
+        $seller = $this->sellerCountry !== null ? UnionMembership::territoryOf($this->sellerCountry) : null;
 
         // A validated business in ANOTHER union country. The place moves to them and they account for the
         // tax; the consumer scheme never sees it. Cross-border must be provable — a domestic business
@@ -202,7 +202,7 @@ final readonly class PlaceOfSupplyResolver
      */
     public function documentCountryFor(PlaceOfSupplyRule $productRule, TaxContext $buyer): ?string
     {
-        return $this->place($productRule, $buyer)->reportableUnderOneStopShop ? strtoupper($buyer->countryCode) : null;
+        return $this->place($productRule, $buyer)->reportableUnderOneStopShop ? UnionMembership::territoryOf($buyer->countryCode) : null;
     }
 
     /**
@@ -230,10 +230,19 @@ final readonly class PlaceOfSupplyResolver
                 : RecipientTaxStatus::NonUnionBusiness;
         }
 
-        // A business without a union registration is treated as outside it. A union business that failed to
-        // prove itself is NOT this case — it falls back to consumer, which charges tax rather than dropping it.
-        return $context->vatId === null || trim($context->vatId) === ''
-            ? RecipientTaxStatus::NonUnionBusiness
-            : RecipientTaxStatus::Consumer;
+        // A business that named no registration. Outside the union it is outside the union's tax. Inside it, a
+        // customer who communicated no VAT number may be regarded as a non-taxable person (Art. 18(2) of
+        // Implementing Regulation (EU) No 282/2011), so it is a consumer, taxed at destination and reported under
+        // the consumer scheme. Read as outside the union, its destination tax was charged and then stated
+        // nowhere: no country on the document, no line in any return.
+        if ($context->vatId === null || trim($context->vatId) === '') {
+            return $this->sharesUnion($context->countryCode)
+                ? RecipientTaxStatus::Consumer
+                : RecipientTaxStatus::NonUnionBusiness;
+        }
+
+        // A union business that failed to prove itself falls back to consumer, which charges tax rather than
+        // dropping it.
+        return RecipientTaxStatus::Consumer;
     }
 }

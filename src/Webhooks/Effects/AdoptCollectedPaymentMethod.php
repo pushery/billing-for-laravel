@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace Pushery\Billing\Webhooks\Effects;
 
 use Illuminate\Database\Eloquent\Model;
-use Pushery\Billing\Contracts\AdoptsCollectedPaymentMethod;
+use Illuminate\Support\Facades\Bus;
 use Pushery\Billing\Contracts\CustomerDirectory;
-use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Events\PaymentMethodCollected;
-use Pushery\Billing\Support\BillingEventLog;
+use Pushery\Billing\Jobs\MakeCollectedMethodTheDefault;
 
 /**
  * Makes the payment method a customer added on the hosted page the one the next charge reads.
@@ -26,14 +25,13 @@ use Pushery\Billing\Support\BillingEventLog;
  *
  * An owner this app does not know resolves to nobody and nothing is changed, the same rule every effect
  * that acts on a customer follows.
+ *
+ * The provider is asked by {@see MakeCollectedMethodTheDefault}, once the run has committed, never from inside
+ * the run's transaction, which a provider call would hold open and a rollback could not take back.
  */
 final readonly class AdoptCollectedPaymentMethod
 {
-    public function __construct(
-        private CustomerDirectory $directory,
-        private AdoptsCollectedPaymentMethod $methods,
-        private BillingEventLog $log,
-    ) {}
+    public function __construct(private CustomerDirectory $directory) {}
 
     public function __invoke(PaymentMethodCollected $event): void
     {
@@ -43,10 +41,6 @@ final readonly class AdoptCollectedPaymentMethod
             return;
         }
 
-        $this->methods->adopt($event->customerReference, $event->collectionReference);
-
-        $this->log->record('payment_method.default_changed', $owner, [
-            'collection' => $event->collectionReference,
-        ], AuditSource::Webhook);
+        Bus::dispatch(new MakeCollectedMethodTheDefault($owner, $event->customerReference, $event->collectionReference));
     }
 }

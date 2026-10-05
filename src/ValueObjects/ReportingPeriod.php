@@ -37,8 +37,7 @@ final readonly class ReportingPeriod
 
     public function startsOn(): CarbonImmutable
     {
-        // Both fields were validated in the constructor, so this is always a real date — the fallback is for
-        // the type system, not for a case that can occur.
+        // Both fields were validated in the constructor, so this is always a real date.
         return CarbonImmutable::createStrict($this->year, ($this->quarter - 1) * 3 + 1, 1)->startOfDay();
     }
 

@@ -9,11 +9,13 @@ use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\Plan;
 
 /**
- * How unused time is credited when a plan is swapped mid-cycle. Two implementations:
+ * What a plan swapped mid-cycle costs or gives back. Three implementations:
  *
  *  - DELEGATE (Stripe): defer to the provider's own proration.
- *  - CREDIT-BALANCE (a local-engine driver): the package computes the unused portion into a customer credit
- *    balance and offsets the next order — because those providers have no provider-side proration.
+ *  - ARREARS (the package's own engine, under Mollie): nothing is paid for the period in progress, so the swap
+ *    changes the bill that closes it, which then charges each tier for the days it held.
+ *  - CREDIT-BALANCE (a local driver that collects in advance): the package computes the unused portion of the
+ *    paid period into a customer credit balance and offsets the next order.
  */
 interface ProrationStrategy
 {

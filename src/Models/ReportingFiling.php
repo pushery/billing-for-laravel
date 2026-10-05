@@ -89,13 +89,13 @@ class ReportingFiling extends Model
     }
 
     /**
-     * The filing this one corrects, or null on a first filing.
+     * The filing this one corrects, or null on a first filing, as the class the package is configured to use.
      *
-     * @return BelongsTo<self, $this>
+     * @return BelongsTo<static, $this>
      */
     public function corrects(): BelongsTo
     {
-        return $this->belongsTo(self::class, 'corrects_filing_id');
+        return $this->belongsTo(self::model(), 'corrects_filing_id');
     }
 
     /** Whether this is the period's first filing rather than a correction of an earlier one. */
@@ -144,7 +144,8 @@ class ReportingFiling extends Model
     #[Override]
     protected static function appendOnlyDeleteRefusal(): string
     {
-        return 'This row carries a statutory retention window; retention removes it on its schedule, '
-            .'inside purging(). A caller does not delete it.';
+        return 'A filing is the record of a statutory act and is not deleted by a caller. Retention removes '
+            .'the filings of a period together, once the youngest of them has had the book-keeping window; a '
+            .'correction is a second filing that names the one it corrects.';
     }
 }

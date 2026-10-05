@@ -24,23 +24,23 @@ use Pushery\Billing\ValueObjects\Money;
  * may quietly rewrite is not explained at all — it merely looks it, which is worse than an unexplained
  * balance because it invites trust. So the model refuses every update and every delete, without exception.
  *
- * Deliberately WITHOUT the {@see BillingEvent::purging()} escape hatch, and the difference is worth stating
- * because the two models otherwise look alike. An audit row leaves through the model, so its guard needs a
- * sanctioned way past itself. These entries leave with the owner instead: the table is listed in
- * {@see OwnerScopedTables::PURGED} and the eraser removes it through the shared
- * owner-scoped machinery, which works on the query builder and never raises a model event. An escape hatch
- * here would therefore have had no caller at all — a mechanism whose only proof of life is its own test,
- * which is the shape this package keeps finding and removing rather than adding.
+ * Deliberately WITHOUT the {@see BillingEvent::purging()} door, and the difference is worth stating
+ * because the two models otherwise look alike. A host can take a single audit row out through the model,
+ * inside `purging()`. Nothing takes one of these entries out on its own, because the balance is their sum.
+ * They outlive the owner as booking records: the table is listed in {@see OwnerScopedTables::RETAINED}, the eraser
+ * unlinks the entries through the shared owner-scoped machinery, which works on the query builder and never raises a
+ * model event, and `billing:prune` removes them once the window for erased financial records has passed.
  *
  * @property int $id
- * @property string $owner_type
- * @property int $owner_id
+ * @property ?string $owner_type
+ * @property int|string|null $owner_id
  * @property int $amount_minor
  * @property string $currency
  * @property CreditReason $reason
  * @property ?string $source_type
  * @property ?int $source_id
  * @property ?Carbon $created_at
+ * @property ?string $erased_owner_key
  */
 class CreditLedgerEntry extends Model
 {
@@ -131,7 +131,8 @@ class CreditLedgerEntry extends Model
     #[Override]
     protected static function appendOnlyDeleteRefusal(): string
     {
-        return 'A credit ledger entry is append-only; owner erasure removes it through the owner-scoped '
-            .'table machinery, and nothing else does.';
+        return 'A credit ledger entry is append-only and is not deleted by a caller. An erasure unlinks it from '
+            .'its owner and keeps it for the books, and retention removes it once the window of an erased owner\'s '
+            .'financial records has passed.';
     }
 }

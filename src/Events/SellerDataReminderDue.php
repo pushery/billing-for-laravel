@@ -6,6 +6,7 @@ namespace Pushery\Billing\Events;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 use Pushery\Billing\Enums\SellerDataEscalationStage;
 use Pushery\Billing\Enums\SellerDataMeasure;
 
@@ -23,6 +24,8 @@ use Pushery\Billing\Enums\SellerDataMeasure;
  */
 final readonly class SellerDataReminderDue implements BillingDomainEvent
 {
+    use SerializesModels;
+
     /**
      * @param  list<string>  $missingFields
      */

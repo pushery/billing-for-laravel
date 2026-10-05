@@ -13,7 +13,8 @@ use Pushery\Billing\Enums\InvoiceStatus;
  *
  * It is frozen on purpose: the buyer's name and address, the line items and the tax split are captured as
  * they were on the invoice, because a valid invoice must carry them (§14 UStG) and must not change after
- * issue. The number is the PROVIDER'S invoice number — Stripe already assigns a gapless, unique one, and
+ * issue. The number is the PROVIDER'S invoice number. Stripe assigns it when the invoice is finalized and keeps
+ * the sequence unique and gapless as long as the account invoices only through Stripe and edits no number, and
  * minting a second of our own would give one invoice two numbers.
  *
  * @phpstan-type BuyerSnapshot array{name?: string, address?: string, postcode?: string, city?: string, country?: string, vat_id?: string, email?: string, reference?: string}

@@ -49,6 +49,7 @@ return [
         'submit' => 'Cancelar suscripción',
         'canceled' => 'Suscripción cancelada.',
         'not_found' => 'No se encontró ningún titular con ese ID.',
+        'nothing_running' => 'Este titular no tiene ninguna suscripción activa que cancelar.',
     ],
 
     'audit' => [

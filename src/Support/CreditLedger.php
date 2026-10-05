@@ -72,6 +72,34 @@ final class CreditLedger
     }
 
     /**
+     * Debit once for a source and a reason, and answer the new balance, or null when that debit already happened.
+     *
+     * The question is asked under the balance row's lock, the one every movement of this owner and currency
+     * takes. Asked before it, two deliveries of one event both find no entry, queue on the lock, and both debit.
+     * The read under the lock is a locking one as well: on MySQL a plain read after the wait answers from a
+     * snapshot older than the movement it waited for.
+     */
+    public function debitOnce(Model $owner, Money $amount, CreditReason $reason, CreditSource $source): ?Money
+    {
+        if (! $amount->isPositive()) {
+            throw new InvalidArgumentException('A debit amount must be positive.');
+        }
+
+        return DB::transaction(function () use ($owner, $amount, $reason, $source): ?Money {
+            $this->lockedBalance($owner, $amount->currency);
+
+            $debited = CreditLedgerEntry::model()::query()
+                ->where('source_type', $source->type)
+                ->where('source_id', $source->id)
+                ->where('reason', $reason)
+                ->lockForUpdate()
+                ->first();
+
+            return $debited instanceof CreditLedgerEntry ? null : $this->credit($owner, $amount->negated(), $reason, $source);
+        }, LockedRow::ATTEMPTS);
+    }
+
+    /**
      * Debit at most $ceiling of an owner's balance, and answer what ACTUALLY moved.
      *
      * The read, the cap and the debit are one movement under the balance row's own lock, and that is the
@@ -104,7 +132,7 @@ final class CreditLedger
             $this->credit($owner, Money::of(-$spend, $ceiling->currency), $reason, $source);
 
             return Money::of($spend, $ceiling->currency);
-        });
+        }, LockedRow::ATTEMPTS);
     }
 
     /**
@@ -136,7 +164,7 @@ final class CreditLedger
             ]);
 
             return Money::of($updated, $amount->currency);
-        });
+        }, LockedRow::ATTEMPTS);
     }
 
     /**
@@ -148,7 +176,12 @@ final class CreditLedger
      */
     private function lockedBalance(Model $owner, string $currency): CreditBalance
     {
-        CreditBalance::model()::query()->insertOrIgnore([
+        $row = CreditBalance::model()::query()
+            ->where('owner_type', $owner->getMorphClass())
+            ->where('owner_id', $owner->getKey())
+            ->where('currency', $currency);
+
+        return LockedRow::take($row, [
             'owner_type' => $owner->getMorphClass(),
             'owner_id' => $owner->getKey(),
             'currency' => $currency,
@@ -156,12 +189,5 @@ final class CreditLedger
             'created_at' => Carbon::now(),
             'updated_at' => Carbon::now(),
         ]);
-
-        return CreditBalance::model()::query()
-            ->where('owner_type', $owner->getMorphClass())
-            ->where('owner_id', $owner->getKey())
-            ->where('currency', $currency)
-            ->lockForUpdate()
-            ->firstOrFail();
     }
 }

@@ -112,7 +112,7 @@ final readonly class StripeProrationStrategy implements ProrationStrategy
             return null;
         }
 
-        return Money::of($preview->amount_due, strtoupper($preview->currency));
+        return StripeAmount::toMoney($preview->amount_due, strtoupper($preview->currency));
     }
 
     public function applySwap(Model $billable, Plan $newPlan): void

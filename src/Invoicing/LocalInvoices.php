@@ -6,6 +6,8 @@ namespace Pushery\Billing\Invoicing;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\URL;
 use LogicException;
 use Pushery\Billing\Contracts\Invoices;
 use Pushery\Billing\Models\InvoiceRecord;
@@ -13,7 +15,6 @@ use Pushery\Billing\ValueObjects\Invoice;
 use Pushery\Billing\ValueObjects\InvoiceDownload;
 use Pushery\Billing\ValueObjects\InvoicePage;
 use Pushery\Billing\ValueObjects\Money;
-use Throwable;
 
 /**
  * Invoices read from the package's own table, for a driver whose engine is local.
@@ -35,7 +36,10 @@ use Throwable;
  */
 final readonly class LocalInvoices implements Invoices
 {
-    public function __construct(private InvoiceDocumentRenderer $renderer) {}
+    public function __construct(
+        private InvoiceDocumentRenderer $renderer,
+        private KeptInvoicePdf $kept = new KeptInvoicePdf,
+    ) {}
 
     public function recent(Model $billable, int $perPage = 24): InvoicePage
     {
@@ -49,44 +53,95 @@ final readonly class LocalInvoices implements Invoices
 
         $hasMore = $records->count() > $perPage;
 
+        // A row the screen offers to download: the route that streams it is registered, and `download()` can
+        // hand a document over, either because a PDF toolchain is bound or because the application kept the
+        // issued file. The screen shows the link only for a row that names where to get it.
+        $routed = Route::has('billing.account.invoice-download');
+        $renders = $this->renderer->rendersPdf();
+
         $rows = $records->take($perPage)
             // A row carrying neither an issue date nor a creation timestamp cannot be placed on a
             // timeline, and inventing one would put it at today's date among documents that are years
             // old. Skipped rather than dated by guess; a persisted row always has at least the latter.
             ->filter(static fn (InvoiceRecord $record): bool => ($record->issued_at ?? $record->created_at) !== null)
-            ->map(static fn (InvoiceRecord $record): Invoice => new Invoice(
+            ->map(fn (InvoiceRecord $record): Invoice => new Invoice(
                 (string) $record->id,
                 $record->issued_at ?? $record->created_at ?? throw new LogicException('unreachable: filtered above'),
                 new Money($record->total_minor, $record->currency),
                 $record->status,
                 $record->number,
+                $routed ? $this->downloadUrl($record, $renders) : null,
             ))
             ->all();
 
         return new InvoicePage(array_values($rows), $hasMore);
     }
 
+    /** Where the screen offers the row's document, or null where `download()` would have none to hand over. */
+    private function downloadUrl(InvoiceRecord $record, bool $renders): ?string
+    {
+        if (! $renders && ! $this->kept->isRecorded($record)) {
+            return null;
+        }
+
+        return URL::route('billing.account.invoice-download', ['invoiceId' => (string) $record->id]);
+    }
+
     public function download(Model $billable, string $invoiceId): ?InvoiceDownload
     {
-        $record = $this->ownedBy($billable)->whereKey($invoiceId)->first();
+        $record = $this->record($billable, $invoiceId);
 
         if (! $record instanceof InvoiceRecord) {
             return null;
         }
 
-        try {
-            $pdf = $this->renderer->pdf($record);
-        } catch (Throwable) {
-            // No PDF renderer is installed, which is the shipped default — the package produces the
-            // document and never the paper. Null reads as "not downloadable" on the screen rather than
-            // turning a missing optional dependency into an error page.
+        $filename = sprintf('%s.pdf', $record->number ?? (string) $record->id);
+
+        // The file the invoice was issued as, where the application kept one, before any render of it.
+        $kept = $this->kept->contents($record);
+
+        if ($kept !== null) {
+            return new InvoiceDownload($filename, $kept);
+        }
+
+        // No PDF renderer is installed, which is the shipped default — the package produces the document and
+        // never the paper. Null answers the download route with a 404 rather than turning a missing optional
+        // dependency into an error page. A renderer that is bound and fails, and a document the margin guard
+        // refuses, are errors rather than an absent document, and they reach the exception handler.
+        if (! $this->renderer->rendersPdf()) {
             return null;
         }
 
-        return new InvoiceDownload(
-            sprintf('%s.pdf', $record->number ?? (string) $record->id),
-            $pdf,
-        );
+        return new InvoiceDownload($filename, $this->renderer->pdf($record));
+    }
+
+    /**
+     * The owner's stored invoice behind an id from a route, or null where the owner has none by that id.
+     *
+     * Another owner's invoice and an id that names no invoice answer alike, so the id sequence every customer
+     * shares cannot be probed for which ids exist. The table's key is a bigint sequence, and an id that is not
+     * a positive integer within its range names no invoice; it is answered without a query, because such a
+     * value against an integer key is an error on PostgreSQL rather than an empty result.
+     */
+    public function record(Model $billable, string $invoiceId): ?InvoiceRecord
+    {
+        return $this->canBeAKey($invoiceId) ? $this->ownedBy($billable)->whereKey((int) $invoiceId)->first() : null;
+    }
+
+    /**
+     * Whether an id from a route can be a key of the invoice table: digits with no leading zero, and no larger
+     * than a bigint holds. The bound is compared as text, because a longer number cast to an integer first
+     * would land inside the range it is being tested against.
+     */
+    private function canBeAKey(string $id): bool
+    {
+        if (! ctype_digit($id) || $id[0] === '0') {
+            return false;
+        }
+
+        $largest = (string) PHP_INT_MAX;
+
+        return strlen($id) < strlen($largest) || (strlen($id) === strlen($largest) && strcmp($id, $largest) <= 0);
     }
 
     /**

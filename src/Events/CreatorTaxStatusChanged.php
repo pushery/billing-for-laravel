@@ -6,6 +6,7 @@ namespace Pushery\Billing\Events;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 use Pushery\Billing\Enums\CreatorTaxStatus;
 use Pushery\Billing\Enums\CreatorTaxStatusSource;
 
@@ -20,6 +21,8 @@ use Pushery\Billing\Enums\CreatorTaxStatusSource;
  */
 final readonly class CreatorTaxStatusChanged implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public function __construct(
         public Model $merchant,
         public CreatorTaxStatus $previous,

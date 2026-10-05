@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Contracts\ArrearsClock;
+use Pushery\Billing\Discounts\CouponCodes;
 use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
@@ -43,10 +44,10 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * the seller's own discount code is the acquisition tool, so that is not a limitation of the feature, it is
  * its absence.
  *
- * Always read a coupon through {@see Coupon::scopeIssuedBy()}. A bare `where('code', ...)` finds ANY
- * issuer's coupon of that name, which after this column exists means one seller's discount can be spent on
- * another seller's sale. `CouponsAreReadScopedTest` holds that, because the mistake is a query that looks
- * completely ordinary.
+ * Always read a coupon through {@see Coupon::scopeIssuedBy()}, and by its code through {@see CouponCodes::find()},
+ * which matches a code the same way on every database. A bare `where('code', ...)` finds ANY issuer's coupon of
+ * that name, which after this column exists means one seller's discount can be spent on another seller's sale.
+ * `CouponsAreReadScopedTest` holds that, because the mistake is a query that looks completely ordinary.
  *
  * @property int $id
  * @property string $code
@@ -106,7 +107,7 @@ class Coupon extends Model
     /** @return HasMany<CouponRedemption, $this> */
     public function redemptions(): HasMany
     {
-        return $this->hasMany(CouponRedemption::model());
+        return $this->hasMany(CouponRedemption::model(), 'coupon_id');
     }
 
     /**

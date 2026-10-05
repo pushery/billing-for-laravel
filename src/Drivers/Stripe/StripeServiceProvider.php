@@ -9,6 +9,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 use Override;
 use Pushery\Billing\Contracts\AdoptsCollectedPaymentMethod;
+use Pushery\Billing\Contracts\AttachesVerifiedVatIds;
 use Pushery\Billing\Contracts\CardPresentPayments;
 use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\CreditSync;
@@ -122,8 +123,10 @@ final class StripeServiceProvider extends ServiceProvider
 {
     /**
      * The Stripe API version the package is written and TESTED against. The default a consuming app runs
-     * on unless it sets billing.stripe.api_version. Moving this is a deliberate act: bump it, run the
-     * live-Stripe suite against the new version, and ship — never let a dependency update move it instead.
+     * on unless it sets billing.stripe.api_version. Moving this is a deliberate act, never a side effect of a
+     * dependency update: read Stripe's changelog for the new version for removed or renamed fields on the
+     * objects the webhook mappers read, bump it, run the live-Stripe suite against the new version, point
+     * each webhook endpoint at it and let `billing:doctor` confirm, and ship.
      *
      * ## Why it must equal Cashier's, and why that was not true until 2026-08-18
      *
@@ -169,6 +172,9 @@ final class StripeServiceProvider extends ServiceProvider
         // through its API, so the Mollie provider takes this binding out again and a host can ask the container
         // whether the step exists.
         $this->app->bind(SubmitsDisputeEvidence::class, StripeDisputeEvidence::class);
+        // A proven VAT number on the customer is what a checkout reverse-charges on. A capability of the same kind,
+        // taken out again by the Mollie provider, whose customers carry no tax ids.
+        $this->app->bind(AttachesVerifiedVatIds::class, StripeVerifiedVatIds::class);
         // Payment in person is a capability of the same kind: a driver binds it when its provider runs card readers,
         // and a host asks the container before it offers a counter sale. The Mollie provider rebinds it to its own
         // terminals when Mollie is the driver. Pairing is bound on its own, because Stripe pairs by the code the
@@ -394,8 +400,8 @@ final class StripeServiceProvider extends ServiceProvider
         // side only, while a supply the buyer never received corrects the creator's settlement with it.
         $registry->on(ChargebackReceived::class, CorrectChainOnChargeback::class);
         // And the money itself. Its own effect for the third time, and for a reason the other two do not
-        // have: it is the only one that has to reach the PROVIDER, which an effect cannot do from inside
-        // the transaction it runs in. So it claims here and spends in a job.
+        // have: it has to reach the PROVIDER, which an effect cannot do from inside the transaction it runs
+        // in. So it claims here and spends in a job, as every effect that reaches the provider does.
         $registry->on(ChargebackReceived::class, ClaimChargebackClawback::class);
     }
 

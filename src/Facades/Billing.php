@@ -8,6 +8,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Facade;
+use LogicException;
 use Override;
 use Pushery\Billing\Contracts\CanReceiveMoney;
 use Pushery\Billing\Contracts\Checkout;
@@ -27,6 +28,9 @@ use Pushery\Billing\ValueObjects\Money;
  * recording {@see BillingFake} to the Checkout, SubscriptionActions and OneTimeCharge contracts, then
  * assert what the app WOULD have done — `Billing::assertSubscribeStarted($owner, 'pro')`,
  * `Billing::assertSwapped(...)`, `Billing::assertNothingCharged()` — exactly like `Bus::fake()`.
+ *
+ * Without `fake()` the facade refuses rather than answering: nothing would have recorded what the code under
+ * test did, so a negative assertion would pass over a real cancel or a real charge.
  *
  * @method static void assertSubscribeStarted(Model $owner, string $tierKey)
  * @method static void assertSubscribeStartedWithCoupon(Model $owner, string $tierKey, ?string $couponCode)
@@ -56,7 +60,15 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final class Billing extends Facade
 {
-    /** Bind a recording fake to the three money seams (and this facade) and return it. */
+    /**
+     * Bind a recording fake to the seams that charge a buyer and to the receiving side, and to this facade, and
+     * return it.
+     *
+     * Six contracts: the hosted checkout and the subscription starter, the subscription actions, the one-time
+     * charge, merchant onboarding and the receive gate. The fake gate refuses every merchant until
+     * `allowMerchantsToReceive()` is called, so a test that relies on its own `CanReceiveMoney` binds it again
+     * after this call, or allows on the fake.
+     */
     public static function fake(): BillingFake
     {
         $fake = new BillingFake;
@@ -79,11 +91,11 @@ final class Billing extends Facade
     }
 
     /**
-     * Bind a recording stand-in for the RECEIVING side and return it.
+     * Bind a recording stand-in for merchant onboarding and the merchant account directory, and return it.
      *
-     * Separate from {@see fake()} by design — that one stands in for the seams that move a buyer's money,
-     * this one for the receiving side — and binding them together would quietly replace a consumer's own
-     * rails in tests that never asked for it.
+     * {@see fake()} covers part of the receiving side, onboarding and the receive gate. This one is the fuller
+     * stand-in for onboarding, with the account directory a merchant's screens read, and it leaves the buyer's
+     * seams and the receive gate as they are.
      *
      * ## They are not disjoint, and the overlap has an order
      *
@@ -95,8 +107,7 @@ final class Billing extends Facade
      * nothing at all.
      *
      * That is not a defect to fix by dropping one of them: onboarding is a genuine part of both surfaces,
-     * and a consumer may reasonably want either recording. It is a defect to leave UNSAID, which it was —
-     * this block claimed the two were separate while they shared a contract.
+     * and a consumer may reasonably want either recording.
      *
      * If a test needs both fakes and asserts on onboarding, call the one it asserts on **second**, or hold
      * the returned object and go through it rather than through the container. `EveryFakeOverlapIsDocumented`
@@ -116,5 +127,25 @@ final class Billing extends Facade
     protected static function getFacadeAccessor(): string
     {
         return BillingFake::class;
+    }
+
+    /**
+     * The fake `fake()` set, and nothing else. Resolved from the container instead, the facade built a fresh
+     * fake nothing was bound to: the code under test reached the real seams, and `assertNothingCharged()`
+     * passed over a charge it never saw.
+     *
+     * @param  string  $name
+     */
+    #[Override]
+    protected static function resolveFacadeInstance(mixed $name): mixed
+    {
+        if (! isset(self::$resolvedInstance[$name])) {
+            throw new LogicException(
+                'Call Billing::fake() before asserting on Billing. Without it nothing records what the code under test '
+                .'did, and the real billing seams answered it.'
+            );
+        }
+
+        return self::$resolvedInstance[$name];
     }
 }

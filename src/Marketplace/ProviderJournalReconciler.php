@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace;
 
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\Eloquent\Builder;
 use Pushery\Billing\Contracts\ReportsMovedShares;
 use Pushery\Billing\Events\ProviderJournalDrift;
 use Pushery\Billing\Models\MerchantCharge;
@@ -57,24 +58,40 @@ final readonly class ProviderJournalReconciler
     ) {}
 
     /**
+     * How many journal rows of this provider a sweep can read, below `$before` where one is given.
+     */
+    public function rowsIn(string $provider, ?int $before = null): int
+    {
+        return $this->journal($provider, $before)->count();
+    }
+
+    /**
+     * The id of the oldest row a sweep with these bounds reads, which is where the next one continues.
+     */
+    public function oldestRead(string $provider, int $limit, ?int $before = null): ?int
+    {
+        $ids = $this->newestFirst($provider, $limit, $before)->pluck('id');
+        $oldest = $ids->last();
+
+        return is_numeric($oldest) ? (int) $oldest : null;
+    }
+
+    /**
      * Walk the journal and report every charge whose transfer the provider describes differently.
      *
      * @param  string  $provider  the driver name whose rows are being audited; a tree that has run two
      *                            providers holds rows only one of them can answer for
      * @param  int  $limit  a bound on one sweep, so an operator can run this against a large journal without
      *                      it becoming an unbounded provider round trip
+     * @param  ?int  $before  continue below this row id, to reach rows older than the ones a sweep read
      * @return list<ProviderJournalDrift>
      */
-    public function sweep(string $provider, int $limit = 500): array
+    public function sweep(string $provider, int $limit = 500, ?int $before = null): array
     {
-        $rows = MerchantCharge::model()::query()
-            ->where('provider', $provider)
-            ->whereNotNull('transfer_reference')
-            // An erased merchant's figures are gone by design; asking the provider about them would both
-            // fail and undo the point of erasing them.
-            ->whereNull('merchant_erased_at')
-            ->orderBy('id')
-            ->limit($limit)
+        $rows = $this->newestFirst($provider, $limit, $before)
+            // Every row's merchant in one query rather than one per row, which a host running
+            // `Model::preventLazyLoading()` refuses from the second row on.
+            ->with('merchant')
             ->get();
 
         $findings = [];
@@ -156,5 +173,39 @@ final readonly class ProviderJournalReconciler
             $ours,
             $theirs->net(),
         );
+    }
+
+    /**
+     * The rows a bounded sweep reads, newest first.
+     *
+     * Newest first because that is where a drift is fresh and can still be repaired; a bounded sweep that read
+     * the oldest rows would never reach it once the journal outgrew the bound.
+     *
+     * @return Builder<MerchantCharge>
+     */
+    private function newestFirst(string $provider, int $limit, ?int $before): Builder
+    {
+        return $this->journal($provider, $before)->orderByDesc('id')->limit($limit);
+    }
+
+    /**
+     * Every journal row of this provider that carries a transfer, below `$before` where one is given.
+     *
+     * @return Builder<MerchantCharge>
+     */
+    private function journal(string $provider, ?int $before): Builder
+    {
+        $query = MerchantCharge::model()::query()
+            ->where('provider', $provider)
+            ->whereNotNull('transfer_reference')
+            // An erased merchant's figures are gone by design; asking the provider about them would both
+            // fail and undo the point of erasing them.
+            ->whereNull('merchant_erased_at');
+
+        if ($before !== null) {
+            $query->where('id', '<', $before);
+        }
+
+        return $query;
     }
 }

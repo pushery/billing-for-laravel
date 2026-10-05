@@ -70,11 +70,14 @@ final readonly class CheckoutUrls
      * Where the hosted billing portal returns the customer, or null when none can be resolved. Nullable
      * on purpose: the hosted portal degrades to "unavailable" rather than erroring when it has no return
      * URL, so this must be able to say "none" instead of throwing.
+     *
+     * The checkout's `success_url` is not a fallback here. It is the page a customer lands on after paying,
+     * and it expects a purchase that has just completed; a customer coming back from changing a card read
+     * there that their subscription was being set up.
      */
     public function portalReturnUrl(): ?string
     {
         return $this->configured('portal_return_url')
-            ?? $this->configured('success_url')
             ?? $this->route('billing.account.subscription');
     }
 

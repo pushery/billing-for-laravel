@@ -10,9 +10,11 @@ use Mollie\Api\Http\Requests\CreatePaymentRequest;
 use Mollie\Api\MollieApiClient;
 use Mollie\Api\Resources\Payment;
 use Mollie\Api\Resources\Refund;
+use Mollie\Api\Types\MandateMethod;
 use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
 use Pushery\Billing\Contracts\PaymentRails;
 use Pushery\Billing\Exceptions\MandateNeedsRedirect;
+use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\ValueObjects\ChargeNarrative;
 use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
@@ -50,17 +52,28 @@ use Pushery\Billing\ValueObjects\TokenizedMethod;
 final readonly class MolliePaymentRails implements EstablishesMandateByRedirect, PaymentRails
 {
     /**
-     * Mollie's `description` carries 255 characters.
+     * Mollie's `description` carries 255 characters at most, and less for some payment methods.
      *
      * Trimmed HERE rather than left to the provider, because Mollie cuts the end — and the end is the
      * period, which is the half that tells two otherwise identical charges apart.
      */
     private const int DESCRIPTION_LIMIT = 255;
 
+    /**
+     * What a SEPA direct debit carries of the description: 140 characters of remittance information, the
+     * EPC rulebook's limit, which Mollie cuts to rather than to its absolute 255.
+     */
+    private const int SEPA_DESCRIPTION_LIMIT = 140;
+
+    /** The mandate method whose recurring payments Mollie collects as SEPA direct debits. */
+    private const string SEPA_MANDATE = 'directdebit';
+
     public function __construct(
         private MollieApiClient $client,
-        /** Where Mollie returns the customer after a redirect, and where it posts its status pings. */
-        private string $returnUrl,
+        /** Where Mollie posts its status pings: the package's webhook endpoint, which only accepts POST. */
+        private string $webhookUrl,
+        /** Where a customer is sent back after a checkout. Never the webhook, which a browser cannot open. */
+        private CheckoutUrls $urls,
     ) {}
 
     /**
@@ -83,11 +96,16 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
         //
         // Set immediately before the call because the SDK resets it after every request -- setting it any
         // earlier would arm whichever request happened to go first.
+        //
+        // The return URL is resolved before the key is armed: an install with nowhere to send the customer
+        // back to is refused here, before anything reaches Mollie.
+        $returnUrl = $this->urls->purchaseReturnUrl();
+
         $payment = $this->keyed($idempotencyKey, fn (): mixed => $this->client->send(new CreatePaymentRequest(
             description: $this->describe($narrative, 'Payment'),
             amount: MollieAmount::toMollie($amount),
-            redirectUrl: $this->returnUrl,
-            webhookUrl: $this->returnUrl,
+            redirectUrl: $returnUrl,
+            webhookUrl: $this->webhookUrl,
             method: $token,
             metadata: $this->traceOf($idempotencyKey),
             sequenceType: MollieValue::SEQUENCE_ONEOFF,
@@ -129,7 +147,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
             description: 'Mandate verification',
             amount: MollieAmount::toMollie($verification),
             redirectUrl: $returnUrl,
-            webhookUrl: $this->returnUrl,
+            webhookUrl: $this->webhookUrl,
             sequenceType: MollieValue::SEQUENCE_FIRST,
             customerId: $customerReference,
         )), Payment::class);
@@ -167,9 +185,9 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
         }
 
         $payment = $this->keyed($idempotencyKey, fn (): mixed => $this->client->send(new CreatePaymentRequest(
-            description: $this->describe($narrative, 'Subscription'),
+            description: $this->describe($narrative, 'Subscription', $this->recurringDescriptionLimit($mandate)),
             amount: MollieAmount::toMollie($amount),
-            webhookUrl: $this->returnUrl,
+            webhookUrl: $this->webhookUrl,
             metadata: $this->traceOf($idempotencyKey),
             sequenceType: MollieValue::SEQUENCE_RECURRING,
             mandateId: $mandate->id,
@@ -209,24 +227,6 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
         );
     }
 
-    /** Translate a Mollie payment into the neutral outcome, keeping "not yet" apart from "no". */
-    /**
-     * Run one request with the idempotency key armed, and disarm it afterwards WHATEVER happened.
-     *
-     * The SDK clears the key in a RESPONSE middleware, so it clears it only when a response comes back. A
-     * request that throws — a network error, an API error, a timeout, which is precisely the case an
-     * idempotency key exists for — leaves it set. And the client is a singleton: the next call would send
-     * somebody else's key, so a customer creation could come back as the previous charge, or be refused
-     * for a payload that does not match the key it inherited.
-     *
-     * A key that leaks to the next request is worse than no key at all, and the leak is loudest exactly
-     * when the first request failed. `finally`, not a second reset after the call.
-     *
-     * @template T
-     *
-     * @param  callable(): T  $send
-     * @return T
-     */
     /**
      * The caller's reference, for the payment's metadata rather than for its description.
      *
@@ -253,11 +253,44 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
      * nothing beyond "a payment happened", which is every call that is not a subscription cycle. Naming a
      * service there would mean inventing one.
      */
-    private function describe(?ChargeNarrative $narrative, string $fallback): string
+    private function describe(?ChargeNarrative $narrative, string $fallback, int $limit = self::DESCRIPTION_LIMIT): string
     {
-        return $narrative?->statement(self::DESCRIPTION_LIMIT) ?? $fallback;
+        return $narrative?->statement($limit) ?? $fallback;
     }
 
+    /**
+     * The description limit of a recurring payment, which Mollie collects on its mandate's rails.
+     *
+     * The stored method is the FIRST payment's, and the SDK maps it onto the mandate it established: a card or
+     * Apple Pay onto a card mandate, PayPal and BACS onto their own, and iDEAL, Bancontact and every other bank
+     * method onto a SEPA direct-debit mandate. A method the SDK does not know lands on direct debit as well,
+     * which costs a shorter service name at worst and keeps the period.
+     */
+    private function recurringDescriptionLimit(MandateReference $mandate): int
+    {
+        return MandateMethod::getForFirstPaymentMethod($mandate->method) === self::SEPA_MANDATE
+            ? self::SEPA_DESCRIPTION_LIMIT
+            : self::DESCRIPTION_LIMIT;
+    }
+
+    /**
+     * Run one request with the idempotency key armed, and disarm it afterwards WHATEVER happened.
+     *
+     * The client is a singleton, so a key still set after this call would go out with the next request: a
+     * customer creation could come back as the previous charge, or be refused for a payload that does not
+     * match the key it inherited. Version 4 of the SDK takes the key off the client while it prepares a
+     * request, so a request that is sent leaves nothing behind; a call that throws before that point, the SDK
+     * refusing its own arguments for one, leaves the key set, and this driver also accepts version 3.13.
+     *
+     * A key that leaks to the next request is worse than no key at all. `finally` holds whichever way the
+     * call ends and whichever SDK made it, where a second reset after the call would hold only for the call
+     * that returns.
+     *
+     * The answer stays `mixed` on purpose. Each caller checks what came back before it reads it, because the
+     * SDK hands over what the response hydrated to, and an answer of another shape is a case they handle.
+     *
+     * @param  callable(): mixed  $send
+     */
     private function keyed(?string $idempotencyKey, callable $send): mixed
     {
         $this->client->setIdempotencyKey($idempotencyKey);
@@ -269,6 +302,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
         }
     }
 
+    /** Translate a Mollie payment into the neutral outcome, keeping "not yet" apart from "no". */
     private function settle(mixed $payment, Money $amount): ChargeResult
     {
         if (! $payment instanceof Payment) {

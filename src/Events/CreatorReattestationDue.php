@@ -6,6 +6,7 @@ namespace Pushery\Billing\Events;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 
 /**
  * A creator's tax declaration is due for renewal, and the date its hold begins is known.
@@ -19,6 +20,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 final readonly class CreatorReattestationDue implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public function __construct(
         public Model $merchant,
         public CarbonImmutable $holdFrom,

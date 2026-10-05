@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Pushery\Billing\Webhooks\Effects;
 
 use Pushery\Billing\Enums\MerchantStatus;
+use Pushery\Billing\Enums\SellerDataMeasure;
 use Pushery\Billing\Events\MerchantAccountUpdated;
 use Pushery\Billing\Marketplace\MerchantCapabilities;
 use Pushery\Billing\Marketplace\MerchantLifecycle;
+use Pushery\Billing\Marketplace\SellerDataEscalationSweep;
 use Pushery\Billing\Models\MerchantAccount;
+use Pushery\Billing\Models\SellerDataEscalationEpisode;
 
 /**
  * Stores what the provider reported, then moves the merchant's standing to match.
@@ -25,9 +28,16 @@ use Pushery\Billing\Models\MerchantAccount;
  * Reinstatement is deliberately NOT symmetric with suspension: a terminated merchant stays terminated,
  * because a provider keeps reporting healthy capabilities for an account long after its owner disconnected
  * it from this platform.
+ *
+ * And a healthy report lifts only the suspension a report made. A suspension made for another reason, a
+ * measure over missing seller data or an operator's, says nothing about the provider, so the provider being
+ * satisfied says nothing about it either.
  */
 final readonly class RefreshMerchantCapabilities
 {
+    /** The reason a suspension made here carries, so a later report lifts that suspension and no other. */
+    public const string WITHHELD = 'The provider withheld a capability this merchant needs to receive money.';
+
     public function __construct(
         private MerchantCapabilities $capabilities,
         private MerchantLifecycle $lifecycle,
@@ -35,7 +45,7 @@ final readonly class RefreshMerchantCapabilities
 
     public function __invoke(MerchantAccountUpdated $event): void
     {
-        $account = $this->capabilities->apply($event->account);
+        $account = $this->capabilities->apply($event->account, occurredAt: $event->occurredAt);
 
         if (! $account instanceof MerchantAccount) {
             return;
@@ -49,13 +59,34 @@ final readonly class RefreshMerchantCapabilities
             && $account->deauthorized_at === null;
 
         if (! $providerPermits) {
-            $this->lifecycle->suspend($account, 'The provider withheld a capability this merchant needs to receive money.');
+            $this->lifecycle->suspend($account, self::WITHHELD);
 
             return;
         }
 
-        if ($account->status === MerchantStatus::Suspended) {
-            $this->lifecycle->reinstate($account);
+        if ($account->status !== MerchantStatus::Suspended || $account->status_reason !== self::WITHHELD) {
+            return;
         }
+
+        // A measure that suspends sales may still hold this merchant. It began while the report's suspension
+        // stood, so it wrote no reason of its own, and lifting now would let the seller sell again while the
+        // measure is in force. The suspension passes to the measure, which lifts it when it ends.
+        if ($this->measureSuspendsSales($account)) {
+            $this->lifecycle->transferSuspension($account, SellerDataEscalationSweep::SUSPENSION_REASON);
+
+            return;
+        }
+
+        $this->lifecycle->reinstate($account);
+    }
+
+    private function measureSuspendsSales(MerchantAccount $account): bool
+    {
+        return SellerDataEscalationEpisode::model()::query()
+            ->where('merchant_type', $account->merchant_type)
+            ->where('merchant_id', $account->merchant_id)
+            ->whereNull('resolved_at')
+            ->where('measure', SellerDataMeasure::SuspendSales->value)
+            ->exists();
     }
 }

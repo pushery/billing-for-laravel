@@ -28,9 +28,9 @@ final class MerchantPartyUnavailable extends RuntimeException
     {
         return new self(sprintf(
             'No merchant party resolver is bound, so the identity of a [%s] merchant cannot be read for a '
-            .'self-billed document. A self-billed document names the merchant as seller and needs their legal '
-            .'name and registered address, which live in your application, not this package. Bind a '
-            .'MerchantPartyResolver before self-billing.',
+            .'document the platform issues about them. A self-billed document names the merchant as seller and '
+            .'a commission invoice names them as buyer, and both need their legal name and registered address, '
+            .'which live in your application, not this package. Bind a MerchantPartyResolver before issuing either.',
             $merchant->getMorphClass(),
         ));
     }

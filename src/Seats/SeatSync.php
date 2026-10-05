@@ -25,8 +25,17 @@ use Pushery\Billing\Events\SeatQuantityChanged;
  */
 final readonly class SeatSync
 {
+    /** How often one sync writes before it leaves a still-moving count to the sync of the next change. */
+    private const int ROUNDS = 3;
+
     public function __construct(private SeatBilling $billing) {}
 
+    /**
+     * Membership changes sync from queued jobs, and two of them for one team can overlap: the job that counted the
+     * seats first can write after the job that counted them later, and leave the older count billed. So a sync counts
+     * the seats again after it wrote, and writes again while the count moved under it. The job whose older count
+     * landed last is the one that sees the newer count afterwards.
+     */
     public function sync(Model $owner): void
     {
         if (! $owner instanceof ProvidesSeats) {
@@ -41,12 +50,13 @@ final readonly class SeatSync
 
         $target = $owner->seatCount();
 
-        if ($current === $target) {
-            return; // already correct — idempotent, no provider write, no event
+        for ($round = 0; $round < self::ROUNDS && $current !== $target; $round++) {
+            $this->billing->updateSeatQuantity($owner, $target);
+
+            Event::dispatch(new SeatQuantityChanged($owner, $current, $target));
+
+            $current = $target;
+            $target = $owner->seatCount();
         }
-
-        $this->billing->updateSeatQuantity($owner, $target);
-
-        Event::dispatch(new SeatQuantityChanged($owner, $current, $target));
     }
 }

@@ -58,7 +58,7 @@
             </label>
             <input id="coupon-code" type="text" wire:model.blur="couponCode" autocomplete="off"
                 placeholder="{{ __('billing::account.coupon.placeholder') }}"
-                class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100">
+                class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-base sm:text-sm dark:border-gray-700 dark:bg-gray-950 dark:text-gray-100">
             @if ($couponStatus === 'applied')
                 <p role="status" class="mt-2 text-sm font-medium text-green-700 dark:text-green-400">{{ __('billing::account.coupon.applied') }}</p>
             @elseif ($couponStatus === 'invalid')

@@ -13,6 +13,7 @@ use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Contracts\NamesPaymentTransfer;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Models\MerchantCharge;
+use Pushery\Billing\Support\Concerns\BacksOffBetweenAttempts;
 
 /**
  * Writes onto a destination charge the transfer its share went out on, when the confirmation could not name it.
@@ -33,6 +34,7 @@ use Pushery\Billing\Models\MerchantCharge;
  */
 final class NameTransferOnConfirmation implements ShouldQueueAfterCommit
 {
+    use BacksOffBetweenAttempts;
     use InteractsWithQueue;
     use Queueable;
 

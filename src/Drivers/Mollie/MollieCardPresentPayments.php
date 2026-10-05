@@ -12,6 +12,7 @@ use Pushery\Billing\Contracts\IssuesReaderPairingCodes;
 use Pushery\Billing\Enums\InPersonSaleStatus;
 use Pushery\Billing\Exceptions\ReaderUnavailable;
 use Pushery\Billing\Models\InPersonSaleRecord;
+use Pushery\Billing\Support\UniqueRow;
 use Pushery\Billing\Tax\SaleTaxDecision;
 use Pushery\Billing\Tax\SaleTaxFacts;
 use Pushery\Billing\ValueObjects\InPersonCollection;
@@ -32,8 +33,9 @@ use Throwable;
  * - A terminal carries no address. The country every sale on it is placed in comes from the host
  *   (`billing.mollie.terminal_countries`), by the terminal's id or its profile's, and never from a guess such as
  *   the terminal's time zone. A terminal with no country declared takes no sale.
- * - A terminal's status says whether it is activated, not whether Mollie can reach it. An activated terminal that
- *   lost its connection takes the sale up and fails it within thirty seconds, and the webhook reports that.
+ * - A terminal's status says whether it is activated, not whether Mollie can reach it. Mollie accepts a sale for an
+ *   activated terminal that lost its connection and fails it once it has not reached the terminal in thirty
+ *   seconds, with the status reason `terminal_unreachable`. The webhook reports that.
  * - Mollie reports no payment in progress on a terminal. The package knows the sales it put up itself, and asks
  *   Mollie whether the last of those on the terminal is still open.
  *
@@ -189,7 +191,8 @@ final readonly class MollieCardPresentPayments implements CardPresentPayments, I
     private function record(Payment $payment, string $reader, string $soldAt, InPersonSale $sale, SaleTaxFacts $tax): void
     {
         try {
-            InPersonSaleRecord::model()::query()->firstOrCreate(
+            UniqueRow::firstOrCreate(
+                InPersonSaleRecord::model()::query(),
                 ['provider' => self::PROVIDER, 'payment_reference' => MollieValue::id($payment->id)],
                 [
                     'reader' => $reader,

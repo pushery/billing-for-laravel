@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -26,6 +28,7 @@ use Pushery\Billing\Events\InvoiceCorrected;
 use Pushery\Billing\Events\InvoiceFinalized;
 use Pushery\Billing\Events\InvoiceUpcoming;
 use Pushery\Billing\Events\MandateRevoked;
+use Pushery\Billing\Events\MerchantTransferReversedByProvider;
 use Pushery\Billing\Events\PaymentActionRequired;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentMethodCollected;
@@ -39,6 +42,9 @@ use Pushery\Billing\Events\TaxIdVerificationReported;
 use Pushery\Billing\Events\TrialEnding;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Models\MerchantCharge;
+use Pushery\Billing\Tax\ChargedTaxRate;
+use Pushery\Billing\Tax\ShippedTaxRates;
+use Pushery\Billing\Tax\TaxCalculatorFactory;
 use Pushery\Billing\ValueObjects\InvoiceCorrectionSnapshot;
 use Pushery\Billing\ValueObjects\InvoiceSnapshot;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -152,11 +158,16 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             ],
             'checkout.session.completed',
             'checkout.session.async_payment_succeeded' => $this->checkoutEvents($object),
+            // A hosted checkout the buyer never paid closes the routed sale written down when it opened.
+            'checkout.session.expired' => $this->expiredCheckoutEvents($object),
             // What a tax authority's register said about a buyer's tax ID. The checkout checks only the format, and
             // the register answers afterwards: `created` carries a first answer where there is one, `updated` every
             // later one.
             'customer.tax_id.created',
             'customer.tax_id.updated' => $this->taxIdVerificationEvents($object),
+            // A number the customer removed. Without this, the last verification it carried kept standing, and the
+            // reverse charge went on resting on a number the customer no longer gives.
+            'customer.tax_id.deleted' => $this->taxIdRemovalEvents($object),
             // `@partially-mapped:` payment_intent.succeeded, payment_intent.payment_failed and
             // payment_intent.canceled ARE answered, for routed marketplace charges only. What stays out is
             // every INVOICE-DRIVEN payment, which is the whole customer-facing surface — and that qualifier
@@ -188,6 +199,11 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             'charge.refunded' => $this->refundEvents($object),
             'charge.dispute.created' => $this->disputeOpenedEvents($object),
             'charge.dispute.closed' => $this->disputeClosedEvents($object),
+            // A transfer the provider reversed on its own. The transfer is the platform's object, made with its keys for
+            // a routed sale, so Stripe delivers the event to the platform's endpoint with its other events about separate
+            // charges and transfers, never to the endpoint for the connected accounts. A single-seller install makes no
+            // transfers, and the effect books nothing for a transfer no routed charge names.
+            'transfer.reversed' => $this->transferReversedEvents($object),
             'credit_note.created' => $this->correctionEvents($object),
             'payment_method.detached' => $this->paymentMethodDetachedEvents($object, $data),
             default => [],
@@ -251,7 +267,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
 
         return [new AddonRefunded(
             $paymentReference,
-            Money::of($this->int($object, 'amount_refunded') ?? 0, strtoupper($currency)),
+            StripeAmount::toMoney($this->int($object, 'amount_refunded') ?? 0, strtoupper($currency)),
         )];
     }
 
@@ -309,7 +325,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             return [];
         }
 
-        $amount = Money::of($this->int($object, 'amount') ?? 0, strtoupper($currency));
+        $amount = StripeAmount::toMoney($this->int($object, 'amount') ?? 0, strtoupper($currency));
         // A one-off sale is recorded under its payment and is found directly. A subscription cycle is recorded
         // under its invoice, which a dispute never names, so it is found through the payment kept beside it.
         $charge = $this->routed->find('stripe', $paymentReference)
@@ -443,7 +459,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             return [];
         }
 
-        $amount = Money::of(
+        $amount = StripeAmount::toMoney(
             $this->int($object, $failed ? 'amount_due' : 'amount_paid') ?? 0,
             strtoupper($currency),
         );
@@ -615,7 +631,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
 
         if ($soldAlongside instanceof TaxArchetype && $tipMerchant !== null
             && $customer !== null && $id !== null && $currency !== null) {
-            $tip = Money::of($this->int($object, 'amount_total') ?? 0, strtoupper($currency));
+            $tip = StripeAmount::toMoney($this->int($object, 'amount_total') ?? 0, strtoupper($currency));
 
             return [new FanTipPaid(
                 $customer,
@@ -649,7 +665,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             return [];
         }
 
-        $amount = Money::of($this->int($object, 'amount_total') ?? 0, strtoupper($currency));
+        $amount = StripeAmount::toMoney($this->int($object, 'amount_total') ?? 0, strtoupper($currency));
 
         return [new AddonPurchased(
             $customer,
@@ -711,7 +727,9 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
      *
      * A tax ID without `verification` was never sent to a register, and a status this package does not know is
      * left alone rather than guessed at, because the answer decides whether a reverse-charged sale owed tax. The
-     * customer is read from `customer`, and from `owner.customer` where the object reports it there.
+     * customer is read from `customer`, and from `owner.customer` where the object reports it there. `removed` is
+     * this package's record of a deletion and never a register's answer, so a verification reporting it is not
+     * read as one.
      *
      * @param  array<array-key, mixed>  $object
      * @return list<BillingDomainEvent>
@@ -724,33 +742,53 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             return [];
         }
 
+        $status = TaxIdVerificationStatus::tryFrom($this->string($verification, 'status') ?? '');
+
+        if (! $status instanceof TaxIdVerificationStatus || $status === TaxIdVerificationStatus::Removed) {
+            return [];
+        }
+
+        return $this->taxIdEvents(
+            $object,
+            $status,
+            $this->string($verification, 'verified_name'),
+            $this->string($verification, 'verified_address'),
+        );
+    }
+
+    /**
+     * A tax ID the customer removed, recorded as an answer of its own so that a verification it carried stops
+     * counting for the sales after it. Whatever the deleted object still says about its verification is that
+     * verification, which is exactly what no longer applies.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function taxIdRemovalEvents(array $object): array
+    {
+        return $this->taxIdEvents($object, TaxIdVerificationStatus::Removed, null, null);
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function taxIdEvents(array $object, TaxIdVerificationStatus $status, ?string $verifiedName, ?string $verifiedAddress): array
+    {
         $owner = $object['owner'] ?? null;
         $customer = $this->string($object, 'customer')
             ?? (is_array($owner) && $this->string($owner, 'type') === 'customer' ? $this->string($owner, 'customer') : null);
         $id = $this->string($object, 'id');
         $type = $this->string($object, 'type');
         $value = $this->string($object, 'value');
-        $status = TaxIdVerificationStatus::tryFrom($this->string($verification, 'status') ?? '');
 
-        if ($customer === null || $id === null || $type === null || $value === null || ! $status instanceof TaxIdVerificationStatus) {
+        if ($customer === null || $id === null || $type === null || $value === null) {
             return [];
         }
 
-        return [new TaxIdVerificationReported(
-            $customer,
-            'stripe',
-            $id,
-            $type,
-            $value,
-            $status,
-            $this->string($verification, 'verified_name'),
-            $this->string($verification, 'verified_address'),
-        )];
+        return [new TaxIdVerificationReported($customer, 'stripe', $id, $type, $value, $status, $verifiedName, $verifiedAddress)];
     }
 
-    /**
-     * @param  array<array-key, mixed>  $data
-     */
     /**
      * How much of the customer's Stripe balance this invoice consumed.
      *
@@ -831,7 +869,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
                 $customer,
                 $id,
                 $this->countryAt($object, 'customer_shipping', 'address') ?? $this->countryAt($object, 'customer_address'),
-                Money::of($total, strtoupper($currency)),
+                StripeAmount::toMoney($total, strtoupper($currency)),
                 paid: $this->string($object, 'status') === 'paid',
                 chargeReference: $id,
                 subscriptionReference: $subscription,
@@ -864,23 +902,81 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     }
 
     /**
-     * The invoice's net (taxable base) and tax, both AFTER any discount. Stripe's `subtotal` is the
+     * The document's net (taxable base) and tax, both AFTER any discount. Stripe's `subtotal` is the
      * pre-discount, pre-tax amount, so subtracting an invoice-level discount (promotion codes are allowed by
-     * default) gives the real taxable base; the tax is then total - net. Deriving tax as total - subtotal
+     * default) gives the real taxable base; the tax is then total - net. An invoice lists its discounts as
+     * `total_discount_amounts` and a credit note as `discount_amounts`, so both are read: reading only the
+     * invoice's name subtracted nothing from a credit note, which kept its net before the discount and lost the
+     * tax it credits. Deriving tax as total - subtotal
      * would be wrong by exactly the discount — it would report tax that was never charged and a net that the
      * lines do not sum to, producing a legally invalid EN 16931 e-invoice. Net is not floored: a downgrade
      * can finalize a genuinely negative invoice, which must persist faithfully. The tax floor keeps a rounding
      * wobble from ever emitting a negative VAT.
+     *
+     * Where the document states `total_excluding_tax`, that is the net, and nothing is derived. `subtotal` leaves
+     * out only exclusive tax, so on a price set gross it carries the tax inside it: derived from it, an invoice of
+     * 11.90 at 19 % inclusive was stored as a net of 11.90 and a tax of zero, and every return read it so.
      *
      * @param  array<array-key, mixed>  $object
      * @return array{0: int, 1: int}
      */
     private function netAndTax(array $object, int $total): array
     {
-        $grossSubtotal = $this->int($object, 'subtotal') ?? $total;
-        $net = $grossSubtotal - $this->sumAmounts($object['total_discount_amounts'] ?? null);
+        $net = $this->int($object, 'total_excluding_tax');
+
+        if ($net === null) {
+            $grossSubtotal = $this->int($object, 'subtotal') ?? $total;
+            $net = $grossSubtotal - $this->invoiceLevelDiscount($object);
+        }
 
         return [$net, max(0, $total - $net)];
+    }
+
+    /**
+     * The discount taken off the invoice as a whole.
+     *
+     * Stripe's `subtotal` has every line item's own discounts taken off already, while `total_discount_amounts`
+     * lists the amounts of every discount across all line items, those of the line items' own discounts included. A
+     * discount a line item names in its own `discounts` is therefore left out here, or the net would lose it twice.
+     *
+     * @param  array<array-key, mixed>  $object
+     */
+    private function invoiceLevelDiscount(array $object): int
+    {
+        $data = $object['lines'] ?? null;
+        $lines = is_array($data) ? ($data['data'] ?? null) : null;
+        $ownDiscounts = [];
+
+        foreach (is_array($lines) ? $lines : [] as $line) {
+            foreach (is_array($line) && is_array($line['discounts'] ?? null) ? $line['discounts'] : [] as $discount) {
+                $id = $this->discountId($discount);
+
+                if ($id !== null) {
+                    $ownDiscounts[$id] = true;
+                }
+            }
+        }
+
+        $rows = $object['total_discount_amounts'] ?? $object['discount_amounts'] ?? null;
+        $sum = 0;
+
+        foreach (is_array($rows) ? $rows : [] as $row) {
+            if (! is_array($row) || isset($ownDiscounts[$this->discountId($row['discount'] ?? null) ?? ''])) {
+                continue;
+            }
+
+            $sum += $this->int($row, 'amount') ?? 0;
+        }
+
+        return $sum;
+    }
+
+    /** A discount's id, whether the payload names it or expands it. */
+    private function discountId(mixed $discount): ?string
+    {
+        $id = is_array($discount) ? ($discount['id'] ?? null) : $discount;
+
+        return is_string($id) && $id !== '' ? $id : null;
     }
 
     /**
@@ -1011,18 +1107,23 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     /**
      * The invoice lines, each carrying its net AFTER any discount so the lines sum to the document net (the
      * discount-adjusted taxable base). Stripe's line `amount` is the pre-discount figure and its per-line
-     * `discount_amounts` carry the reduction, so the post-discount net is amount minus those. Stripe's
-     * per-line tax rate is not reliably present in a webhook payload (the rate object is not expanded), so
-     * each line carries the invoice's EFFECTIVE rate — exact for the common single-rate invoice, and
-     * consistent with the stored net and tax. A lineless invoice gets one summary line, because an EN 16931
-     * invoice must have at least one (BR-16).
+     * `discount_amounts` carry the reduction, so the post-discount net is amount minus those. On a price set
+     * gross, `amount` also carries the tax, and the tax the line reports as inclusive comes off as well. A lineless
+     * invoice gets one summary line, because an EN 16931 invoice must have at least one (BR-16).
+     *
+     * Each line states the rate it was taxed at. Stripe does not expand the rate object in a webhook, but every
+     * line reports the tax it charged and the base it charged it on (`taxes`, `tax_amounts` before `basil`), and
+     * those are read back into the statutory rate they come from. A mixed invoice is two bands, an e-book at 7 %
+     * beside a subscription at 19 %, and not one band at the 13 % the totals average to. A line that reports no
+     * tax information at all states the rate of the invoice's own totals, read back the same way.
      *
      * @param  array<array-key, mixed>  $object
      * @return list<array{description: string, quantity: int, unit: string, unit_price_minor: int, net_minor: int, tax_rate: float}>
      */
     private function lineSnapshots(array $object, int $net, int $tax): array
     {
-        $rate = $net > 0 ? round($tax / $net * 100, 1) : 0.0;
+        $rates = $this->chargedRates($object);
+        $rate = $rates->of($net, $tax);
 
         $data = $object['lines'] ?? null;
         $rows = is_array($data) ? ($data['data'] ?? null) : null;
@@ -1034,7 +1135,8 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
                 continue;
             }
 
-            $lineNet = ($this->int($row, 'amount') ?? 0) - $this->sumAmounts($row['discount_amounts'] ?? null);
+            $charged = $this->lineTax($row);
+            $lineNet = ($this->int($row, 'amount') ?? 0) - $this->sumAmounts($row['discount_amounts'] ?? null) - ($charged['inclusive'] ?? 0);
             $quantity = $this->int($row, 'quantity') ?? 1;
 
             $lines[] = [
@@ -1043,7 +1145,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
                 'unit' => 'C62',
                 'unit_price_minor' => $quantity !== 0 ? intdiv($lineNet, $quantity) : $lineNet,
                 'net_minor' => $lineNet,
-                'tax_rate' => $rate,
+                'tax_rate' => $charged === null ? $rate : $rates->of($charged['base'] ?? $lineNet, $charged['tax']),
             ];
         }
 
@@ -1059,6 +1161,81 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         }
 
         return $lines;
+    }
+
+    /**
+     * The rates a line of this document can state, the buyer's country and the seller's first.
+     *
+     * The buyer's country is read as the provider reads it for a destination, the shipping address before the
+     * billing address. A credit note embeds neither, so its lines are read against the seller's country first.
+     *
+     * @param  array<array-key, mixed>  $object
+     */
+    private function chargedRates(array $object): ChargedTaxRate
+    {
+        $container = Container::getInstance();
+        $seller = $container->make(Repository::class)->get('billing.company.country');
+        $countries = [];
+
+        foreach ([
+            $this->countryAt($object, 'customer_shipping', 'address'),
+            $this->countryAt($object, 'customer_address'),
+            is_string($seller) && $seller !== '' ? $seller : null,
+        ] as $country) {
+            if ($country !== null) {
+                $countries[] = $country;
+            }
+        }
+
+        return ChargedTaxRate::between(
+            $countries,
+            $container->make(ShippedTaxRates::class),
+            $container->make(TaxCalculatorFactory::class)->answeringRateMatrix(),
+        );
+    }
+
+    /**
+     * The tax a line was charged and the base it was charged on, or null where the line reports nothing about tax.
+     *
+     * An empty list is a report: the line carried no tax. The base is the one the entries name, where they name one.
+     * Several entries on one base are one rate made of several taxes, a state and a city sales tax for one, and add
+     * up; entries on different bases name none, and the line's own net stands in. The inclusive part is the tax the
+     * line's `amount` already contains, marked `tax_behavior: inclusive`, or `inclusive: true` before `basil`.
+     *
+     * @param  array<array-key, mixed>  $row
+     * @return array{tax: int, inclusive: int, base: ?int}|null
+     */
+    private function lineTax(array $row): ?array
+    {
+        $entries = $row['taxes'] ?? $row['tax_amounts'] ?? null;
+
+        if (! is_array($entries)) {
+            return null;
+        }
+
+        $tax = 0;
+        $inclusive = 0;
+        $bases = [];
+
+        foreach ($entries as $entry) {
+            if (! is_array($entry)) {
+                continue;
+            }
+
+            $amount = $this->int($entry, 'amount') ?? 0;
+            $base = $this->int($entry, 'taxable_amount');
+            $tax += $amount;
+
+            if (($entry['tax_behavior'] ?? null) === 'inclusive' || ($entry['inclusive'] ?? null) === true) {
+                $inclusive += $amount;
+            }
+
+            if ($amount !== 0 && $base !== null) {
+                $bases[$base] = true;
+            }
+        }
+
+        return ['tax' => $tax, 'inclusive' => $inclusive, 'base' => count($bases) === 1 ? array_key_first($bases) : null];
     }
 
     /**
@@ -1114,7 +1291,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
 
         return $currency === null || $received === null
             ? []
-            : [new InPersonSalePaid('stripe', $reference, Money::of($received, strtoupper($currency)))];
+            : [new InPersonSalePaid('stripe', $reference, StripeAmount::toMoney($received, strtoupper($currency)))];
     }
 
     /**
@@ -1149,8 +1326,80 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         // `latest_charge`, as an id, and nothing else. Every confirmation therefore carried null while the comment
         // here described the reference arriving. The settle effect now asks the provider for it, after the
         // webhook's transaction commits, which a mapper that makes no provider call cannot do.
+        //
+        // The sale's own reference rides along where the intent carries one: a hosted checkout recorded its sale
+        // under it, because the session had no payment yet to record it under.
+        $sale = $this->saleReferenceOf($object);
+
         return [$confirmed
-            ? new RoutedChargeConfirmed('stripe', $reference)
-            : new RoutedChargeAbandoned('stripe', $reference)];
+            ? new RoutedChargeConfirmed('stripe', $reference, saleReference: $sale)
+            : new RoutedChargeAbandoned('stripe', $reference, saleReference: $sale)];
+    }
+
+    /**
+     * A hosted checkout that lapsed before the buyer paid, which closes the sale it was opened for.
+     *
+     * A routed hosted sale is written down as pending when its session opens. A buyer who walks away leaves no
+     * payment to fail, so no `payment_intent.*` event ever reaches that row; the session's expiry is the only
+     * word that the sale will not happen. The session carries the sale's reference in its metadata, and names a
+     * payment only where the buyer got as far as one.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function expiredCheckoutEvents(array $object): array
+    {
+        $sale = $this->saleReferenceOf($object);
+
+        if ($sale === null) {
+            return [];
+        }
+
+        $payment = $object['payment_intent'] ?? null;
+
+        return [new RoutedChargeAbandoned('stripe', is_string($payment) && $payment !== '' ? $payment : $sale, saleReference: $sale)];
+    }
+
+    /**
+     * The package's own reference for a hosted sale, from the metadata of the session or the payment it carries.
+     *
+     * @param  array<array-key, mixed>  $object
+     */
+    private function saleReferenceOf(array $object): ?string
+    {
+        $metadata = $object['metadata'] ?? null;
+        $sale = is_array($metadata) ? ($metadata[StripeOneTimeCharge::SALE_METADATA_KEY] ?? null) : null;
+
+        return is_string($sale) && $sale !== '' ? $sale : null;
+    }
+
+    /**
+     * A transfer the provider reversed on its own.
+     *
+     * Attributed on the TRANSFER id, which is the only field that ties the event to a sale this package
+     * recorded — the connected account alone would name a merchant, not a charge, and a merchant can have
+     * many.
+     *
+     * `amount_reversed` is the provider's CUMULATIVE figure, and carrying it as such is what makes the
+     * effect idempotent without a dedup table: a redelivery states the same total, a second reversal states
+     * a higher one, and both are handled by writing what was reported.
+     *
+     * Zero is dropped rather than recorded. `transfer.reversed` fires with the whole transfer object, and a
+     * body that states nothing reversed is either a shape this package does not understand or an event about
+     * something else — either way it is not an instruction to write a zero over a real figure.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<MerchantTransferReversedByProvider>
+     */
+    private function transferReversedEvents(array $object): array
+    {
+        $transfer = $object['id'] ?? null;
+        $reversed = $object['amount_reversed'] ?? null;
+
+        if (! is_string($transfer) || $transfer === '' || ! is_int($reversed) || $reversed <= 0) {
+            return [];
+        }
+
+        return [new MerchantTransferReversedByProvider('stripe', $transfer, $reversed)];
     }
 }

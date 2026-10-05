@@ -36,7 +36,8 @@ final readonly class RecoveredReceivable
      * Every correction still standing on the judgment that the money will not arrive.
      *
      * Ordered oldest first, because age is what the review turns on: a write-off nobody has revisited in a
-     * year is either right and settled or wrong and overdue, and both need somebody to look.
+     * year is either right and settled or wrong and overdue, and both need somebody to look. A write-off a
+     * later payment reopened stands no longer and is left out.
      *
      * @return list<InvoiceRecord>
      */
@@ -47,6 +48,7 @@ final readonly class RecoveredReceivable
             ->where('owner_type', $ownerType)
             ->where('owner_id', $ownerId)
             ->where('tax_base_change_reason', TaxBaseChangeReason::Uncollectible->value)
+            ->whereNull('write_off_recovered_at')
             ->orderBy('issued_at')
             ->get()
             ->all();
@@ -66,6 +68,7 @@ final readonly class RecoveredReceivable
             ->where(function (Builder $query): void {
                 $query->where('tax_base_change_reason', TaxBaseChangeReason::Uncollectible->value);
             })
+            ->whereNull('write_off_recovered_at')
             ->orderBy('issued_at')
             ->get()
             ->all();

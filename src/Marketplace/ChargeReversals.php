@@ -27,11 +27,20 @@ use Pushery\Billing\Models\RefundAttempt;
 final readonly class ChargeReversals
 {
     /**
+     * How many charge references one query binds.
+     *
+     * Every engine caps the parameters of one statement: PostgreSQL and MySQL at 65,535, SQLite at 32,766, and
+     * an older SQLite at 999. A busy creator's charges in a year pass the first two, and each engine then refuses
+     * the whole query, so the counter that asked fails. 500 stays under all of them with room for the providers.
+     */
+    private const int REFERENCES_PER_QUERY = 500;
+
+    /**
      * Every succeeded reversal of the given charges, grouped by {@see keyOf()}.
      *
-     * One query for the whole set. A query per charge is a query per sale per creator on a nightly sweep,
-     * and the shape this replaced was two aggregates — so fanning out per row would trade a wrong figure
-     * for a slow one rather than fixing anything.
+     * One query per 500 references rather than one per charge. A query per charge is a query per sale per
+     * creator on a nightly sweep, and the shape this replaced was two aggregates — so fanning out per row
+     * would trade a wrong figure for a slow one rather than fixing anything.
      *
      * Grouped on the provider AND the reference, never the reference alone: it is unique only per provider,
      * so a second processor issuing the same string would hand its reversals to a stranger's sale. The pair
@@ -51,19 +60,24 @@ final readonly class ChargeReversals
         }
 
         $grouped = [];
+        $providers = $charges->pluck('provider')->unique()->values()->all();
 
-        $attempts = RefundAttempt::model()::query()
-            ->whereIn('provider', $charges->pluck('provider')->unique()->all())
-            ->whereIn('charge_reference', $charges->pluck('charge_reference')->unique()->all())
-            ->where('status', RefundAttemptStatus::Succeeded->value)
-            ->orderBy('completed_at')
-            ->orderBy('id')
-            ->get();
+        // A reference falls in exactly one slice, so all of a charge's reversals come from one query and keep the
+        // order that query reads them in.
+        foreach (array_chunk($charges->pluck('charge_reference')->unique()->values()->all(), self::REFERENCES_PER_QUERY) as $references) {
+            $attempts = RefundAttempt::model()::query()
+                ->whereIn('provider', $providers)
+                ->whereIn('charge_reference', $references)
+                ->where('status', RefundAttemptStatus::Succeeded->value)
+                ->orderBy('completed_at')
+                ->orderBy('id')
+                ->get();
 
-        foreach ($attempts as $attempt) {
-            // The whereIn pair is a cross product, so a row is kept only when BOTH halves belong to the same
-            // charge. Filtering here rather than trusting the query is what keeps the composite key honest.
-            $grouped[$attempt->provider.'|'.$attempt->charge_reference][] = $attempt;
+            foreach ($attempts as $attempt) {
+                // The whereIn pair is a cross product, so a row is kept only when BOTH halves belong to the same
+                // charge. Filtering here rather than trusting the query is what keeps the composite key honest.
+                $grouped[$attempt->provider.'|'.$attempt->charge_reference][] = $attempt;
+            }
         }
 
         return $grouped;

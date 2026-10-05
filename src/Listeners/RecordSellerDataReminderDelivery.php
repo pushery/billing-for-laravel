@@ -31,18 +31,30 @@ final readonly class RecordSellerDataReminderDelivery
     {
         // The type first: this runs for every notification the application sends, and nearly all of them are
         // somebody else's.
-        if (! $event->notification instanceof SellerDataReminderNotification
+        $notification = $event->notification;
+
+        if (! $notification instanceof SellerDataReminderNotification
             || ! (bool) $this->config->get('billing.marketplace.enabled', false)) {
             return;
         }
 
-        $episode = SellerDataEscalationEpisode::model()::query()->find($event->notification->episodeId);
+        // A queued notification is sent once per channel, each in a job of its own, so two channels of one reminder
+        // can arrive here at the same moment. Each appends to the same list, and without the lock the later write
+        // would drop the entry the earlier one made.
+        $query = SellerDataEscalationEpisode::model()::query();
 
-        if (! $episode instanceof SellerDataEscalationEpisode) {
-            return;
-        }
+        $query->getConnection()->transaction(function () use ($query, $notification, $event): void {
+            $episode = $query->lockForUpdate()->find($notification->episodeId);
 
-        $notifiable = $event->notifiable;
+            if ($episode instanceof SellerDataEscalationEpisode) {
+                $this->append($episode, $notification, $event->channel, $event->notifiable);
+            }
+        });
+    }
+
+    /** Append the channel this reminder was handed to, and the recipient, to the episode's deliveries. */
+    private function append(SellerDataEscalationEpisode $episode, SellerDataReminderNotification $notification, string $channel, mixed $notifiable): void
+    {
         $key = $notifiable instanceof Model ? $notifiable->getKey() : null;
         $toTheSeller = $notifiable instanceof Model
             && $notifiable->getMorphClass() === $episode->merchant_type
@@ -50,8 +62,8 @@ final readonly class RecordSellerDataReminderDelivery
             && (string) $key === (string) $episode->merchant_id;
 
         $episode->deliveries = [...($episode->deliveries ?? []), [
-            'reminder' => $event->notification->reminder->value,
-            'channel' => $event->channel,
+            'reminder' => $notification->reminder->value,
+            'channel' => $channel,
             'recipient' => $toTheSeller ? 'merchant' : (is_object($notifiable) ? $notifiable::class : 'unknown'),
             'at' => CarbonImmutable::now()->toIso8601String(),
         ]];

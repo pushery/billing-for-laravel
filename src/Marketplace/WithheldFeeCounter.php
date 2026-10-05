@@ -97,8 +97,8 @@ final readonly class WithheldFeeCounter
         $code = strtoupper($currency);
         $attribution = $this->attribution();
 
-        $start = $period->from->toDateTimeString();
-        $end = $period->until->toDateTimeString();
+        $start = $period->from->utc()->toDateTimeString();
+        $end = $period->until->utc()->toDateTimeString();
 
         $charges = $this->chargesTouching($party, $code, $start, $end, $attribution);
         $reversals = new ChargeReversals()->of($charges);
@@ -148,8 +148,8 @@ final readonly class WithheldFeeCounter
         $this->assertEnabled();
 
         $code = strtoupper($currency);
-        $start = $period->from->toDateTimeString();
-        $end = $period->until->toDateTimeString();
+        $start = $period->from->utc()->toDateTimeString();
+        $end = $period->until->utc()->toDateTimeString();
 
         return $this->chargesTouching($party, $code, $start, $end, $this->attribution())
             ->filter(fn (MerchantCharge $charge): bool => $charge->settlement_invoice_id === null

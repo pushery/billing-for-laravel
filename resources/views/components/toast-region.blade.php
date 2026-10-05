@@ -23,6 +23,15 @@
 
 <script>
     (function () {
+        // Once per page load. `wire:navigate` swaps the body and runs the scripts in it again, and a listener on
+        // `window` outlives the swap: registered on every screen, one toast showed once per screen visited. The
+        // listener looks its regions up when a toast arrives, so it writes into the body on screen.
+        if (window.__billingToastRegion) {
+            return;
+        }
+
+        window.__billingToastRegion = true;
+
         var STYLES = {
             'info': 'bg-slate-800 text-white',
             'success': 'bg-emerald-700 text-white',

@@ -21,7 +21,7 @@ return [
 
     'trial_ending' => [
         'subject' => 'Deine Testphase endet bald',
-        'intro' => 'Deine kostenlose Testphase neigt sich dem Ende zu.',
+        'intro' => 'Deine kostenlose Testphase endet am :date.',
         'outro' => 'Hinterlege vorher eine Zahlungsmethode, damit dein Abo nahtlos weiterläuft.',
         'cta' => 'Zahlungsmethode hinterlegen',
     ],
@@ -29,7 +29,7 @@ return [
     'subscription_canceled' => [
         'subject' => 'Dein Abo wurde gekündigt',
         'intro' => 'Dein Abo wurde gekündigt und verlängert sich nicht.',
-        'outro' => 'Bis zum Ende des bezahlten Zeitraums (siehe unten) behältst du deinen Zugang.',
+        'outro' => 'Deinen Zugang behältst du bis zum :date, dem Ende des bezahlten Zeitraums.',
         'cta' => 'Tarif ansehen',
     ],
 
@@ -39,6 +39,16 @@ return [
         'effective' => 'Es gilt ab :date.',
         'consequence' => 'Ab diesem Datum ist der Betrag, der bei dir ankommt, höher, weil die Steuer mitläuft. Was dir davon bleibt, ändert sich nicht.',
         'outro' => 'Wenn das nicht zu deiner Lage passt, sag uns Bescheid — wir korrigieren es.',
+        'statuses' => [
+            'de_standard_rated' => 'regelbesteuert',
+            'de_standard_rated_pending_validation' => 'regelbesteuert (Registrierung noch nicht bestätigt)',
+            'de_small_business' => 'Kleinunternehmer ohne Umsatzsteuer',
+            'eu_small_business_de_exempt' => 'Kleinunternehmer in einem anderen EU-Land (hier befreit)',
+            'private_individual' => 'Privatperson',
+            'eu_business' => 'Unternehmen in einem anderen EU-Land',
+            'non_eu_business' => 'Unternehmen außerhalb der EU',
+            'unclarified' => 'noch nicht geklärt',
+        ],
     ],
 
     'reattestation_due' => [

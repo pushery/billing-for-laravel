@@ -6,6 +6,7 @@ namespace Pushery\Billing\Livewire;
 
 use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
+use Livewire\Attributes\Locked;
 use Pushery\Billing\Contracts\Invoices;
 use Pushery\Billing\Livewire\Concerns\DegradesGracefully;
 use Pushery\Billing\ValueObjects\InvoicePage;
@@ -22,8 +23,19 @@ final class InvoiceHistory extends AccountScreen
     /** The provider never returns more than this many in one page (a driver-side ceiling on the read). */
     private const int PROVIDER_CAP = 100;
 
-    /** How many invoices to show; widened by "load older" up to the provider's hard cap. */
+    /**
+     * How many invoices to show; widened by "load older" up to the provider's hard cap.
+     *
+     * Locked: only loadOlder() changes it. Left writable, a page size from the browser would reach the reader
+     * unchecked, and a negative one lifts the query's limit altogether.
+     */
+    #[Locked]
     public int $perPage = 24;
+
+    protected function headingKey(): string
+    {
+        return 'billing::account.invoices.heading';
+    }
 
     public function render(): View
     {

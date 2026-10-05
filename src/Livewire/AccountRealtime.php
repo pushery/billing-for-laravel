@@ -78,9 +78,9 @@ final class AccountRealtime extends Component
     private function owner(): Model
     {
         // Fail-closed, and not redundant with mount()'s identical check. Its caller is
-        // getListeners(), which Livewire runs on every HYDRATION — and hydration does not re-run
-        // mount(). So a session that ends between two requests reaches this method with the mount
-        // gate long past. Answering then would mean deriving a PRIVATE channel name from a guess,
+        // getListeners(), which Livewire runs on mount and again for every event dispatched to the
+        // component — and an event's request does not re-run mount(). So a session that ends between
+        // two requests reaches this method with the mount gate long past. Answering then would mean deriving a PRIVATE channel name from a guess,
         // and somebody else may be listening on it.
         $actor = Auth::user();
 

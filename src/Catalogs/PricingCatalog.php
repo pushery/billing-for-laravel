@@ -9,6 +9,7 @@ use Illuminate\Contracts\Translation\Translator;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Entitlements\ConfigEntitlements;
 use Pushery\Billing\Entitlements\ConfigEntitlementsFactory;
+use Pushery\Billing\Support\CatalogLabel;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PricingCard;
 
@@ -61,7 +62,7 @@ final readonly class PricingCatalog
         return array_map(
             fn (string $key): PricingCard => new PricingCard(
                 tierKey: $key,
-                label: $this->catalog->label($key),
+                label: CatalogLabel::translate($this->catalog->label($key)),
                 priceDisplay: $this->catalog->priceDisplay($key),
                 byok: $this->catalog->isByok($key),
                 bullets: $this->bulletsFor($key),

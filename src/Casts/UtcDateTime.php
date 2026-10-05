@@ -19,6 +19,13 @@ use Illuminate\Support\Carbon;
  * into the wrong billing cycle at a period boundary, or to expire a trial an hour early. This cast writes
  * and reads the value as UTC on both sides, so the instant round-trips exactly whatever the app timezone.
  *
+ * ## A query against such a column binds UTC
+ *
+ * The query builder writes a date it binds in that date's own zone, without converting it. A moment in a non-UTC
+ * `app.timezone` compared against a column this cast writes would compare local wall-clock with UTC wall-clock, off
+ * by the offset: a sweep that expires a subscription an hour early, a counting period whose first hour falls into
+ * the one before. So every comparison against such a column binds the moment in UTC, `->utc()` on it or on a copy.
+ *
  * @implements CastsAttributes<Carbon, Carbon|DateTimeInterface|string>
  */
 final class UtcDateTime implements CastsAttributes

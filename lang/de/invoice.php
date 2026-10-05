@@ -23,6 +23,7 @@ return [
     'vat_reverse_charge' => 'USt (Reverse Charge)',
     'total' => 'Gesamt',
     'total_including_vat' => 'Gesamt inklusive :rate USt',
+    'collected_on_behalf' => 'Im Namen und für Rechnung des Verkäufers vereinnahmt',
     'reverse_charge_note' => 'Reverse Charge: Die Steuerschuld geht auf den Leistungsempfänger über.',
     'small_business_note' => 'Steuerfrei nach § 19 UStG (Kleinunternehmerregelung).',
     'union_small_business_note' => 'Steuerfrei nach der Kleinunternehmerregelung des Ansässigkeitsstaats des Leistenden.',

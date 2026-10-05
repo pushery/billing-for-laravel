@@ -55,6 +55,10 @@ final class EraseOwnerCommand extends Command
             $this->line('Would purge: '.implode(', ', OwnerScopedTables::PURGED));
             $this->line('Would scrub the stored webhook payloads.');
             $this->line('Would KEEP, unlinked (the law requires it): '.implode(', ', OwnerScopedTables::RETAINED));
+            // The same person as a merchant, on the other side of a routed sale. An owner who never sold
+            // anything has no rows there, and the lines say what would happen if they had.
+            $this->line('As a merchant, would end the subscriptions fans hold with them, then purge: '.implode(', ', OwnerScopedTables::MERCHANT_PURGED));
+            $this->line('As a merchant, would KEEP, unlinked (the law requires it): '.implode(', ', OwnerScopedTables::MERCHANT_RETAINED));
 
             return self::SUCCESS;
         }

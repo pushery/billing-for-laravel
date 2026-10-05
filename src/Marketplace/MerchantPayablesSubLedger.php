@@ -69,16 +69,16 @@ final readonly class MerchantPayablesSubLedger
     }
 
     /**
-     * The balance per merchant, keyed by the morph pair.
+     * The balance per merchant, keyed by the morph pair, summed from movements {@see movementsIn()} produced.
      *
-     * @param  iterable<InvoiceRecord>  $documents
+     * @param  iterable<SubLedgerMovement>  $movements
      * @return array<string, Money>
      */
-    public function balancesIn(iterable $documents, CarbonInterface $periodStart, string $currency): array
+    public function balancesOf(iterable $movements, string $currency): array
     {
         $balances = [];
 
-        foreach ($this->movementsIn($documents, $periodStart) as $movement) {
+        foreach ($movements as $movement) {
             $key = $movement->merchantKey();
             $running = $balances[$key] ?? Money::of(0, $currency);
 

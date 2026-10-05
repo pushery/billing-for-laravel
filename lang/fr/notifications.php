@@ -21,7 +21,7 @@ return [
 
     'trial_ending' => [
         'subject' => 'Ton essai se termine bientôt',
-        'intro' => 'Ton essai gratuit touche à sa fin.',
+        'intro' => 'Ton essai gratuit se termine le :date.',
         'outro' => 'Ajoute un moyen de paiement avant la fin pour que ton abonnement continue sans interruption.',
         'cta' => 'Ajouter un moyen de paiement',
     ],
@@ -29,7 +29,7 @@ return [
     'subscription_canceled' => [
         'subject' => 'Ton abonnement a été résilié',
         'intro' => 'Ton abonnement a été résilié et ne sera pas renouvelé.',
-        'outro' => 'Tu conserves l’accès jusqu’à la fin de la période payée, indiquée ci-dessous.',
+        'outro' => 'Tu conserves l’accès jusqu’au :date, la fin de la période payée.',
         'cta' => 'Voir l\'offre',
     ],
 
@@ -39,6 +39,16 @@ return [
         'effective' => 'Cela s\'applique à partir du :date.',
         'consequence' => 'À partir de cette date, le montant qui te parvient est plus élevé, car la taxe voyage avec lui. Ce qui te reste ne change pas.',
         'outro' => 'Si cela ne correspond pas à ta situation, dis-le-nous — nous pouvons le corriger.',
+        'statuses' => [
+            'de_standard_rated' => 'assujetti à la TVA',
+            'de_standard_rated_pending_validation' => 'assujetti à la TVA (immatriculation pas encore confirmée)',
+            'de_small_business' => 'petite entreprise sans TVA',
+            'eu_small_business_de_exempt' => 'petite entreprise d\'un autre pays de l\'UE (exonérée ici)',
+            'private_individual' => 'particulier',
+            'eu_business' => 'entreprise d\'un autre pays de l\'UE',
+            'non_eu_business' => 'entreprise hors de l\'UE',
+            'unclarified' => 'pas encore déterminé',
+        ],
     ],
 
     'reattestation_due' => [

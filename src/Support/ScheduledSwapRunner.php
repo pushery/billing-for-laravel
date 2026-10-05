@@ -7,10 +7,13 @@ namespace Pushery\Billing\Support;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
+use Pushery\Billing\Contracts\AppliesScheduledSwaps;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\MerchantScope;
+use Throwable;
 
 /**
  * Executes the plan changes that were scheduled for later — a downgrade waiting for the period it was
@@ -45,14 +48,30 @@ final readonly class ScheduledSwapRunner
         // a real, past effective moment come through. A well-formed schedule always has a tier alongside the
         // date, but a malformed one (a legacy or partial write) is caught in apply() rather than silently
         // skipped by a tier filter here.
+        //
+        // Oldest first, and by id among equals, so every run meets the rows in the same order.
         $due = Subscription::model()::query()
             ->whereNotNull('scheduled_swap_at')
             ->where('scheduled_swap_at', '<=', $now)
+            ->orderBy('scheduled_swap_at')
+            ->orderBy('id')
             ->get();
 
         foreach ($due as $subscription) {
-            if ($this->apply($subscription)) {
-                $applied++;
+            try {
+                if ($this->apply($subscription)) {
+                    $applied++;
+                }
+            } catch (Throwable $failure) {
+                // Logged and skipped, never rethrown, as the cycle does with a cycle it cannot process. Rethrown,
+                // one row the driver refuses would stop every change due after it, on every run, and those
+                // customers would go on paying the tier they left. The row keeps its schedule: a tier taken out of
+                // the catalog, or a provider that failed this once, is for the operator to see and settle.
+                Log::error('billing: a due plan change could not be applied', [
+                    'subscription' => $subscription->getKey(),
+                    'tier' => $subscription->scheduled_tier_key,
+                    'reason' => $failure->getMessage(),
+                ]);
             }
         }
 
@@ -64,19 +83,21 @@ final readonly class ScheduledSwapRunner
         $targetTier = $subscription->scheduled_tier_key;
         $owner = $targetTier === null ? null : $this->ownerOf($subscription);
 
-        // Two ways a due row is not actionable, both cleared rather than retried forever: a malformed
-        // schedule that has a date but no target tier, and an orphaned one whose owner was deleted between
-        // scheduling and the due date. Either way there is nothing to swap.
-        if ($targetTier === null || ! $owner instanceof Model) {
+        // Three ways a due row is not actionable, all cleared rather than retried forever: a malformed
+        // schedule that has a date but no target tier, an orphaned one whose owner was deleted between
+        // scheduling and the due date, and a contract that ended or was terminated in between, which takes
+        // the change it had pending with it. Either way there is nothing to swap.
+        if ($targetTier === null || ! $owner instanceof Model || $subscription->terminated() || $subscription->isReplaceableByANewSubscription()) {
             $subscription->cancelScheduledSwap();
 
             return false;
         }
 
-        // The swap prorates, as it does on the in-app path: the driver prices the unused remainder against the
-        // tier being LEFT and only then moves the row, and a provider that prorates itself does it there. A
-        // scheduled downgrade lands at the period end, where the remainder is normally zero, but the runner
-        // fires from the cycle tick and can arrive early, and a genuine remainder is owed just the same.
+        // The swap prorates, as it does on the in-app path, and the driver decides how. A provider that prorates
+        // itself does it there, at the moment it is told. The local driver bills the period when it closes, so it
+        // carries the tier being left up to the moment the change was scheduled for, which is where the period
+        // it was deferred to begins: nothing when the cycle has already opened that period, and the whole of the
+        // period before when that one is still being collected.
         //
         // This runner used to book the proration itself and then call the swap. That was one credit only
         // because the local driver scheduled the due downgrade again instead of applying it, so the tier never
@@ -90,13 +111,21 @@ final readonly class ScheduledSwapRunner
         // Without them a sponsorship's downgrade would land on the owner's default subscription at the platform.
         $type = $subscription->type;
 
-        $this->actions->swap(
-            $owner,
-            $targetTier,
-            prorate: $type === Subscription::TYPE_DEFAULT,
-            merchant: MerchantScope::fromUid($subscription->merchant_uid),
-            type: $type,
-        );
+        // Through applyScheduledSwap() wherever the driver offers it, because swap() asks the eligibility gate
+        // first. The gate was asked when the change was scheduled; asked again here, where nobody is acting, a
+        // gate that needs an acting person refuses every scheduled change, and the customer goes on paying the
+        // tier they left. A later block reaches the change through the paths above: an owner deleted, a
+        // contract ended. An application that blocks an account in a way of its own drops the change with
+        // Subscription::cancelScheduledSwap().
+        $prorate = $type === Subscription::TYPE_DEFAULT;
+        $merchant = MerchantScope::fromUid($subscription->merchant_uid);
+
+        if ($this->actions instanceof AppliesScheduledSwaps) {
+            $this->actions->applyScheduledSwap($owner, $targetTier, prorate: $prorate, merchant: $merchant, type: $type);
+        } else {
+            $this->actions->swap($owner, $targetTier, prorate: $prorate, merchant: $merchant, type: $type);
+        }
+
         $subscription->cancelScheduledSwap();
 
         $this->log->record('billing.scheduled_swap_applied', $owner, [

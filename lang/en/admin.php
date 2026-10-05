@@ -49,6 +49,7 @@ return [
         'submit' => 'Cancel subscription',
         'canceled' => 'Subscription canceled.',
         'not_found' => 'No owner found for that ID.',
+        'nothing_running' => 'This owner has no running subscription to cancel.',
     ],
 
     'audit' => [

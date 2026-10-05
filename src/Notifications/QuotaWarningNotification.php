@@ -6,6 +6,7 @@ namespace Pushery\Billing\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Enums\BillingAction;
 
 /**
  * Warns the owner that a metered allowance is running out, while they can still do something about it —
@@ -38,7 +39,7 @@ final class QuotaWarningNotification extends BillingNotification
         return $this->withAction(
             $mail,
             Lang::get('billing::notifications.quota_warning.cta'),
-            $this->actionUrl('billing.account.usage'),
+            $this->actionFor($notifiable, BillingAction::Usage),
         );
     }
 

@@ -7,6 +7,7 @@ namespace Pushery\Billing\Marketplace;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\MerchantScopedCustomerDirectory;
 use Pushery\Billing\Models\MerchantCustomer;
+use Pushery\Billing\Support\OwnerOfRecord;
 
 /**
  * The shipped account-scoped lookup: the package's own table, keyed by account AND customer.
@@ -19,13 +20,18 @@ final readonly class DatabaseMerchantScopedCustomerDirectory implements Merchant
 {
     public function __construct(private string $provider) {}
 
+    /**
+     * The owner a merchant's customer reference stands for, found even where the application hides it: the merchant
+     * goes on billing a buyer the application has soft-deleted or scoped to another tenant.
+     */
     public function ownerForReference(string $accountReference, string $customerReference): ?Model
     {
-        return MerchantCustomer::model()::query()
+        $customer = MerchantCustomer::model()::query()
             ->where('provider', $this->provider)
             ->where('account_reference', $accountReference)
             ->where('customer_reference', $customerReference)
-            ->first()
-            ?->owner;
+            ->first();
+
+        return $customer instanceof MerchantCustomer ? OwnerOfRecord::find($customer->owner_type, $customer->owner_id) : null;
     }
 }

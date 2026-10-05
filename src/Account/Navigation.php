@@ -92,10 +92,6 @@ final readonly class Navigation
     }
 
     /**
-     * The localized label of the active nav item (the one whose route the current request matches), or null
-     * when nothing matches — the layout then falls back to the app name.
-     */
-    /**
      * The same visible items as {@see self::visible()}, flat — for a view that shows cards rather than groups.
      *
      * Offered here rather than left to a caller to assemble, because the alternative is what this replaced:
@@ -118,6 +114,10 @@ final readonly class Navigation
         return $flat;
     }
 
+    /**
+     * The localized label of the active nav item (the one whose route the current request matches), or null
+     * when nothing matches — the layout then falls back to the app name.
+     */
     public function activeTitle(): ?string
     {
         foreach ($this->items() as $item) {

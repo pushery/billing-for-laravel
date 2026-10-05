@@ -12,9 +12,9 @@ use Pushery\Billing\Enums\TaxExemptionReason;
  * The tax decision for one creator's supply into a commission-chain sale — the whole answer, and nothing
  * a downstream step has to re-derive.
  *
- * Six things, because "how is this creator's link taxed" has exactly six honest parts: which document to
- * issue, whether it states tax, how much, whether the tax burden reverses onto the recipient instead, what
- * the creator is paid, and whether the supply is EXEMPT. The document engine renders from this; it never
+ * These are the honest parts of "how is this creator's link taxed": which document to issue, whether it
+ * states tax, how much, whether the tax burden reverses onto the recipient instead, what the creator is
+ * paid, whether the supply is EXEMPT, and why it is. The document engine renders from this; it never
  * re-decides it.
  *
  * `exempt` is the one field a downstream step could not reconstruct: a small business's supply and a

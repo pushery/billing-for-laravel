@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 use Pushery\Billing\Consumer\ProratedCancellation;
+use Pushery\Billing\Contracts\AppliesScheduledSwaps;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\MerchantCatalog;
 use Pushery\Billing\Contracts\SubscriptionActions;
@@ -19,9 +20,12 @@ use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use RuntimeException;
+use Stripe\Customer;
 use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\RateLimitException;
+use Stripe\PaymentMethod;
 use Stripe\StripeClient;
+use Stripe\Subscription as StripeSubscription;
 use Stripe\SubscriptionItem;
 
 /**
@@ -35,8 +39,15 @@ use Stripe\SubscriptionItem;
  * that carries no provider price, or onto a subscription whose tier item cannot be identified, is
  * rejected rather than silently doing nothing — or, worse, repricing the wrong item.
  */
-final readonly class StripeSubscriptionActions implements SubscriptionActions
+final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps, SubscriptionActions
 {
+    /**
+     * The payment methods, of those this driver collects, under which Stripe can hold a swap until it is paid.
+     *
+     * Stripe offers pending updates for a card and for Link, and not for a bank debit such as SEPA Direct Debit.
+     */
+    private const array HOLDABLE_METHODS = ['card', 'link'];
+
     public function __construct(
         private StripeClient $stripe,
         private MerchantCatalog $catalogs,
@@ -70,7 +81,7 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
             $payload['cancellation_details'] = $details;
         }
 
-        $this->ignoringDeadSubscription(fn () => $this->stripe->subscriptions->update($reference, $payload));
+        $this->ignoringDeadSubscription($reference, fn () => $this->stripe->subscriptions->update($reference, $payload));
     }
 
     /**
@@ -109,7 +120,7 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
         $reference = $subscription?->provider_id;
 
         if ($reference !== null) {
-            $this->ignoringDeadSubscription(fn () => $this->stripe->subscriptions->update($reference, ['cancel_at_period_end' => false]));
+            $this->ignoringDeadSubscription($reference, fn () => $this->stripe->subscriptions->update($reference, ['cancel_at_period_end' => false]));
         }
     }
 
@@ -134,7 +145,7 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
 
         $subscription->assertCanEndAt($endsAt);
 
-        $this->ignoringDeadSubscription(fn () => $this->stripe->subscriptions->update($reference, [
+        $this->ignoringDeadSubscription($reference, fn () => $this->stripe->subscriptions->update($reference, [
             'cancel_at' => $endsAt->getTimestamp(),
             'proration_behavior' => 'none',
         ]));
@@ -145,7 +156,7 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
         $reference = $this->subscriptionFor($billable, $merchant, $type)?->provider_id;
 
         if ($reference !== null) {
-            $this->ignoringDeadSubscription(fn () => $this->stripe->subscriptions->cancel($reference));
+            $this->ignoringDeadSubscription($reference, fn () => $this->stripe->subscriptions->cancel($reference));
         }
     }
 
@@ -159,6 +170,17 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
             throw EligibilityDenied::forMoneyMovement();
         }
 
+        $this->reprice($billable, $tierKey, $prorate, $merchant, $type);
+    }
+
+    /** The swap a scheduled change comes to, without asking the gate again: it was asked when the change was made. */
+    public function applyScheduledSwap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        $this->reprice($billable, $tierKey, $prorate, $merchant, $type);
+    }
+
+    private function reprice(Model $billable, string $tierKey, bool $prorate, ?MerchantScope $merchant, ?string $type): void
+    {
         // The price comes from the MERCHANT's catalog, so a marketplace swap reprices against the creator's
         // own tier — never the platform's, and never a price the client named. A null merchant reads the
         // platform catalog exactly as before.
@@ -175,7 +197,10 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
         }
 
         try {
-            $subscription = $this->stripe->subscriptions->retrieve($reference);
+            $subscription = $this->stripe->subscriptions->retrieve($reference, [
+                // The two places Stripe takes the method it charges from, read in the same call.
+                'expand' => ['default_payment_method', 'customer.invoice_settings.default_payment_method'],
+            ]);
         } catch (RateLimitException $e) {
             // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
@@ -195,7 +220,60 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
         $this->stripe->subscriptions->update($reference, [
             'items' => [['id' => $base->id, 'price' => $price]],
             'proration_behavior' => $prorate ? 'create_prorations' : 'none',
+            ...$this->paymentBehaviorFor($subscription),
         ]);
+    }
+
+    /**
+     * Hold a swap until its charge is paid, wherever Stripe can.
+     *
+     * A swap that changes the billing interval, ends a trial or moves a free subscription to a paid price is
+     * charged at once. Under Stripe's default, `allow_incomplete`, the new price applies whether that charge
+     * succeeds or not, so a declined card leaves the subscription `past_due` on a price nobody paid for.
+     * `pending_if_incomplete` applies the change only once the invoice is paid, and until then the subscription
+     * stays on its price and in its state. A swap that charges nothing applies at once either way.
+     *
+     * Stripe holds an update only under automatic collection and only for some payment methods, see
+     * {@see self::HOLDABLE_METHODS}. Any other method, or one this cannot tell, keeps Stripe's default.
+     *
+     * @return array{payment_behavior?: 'pending_if_incomplete'}
+     */
+    private function paymentBehaviorFor(StripeSubscription $subscription): array
+    {
+        if (($subscription->collection_method ?? null) !== 'charge_automatically') {
+            return [];
+        }
+
+        return in_array($this->chargedMethodType($subscription), self::HOLDABLE_METHODS, true)
+            ? ['payment_behavior' => 'pending_if_incomplete']
+            : [];
+    }
+
+    /**
+     * The type of the payment method Stripe charges for the subscription, or null when it cannot be told.
+     *
+     * Stripe's order: the subscription's own default, then a legacy source on the subscription, then the
+     * customer's invoice default. A legacy source has no type this reads, so it answers null.
+     *
+     * Every read goes through `??`: a Stripe object logs a notice for a key its response does not carry, and
+     * `??` asks `__isset` first.
+     */
+    private function chargedMethodType(StripeSubscription $subscription): ?string
+    {
+        $own = $subscription->default_payment_method ?? null;
+
+        if ($own instanceof PaymentMethod) {
+            return $own->type;
+        }
+
+        if ($own !== null || ($subscription->default_source ?? null) !== null) {
+            return null;
+        }
+
+        $customer = $subscription->customer ?? null;
+        $default = $customer instanceof Customer ? ($customer->invoice_settings->default_payment_method ?? null) : null;
+
+        return $default instanceof PaymentMethod ? $default->type : null;
     }
 
     /**
@@ -203,9 +281,14 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
      * canceled or gone. cancel/resume/cancelNow must be a safe no-op on a dead subscription — account
      * deletion calls cancelNow and must never be blocked by an already-canceled subscription.
      *
+     * Only those. Every refused request is an `InvalidRequestException`, and swallowing all of them let a
+     * refusal of the change itself pass as done: `cancelAt()` returned, and the prorated cancellation after it
+     * refunded the rest of a subscription that went on billing. A 404 is a subscription that is gone. Any other
+     * refusal is asked of the subscription, and only one that has ended is a no-op.
+     *
      * @param  callable(): mixed  $call
      */
-    private function ignoringDeadSubscription(callable $call): void
+    private function ignoringDeadSubscription(string $reference, callable $call): void
     {
         try {
             $call();
@@ -213,9 +296,17 @@ final readonly class StripeSubscriptionActions implements SubscriptionActions
             // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
-        } catch (InvalidRequestException) {
-            // Already canceled or no longer exists: nothing to do.
+        } catch (InvalidRequestException $refusal) {
+            if ($refusal->getHttpStatus() !== 404 && ! $this->hasEnded($reference)) {
+                throw $refusal;
+            }
         }
+    }
+
+    /** Whether Stripe holds the subscription as ended, the one reason a refusal of a change to it is no news. */
+    private function hasEnded(string $reference): bool
+    {
+        return in_array($this->stripe->subscriptions->retrieve($reference)->status, ['canceled', 'incomplete_expired'], true);
     }
 
     /**

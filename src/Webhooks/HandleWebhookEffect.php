@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\DedupesOnReference;
 use Pushery\Billing\Events\BillingDomainEvent;
+use Pushery\Billing\Support\Concerns\BacksOffBetweenAttempts;
+use Pushery\Billing\Support\RedactedError;
 use Pushery\Billing\Support\WebhookEffectLedger;
 use RuntimeException;
 use Throwable;
@@ -33,16 +35,30 @@ use Throwable;
  *   - The package's notifications are queued AFTER COMMIT, so a mail is only ever really sent if the run
  *     it belongs to committed. That is what closes the other half: no duplicate mail from a run that
  *     rolled back.
+ *   - For the same reason an effect never calls a provider itself. Inside this transaction its own
+ *     transactions are savepoints, so a call made there holds the run open, and a rollback after it keeps
+ *     what the provider did while the package forgets it. Such a call goes to a job queued after commit,
+ *     or to `DB::afterCommit()`.
  *
- * The dedup key is chosen by the effect (see DedupesOnReference), defaulting to the provider's event id.
+ * The dedup key is chosen by the effect (see DedupesOnReference), defaulting to the provider's event id inside
+ * the account the delivery came from (see WebhookEffectLedger::referenceFor()).
  */
 final class HandleWebhookEffect implements ShouldQueueAfterCommit
 {
+    use BacksOffBetweenAttempts;
     use InteractsWithQueue;
     use Queueable;
 
     /** How often a failing effect is retried before the job is marked failed. Configurable per app. */
     public int $tries;
+
+    /**
+     * The account the delivery came from, or '' for the platform.
+     *
+     * Set through forAccount() rather than the constructor: a job queued before it existed is unserialized
+     * without it, and a promoted property would then stand uninitialized. Null reads as the platform.
+     */
+    public ?string $accountReference = null;
 
     /**
      * @param  class-string  $effectClass
@@ -61,6 +77,14 @@ final class HandleWebhookEffect implements ShouldQueueAfterCommit
         $this->onQueue(is_string($config['queue'] ?? null) ? $config['queue'] : null);
     }
 
+    /** The same job, for a delivery that came from this account ('' for the platform). */
+    public function forAccount(string $accountReference): self
+    {
+        $this->accountReference = $accountReference;
+
+        return $this;
+    }
+
     public function handle(WebhookEffectLedger $runs): void
     {
         $effect = Container::getInstance()->make($this->effectClass);
@@ -71,7 +95,7 @@ final class HandleWebhookEffect implements ShouldQueueAfterCommit
 
         $reference = $effect instanceof DedupesOnReference
             ? $effect->dedupReference($this->event)
-            : $this->eventId;
+            : $runs->referenceFor($this->provider, $this->eventId, $this->accountReference, $this->effectClass, $this->deliveryId);
 
         try {
             DB::transaction(function () use ($runs, $effect, $reference): void {
@@ -86,7 +110,10 @@ final class HandleWebhookEffect implements ShouldQueueAfterCommit
         } catch (Throwable $e) {
             // The claim rolled back with the effect, so this records the failure fresh — outside the
             // transaction that just died — and then lets the queue retry the job.
-            $runs->markFailed($this->provider, $reference, $this->effectClass, $e->getMessage(), $this->deliveryId);
+            //
+            // Redacted, because the run table holds nobody and no erasure reaches it, while the message of a
+            // failed insert carries the row it was writing. The full message travels with the rethrow.
+            $runs->markFailed($this->provider, $reference, $this->effectClass, RedactedError::of($e), $this->deliveryId);
 
             throw $e;
         }

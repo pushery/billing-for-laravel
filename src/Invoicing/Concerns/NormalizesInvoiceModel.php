@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Pushery\Billing\Invoicing\Concerns;
 
 use Illuminate\Container\Container;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Contracts\SellerPartyResolver;
 use Pushery\Billing\Enums\InvoiceCorrectionKind;
+use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Enums\TaxationBasis;
 use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Exceptions\InvalidInvoiceCorrection;
+use Pushery\Billing\Invoicing\EnInvoiceTaxCategory;
 use Pushery\Billing\Invoicing\Line;
 use Pushery\Billing\Invoicing\MarginDocumentGuard;
 use Pushery\Billing\Invoicing\Party;
@@ -179,9 +182,6 @@ trait NormalizesInvoiceModel
     }
 
     /**
-     * @return list<Line>
-     */
-    /**
      * How this document is taxed — the derivation that used to stand byte-identically in both writers.
      *
      * Eight places read these same five lines. Correct the rule in one renderer and the other keeps the old
@@ -192,7 +192,7 @@ trait NormalizesInvoiceModel
     {
         $reverseCharge = (bool) $invoice->reverse_charge;
         $lines = $this->lines($invoice);
-        $bands = $this->taxBandsFor($lines, $invoice);
+        $bands = $this->chargedTaxIn($this->taxBandsFor($lines, $invoice), $invoice);
 
         // Derive the document net + tax from the lines so BT-110 equals the sum of the per-band tax
         // (BR-CO-14) and the totals stay internally consistent (BR-CO-13/15). A lineless invoice cannot
@@ -216,6 +216,75 @@ trait NormalizesInvoiceModel
             // charge with no stored note falls back to the standard wording), never a hardcoded literal.
             exemptionReason: $this->vatNote($invoice),
         );
+    }
+
+    /**
+     * Whether the document is settled: an invoice paid, or a credit note whose money went back.
+     *
+     * A settled document states its whole amount as already paid (BT-113), so the amount due (BT-115) is zero and
+     * EN 16931 asks for neither a due date nor payment terms (BR-CO-25). Read from the status rather than from
+     * the money, because the status is what the document records about its own settlement.
+     */
+    private function settled(InvoiceRecord $invoice): bool
+    {
+        return in_array($invoice->status, [InvoiceStatus::Paid, InvoiceStatus::Refunded], true);
+    }
+
+    /**
+     * When an open document is due (BT-9): the due date it records, or the day it was issued where it records
+     * none. BR-CO-25 asks for a due date or payment terms wherever an amount is due, and a document that names
+     * no later date is due when it is issued.
+     */
+    private function dueDateOf(InvoiceRecord $invoice): string
+    {
+        return ($invoice->due_at ?? $invoice->issued_at ?? Carbon::now())->format('Y-m-d');
+    }
+
+    /**
+     * The bands carry the tax the document charged, where that is their own rounding a cent away each.
+     *
+     * A price set gross has no net for some amounts that gives it back at the statutory rate: 9.99 at 19 % is
+     * 8.39 and 1.60, while 8.39 at 19 % rounds to 1.59. A source that rounds each line's tax and sums them lands
+     * the same way: three lines of 0.35 at 19 % charge 0.21, and their band rounds to 0.20. Recomputed, the bands
+     * state a tax the customer was not charged and the document pays less or more than it collected. EN 16931 lets
+     * a band's tax sit within a unit of its base times its rate (BR-CO-17), so the charged figure stands, one cent
+     * at a time, on the taxed bands whose own rounding moved furthest the other way. Further apart than a cent per
+     * taxed band, the two disagree about more than rounding, and the bands keep what their lines say.
+     *
+     * A band without a rate, of amounts collected on behalf of another party, and a band at zero carry no tax and
+     * take no cent: the fee stated beside the goods it passed through is still the one band the charged tax is on.
+     *
+     * @param  list<array{rate: ?float, taxable: int, tax: int}>  $bands
+     * @return list<array{rate: ?float, taxable: int, tax: int}>
+     */
+    private function chargedTaxIn(array $bands, InvoiceRecord $invoice): array
+    {
+        $charged = $invoice->tax_minor;
+        $taxed = array_keys(array_filter($bands, static fn (array $band): bool => $band['rate'] !== null && $band['rate'] > 0));
+
+        if ($taxed === [] || $charged === null || (bool) $invoice->reverse_charge) {
+            return $bands;
+        }
+
+        $difference = $charged - $this->sum($bands, fn (array $band): int => $band['tax']);
+
+        if ($difference === 0 || abs($difference) > count($taxed)) {
+            return $bands;
+        }
+
+        // How far each band's own rounding moved from its exact tax. A band rounded down has the first claim on a cent
+        // more, a band rounded up on a cent less.
+        $residual = static fn (int $index): float => $bands[$index]['taxable'] * (float) $bands[$index]['rate'] / 100 - $bands[$index]['tax'];
+        usort($taxed, static fn (int $a, int $b): int => $difference > 0 ? $residual($b) <=> $residual($a) : $residual($a) <=> $residual($b));
+
+        $cents = array_fill_keys(array_slice($taxed, 0, abs($difference)), $difference > 0 ? 1 : -1);
+        $out = [];
+
+        foreach ($bands as $index => $band) {
+            $out[] = ['rate' => $band['rate'], 'taxable' => $band['taxable'], 'tax' => $band['tax'] + ($cents[$index] ?? 0)];
+        }
+
+        return $out;
     }
 
     /** @return list<Line> */
@@ -244,18 +313,50 @@ trait NormalizesInvoiceModel
      * document from the lines could therefore state a rate the platform never declared for that sale, into a
      * country it never declared it to — and the document would still add up.
      *
+     * An amount collected on behalf of another party is not the issuer's supply, so it joins none of those bands. It
+     * is stated after them in a band of its own, with no rate and no tax, and a document without one has none.
+     *
      * @param  list<Line>  $lines
-     * @return list<array{rate: float, taxable: int, tax: int}>
+     * @return list<array{rate: ?float, taxable: int, tax: int}>
      */
     private function taxBandsFor(array $lines, ?InvoiceRecord $invoice = null): array
     {
+        [$supplied, $collected] = $this->collectedApart($lines, $invoice);
+
         if (! $invoice instanceof InvoiceRecord || ! (bool) $invoice->reverse_charge) {
             $declared = $this->declaredOssRate($invoice);
 
-            return $declared === null ? $this->taxBands($lines) : $this->singleBand($lines, $declared);
+            return [...($declared === null ? $this->taxBands($supplied) : $this->singleBand($supplied, $declared)), ...$collected];
         }
 
-        return $this->singleBand($lines, 0.0);
+        return [...$this->singleBand($supplied, 0.0), ...$collected];
+    }
+
+    /**
+     * The lines that are the issuer's supply, and the band of the amounts it collected on behalf of another party.
+     *
+     * Apart only where the document can carry a band of its own for them. On a document that is exempt or outside the
+     * scope as a whole they stay among the supply and join its zero band, because that category admits one band. A
+     * document with no such amount is banded from all its lines, and its category is not asked here.
+     *
+     * @param  list<Line>  $lines
+     * @return array{list<Line>, list<array{rate: ?float, taxable: int, tax: int}>}
+     */
+    private function collectedApart(array $lines, ?InvoiceRecord $invoice): array
+    {
+        $supplied = array_values(array_filter($lines, static fn (Line $line): bool => ! $line->collectedOnBehalf()));
+
+        if (count($supplied) === count($lines)) {
+            return [$lines, []];
+        }
+
+        if ($invoice instanceof InvoiceRecord && ! EnInvoiceTaxCategory::forDocument($invoice, null)->isCollectedOnBehalf()) {
+            return [$lines, []];
+        }
+
+        $collected = $this->sum($lines, fn (Line $line): int => $line->collectedOnBehalf() ? $line->netMinor : 0);
+
+        return [$supplied, [['rate' => null, 'taxable' => $collected, 'tax' => 0]]];
     }
 
     /**
@@ -309,9 +410,12 @@ trait NormalizesInvoiceModel
         $rates = [];
 
         foreach ($lines as $line) {
-            $key = $this->rate($line->taxRate);
+            // A line without a rate reaches this only on a document that is exempt or outside the scope as a whole,
+            // where it belongs to the document's zero band.
+            $rate = $line->taxRate ?? 0.0;
+            $key = $this->rate($rate);
             $taxable[$key] = ($taxable[$key] ?? 0) + $line->netMinor;
-            $rates[$key] = $line->taxRate;
+            $rates[$key] = $rate;
         }
 
         $bands = [];
@@ -362,5 +466,21 @@ trait NormalizesInvoiceModel
         return $this->typeCode($invoice) === '389'
             ? (string) Lang::get('billing::invoice.self_billed_note')
             : null;
+    }
+
+    /**
+     * A text as XML 1.0 can carry it: valid UTF-8, without a character the format has no place for.
+     *
+     * Names and addresses are written as they were entered or configured, and XML 1.0 holds neither a control
+     * character nor bytes that are not UTF-8. Given one, the document came out wrong without an error: a control
+     * character turned into a replacement character, and invalid UTF-8 failed the serialization, so the writer
+     * returned an empty string as the e-invoice. Invalid bytes are replaced the way mbstring replaces them, and
+     * a character XML 1.0 excludes is left out. Tab, line feed and carriage return stay.
+     */
+    private function xmlText(string $text): string
+    {
+        $valid = mb_check_encoding($text, 'UTF-8') ? $text : mb_scrub($text, 'UTF-8');
+
+        return (string) preg_replace('/[^\x{9}\x{A}\x{D}\x{20}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/u', '', $valid);
     }
 }

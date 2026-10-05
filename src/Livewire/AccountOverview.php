@@ -8,6 +8,7 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Pushery\Billing\Account\Navigation;
 use Pushery\Billing\Contracts\TierCatalog;
+use Pushery\Billing\Support\CatalogLabel;
 
 /**
  * The account-hub landing screen: the config-driven navigation to the hub sections plus a one-line
@@ -21,6 +22,11 @@ use Pushery\Billing\Contracts\TierCatalog;
  */
 final class AccountOverview extends AccountScreen
 {
+    protected function headingKey(): string
+    {
+        return 'billing::account.overview.heading';
+    }
+
     public function render(): View
     {
         // ONE reader of the navigation configuration, and it is the layout's. This method used to walk the
@@ -30,7 +36,7 @@ final class AccountOverview extends AccountScreen
         // vanish from the sidebar and stay on this page, one click from a working deletion.
         return $this->view('billing::livewire.account-overview', [
             'items' => Container::getInstance()->make(Navigation::class)->visibleItems(),
-            'tierLabel' => Container::getInstance()->make(TierCatalog::class)->label($this->currentTierKey()),
+            'tierLabel' => CatalogLabel::translate(Container::getInstance()->make(TierCatalog::class)->label($this->currentTierKey())),
         ]);
     }
 }

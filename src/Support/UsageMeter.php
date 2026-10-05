@@ -103,7 +103,7 @@ final class UsageMeter
             ]);
 
             return $hold;
-        });
+        }, LockedRow::ATTEMPTS);
     }
 
     /**
@@ -150,7 +150,7 @@ final class UsageMeter
             ]);
 
             return $drawn;
-        });
+        }, LockedRow::ATTEMPTS);
     }
 
     /**
@@ -305,7 +305,7 @@ final class UsageMeter
             $reservation->update(['state' => $state]);
 
             return $drawn;
-        });
+        }, LockedRow::ATTEMPTS);
     }
 
     /**
@@ -372,7 +372,13 @@ final class UsageMeter
      */
     private function lockedCounterFor(string $ownerType, mixed $ownerId, string $meterKey, string $period): UsageCounter
     {
-        UsageCounter::model()::query()->insertOrIgnore([
+        $row = UsageCounter::model()::query()
+            ->where('owner_type', $ownerType)
+            ->where('owner_id', $ownerId)
+            ->where('meter_key', $meterKey)
+            ->where('period', $period);
+
+        return LockedRow::take($row, [
             'owner_type' => $ownerType,
             'owner_id' => $ownerId,
             'meter_key' => $meterKey,
@@ -383,14 +389,6 @@ final class UsageMeter
             'created_at' => Carbon::now(),
             'updated_at' => Carbon::now(),
         ]);
-
-        return UsageCounter::model()::query()
-            ->where('owner_type', $ownerType)
-            ->where('owner_id', $ownerId)
-            ->where('meter_key', $meterKey)
-            ->where('period', $period)
-            ->lockForUpdate()
-            ->firstOrFail();
     }
 
     /**

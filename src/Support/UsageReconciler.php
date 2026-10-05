@@ -7,7 +7,6 @@ namespace Pushery\Billing\Support;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Pushery\Billing\Contracts\UsageReporter;
@@ -43,16 +42,18 @@ final readonly class UsageReconciler
     /**
      * Reconcile every owner's CURRENT cycle against the provider.
      *
+     * Each owner is loaded once and asked for its current cycle once, and only that cycle's rollups are read. A
+     * closed cycle costs nothing: walking every reported cycle and dropping the closed ones afterwards loaded the
+     * owner and resolved its period for each of them, so the daily run grew with the history it never acts on.
+     *
      * @return list<UsageDrift> the disagreements found (empty when the two sources agree)
      */
     public function reconcile(): array
     {
         $drifts = [];
 
-        foreach ($this->reportedGroups() as $group) {
-            $drift = $this->reconcileGroup($group);
-
-            if ($drift instanceof UsageDrift) {
+        foreach ($this->ownersWithReportedUsage() as $holder) {
+            foreach ($this->reconcileOwner($holder) as $drift) {
                 $drifts[] = $drift;
 
                 Event::dispatch(new UsageReconciliationDrift(
@@ -111,87 +112,99 @@ final readonly class UsageReconciler
     }
 
     /**
-     * One owner+meter+period's reported usage, checked against the provider. The group is a partially
-     * hydrated {@see UsageEvent} carrying only the four grouping columns.
+     * One owner's reported usage in its current cycle, checked meter by meter against the provider. The holder is a
+     * partially hydrated {@see UsageEvent} carrying only the two owner columns.
+     *
+     * @return list<UsageDrift>
      */
-    private function reconcileGroup(UsageEvent $group): ?UsageDrift
+    private function reconcileOwner(UsageEvent $holder): array
     {
-        $owner = $this->ownerOf($group->owner_type, $group->owner_id);
+        $owner = $this->ownerOf($holder->owner_type, $holder->owner_id);
 
         if (! $owner instanceof Model) {
-            return null;
+            return [];
+        }
+
+        $customer = $this->customerReference($owner);
+
+        if ($customer === null) {
+            return [];
         }
 
         // Only the CURRENT cycle: a closed one cannot be corrected anyway (a meter event past the window is
         // not retro-billed), and its window would have to be reconstructed from a period key that no longer
         // resolves. The reconcile runs daily and at cycle close, which is when it can still act.
         $period = $this->periods->forOwner($owner);
+        $drifts = [];
 
-        if ($period->key !== $group->period) {
-            return null;
+        foreach ($this->reportedRollupsByMeter($holder, $period->key) as $rollups) {
+            $meter = $rollups[0]->provider_meter;
+
+            if (! is_string($meter)) {
+                continue;
+            }
+
+            // What we believe crossed the wire: the usage MINUS the prepaid units it was covered by. Comparing
+            // the raw total would flag every prepaid customer as drifting.
+            $reported = array_sum(array_map(static fn (UsageEvent $rollup): int => $rollup->quantity - $rollup->prepaid_units, $rollups));
+
+            $recorded = $this->reporter->recordedTotal($customer, $meter, $period->start, $period->end);
+
+            if ($recorded === null || $recorded === $reported) {
+                continue; // no second source to compare against, or the two agree
+            }
+
+            $drifts[] = new UsageDrift($owner, $rollups[0]->meter_key, $period->key, $reported, $recorded);
         }
 
-        $customer = $this->customerReference($owner);
-        $rollups = $this->reportedRollups($group);
-        $meter = $rollups->first()?->provider_meter;
-
-        if ($customer === null || ! is_string($meter)) {
-            return null;
-        }
-
-        // What we believe crossed the wire: the usage MINUS the prepaid units it was covered by. Comparing
-        // the raw total would flag every prepaid customer as drifting.
-        $reported = $rollups->sum(fn (UsageEvent $rollup): int => $rollup->quantity - $rollup->prepaid_units);
-
-        $recorded = $this->reporter->recordedTotal($customer, $meter, $period->start, $period->end);
-
-        if ($recorded === null || $recorded === $reported) {
-            return null; // no second source to compare against, or the two agree
-        }
-
-        return new UsageDrift($owner, $group->meter_key, $group->period, $reported, $recorded);
-    }
-
-    /** @return EloquentCollection<int, UsageEvent> the reported rollups for this owner+meter+period. */
-    private function reportedRollups(UsageEvent $group): EloquentCollection
-    {
-        return UsageEvent::model()::query()
-            ->where('is_rollup', true)
-            ->where('state', UsageEventState::Reported->value)
-            ->where('owner_type', $group->owner_type)
-            ->where('owner_id', $group->owner_id)
-            ->where('meter_key', $group->meter_key)
-            ->where('period', $group->period)
-            ->get();
+        return $drifts;
     }
 
     /**
-     * Every owner+meter+period that has reported usage — the groups worth asking the provider about. Each
-     * row is a {@see UsageEvent} hydrated with only the grouping columns.
+     * The reported rollups of one owner in one cycle, read in one query and grouped by meter.
+     *
+     * @return list<non-empty-list<UsageEvent>>
+     */
+    private function reportedRollupsByMeter(UsageEvent $holder, string $period): array
+    {
+        $rollups = UsageEvent::model()::query()
+            ->where('is_rollup', true)
+            ->where('state', UsageEventState::Reported->value)
+            ->where('owner_type', $holder->owner_type)
+            ->where('owner_id', $holder->owner_id)
+            ->where('period', $period)
+            ->orderBy('id')
+            ->get();
+
+        $byMeter = [];
+
+        foreach ($rollups as $rollup) {
+            $byMeter[$rollup->meter_key][] = $rollup;
+        }
+
+        return array_values($byMeter);
+    }
+
+    /**
+     * Every owner that has reported usage — the owners worth asking the provider about. Each row is a
+     * {@see UsageEvent} hydrated with only the two owner columns.
      *
      * @return EloquentCollection<int, UsageEvent>
      */
-    private function reportedGroups(): EloquentCollection
+    private function ownersWithReportedUsage(): EloquentCollection
     {
         return UsageEvent::model()::query()
             ->where('is_rollup', true)
             ->where('state', UsageEventState::Reported->value)
-            ->select(['owner_type', 'owner_id', 'meter_key', 'period'])
+            ->select(['owner_type', 'owner_id'])
             ->distinct()
             ->get();
     }
 
+    /** The owner the reported usage stands in the name of, the one the flusher billed it to. */
     private function ownerOf(string $ownerType, mixed $ownerId): ?Model
     {
-        $class = Relation::getMorphedModel($ownerType) ?? $ownerType;
-
-        if (! is_subclass_of($class, Model::class)) {
-            return null;
-        }
-
-        $owner = $class::query()->find($ownerId);
-
-        return $owner instanceof Model ? $owner : null;
+        return OwnerOfRecord::find($ownerType, $ownerId);
     }
 
     private function customerReference(Model $owner): ?string

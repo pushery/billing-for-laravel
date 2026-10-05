@@ -17,9 +17,11 @@ use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\MerchantCatalog;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
+use Pushery\Billing\Discounts\CouponCodes;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\ReceiveEligibilityDenied;
+use Pushery\Billing\Exceptions\SubscriptionNotPermitted;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Marketplace\SellerSaleGate;
 use Pushery\Billing\Models\Coupon;
@@ -95,6 +97,13 @@ final readonly class StripeCheckout implements Checkout
         // is on, so a single-seller install never consults the resolver and everything below is unchanged.
         $merchant = $this->context->routedMerchant();
 
+        // A tier listed as untouchable is granted by hand and kept out of the billing flow, and the local starter
+        // refuses it for the same reason. Sold here, it could be bought and kept: the plan sync never moves an owner
+        // off an untouchable tier, so a canceled subscription would leave it in place.
+        if ($this->catalogs->tierCatalog($merchant instanceof Model ? MerchantScope::forMerchant($merchant) : null)->isUntouchable($tierKey)) {
+            throw SubscriptionNotPermitted::untouchableTier($tierKey);
+        }
+
         $price = $this->priceFor($tierKey, $merchant);
 
         if ($price === null) {
@@ -106,7 +115,7 @@ final readonly class StripeCheckout implements Checkout
         // The Stripe SDK's generated param shape cannot express a payload assembled at runtime (optional
         // trial/tax/promo/discount groups, a variable line-item list). The payload IS a valid
         // subscription-mode Checkout Session request; its shape is asserted field-by-field in StripeCheckoutTest.
-        // @phpstan-ignore argument.type
+        // @phpstan-ignore argument.type (the SDK's generated shape cannot express a payload assembled at run time)
         $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant, $declarationReference, $collectTaxId, $type, $callerReference));
 
         $url = $session->url ?? null;
@@ -314,8 +323,8 @@ final readonly class StripeCheckout implements Checkout
             return null;
         }
 
-        // Matched on the code column, so the literal-code rule below holds here too — a code is never
-        // split, and a row is reached only by the exact string the catalog just accepted.
+        // Matched by the same rule the catalog just applied, CouponCodes', so a row is reached by the code the
+        // catalog accepted whatever its case, and a code is never split.
         //
         // Scoped to the SELLER of this sale. Without the scope this finds any issuer's row of that name, so
         // one seller's provider coupon would be applied to another seller's checkout — and on this lane the
@@ -324,21 +333,22 @@ final readonly class StripeCheckout implements Checkout
         // And only a LIVE row. A deactivated or expired one is a coupon that was withdrawn, and a config entry of the
         // same code passes the check above on its own account, so a row read without asking would put the withdrawn
         // coupon's discount on the invoice anyway.
-        $row = Coupon::model()::query()->issuedBy($merchant)->where('code', $couponCode)->first();
+        $row = CouponCodes::find(Coupon::model()::query()->issuedBy($merchant), $couponCode);
         $onTheRow = $row instanceof Coupon && $row->isLive() ? $row->provider_coupon_id : null;
 
         if (is_string($onTheRow) && $onTheRow !== '') {
             return $onTheRow;
         }
 
-        // Read by the LITERAL code, never a dotted config path: a code is matched exactly and never split
-        // on a dot (the same rule the ConfigDiscountResolver follows).
+        // Read by the code's key, never a dotted config path: a code is matched by CouponCodes' rule and never
+        // split on a dot (the same rule the ConfigDiscountResolver follows).
         //
         // NOT scoped, and on purpose. The config map carries no issuer, so a code declared there is the
         // platform's and its Stripe coupon applies on every sale, a merchant's included — the same reach the
         // resolver gives it. A code only one seller should honor belongs in a row that seller issued.
         $coupons = $this->config->get('billing.coupons');
-        $coupon = is_array($coupons) ? ($coupons[$couponCode] ?? null) : null;
+        $key = is_array($coupons) ? CouponCodes::keyIn($coupons, $couponCode) : null;
+        $coupon = is_array($coupons) && $key !== null ? ($coupons[$key] ?? null) : null;
         $stripeCoupon = is_array($coupon) ? ($coupon['stripe_coupon'] ?? null) : null;
 
         return is_string($stripeCoupon) && $stripeCoupon !== '' ? $stripeCoupon : null;

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Events;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 use Pushery\Billing\Enums\MarketAccess;
 use Pushery\Billing\ValueObjects\RefundResult;
 
@@ -18,6 +19,8 @@ use Pushery\Billing\ValueObjects\RefundResult;
  */
 final readonly class SaleIntoClosedMarketReversed implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public function __construct(
         public Model $owner,
         public string $country,

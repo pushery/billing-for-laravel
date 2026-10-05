@@ -106,7 +106,7 @@ final readonly class ChargedBuyerFee
             throw InvalidBillingConfig::forKey(
                 'billing.marketplace.buyer_fee.place_of_supply',
                 'must name the country the mediated sale happens in, because the buyer fee carries that '
-                ."country's rate. It cannot be derived from a currency — twenty countries share the euro",
+                ."country's rate. It cannot be derived from a currency — many countries share the euro",
             );
         }
 

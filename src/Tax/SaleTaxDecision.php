@@ -69,6 +69,9 @@ final readonly class SaleTaxDecision
      *                                            else — a tip, a fan-chosen top-up — what it was paid ON
      * @param  string|null  $soldAt  the country a sale made in person is made in, as a two-letter code; null
      *                               for a sale that is not made at a point of sale
+     * @param  bool  $belowDistanceSaleThreshold  whether the seller is below the distance-sale threshold this year,
+     *                                            which keeps a supply the product places at the buyer taxed at the
+     *                                            seller (Art. 59c of the VAT Directive)
      */
     public function decide(
         TaxArchetype $archetype,
@@ -78,6 +81,7 @@ final readonly class SaleTaxDecision
         ?CarbonImmutable $paidOn = null,
         ?TaxArchetype $soldAlongside = null,
         ?string $soldAt = null,
+        bool $belowDistanceSaleThreshold = false,
     ): SaleTaxFacts {
         // The product's own rule first — a download is placed differently from a live one-to-one session —
         // and then the buyer's status has its say over it. The order matters: reading the product last would
@@ -100,20 +104,19 @@ final readonly class SaleTaxDecision
             $placeCell = $classification->placeOfSupplyInPerson;
         }
 
-        // ONE archetype is refused here, and it used to be two. That change is the point of this block.
+        // ONE archetype is refused here.
         //
-        // A tip is now ANSWERABLE: `$soldAlongside` is the signature change the comment that stood here used
-        // to defer to "the ticket that owns the delegation", and it takes its placement from what it was paid
-        // on. Its refusal did not disappear, it MOVED — the classifier resolves a delegating archetype from
-        // its reference or refuses, and a reference that itself delegates is refused one level down. So a
-        // delegated cell can no longer come back out, and a branch for it here would be dead code wearing a
-        // guard's clothes, which the next reader would mistake for the place the rule lives.
+        // A tip is answerable: it takes its placement from what it was paid on, which `$soldAlongside` names.
+        // A delegating archetype is resolved by the classifier from its reference, or refused there, and a
+        // reference that itself delegates is refused one level down. So a delegated cell never comes back
+        // out, and a branch for it here would be dead code wearing a guard's clothes, which reads as the place
+        // the rule lives.
         //
         // A multi-purpose voucher stays refused unconditionally, and no reference argument can change that:
         // it has no treatment AT ALL until redemption, so answering would mean inventing a redemption that
-        // has not happened. Reading one out of the cell used to end in a `LogicException` from deep inside a
-        // value object — a message written for whoever maintains this package, surfacing to whoever merely
-        // called `decide()`. It still refuses; the refusal is now this package's own and says what to do.
+        // has not happened. The refusal is this package's own exception, which tells whoever called
+        // `decide()` what to do; a `LogicException` from deep inside a value object would speak only to
+        // whoever maintains this package.
         if ($placeCell->isDeferred()) {
             throw ProductNotClassified::deferredUntilRedemption($archetype->value);
         }
@@ -125,6 +128,13 @@ final readonly class SaleTaxDecision
         // that defect behind a plausible answer on every invoice.
         if (! $productRule instanceof PlaceOfSupplyRule) {
             throw ProductNotClassified::forPlaceOfSupply($archetype->value);
+        }
+
+        // Below the distance-sale threshold, a supply the product places at the buyer stays where the seller is.
+        // Only that rule moves: a supply placed at the seller or at a point of sale is placed there either way,
+        // and a validated business moves the place to itself before the product's rule is read at all.
+        if ($belowDistanceSaleThreshold && $productRule === PlaceOfSupplyRule::Destination) {
+            $productRule = PlaceOfSupplyRule::Domestic;
         }
 
         // The band follows from what was sold, exactly as the place does, so it comes from the same
@@ -154,7 +164,8 @@ final readonly class SaleTaxDecision
             ? $this->taxPoint->decideFor($period, $paidOn ?? $period->from)
             : null;
 
-        $tax = $this->calculator->calculate($net, $context->at($taxPoint?->on));
+        $taxed = $context->at($taxPoint?->on);
+        $tax = $this->calculator->calculate($net, $taxed);
 
         return new SaleTaxFacts(
             tax: $tax,
@@ -171,7 +182,21 @@ final readonly class SaleTaxDecision
             // a question that must have exactly one. It is the SAME value the rate was asked for above,
             // computed once — a second call here would be a second answer to that same question.
             taxPoint: $taxPoint,
+            appliedRateBps: $this->appliedRateBpsFor($taxed, $net->currency),
         );
+    }
+
+    /**
+     * The rate the regime applies to this context, in basis points, read off the calculator.
+     *
+     * The calculator answers with an amount and never with a rate, so the rate is asked for on an amount large
+     * enough that rounding cannot move it: on a hundred thousand of the currency, a rate carried to two decimals
+     * of a percent comes out exact. A regime that does not scale with the amount gives a rate that holds for the
+     * probe alone, the same assumption the split of a gross price already makes.
+     */
+    private function appliedRateBpsFor(TaxContext $context, string $currency): int
+    {
+        return (int) round($this->calculator->calculate(Money::of(10_000_000, $currency), $context)->minorUnits / 1_000);
     }
 
     /**
@@ -204,6 +229,7 @@ final readonly class SaleTaxDecision
      * @param  Money  $gross  what the buyer chose to pay, tax included
      * @param  TaxArchetype|null  $soldAlongside  what a delegating archetype was paid on
      * @param  string|null  $soldAt  the country a sale made in person is made in
+     * @param  bool  $belowDistanceSaleThreshold  whether the seller is below the distance-sale threshold this year
      */
     public function decideOnGross(
         TaxArchetype $archetype,
@@ -213,20 +239,21 @@ final readonly class SaleTaxDecision
         ?CarbonImmutable $paidOn = null,
         ?TaxArchetype $soldAlongside = null,
         ?string $soldAt = null,
+        bool $belowDistanceSaleThreshold = false,
     ): SaleTaxFacts {
         // The probe. Its own tax is meaningless — it is the tax on a number nobody is paying — but the rate
         // it carries is the regime's slope for this buyer and this product, which is the one thing needed.
-        $slope = $this->decide($archetype, $gross, $buyer, $period, $paidOn, $soldAlongside, $soldAt)->rateBps;
+        $slope = $this->decide($archetype, $gross, $buyer, $period, $paidOn, $soldAlongside, $soldAt, $belowDistanceSaleThreshold)->rateBps;
 
         // Nothing to strip out: an exempt, reverse-charged or untaxed sale has a net equal to its total, and
         // `baseFromMarkup(0)` would say the same thing at more cost.
         if ($slope === 0) {
-            return $this->decide($archetype, $gross, $buyer, $period, $paidOn, $soldAlongside, $soldAt);
+            return $this->decide($archetype, $gross, $buyer, $period, $paidOn, $soldAlongside, $soldAt, $belowDistanceSaleThreshold);
         }
 
         [$net, $impliedTax] = $gross->baseFromMarkup($slope);
 
-        $facts = $this->decide($archetype, $net, $buyer, $period, $paidOn, $soldAlongside, $soldAt);
+        $facts = $this->decide($archetype, $net, $buyer, $period, $paidOn, $soldAlongside, $soldAt, $belowDistanceSaleThreshold);
 
         // The one-cent tolerance is a property of inverting a rounded function, not a defect: for some
         // totals no whole-cent net reproduces them exactly. A wider gap is a statement about the regime —

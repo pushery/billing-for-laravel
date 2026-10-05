@@ -44,7 +44,11 @@ final readonly class UsTaxFormRegistry
         return (bool) $this->config->get('billing.tax_us.enabled', false);
     }
 
-    /** Record what a seller declared. Allowed while the regime is off — collecting early is the point. */
+    /**
+     * Record what a seller declared. Allowed while the regime is off — collecting early is the point.
+     *
+     * Both dates are kept as the calendar day they name in their own zone, whatever their hour.
+     */
     public function record(
         Model $merchant,
         UsTaxFormType $type,
@@ -58,19 +62,26 @@ final readonly class UsTaxFormRegistry
             'merchant_id' => $this->key($merchant),
             'form_type' => $type,
             'status' => $status,
-            'signed_on' => $signedOn,
-            'expires_on' => $expiresOn,
+            'signed_on' => $signedOn->toDateString(),
+            'expires_on' => $expiresOn?->toDateString(),
             'document_reference' => $documentReference,
         ]);
     }
 
-    /** The declaration that describes this seller today, or null where none does. */
+    /**
+     * The declaration that describes this seller on the day of `$asOf`, or null where none does.
+     *
+     * Days are compared as days: a declaration counts from the day it was signed through the whole of the day it
+     * expires on, with the day of `$asOf` read in the zone it carries, whatever its hour.
+     */
     public function currentFor(Model $merchant, CarbonInterface $asOf): ?UsTaxForm
     {
+        $day = $asOf->toDateString();
+
         $form = UsTaxForm::model()::query()
             ->where('merchant_type', $merchant->getMorphClass())
             ->where('merchant_id', $this->key($merchant))
-            ->where('signed_on', '<=', $asOf)
+            ->whereDate('signed_on', '<=', $day)
             ->orderByDesc('signed_on')
             ->orderByDesc('id')
             ->first();
@@ -81,7 +92,7 @@ final readonly class UsTaxFormRegistry
 
         // An expired declaration is worth what an absent one is. Returning it would let a caller act on a
         // statement the seller is no longer making.
-        return $form->expires_on !== null && $form->expires_on->lessThan($asOf) ? null : $form;
+        return $form->expires_on !== null && $form->expires_on->toDateString() < $day ? null : $form;
     }
 
     /**

@@ -71,7 +71,7 @@ class InvoiceExchangeRate extends Model
     #[Override]
     protected static function appendOnlyDeleteRefusal(): string
     {
-        return 'This row carries a statutory retention window; retention removes it on its schedule, '
-            .'inside purging(). A caller does not delete it.';
+        return 'A frozen exchange rate is kept as long as its invoice and is not deleted by a caller. It '
+            .'leaves with the invoice, when retention removes that.';
     }
 }

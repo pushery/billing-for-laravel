@@ -50,21 +50,22 @@ final class ArraySubscriptionStateReader implements SubscriptionStateReader
         }
 
         // A missing level means "any access-granting grant will do". A level asks the cumulative question,
-        // and `atLeast()` answers it the same way for the fake as for the real reader.
-        return $atLevel === null ? $grant->grantsAccess() : $grant->atLeast($atLevel);
+        // and `atLeast()` answers it the same way for the fake as for the real reader, which then asks the
+        // window at the moment as well.
+        $granted = $atLevel === null ? $grant->grantsAccess() : $grant->atLeast($atLevel);
+
+        return $granted && $grant->coversInstant($at ?? Carbon::now());
     }
 
+    /**
+     * The grant as recorded, its window and state included, and null only where none was recorded: the answer
+     * the real reader gives, which returns a lapsed subscription's grant rather than nothing. An ACL that reads
+     * the grant has to read its state and window the way production will, or a suite that says "lapsed, no
+     * access" stays green over code that grants it.
+     */
     public function grantOn(Model $customer, ?MerchantScope $merchant = null, ?CarbonInterface $at = null): ?SubscriptionGrant
     {
-        $grant = $this->grants[$this->keyFor($customer)][($merchant ?? MerchantScope::platform())->uid()] ?? null;
-
-        if (! $grant instanceof SubscriptionGrant) {
-            return null;
-        }
-
-        // Outside its window a grant is not a lesser grant, it is none — the same answer the real reader
-        // gives, and the one a consumer's ACL has to see for a back-dated read to be honest.
-        return $grant->coversInstant($at ?? Carbon::now()) ? $grant : null;
+        return $this->grants[$this->keyFor($customer)][($merchant ?? MerchantScope::platform())->uid()] ?? null;
     }
 
     /** @return array<string, SubscriptionGrant> */

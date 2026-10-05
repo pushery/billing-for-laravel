@@ -40,8 +40,8 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  *
  * Here: the answers a lane derives from configuration about the shape of the sale. Not here: the routed
  * charge itself — the destination account, the platform fee, the resolved routing. That assembly is
- * `ChargeRoutingResolver`'s, it is the subject of its own ticket, and duplicating a slice of it here would
- * recreate exactly the split this class exists to end.
+ * `ChargeRoutingResolver`'s, and duplicating a slice of it here would recreate exactly the split this class
+ * exists to end.
  */
 final readonly class MarketplaceSaleContext
 {

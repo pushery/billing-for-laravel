@@ -40,7 +40,8 @@ final readonly class MarketplacePreflight
      */
     public function run(bool $includeStoredState = true): PreflightReport
     {
-        $checkpoints = $this->checklist->all();
+        $registered = $this->checklist->all();
+        $checkpoints = $registered;
 
         if (! $includeStoredState) {
             // Excluded rather than evaluated-and-ignored: the point is not to spend the query. See
@@ -50,8 +51,12 @@ final readonly class MarketplacePreflight
                 static fn (GoLiveCheckpoint $checkpoint): bool => ! $checkpoint instanceof ReadsStoredState,
             ));
         }
+
+        // The waivers are checked against every registered point, the ones this run leaves out included. A
+        // waiver for a point only the console evaluates is valid; checked against the boot set alone it named
+        // "no such checkpoint", a blocking failure, and the application refused to start over it.
         $waived = $this->waivedKeys();
-        $integrity = $this->waiverIntegrityLine($checkpoints, $waived);
+        $integrity = $this->waiverIntegrityLine($registered, $waived);
 
         $lines = [];
         $empty = [];

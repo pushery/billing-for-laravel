@@ -86,8 +86,7 @@ final readonly class ReceivingGateCheckpoint implements GoLiveCheckpoint
         }
 
         // Compared by class name rather than with `instanceof`: the question is genuinely "is this still
-        // the shipped default", which is identity rather than kind. A consumer's subclass of it would be
-        // their decision and passes.
+        // the shipped default", which is identity rather than kind.
         if ($this->gate::class === AlwaysReceivable::class) {
             return CheckpointOutcome::fail(
                 // The two classes are named through ::class rather than spelled out, so the message cannot

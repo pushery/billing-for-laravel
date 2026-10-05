@@ -57,5 +57,11 @@ final readonly class DeterminedOrderTax
         public ?string $buyerVatId,
         /** The country that ID registers the buyer in, which is where a business supply is placed. */
         public ?string $buyerCountry,
+        /**
+         * The statutory rate the supply was taxed at, in basis points, zero where no tax applied. `rateBps` is the
+         * quotient of the rounded amounts and states what the customer was charged; this is the rate a return
+         * groups by and a ledger books by.
+         */
+        public int $appliedRateBps = 0,
     ) {}
 }

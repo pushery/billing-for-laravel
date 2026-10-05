@@ -65,11 +65,6 @@ final readonly class TaxContext
     }
 
     /**
-     * Whether this is a VALIDATED intra-EU business: flagged business, carrying a VAT id, AND that id proven
-     * valid (via VIES). The reverse charge zero-rates the supply, so it must never rest on an id that was
-     * merely present — a fake, or one that VIES could not confirm, would under-charge VAT.
-     */
-    /**
      * The same buyer, taxed at a band the product decides.
      *
      * The band belongs to what was sold rather than to who bought it, so the classification sets it here,
@@ -88,6 +83,11 @@ final readonly class TaxContext
         );
     }
 
+    /**
+     * Whether this is a VALIDATED intra-EU business: flagged business, carrying a VAT id, AND that id proven
+     * valid (via VIES). The reverse charge zero-rates the supply, so it must never rest on an id that was
+     * merely present — a fake, or one that VIES could not confirm, would under-charge VAT.
+     */
     public function isReverseChargeCandidate(): bool
     {
         return $this->business

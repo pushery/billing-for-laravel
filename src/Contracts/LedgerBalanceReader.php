@@ -22,8 +22,9 @@ use Pushery\Billing\ValueObjects\Money;
  *    the connected account.
  *  - `pending` — routed but not yet settled (a 3-D Secure step is routine under PSD2), so real but not yet
  *    the creator's. Nothing is available before it settles.
- *  - `held` — settled but withheld under buyer protection (the delayed-release C2C flow), the creator's
- *    only once the hold releases.
+ *  - `held` — withheld under buyer protection (the delayed-release C2C flow), the creator's only once the
+ *    hold releases. A protected sale stays pending until then, and what a hold sits on is counted here
+ *    rather than in `pending` or `available`, so the three buckets never count the same money twice.
  *
  * It has no writing method and reaches no provider on purpose. Money movement lives exclusively behind the
  * money-out seams (the marketplace rails), which this reader is deliberately not — reading a balance can
@@ -34,9 +35,9 @@ interface LedgerBalanceReader
     /** Settled earnings a party may already draw on, in the given currency, net of clawbacks. */
     public function availableFor(Model $party, string $currency): Money;
 
-    /** Routed earnings not yet settled — real, but not yet the party's. */
+    /** Routed earnings not yet settled — real, but not yet the party's — less what buyer protection holds back. */
     public function pendingFor(Model $party, string $currency): Money;
 
-    /** Settled earnings withheld under buyer protection, the party's only once the hold releases. */
+    /** Earnings withheld under buyer protection, the party's only once the hold releases. */
     public function heldFor(Model $party, string $currency): Money;
 }

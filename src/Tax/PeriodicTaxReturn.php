@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Pushery\Billing\Enums\TaxRateCategory;
 use Pushery\Billing\Exceptions\CorrectionOutsideWindow;
 use Pushery\Billing\Exceptions\CurrencyMismatch;
+use Pushery\Billing\Exceptions\ReportingRateMissing;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\ReportingPeriod;
 use Pushery\Billing\ValueObjects\TaxReturnLine;
@@ -50,18 +51,24 @@ final readonly class PeriodicTaxReturn
     /**
      * The lines for one period, aggregated.
      *
+     * With a conversion, every sale is declared in its currency, whatever it was issued in, at the reporting
+     * rate frozen onto it. Without one, the sales have to share a currency, and the lines are in it.
+     *
      * @param  iterable<InvoiceRecord>  $sales  the documents of the period, including corrections issued in it
      * @param  int  $correctionWindowYears  how long a jurisdiction allows corrections
      * @return list<TaxReturnLine>
+     *
+     * @throws ReportingRateMissing when a sale in another currency carries no reporting rate
      */
     public function linesFor(
         ReportingPeriod $period,
         iterable $sales,
         int $correctionWindowYears,
+        ?ReportingConversion $conversion = null,
     ): array {
         /** @var array<string, TaxReturnLine> $lines */
         $lines = [];
-        $currency = null;
+        $currency = $conversion?->currency();
 
         foreach ($sales as $sale) {
             // One return covers one currency, and this refuses a batch that mixes them. The shipped caller
@@ -75,7 +82,7 @@ final readonly class PeriodicTaxReturn
             // argument does not stop at reissues. A mixed batch is the other way to hand it a wrong sum.
             $currency ??= $sale->currency;
 
-            if ($sale->currency !== $currency) {
+            if (! $conversion instanceof ReportingConversion && $sale->currency !== $currency) {
                 throw CurrencyMismatch::between($currency, (string) $sale->currency);
             }
 
@@ -86,7 +93,7 @@ final readonly class PeriodicTaxReturn
                 continue;
             }
 
-            $line = $this->lineFor($sale, $period, $correctionWindowYears);
+            $line = $this->lineFor($sale, $period, $correctionWindowYears, $conversion);
 
             if (! $line instanceof TaxReturnLine) {
                 continue;
@@ -120,6 +127,7 @@ final readonly class PeriodicTaxReturn
         InvoiceRecord $sale,
         ReportingPeriod $period,
         int $correctionWindowYears,
+        ?ReportingConversion $conversion,
     ): ?TaxReturnLine {
         $country = $sale->destination_country;
 
@@ -131,6 +139,13 @@ final readonly class PeriodicTaxReturn
         $correcting = $sale->isCorrection();
         $net = $sale->subtotal_minor ?? 0;
         $tax = $sale->tax_minor ?? 0;
+
+        // Net and tax converted one by one, so each is the document's own figure at the reporting rate, rounded
+        // once, and the lines sum them as they sum every other document's.
+        if ($conversion instanceof ReportingConversion) {
+            $net = $conversion->of($sale, $net);
+            $tax = $conversion->of($sale, $tax);
+        }
 
         return new TaxReturnLine(
             country: strtoupper($country),
@@ -188,9 +203,11 @@ final readonly class PeriodicTaxReturn
     /**
      * The rate the sale actually carried.
      *
-     * The one-stop-shop column first, because it is what the sale was declared under; the general rate
-     * column only where there is none. Never a fresh lookup — a country that moved its rate between the sale
-     * and the filing would otherwise have every one of its sales re-rated.
+     * The one-stop-shop column first, because it is what the sale was declared under; then the statutory rate
+     * the supply was taxed at; the stated rate column only where neither is recorded. That column is the
+     * quotient of the rounded amounts on a gross-priced sale, and grouped by it, three sales in one country at
+     * one rate became three lines at 19.98, 19.95 and 20 %. Never a fresh lookup — a country that moved its rate
+     * between the sale and the filing would otherwise have every one of its sales re-rated.
      */
     private function rateOf(InvoiceRecord $sale): int
     {
@@ -200,6 +217,6 @@ final readonly class PeriodicTaxReturn
             return (int) round((float) $ossRate * 100);
         }
 
-        return $sale->tax_rate_bps ?? 0;
+        return $sale->supply_rate_bps ?? $sale->tax_rate_bps ?? 0;
     }
 }

@@ -60,7 +60,7 @@ final class StripeMeterInspector implements MeterInspector
         return new MeterPriceFacts(
             meterEventName: is_string($meterId) ? ($this->meters()[$meterId] ?? null) : null,
             currency: is_string($currency) ? strtoupper($currency) : null,
-            firstTierUpTo: $this->firstTierUpTo($price->tiers ?? null),
+            firstTierUpTo: ($price->tiers_mode ?? null) === 'graduated' ? $this->firstTierUpTo($price->tiers ?? null) : null,
         );
     }
 
@@ -68,18 +68,39 @@ final class StripeMeterInspector implements MeterInspector
      * The `up_to` of the graduated FIRST tier — the units the provider really gives away free. `inf` (a
      * single-tier price that is free forever) is not an allowance, it is a bug in the price, and reads as
      * null rather than as a number the check would happily match.
+     *
+     * A first tier that charges per unit gives nothing away whatever its bound, and reads as null too. So does
+     * every tier of a volume-tiered price, which is why only a graduated one is read: there, every unit is
+     * priced at the tier the total lands in, so the first tier's units are free only while the total stays in it.
      */
     private function firstTierUpTo(mixed $tiers): ?int
     {
         $first = is_array($tiers) ? ($tiers[0] ?? null) : null;
 
-        if (! is_object($first)) {
+        if (! is_object($first) || ! $this->chargesNothingPerUnit($first)) {
             return null;
         }
 
         $upTo = $first->up_to ?? null;
 
         return is_int($upTo) ? $upTo : null;
+    }
+
+    /**
+     * Whether a tier's units cost nothing. A flat amount on the tier does not count against it: that is a fee
+     * for reaching the tier, and the units inside it are still the allowance the fee buys.
+     */
+    private function chargesNothingPerUnit(object $tier): bool
+    {
+        $decimal = $tier->unit_amount_decimal ?? null;
+
+        if (is_string($decimal) && is_numeric($decimal)) {
+            return (float) $decimal === 0.0;
+        }
+
+        $amount = $tier->unit_amount ?? null;
+
+        return ! is_int($amount) || $amount === 0;
     }
 
     /**

@@ -7,7 +7,6 @@ namespace Pushery\Billing\Marketplace;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use InvalidArgumentException;
 use Pushery\Billing\Enums\DocumentSeries;
@@ -19,6 +18,7 @@ use Pushery\Billing\Exceptions\InvalidInvoiceCorrection;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\RefundAttempt;
+use Pushery\Billing\Support\OwnerOfRecord;
 use Pushery\Billing\Tax\FreezeExchangeRateOnDocument;
 use Pushery\Billing\ValueObjects\ChainCorrection;
 use Pushery\Billing\ValueObjects\Money;
@@ -60,8 +60,7 @@ final readonly class SettlementCorrectionIssuer
      * `null` without ever attempting to resolve it -- `Container::resolveClass()` returns the default up
      * front for any class it has no binding for. The seam existed, resolved fine in isolation, and never
      * fired. A required parameter cannot fail that way: the container must produce one or say why.
-     */
-    /**
+     *
      * The disclosure guard is REQUIRED for the same reason the rate carrier is, and its absence here was the
      * live half of that lesson. The original settlement passes the whitelist before a number is drawn; its
      * CORRECTION did not pass it at all, because this class had no way to ask. So a creator whose standing
@@ -227,6 +226,7 @@ final readonly class SettlementCorrectionIssuer
         CarbonImmutable $correctedOn,
         ?TaxBaseChangeReason $reason = null,
         ?RefundAttempt $attempt = null,
+        ?string $correctionKey = null,
     ): ?InvoiceRecord {
         if (! $correction->buyerRefund->isPositive()) {
             return null;
@@ -240,6 +240,7 @@ final readonly class SettlementCorrectionIssuer
             reverseCharge: false,
             reason: $reason,
             attempt: $attempt,
+            correctionKey: $correctionKey,
         );
     }
 
@@ -256,6 +257,7 @@ final readonly class SettlementCorrectionIssuer
         CarbonImmutable $correctedOn,
         ?TaxBaseChangeReason $reason = null,
         ?RefundAttempt $attempt = null,
+        ?string $correctionKey = null,
     ): ?InvoiceRecord {
         if (! $correction->correctsInboundDocument()) {
             return null;
@@ -277,6 +279,7 @@ final readonly class SettlementCorrectionIssuer
             reverseCharge: $correction->reverseChargeTax->isPositive(),
             reason: $reason,
             attempt: $attempt,
+            correctionKey: $correctionKey,
         );
     }
 
@@ -331,6 +334,7 @@ final readonly class SettlementCorrectionIssuer
         ?TaxBaseChangeReason $reason = null,
         ?RefundAttempt $attempt = null,
         InvoiceCorrectionKind $kind = InvoiceCorrectionKind::Amendment,
+        ?string $correctionKey = null,
     ): InvoiceRecord {
         $origin = $original->number;
 
@@ -371,6 +375,10 @@ final readonly class SettlementCorrectionIssuer
             // its own ceiling. Null on the paths that hold no attempt, which says no reversal row stands
             // behind this correction, never that the reversal moved nothing.
             'refund_attempt_id' => $attempt?->id,
+            // WHICH event this document corrects, on the paths that have no reversal row to name. It holds a
+            // unique index with the original, so one event corrects each document once, however often the
+            // caller asks. Null where the attempt above names the event, or where nothing does.
+            'correction_key' => $correctionKey,
             'credited_invoice_id' => $original->id,
             'credited_invoice_number' => $origin,
             // The frozen shape of the sale travels to the correction unchanged: a correction that
@@ -510,6 +518,9 @@ final readonly class SettlementCorrectionIssuer
      * message about a missing class. That is a true statement about a broken row, delivered as a framework
      * fault to whoever merely asked for a correction. Checked here so the refusal is this package's own and
      * says what to do about it.
+     *
+     * The document stands in the party's name whether or not the application still shows that party, so one
+     * soft-deleted or scoped away since is still the party a correction is issued to.
      */
     private function ownerOf(InvoiceRecord $original): ?Model
     {
@@ -520,16 +531,6 @@ final readonly class SettlementCorrectionIssuer
         // this branch exists to prevent.
         $type = $original->getAttribute('owner_type');
 
-        if (! is_string($type) || $type === '') {
-            return null;
-        }
-
-        $class = Relation::getMorphedModel($type) ?? $type;
-
-        if (! class_exists($class)) {
-            return null;
-        }
-
-        return $original->owner;
+        return OwnerOfRecord::find(is_string($type) ? $type : null, $original->getAttribute('owner_id'));
     }
 }

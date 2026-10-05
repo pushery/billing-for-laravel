@@ -19,6 +19,9 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * @property string $currency
  * @property ?string $payment_reference
  * @property ?string $declaration_reference
+ * @property ?bool $money_credit whether the purchase put money on the buyer's credit balance; null where it was recorded without the answer
+ * @property ?string $granted_meter_key the meter the purchase granted usage units of, if it granted any
+ * @property ?int $granted_units how many usage units the purchase granted, if it granted any
  * @property int $reversed_minor
  * @property ?Carbon $revoked_at
  * @property ?string $revoked_reason
@@ -34,7 +37,8 @@ class AddonPurchase extends Model
     /** @var list<string> */
     protected $fillable = [
         'owner_type', 'owner_id', 'reference', 'addon_key', 'amount_minor', 'currency',
-        'payment_reference', 'declaration_reference', 'reversed_minor', 'revoked_at', 'revoked_reason',
+        'payment_reference', 'declaration_reference', 'money_credit', 'granted_meter_key', 'granted_units',
+        'reversed_minor', 'revoked_at', 'revoked_reason',
     ];
 
     /**
@@ -54,6 +58,8 @@ class AddonPurchase extends Model
     protected $casts = [
         'amount_minor' => 'integer',
         'reversed_minor' => 'integer',
+        'money_credit' => 'boolean',
+        'granted_units' => 'integer',
         'revoked_at' => 'datetime',
     ];
 }

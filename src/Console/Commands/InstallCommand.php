@@ -37,6 +37,18 @@ final class InstallCommand extends Command
         $table = $this->ownerTable($config);
         $tierColumn = $this->column($config, 'tier_column', 'plan');
         $customerColumn = $this->column($config, 'customer.column', 'stripe_id');
+
+        // The names go into schema calls, a file name and generated PHP, and nothing on that way quotes them: a
+        // quote in one wrote a migration that does not parse. Refused before the database is asked or a file is
+        // written.
+        $unusable = $this->unusableName($table, $tierColumn, $customerColumn);
+
+        if ($unusable !== null) {
+            $this->components->error($unusable);
+
+            return self::FAILURE;
+        }
+
         $path = $this->writeMigration($files, $table, $tierColumn, $customerColumn, $this->droppableColumns($table, $tierColumn, $customerColumn));
 
         $this->components->info("Wrote the owner-columns migration for '{$table}' to {$path}.");
@@ -68,6 +80,23 @@ final class InstallCommand extends Command
         }
 
         return 'users';
+    }
+
+    /**
+     * What is wrong with a name the migration is built from, or null when each one can be written as it is.
+     *
+     * Letters, digits and underscores, not starting with a digit, at most 64 characters, the identifier limit
+     * MySQL sets. A schema-qualified table is outside it: the generated migration is then written by hand.
+     */
+    private function unusableName(string $table, string $tierColumn, string $customerColumn): ?string
+    {
+        foreach (['owner table' => $table, 'column in billing.tier_column' => $tierColumn, 'column in billing.customer.column' => $customerColumn] as $what => $name) {
+            if (preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,63}$/', $name) !== 1) {
+                return "The {$what}, '{$name}', is not a name the generated migration can carry: use letters, digits and underscores, not starting with a digit, at most 64 characters.";
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -130,8 +159,7 @@ final class InstallCommand extends Command
      * The tier and customer column names come from the config the package READS at runtime, never from a
      * literal: a consumer who renamed either one and got a migration for the default name would end up
      * with a column nothing writes and a package looking at a column that does not exist.
-     */
-    /**
+     *
      * @param  list<string>  $dropColumns
      */
     private function migration(string $table, string $tierColumn, string $customerColumn, array $dropColumns): string

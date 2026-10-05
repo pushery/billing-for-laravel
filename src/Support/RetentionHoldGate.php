@@ -15,15 +15,22 @@ use Throwable;
 /**
  * Asks the host's {@see RetentionHold} which of the rows a query is about to destroy must be left alone.
  *
- * One place, so the four deletion paths in `billing:prune` cannot answer the question differently — the
- * same reason {@see SubjectScopedRecords} exists one level down. A gate written per call site is a gate
- * that gets forgotten at the fifth one, and the failure is invisible: that path simply keeps deleting.
+ * One place, so every deletion path in `billing:prune` answers the question the same way — the same
+ * reason {@see SubjectScopedRecords} exists one level down. A gate written per call site is a gate that
+ * gets forgotten at the next one, and the failure is invisible: that path simply keeps deleting.
  *
  * ## Bounded memory, whatever the table holds
  *
  * Candidate ids are read in chunks and the seam is asked per chunk, so a table with millions of expired
  * rows costs a bounded amount of memory rather than one id per row in a single array. What is accumulated
- * is the HELD set, and that is small by nature: a legal hold is an exception somebody had to declare.
+ * is the HELD set, and only the candidates the host named go into it.
+ *
+ * ## A hold can be large, so it is never bound one id at a time
+ *
+ * A legal hold is an exception somebody had to declare, but one declaration can cover a great deal: a tax
+ * audit over several years holds every document of those years. A statement binds at most 65,535 parameters
+ * on PostgreSQL and MySQL and 32,766 on SQLite, and a hold past that broke the whole run. {@see whereKeys()}
+ * writes integer keys, which every table of this package has, into the statement instead.
  */
 final readonly class RetentionHoldGate
 {
@@ -56,14 +63,41 @@ final readonly class RetentionHoldGate
                 $ids = $this->identify($recordType, $rows, $key);
 
                 try {
-                    $held = [...$held, ...$this->hold->heldAmong($recordType, $ids)];
+                    $named = array_fill_keys(array_map(strval(...), $this->hold->heldAmong($recordType, $ids)), true);
                 } catch (Throwable $e) {
                     throw RetentionHoldUnavailable::asking($recordType, $e);
+                }
+
+                // The candidates the host named, as the table holds them: an id it was not asked about changes
+                // nothing, and one it named as a string is the integer key it stands for.
+                foreach ($ids as $id) {
+                    if (isset($named[(string) $id])) {
+                        $held[] = $id;
+                    }
                 }
             },
         );
 
         return $held;
+    }
+
+    /**
+     * Narrow a query to the given keys, or with `$not` to everything else, without a placeholder per key.
+     *
+     * Integer keys are written into the statement, where no parameter limit applies; a list with any other key
+     * stays bound as before. An empty list narrows to nothing, and with `$not` to everything.
+     *
+     * @param  list<int|string>  $keys
+     */
+    public static function whereKeys(Builder $query, string $column, array $keys, bool $not = false): Builder
+    {
+        $integers = array_filter($keys, is_int(...));
+
+        if (count($integers) !== count($keys)) {
+            return $query->whereIn($column, $keys, 'and', $not);
+        }
+
+        return $query->whereIntegerInRaw($column, $integers, 'and', $not);
     }
 
     /**

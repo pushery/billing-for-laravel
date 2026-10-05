@@ -14,6 +14,8 @@ use Pushery\Billing\Contracts\ReversesMerchantShare;
 use Pushery\Billing\Enums\RefundAttemptStatus;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Models\RefundAttempt;
+use Pushery\Billing\Support\Concerns\BacksOffBetweenAttempts;
+use Pushery\Billing\Support\RedactedError;
 use Pushery\Billing\ValueObjects\Money;
 use Throwable;
 
@@ -29,8 +31,8 @@ use Throwable;
  *
  * It also makes "call the provider outside the transaction" IMPOSSIBLE for an ordinary effect. An effect
  * opening its own transaction gets a SAVEPOINT, not a commit — so a nested `DB::transaction` reads like the
- * promise and is not one. There is an existing class in this package whose docblock makes exactly that
- * promise on exactly that path, which is why the shape here is different rather than modeled on it.
+ * promise and is not one. Every effect that reaches a provider therefore hands the call to a job like this one,
+ * or to `DB::afterCommit()` where a lost call is caught up by a scheduled run anyway.
  *
  * So the effect writes the intent and this job spends it. `ShouldQueueAfterCommit` is the seam: the job is
  * only enqueued once the transaction that claimed the work has actually committed, so a rolled-back
@@ -44,6 +46,7 @@ use Throwable;
  */
 final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
 {
+    use BacksOffBetweenAttempts;
     use InteractsWithQueue;
     use Queueable;
 
@@ -149,24 +152,42 @@ final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
             return;
         }
 
-        try {
-            $reversal = $transfers->reverseShare(
-                $this->transferReference,
-                new Money($attempt->transfer_reversal_minor, $attempt->currency),
-                // The attempt's own key, written before this job existed. A key derived from the amount
-                // would change the moment a partial reversal moved it, and a changed key is a second
-                // reversal at the provider.
-                $attempt->idempotency_key,
-            );
-        } catch (Throwable $e) {
-            $ledger->failRefund($attempt, $e->getMessage());
-
-            throw $e;
-        }
+        // A failure here is thrown with the attempt still pending, so the queue's next try asks the provider
+        // again under the same key. It is recorded as failed in failed(), once the queue has given up.
+        $reversal = $transfers->reverseShare(
+            $this->transferReference,
+            new Money($attempt->transfer_reversal_minor, $attempt->currency),
+            // The attempt's own key, written before this job existed. A key derived from the amount
+            // would change the moment a partial reversal moved it, and a changed key is a second
+            // reversal at the provider.
+            $attempt->idempotency_key,
+        );
 
         // The provider's own figure, not the one this job asked for. The answer was discarded here for as
         // long as the job existed, so the ledger recorded the REQUEST — and a ledger that records its own
         // request agrees with itself no matter what the provider did.
         $ledger->completeRefund($attempt, $reversal->reversed);
+    }
+
+    /**
+     * Record the reversal as failed once the queue has given up on it.
+     *
+     * A failure inside {@see self::handle()} is thrown with the attempt still pending, so every try the queue
+     * has left reaches the provider again. Recording it there made the first timeout final: each retry returned
+     * at the pending guard, and the merchant kept the share of a sale the platform had already lost.
+     *
+     * What is stored names the failure without the data it carried, as {@see RedactedError} describes. The
+     * attempt stays with a financial record that outlives an erasure, and the message of a failed statement
+     * carries the statement's values. The exception itself reaches the application's handler through the queue.
+     */
+    public function failed(?Throwable $exception = null): void
+    {
+        $attempt = RefundAttempt::model()::query()->find($this->attemptId);
+
+        if (! $attempt instanceof RefundAttempt || $attempt->status !== RefundAttemptStatus::Pending) {
+            return;
+        }
+
+        new RoutedChargeLedger()->failRefund($attempt, $exception instanceof Throwable ? RedactedError::of($exception) : 'The reversal job failed.');
     }
 }

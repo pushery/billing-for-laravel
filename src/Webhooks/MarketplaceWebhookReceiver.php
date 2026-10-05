@@ -27,8 +27,11 @@ use Throwable;
  * authenticate the wrong traffic — and the traffic on the other endpoint moves the platform's own money.
  *
  * It answers 404 while the marketplace is off, exactly as the platform endpoint does while billing is off:
- * an endpoint that accepted and discarded merchant events would look configured and do nothing, which is
- * the failure the whole ticket is about.
+ * an endpoint that accepted and discarded merchant events would look configured and do nothing.
+ *
+ * Success is `200 OK` with an empty body, as on the platform endpoint. Stripe accepts any 2xx, Mollie
+ * accepts only 200, so a driver that gains a marketplace surface inherits an answer its provider reads as
+ * delivered.
  */
 final readonly class MarketplaceWebhookReceiver
 {
@@ -63,7 +66,7 @@ final readonly class MarketplaceWebhookReceiver
         // own empty account would file merchant traffic where platform traffic lives, and its effects would
         // then have no merchant to act on. Accepted (so the provider stops retrying) and dropped.
         if (! is_string($account) || $account === '') {
-            return new Response('', Response::HTTP_NO_CONTENT);
+            return new Response('', Response::HTTP_OK);
         }
 
         $delivery = $this->deliveries->record(
@@ -92,7 +95,7 @@ final readonly class MarketplaceWebhookReceiver
 
         $this->deliveries->markHandled($delivery);
 
-        return new Response('', Response::HTTP_NO_CONTENT);
+        return new Response('', Response::HTTP_OK);
     }
 
     /**

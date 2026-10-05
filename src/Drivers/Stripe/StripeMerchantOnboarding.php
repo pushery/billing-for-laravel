@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers\Stripe;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\MerchantOnboarding;
 use Pushery\Billing\Contracts\ReportsMerchantCapabilities;
@@ -17,6 +18,9 @@ use Pushery\Billing\Exceptions\MerchantRelationshipEnded;
 use Pushery\Billing\Models\MerchantAccount;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
+use ReflectionClass;
+use Stripe\Account;
+use Stripe\ApiRequestor;
 use Stripe\StripeClient;
 use Stripe\StripeObject;
 
@@ -55,9 +59,11 @@ use Stripe\StripeObject;
  * cannot see a response header — which is exactly how this notice was found — so shipping the rebuild on
  * a green fake would be asserting the one thing the fake cannot answer.
  *
- * The notice is deliberately NOT filtered out. Suppressing another company's deprecation signal inside a
- * library decides the consumer's log policy for them and removes the advance warning the header exists to
- * give. What the package does instead is make the failure it can cause harmless: see `creationKey()`.
+ * The notice is deliberately NOT dropped. Suppressing another company's deprecation signal inside a library
+ * decides the consumer's log policy for them and removes the advance warning the header exists to give. It is
+ * written to the log as a warning instead of being raised: Laravel's error handler turns every warning into an
+ * exception, so raised it ended every account creation in an error after the account existed and before its
+ * row did, in every Laravel application. `creationKey()` keeps a retry after any other such failure harmless.
  */
 final readonly class StripeMerchantOnboarding implements MerchantOnboarding, ReportsMerchantCapabilities, ReportsOnboardingRequirements
 {
@@ -104,13 +110,13 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
             );
         }
 
-        $account = $this->stripe->accounts->create([
+        $account = $this->loggingProviderNotices(fn (): Account => $this->stripe->accounts->create([
             'type' => $this->accountType(),
             'metadata' => [
                 'billing_merchant_type' => $merchant->getMorphClass(),
                 'billing_merchant_id' => (string) $key,
             ],
-        ], ['idempotency_key' => $this->creationKey($merchant->getMorphClass(), $key)]);
+        ], ['idempotency_key' => $this->creationKey($merchant->getMorphClass(), $key)]));
 
         $row = MerchantAccount::model()::query()->create([
             'merchant_type' => $merchant->getMorphClass(),
@@ -123,6 +129,38 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
         ]);
 
         return $row->toReference();
+    }
+
+    /**
+     * Run a provider call with the SDK's `stripe-notice` warning written to the log rather than raised.
+     *
+     * Only that warning: the one the SDK's requestor raises, at the level it raises it. Every other error goes to
+     * the handler that was installed before, unchanged, and that handler is back in place once the call returns.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $call
+     * @return T
+     */
+    private function loggingProviderNotices(callable $call): mixed
+    {
+        $requestor = new ReflectionClass(ApiRequestor::class)->getFileName();
+        $previous = null;
+        $previous = set_error_handler(static function (int $level, string $message, string $file = '', int $line = 0) use (&$previous, $requestor): bool {
+            if ($level === E_USER_WARNING && $file === $requestor) {
+                Log::warning('Stripe notice: '.$message);
+
+                return true;
+            }
+
+            return is_callable($previous) && (bool) $previous($level, $message, $file, $line);
+        });
+
+        try {
+            return $call();
+        } finally {
+            restore_error_handler();
+        }
     }
 
     /**

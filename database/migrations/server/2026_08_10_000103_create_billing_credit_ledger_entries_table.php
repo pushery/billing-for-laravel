@@ -23,12 +23,12 @@ use Pushery\Billing\Support\BillingSchema;
  * direction flag would make the same sum a two-step calculation that a reader has to trust.
  *
  * Provider-neutral by name and by column, because the second and third drivers share it. There is
- * deliberately NO `provider` column, which departs from the ticket that asked for one: a balance belongs to
- * an owner and a currency and never to a driver, so the column would not be part of any key — and no writer
- * has a driver to hand anyway. Resolving one from config would stamp today's default onto a movement made
- * under whatever was configured back then, which is a wrong answer rather than a missing one. A column that
- * is always null is worse than an absent one, because a reader assumes it is sometimes filled. If a report
- * ever needs the distinction, the column arrives with the code that fills it.
+ * deliberately NO `provider` column: a balance belongs to an owner and a currency and never to a driver, so
+ * the column would not be part of any key — and no writer has a driver to hand anyway. Resolving one from
+ * config would stamp today's default onto a movement made under whatever was configured back then, which is
+ * a wrong answer rather than a missing one. A column that is always null is worse than an absent one,
+ * because a reader assumes it is sometimes filled. If a report ever needs the distinction, the column
+ * arrives with the code that fills it.
  */
 return new class extends Migration
 {
@@ -44,7 +44,10 @@ return new class extends Migration
             $table->string('reason');
             // What caused it — an order, an add-on purchase, a refund attempt. Nullable and polymorphic
             // because the causes are of different types and some callers legitimately have none to name.
-            $table->nullableMorphs('source');
+            // Numeric whatever the framework's morph default: every cause is a row of this package, keyed by
+            // an integer, and `nullableMorphs()` would follow `Schema::morphUsingUuids()` into a uuid column
+            // that refuses every one of them.
+            $table->nullableNumericMorphs('source');
             // No `updated_at`: an entry is written once and never changes, so a column recording when it was
             // last changed would describe something that cannot happen.
             $table->timestamp('created_at')->nullable();

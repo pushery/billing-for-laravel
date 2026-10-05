@@ -17,6 +17,9 @@ interface Invoices
 {
     public function recent(Model $billable, int $perPage = 24): InvoicePage;
 
-    /** The rendered invoice document, or null when the invoice is not owned by / visible to the billable. */
+    /**
+     * The rendered invoice document, or null when the invoice is not owned by / visible to the billable, or
+     * when there is nothing to render it with. A document that fails to render is an error, not a null.
+     */
     public function download(Model $billable, string $invoiceId): ?InvoiceDownload;
 }

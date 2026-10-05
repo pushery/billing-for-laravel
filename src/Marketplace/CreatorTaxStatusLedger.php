@@ -15,7 +15,9 @@ use Pushery\Billing\Enums\CreatorTaxStatus;
 use Pushery\Billing\Enums\CreatorTaxStatusSource;
 use Pushery\Billing\Events\CreatorPlacedOnTaxHold;
 use Pushery\Billing\Events\CreatorTaxStatusChanged;
+use Pushery\Billing\Models\CreatorTaxStatusAnchor;
 use Pushery\Billing\Models\CreatorTaxStatusRecord;
+use Pushery\Billing\Support\LockedRow;
 
 /**
  * The creator tax-status time series: the only place a status is RECORDED, and the only place the series is
@@ -70,6 +72,16 @@ final readonly class CreatorTaxStatusLedger implements CreatorTaxStatusResolver
     /**
      * Record a status from a moment onward.
      *
+     * Two recordings for one creator take turns. The transaction first locks the creator's anchor row, which
+     * the recording creates where it is missing, so a second writer waits there and then closes the interval
+     * the first one opened, on the creator's very first recording too. Without the lock each would close what
+     * it could see and open its own, and the creator would be left with two open intervals. The status the
+     * change is measured against is read behind the same lock, so the one who waited compares with what the
+     * other recorded and announces a change only where there is one.
+     *
+     * Two first recordings can deadlock on MySQL while both create the anchor. The database then rolls one of
+     * them back, and the recording runs again.
+     *
      * @param  ?CarbonImmutable  $attestedUntil  when the attestation goes stale, if it does. A status the
      *                                           system derived itself has no expiry clock.
      */
@@ -83,9 +95,12 @@ final readonly class CreatorTaxStatusLedger implements CreatorTaxStatusResolver
         ?int $businessFoundedYear = null,
     ): CreatorTaxStatusRecord {
         $from = Carbon::instance($effectiveFrom);
-        $previous = $this->statusAt($merchant, $effectiveFrom);
 
-        $record = DB::transaction(function () use ($merchant, $status, $from, $source, $evidenceRef, $attestedUntil, $businessFoundedYear): CreatorTaxStatusRecord {
+        [$record, $previous] = DB::transaction(function () use ($merchant, $status, $effectiveFrom, $from, $source, $evidenceRef, $attestedUntil, $businessFoundedYear): array {
+            $this->lockAnchorOf($merchant);
+
+            $previous = $this->statusAt($merchant, $effectiveFrom);
+
             // Close the interval that CONTAINS the new start, and only that one. Intervals that already
             // start later are untouched: a retroactive correction of January says nothing about March.
             $this->seriesFor($merchant)
@@ -100,7 +115,7 @@ final readonly class CreatorTaxStatusLedger implements CreatorTaxStatusResolver
                 ->orderBy('effective_from')
                 ->first();
 
-            return CreatorTaxStatusRecord::model()::query()->create([
+            $created = CreatorTaxStatusRecord::model()::query()->create([
                 'merchant_type' => $merchant->getMorphClass(),
                 'merchant_id' => $merchant->getKey(),
                 'status' => $status,
@@ -111,7 +126,9 @@ final readonly class CreatorTaxStatusLedger implements CreatorTaxStatusResolver
                 'business_founded_year' => $businessFoundedYear,
                 'attested_until' => $attestedUntil instanceof CarbonImmutable ? Carbon::instance($attestedUntil) : null,
             ]);
-        });
+
+            return [$created, $previous];
+        }, LockedRow::ATTEMPTS);
 
         // Announced only on a real change. The notice to the creator and the payout hold hang off this
         // event rather than off the write, so neither has to know where a status is stored — and neither
@@ -146,6 +163,29 @@ final readonly class CreatorTaxStatusLedger implements CreatorTaxStatusResolver
     public function seriesOf(Model $merchant): array
     {
         return array_values($this->seriesFor($merchant)->orderBy('effective_from')->get()->all());
+    }
+
+    /**
+     * Lock the creator's anchor row, creating it first where the creator has none.
+     *
+     * The lock comes first where the row exists. Creating it first on every call would have two recordings on
+     * MySQL each hold a shared lock on the existing row after the ignored insert, and then wait for each
+     * other's exclusive one. {@see LockedRow} keeps that order.
+     */
+    private function lockAnchorOf(Model $merchant): void
+    {
+        LockedRow::take($this->anchorOf($merchant), [
+            'merchant_type' => $merchant->getMorphClass(),
+            'merchant_id' => $merchant->getKey(),
+        ]);
+    }
+
+    /** @return Builder<CreatorTaxStatusAnchor> */
+    private function anchorOf(Model $merchant): Builder
+    {
+        return CreatorTaxStatusAnchor::model()::query()
+            ->where('merchant_type', $merchant->getMorphClass())
+            ->where('merchant_id', $merchant->getKey());
     }
 
     /** @return Builder<CreatorTaxStatusRecord> */

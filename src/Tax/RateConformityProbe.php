@@ -42,6 +42,7 @@ final readonly class RateConformityProbe
 
         $drift = [];
         $missing = [];
+        $compared = 0;
 
         foreach ($shipped as $country => $bps) {
             if (isset($reduced['refused'][$country])) {
@@ -59,6 +60,8 @@ final readonly class RateConformityProbe
                 continue;
             }
 
+            $compared++;
+
             if ($reduced['rates'][$country] !== $bps) {
                 $drift[$country] = ['shipped' => $bps, 'source' => $reduced['rates'][$country]];
             }
@@ -69,6 +72,7 @@ final readonly class RateConformityProbe
             missingFromSource: $missing,
             refused: $reduced['refused'],
             situationOn: $situationOn,
+            compared: $compared,
         );
     }
 

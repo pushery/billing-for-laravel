@@ -54,6 +54,25 @@ final readonly class MerchantLifecycle
         return true;
     }
 
+    /**
+     * Keep a suspension and pass it to another reason that still holds the merchant.
+     *
+     * Two holds can stand on one suspension, and only the first wrote its reason, because `suspend()` keeps the
+     * first. When that one goes away while the other still holds, the suspension stays and takes the other's
+     * reason, so that the other lifts it when it ends. Nothing moved for anybody downstream, so nothing is
+     * announced. A merchant who is not suspended is left alone and answered false.
+     */
+    public function transferSuspension(MerchantAccount $account, string $reason): bool
+    {
+        if ($account->status !== MerchantStatus::Suspended) {
+            return false;
+        }
+
+        $account->forceFill(['status_reason' => $reason])->save();
+
+        return true;
+    }
+
     /** Let a suspended merchant receive again. Refused for a terminated one — see the class docblock. */
     public function reinstate(MerchantAccount $account): bool
     {

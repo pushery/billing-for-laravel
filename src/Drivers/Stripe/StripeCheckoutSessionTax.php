@@ -18,9 +18,9 @@ use Stripe\StripeClient;
  *
  * `checkout.session.completed` carries `total_details.amount_tax` and no rate at all. A tax document
  * has to name the applicable rate, so the amount alone leaves the document one field short — and the
- * missing field is the one nobody may invent. The rate lives one call away, on the line items, beside
- * the exact base and the exact tax. So the call buys the difference between a document and no
- * document.
+ * missing field is the one nobody may invent. The rate lives one call away, in the taxes of the line
+ * items, beside the exact base and the exact tax, and the call has to ask for those taxes. So the call
+ * buys the difference between a document and no document.
  *
  * ## `effective_percentage`, NEVER `percentage` — and the difference is silent
  *
@@ -69,8 +69,10 @@ final readonly class StripeCheckoutSessionTax implements ReadsProviderComputedTa
         try {
             // Every line, not the first page. A sale with more lines than one page is rare and a
             // document written off a prefix of them would be wrong by exactly the amount nobody
-            // looked at.
-            $lines = $this->stripe->checkout->sessions->allLineItems($saleReference, ['limit' => 100]);
+            // looked at. And with their taxes: Stripe leaves a line item's `taxes` off unless the request
+            // expands them, and without them every sale reads as untaxed and is issued no document. A later
+            // page is asked with the same expansion, because the collection carries its filters.
+            $lines = $this->stripe->checkout->sessions->allLineItems($saleReference, ['limit' => 100, 'expand' => ['data.taxes']]);
         } catch (RateLimitException $rateLimited) {
             // Ask again; not an answer about this sale. See the class docblock.
             throw $rateLimited;
@@ -163,8 +165,9 @@ final readonly class StripeCheckoutSessionTax implements ReadsProviderComputedTa
     {
         $rate = $applied->rate ?? null;
 
-        // Unexpanded, the field is the id string rather than the object. Refused rather than fetched:
-        // a second round trip per line would turn one call into many, and Stripe returns it inline.
+        // Stripe states the rate as the tax rate object itself, inside the entry the expansion in forSale()
+        // brings. An id in its place is not that shape. Refused rather than fetched: a second round trip per
+        // line would turn one call into many.
         if (! is_object($rate)) {
             return null;
         }

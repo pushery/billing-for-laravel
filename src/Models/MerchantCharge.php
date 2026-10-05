@@ -46,6 +46,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property ?int $transfer_moved_minor what the provider reported it actually moved to the merchant, or
  *                                      null where nothing reported a figure — a destination charge moves
  *                                      the share as part of the payment and makes no transfer call
+ * @property ?Carbon $transfer_requested_at when the share was last asked of the provider, null if it never was
  * @property ?Carbon $transfer_failed_at when the share last failed to move after the sale was paid, null if it never did
  * @property ?string $transfer_failure what was said when it did, class first
  * @property ?Carbon $transfer_withheld_at when the share was held back because the merchant's payouts were withheld, kept after it moved
@@ -63,6 +64,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property ?string $buyer_fee_place_of_supply
  * @property int $buyer_fee_refunded_minor
  * @property ?Carbon $merchant_erased_at
+ * @property ?Carbon $term_canceled_at when the prepaid term this charge paid for was canceled, stamped before its refund was asked for
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
@@ -107,6 +109,7 @@ class MerchantCharge extends Model
         // Deliberately NOT defaulted. Null means no provider figure was reported — a destination charge
         // never makes a transfer call — and that is a different claim from "zero moved".
         'transfer_moved_minor' => 'integer',
+        'transfer_requested_at' => UtcDateTime::class,
         'transfer_failed_at' => UtcDateTime::class,
         'transfer_withheld_at' => UtcDateTime::class,
         'refunded_minor' => 'integer',
@@ -125,6 +128,7 @@ class MerchantCharge extends Model
         'seller_posture' => SellerOfRecordPosture::class,
         'settled_at' => UtcDateTime::class,
         'merchant_erased_at' => UtcDateTime::class,
+        'term_canceled_at' => UtcDateTime::class,
     ];
 
     /**
@@ -186,7 +190,7 @@ class MerchantCharge extends Model
     public static function linkToSettlement(Model $merchant, InvoiceRecord $document, array $charges): void
     {
         foreach ($charges as [$provider, $reference]) {
-            self::query()
+            static::model()::query()
                 ->where('merchant_type', $merchant->getMorphClass())
                 ->where('merchant_id', $merchant->getKey())
                 ->where('provider', $provider)
@@ -394,25 +398,13 @@ class MerchantCharge extends Model
             return null;
         }
 
-        // The direction this sale was PRICED under, not the one configured today. `configuredResidual()` is
-        // reached only by a row written before the column existed — see its docblock for why that fallback
-        // is a guess and still the right one.
-        return new PlatformFee($this->fee_bps, $this->fee_flat_minor, $this->fee_residual ?? $this->configuredResidual());
-    }
-
-    /**
-     * What this installation does with the odd minor unit today.
-     *
-     * Deliberately identical to `RoutedRefundCorrector::configuredResidual()`, down to the fallback: the
-     * money side and the document side reconstruct the SAME sale, so the one place they must not differ is
-     * exactly this one. A value neither side can honor lands on `ToPortion` rather than throwing, because
-     * this is a reconstruction of something that already happened — refusing to answer would make an old
-     * charge unreadable over a setting that has nothing to do with it. The resolver that PRICES a sale does
-     * throw, and that asymmetry is the point: a sale not yet made can still be stopped.
-     */
-    private function configuredResidual(): RoundingResidual
-    {
-        return RoundingResidual::fromConfigured(Config::get('billing.marketplace.fee.rounding'))
-            ?? RoundingResidual::ToPortion;
+        // The direction this sale was PRICED under, not the one configured today. Only a row written before
+        // the column existed reaches the fallback, and it takes the one the settlement side takes:
+        // `RoundingResidual::forReconstruction()` says why that guess is still the right one.
+        return new PlatformFee(
+            $this->fee_bps,
+            $this->fee_flat_minor,
+            $this->fee_residual ?? RoundingResidual::forReconstruction(Config::get('billing.marketplace.fee.rounding')),
+        );
     }
 }

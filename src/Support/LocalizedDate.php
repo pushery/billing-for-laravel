@@ -20,16 +20,17 @@ use Illuminate\Support\Facades\App;
  *
  * ## The trap this class exists to close, measured rather than assumed
  *
- * The obvious fix — `->isoFormat('L')` and let Carbon use "the locale" — is WRONG here, and silently
- * so. Laravel does not carry its locale into Carbon. `Application::setLocale()` sets the translator
- * and fires `LocaleUpdated`, and nothing in the framework listens for it: across all of `Illuminate/`
- * the event appears in exactly two files, the Application that fires it and the event class itself.
- * Measured by switching the app locale five times and reading both sides:
+ * The obvious fix — `->isoFormat('L')` and let Carbon use "the locale" — leans on something this
+ * package does not control. `Application::setLocale()` sets the translator and fires `LocaleUpdated`,
+ * and nothing in `Illuminate/` listens for it. Carbon follows only through its own service provider,
+ * which subscribes to the event and is registered by package discovery: an application that leaves
+ * Carbon out of discovery, or any process where that provider never booted, keeps Carbon on its own
+ * locale. Without the provider:
  *
  *     App::setLocale('de') -> translator 'de', Carbon 'en', isoFormat('L') = 09/03/2026
  *     App::setLocale('fr') -> translator 'fr', Carbon 'en', isoFormat('L') = 09/03/2026
  *
- * So a bare `isoFormat()` would have rendered American dates for all seven languages: the same bug,
+ * A bare `isoFormat()` would render American dates in all seven languages there: the same bug,
  * pointing the other way, and harder to notice — the test somebody writes first runs under `en`,
  * where it looks perfect.
  *

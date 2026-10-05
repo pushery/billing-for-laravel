@@ -71,7 +71,8 @@ final readonly class SubscriptionExpirySweep
         $due = Subscription::model()::query()
             ->merchantScoped()
             ->whereNotNull('delinquent_since')
-            ->where('delinquent_since', '<=', $cutoff)
+            // In UTC, the zone the column holds: a binding is written in its own zone (see UtcDateTime).
+            ->where('delinquent_since', '<=', $cutoff->copy()->utc())
             // Idempotence, and it is a real guard rather than a formality: the dunning clock is cleared
             // below, so a second run would not re-select these rows anyway — but a row whose clock is
             // restarted by a later failed payment must not be expired twice on the strength of the first.

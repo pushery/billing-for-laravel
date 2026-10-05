@@ -23,10 +23,12 @@ use Pushery\Billing\ValueObjects\Money;
  * clawed back (a refund or a lost dispute reverses the merchant's share), so a reversal is netted out rather
  * than double-counted. A failed charge is neither settled nor pending and contributes nothing.
  *
- * `held` is what buyer protection is still holding back — a settled charge whose payout is waiting on the
- * buyer, or on somebody deciding a dispute. It is subtracted from `available` rather than shown beside it,
- * because a merchant reading "available" is reading what they can be paid, and money a clock is still
- * sitting on is not that. Nothing here reaches a provider or writes a row.
+ * `held` is what buyer protection is still holding back: the share of a sale whose payout is waiting on the
+ * buyer, or on somebody deciding a dispute. A protected sale stays pending until its hold releases, because the
+ * release is what moves the share and settles the sale. What a hold sits on is taken out of the bucket its sale
+ * is in, `pending` in that flow and `available` for a hold over a sale that settled anyway, so no money is
+ * counted twice and a merchant reading "available" is never told they can be paid money a clock is still
+ * sitting on. Nothing here reaches a provider or writes a row.
  */
 final readonly class MerchantChargeLedgerBalanceReader implements LedgerBalanceReader, ListsEarningCurrencies
 {
@@ -36,11 +38,11 @@ final readonly class MerchantChargeLedgerBalanceReader implements LedgerBalanceR
         // transfer, so the reversed sum is subtracted rather than counted as a second, separate balance.
         $settled = $this->base($party, $currency)->where('settlement_state', SettlementState::Settled->value);
 
-        // …and less what is still held back. Leaving it in would tell a merchant they can be paid money that
-        // a clock is still sitting on, which is the one thing an "available" figure must never do.
+        // …and less what is still held back over a settled sale. Leaving it in would tell a merchant they can be
+        // paid money that a clock is still sitting on, which is the one thing an "available" figure must never do.
         $available = (int) $settled->sum('net_minor')
             - (int) $settled->sum('transfer_reversed_minor')
-            - $this->heldFor($party, $currency)->minorUnits;
+            - $this->heldOver($party, $currency, SettlementState::Settled);
 
         return Money::of($available, $this->code($currency));
     }
@@ -49,7 +51,11 @@ final readonly class MerchantChargeLedgerBalanceReader implements LedgerBalanceR
     {
         $pending = $this->base($party, $currency)->where('settlement_state', SettlementState::Pending->value);
 
-        return Money::of((int) $pending->sum('net_minor'), $this->code($currency));
+        // Less what a hold sits on. A protected sale is pending until its hold releases, and the hold reports its
+        // share as held: counted here as well, the same money would stand in two buckets.
+        $net = (int) $pending->sum('net_minor') - $this->heldOver($party, $currency, SettlementState::Pending);
+
+        return Money::of($net, $this->code($currency));
     }
 
     /**
@@ -61,24 +67,42 @@ final readonly class MerchantChargeLedgerBalanceReader implements LedgerBalanceR
      */
     public function heldFor(Model $party, string $currency): Money
     {
+        // The MERCHANT's share, not the price the buyer paid. `availableFor()` and `pendingFor()` subtract this
+        // from `net_minor`, which is already net of the platform's commission — so subtracting the gross would
+        // take the commission out a second time and, where the whole turnover sits under one open hold, drive the
+        // balance below zero. The contract says the quantity out loud: "earnings withheld under buyer protection".
+        $held = $this->openHolds($party, $currency)->sum(DB::raw('charge_minor - platform_fee_minor'));
+
+        return Money::of((int) $held, $this->code($currency));
+    }
+
+    /** What the open holds sit on over this party's sales in one settlement state, the bucket those sales are in. */
+    private function heldOver(Model $party, string $currency, SettlementState $state): int
+    {
+        $sales = $this->base($party, $currency)->where('settlement_state', $state->value)->select('charge_reference');
+
+        return (int) $this->openHolds($party, $currency)
+            ->whereIn('charge_reference', $sales)
+            ->sum(DB::raw('charge_minor - platform_fee_minor'));
+    }
+
+    /**
+     * The party's holds in one currency whose outcome is still open.
+     *
+     * @return Builder<BuyerProtectionHold>
+     */
+    private function openHolds(Model $party, string $currency): Builder
+    {
         $open = array_values(array_map(
             static fn (BuyerProtectionState $state): string => $state->value,
             array_filter(BuyerProtectionState::cases(), static fn (BuyerProtectionState $state): bool => ! $state->settled()),
         ));
 
-        // The MERCHANT's share, not the price the buyer paid. `availableFor()` subtracts this from
-        // `net_minor`, which is already net of the platform's commission — so subtracting the gross would
-        // take the commission out a second time and, where the whole settled turnover sits under one open
-        // hold, drive the balance below zero. The contract says the quantity out loud: "settled EARNINGS
-        // withheld under buyer protection".
-        $held = BuyerProtectionHold::model()::query()
+        return BuyerProtectionHold::model()::query()
             ->where('merchant_type', $party->getMorphClass())
             ->where('merchant_id', $this->key($party))
             ->where('currency', $this->code($currency))
-            ->whereIn('state', $open)
-            ->sum(DB::raw('charge_minor - platform_fee_minor'));
-
-        return Money::of((int) $held, $this->code($currency));
+            ->whereIn('state', $open);
     }
 
     /** A party's key as the hold table stores it — a string column, so the comparison has to be one. */

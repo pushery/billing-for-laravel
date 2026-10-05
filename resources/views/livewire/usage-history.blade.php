@@ -25,9 +25,9 @@
                                     <dt class="text-gray-600 dark:text-gray-300">{{ $row->meterKey }}</dt>
                                     <dd class="text-gray-500 dark:text-gray-400">
                                         @if ($row->metered)
-                                            {{ __('billing::account.usage_history.used', ['used' => $row->used]) }}
+                                            {{ __('billing::account.usage_history.used', ['used' => \Pushery\Billing\Support\LocalizedNumber::format($row->used)]) }}
                                             @if ($row->prepaidUsed > 0)
-                                                <span class="text-xs">({{ __('billing::account.usage_history.prepaid_used', ['units' => $row->prepaidUsed]) }})</span>
+                                                <span class="text-xs">({{ __('billing::account.usage_history.prepaid_used', ['units' => \Pushery\Billing\Support\LocalizedNumber::format($row->prepaidUsed)]) }})</span>
                                             @endif
                                         @else
                                             {{-- An unmetered / BYOK dimension: the count is not a meaningful allowance figure, so say so. --}}
@@ -54,7 +54,7 @@
                         <li class="flex items-baseline justify-between gap-4 py-2 text-sm">
                             <span>
                                 {{ __('billing::account.usage_history.'.($movement->isCredit() ? 'movement_credited' : 'movement_spent'), [
-                                    'units' => number_format($movement->units()),
+                                    'units' => \Pushery\Billing\Support\LocalizedNumber::format($movement->units()),
                                     'meter' => $movement->meter,
                                 ]) }}
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">{{ $movement->reference }}</span>
@@ -77,7 +77,7 @@
                         <li wire:key="topup-{{ $index }}" class="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3 text-sm shadow-sm dark:border-gray-800 dark:bg-gray-900">
                             <span class="font-medium">{{ $topup->addonKey }}</span>
                             <span class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                                <span>{{ $topup->amount->format() }}</span>
+                                <span>{{ \Pushery\Billing\Support\LocalizedMoney::format($topup->amount) }}</span>
                                 <span class="text-xs">{{ \Pushery\Billing\Support\LocalizedDate::short($topup->purchasedAt) }}</span>
                                 @if ($topup->reversed)
                                     <span class="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">

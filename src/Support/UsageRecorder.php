@@ -57,10 +57,23 @@ final readonly class UsageRecorder
     ) {}
 
     /**
+     * What a source key is unique by: the caller's key for this owner and this meter.
+     *
+     * The key alone was unique across the whole table, so a job that used one key for two meters, or two owners
+     * whose campaigns share a number, had the second usage dropped as a retry of the first: not billed, not
+     * counted, and answered with the same `false` a real retry gets. Hashed rather than stored side by side,
+     * because the three columns and the key together are longer than a MySQL index may be.
+     */
+    public static function sourceScope(string $ownerType, mixed $ownerId, string $meterKey, string $sourceKey): string
+    {
+        return hash('sha256', implode("\0", [$ownerType, is_scalar($ownerId) ? (string) $ownerId : '', $meterKey, $sourceKey]));
+    }
+
+    /**
      * Record usage. Returns false when the call was a duplicate of one already recorded under the same
      * source key — the caller's retry, not an error.
      *
-     * @param  ?string  $sourceKey  the caller's idempotency key: the same key records the usage once
+     * @param  ?string  $sourceKey  the caller's idempotency key: the same key records the usage once for this owner and this meter
      * @param  ?CarbonInterface  $occurredAt  when the usage happened (defaults to now); this, never the
      *                                        flush time, is what the provider bills it into
      */
@@ -146,8 +159,10 @@ final readonly class UsageRecorder
     ): bool {
         // Reportable only when the tier actually bills this meter AND billing is switched on. Otherwise
         // the event is a counter entry: the app still meters (its quota must keep working), but there is
-        // nothing to hand a provider, and the flusher must never pick it up.
-        $reportable = $component?->isBillable() === true && $this->config->get('billing.enabled') !== false;
+        // nothing to hand a provider, and the flusher must never pick it up. The switch is read the way every
+        // other reader of it reads it: `BILLING_ENABLED=0` arrives as the string "0", which they took for off
+        // while this took it for on, and usage metered during the pause was billed once billing came back.
+        $reportable = $component?->isBillable() === true && (bool) $this->config->get('billing.enabled', true);
 
         $providerMeter = $component?->providerMeter;
         $included = $component?->included;
@@ -170,13 +185,14 @@ final readonly class UsageRecorder
                 'period' => $period->key,
                 'identifier' => $identifier,
                 'source_key' => $sourceKey,
+                'source_scope' => $sourceKey === null ? null : self::sourceScope($owner->getMorphClass(), $owner->getKey(), $meterKey, $sourceKey),
                 'state' => ($reportable ? UsageEventState::Pending : UsageEventState::Local)->value,
                 'attempts' => 0,
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ]);
 
-            // The unique source key lost the race (or lost it earlier): this usage is already on the
+            // The unique source scope lost the race (or lost it earlier): this usage is already on the
             // books. Moving the counter now would double-count it on the gauge.
             if ($recorded === 0) {
                 // Hand the allowance back, or a retried job burns allowance it never consumed.
@@ -203,7 +219,7 @@ final readonly class UsageRecorder
             }
 
             return true;
-        });
+        }, LockedRow::ATTEMPTS);
     }
 
     /**

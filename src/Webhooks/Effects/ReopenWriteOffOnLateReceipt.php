@@ -6,6 +6,7 @@ namespace Pushery\Billing\Webhooks\Effects;
 
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Contracts\DedupesOnReference;
 use Pushery\Billing\Enums\AuditSource;
@@ -83,6 +84,13 @@ final readonly class ReopenWriteOffOnLateReceipt implements DedupesOnReference
 
         $correction = $candidates[0];
 
+        // Recorded on the correction, and only by the run that records it. A later payment of the same amount is
+        // the next month's payment rather than this write-off coming back again, and of two payments arriving
+        // together only one may announce the recovery.
+        if (! $this->markRecovered($correction)) {
+            return;
+        }
+
         $this->events->dispatch(new WriteOffRecovered($correction, $event->amount, $event->reference));
 
         $this->log->record('invoice.write_off_recovered', $owner, [
@@ -112,6 +120,8 @@ final readonly class ReopenWriteOffOnLateReceipt implements DedupesOnReference
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
             ->whereNotNull('credited_invoice_id')
+            // A write-off a payment already reopened is settled; the next payment of the same amount is new money.
+            ->whereNull('write_off_recovered_at')
             ->where('currency', $event->amount->currency)
             // A correction is stored with the sign of the movement it records, and the payment arrives
             // positive. Matching on the magnitude keeps this from depending on which sign a given issuer
@@ -125,6 +135,15 @@ final readonly class ReopenWriteOffOnLateReceipt implements DedupesOnReference
             $corrections,
             $this->recovered->reversible(...),
         ));
+    }
+
+    /** Stamp the correction as reopened, answering whether this run was the one that did. */
+    private function markRecovered(InvoiceRecord $correction): bool
+    {
+        return InvoiceRecord::model()::query()
+            ->whereKey($correction->getKey())
+            ->whereNull('write_off_recovered_at')
+            ->update(['write_off_recovered_at' => Carbon::now()]) === 1;
     }
 
     /**

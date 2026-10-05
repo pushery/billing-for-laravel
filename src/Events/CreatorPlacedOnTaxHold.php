@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Events;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 
 /**
  * A merchant can no longer sell or be paid out, because their tax standing does not permit it.
@@ -33,6 +34,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 final readonly class CreatorPlacedOnTaxHold implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public function __construct(
         public Model $merchant,
         /** A translation key naming why the hold began — never a rendered sentence. */

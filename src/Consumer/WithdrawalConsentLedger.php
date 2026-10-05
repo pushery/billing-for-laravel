@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Models\AddonPurchase;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Models\WithdrawalConsentRecord;
+use Pushery\Billing\Support\UniqueRow;
 use Pushery\Billing\ValueObjects\WithdrawalConsent;
 
 /**
@@ -35,7 +36,8 @@ final readonly class WithdrawalConsentLedger
      */
     public function record(Model $owner, string $reference, WithdrawalConsent $consent): WithdrawalConsent
     {
-        $record = WithdrawalConsentRecord::model()::query()->firstOrCreate(
+        $record = UniqueRow::firstOrCreate(
+            WithdrawalConsentRecord::model()::query(),
             [
                 'owner_type' => $owner->getMorphClass(),
                 'owner_id' => $owner->getKey(),

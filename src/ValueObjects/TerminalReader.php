@@ -23,7 +23,8 @@ final readonly class TerminalReader
         /**
          * Whether the provider reports the reader as able to take a payment. Stripe says whether it can reach the
          * reader now. Mollie says only whether a terminal is activated, so an activated terminal that lost its
-         * connection reads as online, and a sale put on it fails within thirty seconds.
+         * connection reads as online, and a sale put on it fails once it has not reached the terminal in thirty
+         * seconds, with the status reason `terminal_unreachable`.
          */
         public bool $online,
         /**

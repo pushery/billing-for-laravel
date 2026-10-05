@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Mollie;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use Mollie\Api\Exceptions\RequestException;
+use Mollie\Api\MollieApiClient;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Exceptions\MandateNeedsRedirect;
@@ -36,6 +39,10 @@ use RuntimeException;
  *   dunned for having removed their first.
  * - Removing the LAST one is refused while a subscription is still being charged. It would not end the
  *   subscription — it would just make the next cycle fail — so the screen is told to say so instead.
+ *
+ * And removal withdraws the mandate at Mollie before the row goes, which is what removing a method means under
+ * Stripe as well. Deleting only the row left the authorization active at Mollie, where it could still be
+ * charged from the dashboard.
  */
 final readonly class MolliePaymentMethods implements PaymentMethods
 {
@@ -87,6 +94,10 @@ final readonly class MolliePaymentMethods implements PaymentMethods
                 id: (string) $mandate->mandate_reference,
                 type: (string) ($mandate->method ?? 'mandate'),
                 isDefault: (bool) $mandate->is_default,
+                brand: $mandate->card_brand,
+                last4: $mandate->card_last4,
+                expMonth: $mandate->card_exp_month,
+                expYear: $mandate->card_exp_year,
             );
         }
 
@@ -105,6 +116,10 @@ final readonly class MolliePaymentMethods implements PaymentMethods
             id: (string) $default->mandate_reference,
             type: (string) ($default->method ?? 'mandate'),
             isDefault: true,
+            brand: $default->card_brand,
+            last4: $default->card_last4,
+            expMonth: $default->card_exp_month,
+            expYear: $default->card_exp_year,
         );
     }
 
@@ -133,6 +148,14 @@ final readonly class MolliePaymentMethods implements PaymentMethods
             }
 
             $wasDefault = (bool) $mandate->is_default;
+            $customer = trim((string) $mandate->customer_reference);
+
+            // A refusal from Mollie leaves the row, so the removal can be tried again. A row stored without its
+            // customer cannot be named to Mollie and is removed here alone.
+            if ($customer !== '') {
+                $this->revoke($customer, $mandate->mandate_reference);
+            }
+
             $mandate->delete();
 
             $successor = $remaining->first();
@@ -196,6 +219,23 @@ final readonly class MolliePaymentMethods implements PaymentMethods
             ->where('owner_id', $billable->getKey())
             ->where('provider', 'mollie')
             ->where('status', PaymentMandate::CHARGEABLE);
+    }
+
+    /**
+     * Withdraw the mandate at Mollie. One that Mollie no longer knows is already where removal wants it.
+     *
+     * The client is resolved here rather than when this class is built: listing the methods and choosing the
+     * default read local rows and work without an API key.
+     */
+    private function revoke(string $customer, string $mandate): void
+    {
+        try {
+            Container::getInstance()->make(MollieApiClient::class)->mandates->revokeForId($customer, $mandate);
+        } catch (RequestException $refusal) {
+            if (! in_array($refusal->getStatusCode(), [404, 410], true)) {
+                throw $refusal;
+            }
+        }
     }
 
     /** The Mollie customer this billable is known by, read from any mandate already stored for them. */

@@ -6,6 +6,7 @@ namespace Pushery\Billing\Seats;
 
 use Illuminate\Contracts\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Config;
+use LogicException;
 use Pushery\Billing\Contracts\ProvidesSeats;
 
 /**
@@ -42,13 +43,26 @@ trait HasSeats
      */
     protected function activeSeatMembers(): Builder
     {
-        $relation = Config::get('billing.seats.membership_relation', 'members');
-        $query = $this->{is_string($relation) ? $relation : 'members'}();
+        $configured = Config::get('billing.seats.membership_relation', 'members');
+        $relation = is_string($configured) ? $configured : 'members';
+        $query = $this->{$relation}();
+
+        // Named rather than left to the count: a configured name that is not a relation would fail inside it
+        // with a message about something else.
+        if (! $query instanceof Builder) {
+            throw new LogicException(sprintf(
+                'billing.seats.membership_relation names [%s], which %s does not answer with a relation.',
+                $relation,
+                static::class,
+            ));
+        }
 
         $column = Config::get('billing.seats.active_status_column');
 
+        // A column the host names in config rather than a property of a known model, so the condition goes to
+        // the query underneath, which takes a column name as it is.
         if (is_string($column) && $column !== '') {
-            $query->where($column, Config::get('billing.seats.active_status_value', 'active'));
+            $query->getQuery()->where($column, Config::get('billing.seats.active_status_value', 'active'));
         }
 
         return $query;

@@ -14,7 +14,7 @@ namespace Pushery\Billing\Enums;
  */
 enum UsRegimeActivationTrigger: string
 {
-    /** An entity or fixed place of business in the country — the one trigger that admits no judgement. */
+    /** An entity or fixed place of business in the country — the one trigger that admits no judgment. */
     case DomesticEstablishment = 'domestic_establishment';
 
     /**

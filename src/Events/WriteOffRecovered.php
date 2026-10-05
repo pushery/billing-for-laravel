@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Events;
 
+use Illuminate\Queue\SerializesModels;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -30,6 +31,8 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final readonly class WriteOffRecovered implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public function __construct(
         public InvoiceRecord $correction,
         public Money $received,

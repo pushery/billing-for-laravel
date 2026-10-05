@@ -24,7 +24,7 @@ final class ViesVatIdValidator implements VatIdValidator
 
     public function validate(?string $vatId): VatIdValidation
     {
-        $normalized = strtoupper(preg_replace('/\s+/', '', $vatId ?? '') ?? '');
+        $normalized = strtoupper(preg_replace('/\s+/u', '', $vatId ?? '') ?? '');
 
         if (preg_match('/^([A-Z]{2})([0-9A-Z]{2,12})$/', $normalized, $matches) !== 1) {
             return VatIdValidation::Invalid; // malformed — not a VAT id at all

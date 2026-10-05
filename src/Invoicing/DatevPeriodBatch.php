@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Pushery\Billing\Invoicing;
 
 use Carbon\CarbonInterface;
+use Generator;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\LazyCollection;
 use Pushery\Billing\Enums\CreditReason;
 use Pushery\Billing\Marketplace\CollectiveAccountReconciler;
 use Pushery\Billing\Models\CreditLedgerEntry;
@@ -16,6 +19,7 @@ use Pushery\Billing\Models\VoucherMovementRecord;
 use Pushery\Billing\Support\CreditConsumption;
 use Pushery\Billing\ValueObjects\AccountReconciliation;
 use Pushery\Billing\ValueObjects\CreditMovement;
+use Pushery\Billing\ValueObjects\SubLedgerMovement;
 use Pushery\Billing\ValueObjects\VoucherMovement;
 
 /**
@@ -41,6 +45,9 @@ use Pushery\Billing\ValueObjects\VoucherMovement;
  */
 final readonly class DatevPeriodBatch
 {
+    /** Documents read per query: a month of invoices, each with its frozen lines and buyer, is never held at once. */
+    private const int PAGE = 500;
+
     public function __construct(
         private DatevExport $export,
         private CollectiveAccountReconciler $reconciler,
@@ -66,16 +73,29 @@ final readonly class DatevPeriodBatch
      * A caller decides what a difference MEANS to it — an exit code, a warning on a screen — but no caller
      * has to know how to establish one.
      *
+     * ## One pass, a page at a time
+     *
+     * The documents are read once, a page at a time, and that one pass feeds the file, the count and the
+     * sub-ledger movements the reconciliation sums. Each of the three reading the period for itself could
+     * meet a document another did not, and the report would no longer describe the file.
+     *
      * @return array{content: string, reconciliation: AccountReconciliation, invoices: int, providerFees: int, voucherMovements: int, creditMovements: int, unbookedCreditMinor: int, currency: string}
      */
     public function render(CarbonInterface $from, CarbonInterface $to): array
     {
-        $invoices = InvoiceRecord::model()::query()
-            ->whereBetween('issued_at', [$from, $to])
-            ->whereNull('reissue_of_invoice_id')
-            ->orderBy('issued_at')
-            ->orderBy('id')
-            ->get();
+        $invoices = 0;
+        /** @var list<SubLedgerMovement> $movements */
+        $movements = [];
+
+        // Counted and moved as the export reads each document, so neither has to read the period again.
+        $documents = (function () use ($from, $to, &$invoices, &$movements): Generator {
+            foreach ($this->documentsIn($from, $to) as $document) {
+                $invoices++;
+                array_push($movements, ...$this->reconciler->movementsOf($document, $from));
+
+                yield $document;
+            }
+        })();
 
         $providerFees = ProviderFee::model()::query()
             ->whereBetween('occurred_at', [$from, $to])
@@ -99,7 +119,7 @@ final readonly class DatevPeriodBatch
         $creditMovements = $this->splitSpends($creditEntries);
 
         $content = $this->export->export(
-            $invoices,
+            $documents,
             $from,
             $to,
             providerFees: $providerFees,
@@ -130,8 +150,8 @@ final readonly class DatevPeriodBatch
 
         return [
             'content' => $content,
-            'reconciliation' => $this->reconciler->reconcile($invoices, $content, $from, $this->currency()),
-            'invoices' => $invoices->count(),
+            'reconciliation' => $this->reconciler->reconcileMovements($movements, $content, $this->currency()),
+            'invoices' => $invoices,
             'providerFees' => $providerFees->count(),
             'voucherMovements' => $voucherMovements->count(),
             'creditMovements' => $bookedCredit->count(),
@@ -151,6 +171,26 @@ final readonly class DatevPeriodBatch
             // answer to a question this class already answered — the reconciliation above uses the same one.
             'currency' => $this->currency(),
         ];
+    }
+
+    /**
+     * The period's documents a page at a time, in the order the batch books them.
+     *
+     * A draft has no `issued_at` and falls outside the range; a restatement is the same sale a second time.
+     *
+     * @return LazyCollection<int, InvoiceRecord>
+     */
+    private function documentsIn(CarbonInterface $from, CarbonInterface $to): LazyCollection
+    {
+        return InvoiceRecord::model()::query()
+            ->whereBetween('issued_at', [$from, $to])
+            ->whereNull('reissue_of_invoice_id')
+            ->orderBy('issued_at')
+            ->orderBy('id')
+            // The frozen rates of a page's documents with the page. A document in another currency reads its
+            // rate, one query each otherwise, and a host running `Model::preventLazyLoading()` refuses that.
+            ->with('exchangeRates')
+            ->lazy(self::PAGE);
     }
 
     /**
@@ -182,6 +222,9 @@ final readonly class DatevPeriodBatch
      * the grouping is what decides; a tuple filter that worked on one engine and silently matched nothing on
      * another would not be, and that failure reads as "this spend consumed nothing".
      *
+     * A spend of an owner who has since been erased names no owner any more. Its history is read by the key the
+     * erasure left on that owner's movements, which keeps them together as one balance.
+     *
      * @param  Collection<int, CreditLedgerEntry>  $entries
      * @return Collection<int, CreditMovement>
      */
@@ -193,9 +236,13 @@ final readonly class DatevPeriodBatch
             return $entries->map(static fn (CreditLedgerEntry $entry): CreditMovement => $entry->toMovement());
         }
 
+        $owned = $offsets->filter(static fn (CreditLedgerEntry $entry): bool => $entry->erased_owner_key === null);
+
         $history = CreditLedgerEntry::model()::query()
-            ->whereIn('owner_type', $offsets->pluck('owner_type')->unique()->values()->all())
-            ->whereIn('owner_id', $offsets->pluck('owner_id')->unique()->values()->all())
+            ->where(static fn (Builder $query): Builder => $query
+                ->whereIn('owner_type', $owned->pluck('owner_type')->unique()->values()->all())
+                ->whereIn('owner_id', $owned->pluck('owner_id')->unique()->values()->all()))
+            ->orWhereIn('erased_owner_key', $offsets->pluck('erased_owner_key')->filter()->unique()->values()->all())
             ->orderBy('id')
             ->get()
             ->groupBy(static fn (CreditLedgerEntry $entry): string => self::balanceKey($entry));
@@ -225,10 +272,17 @@ final readonly class DatevPeriodBatch
             && in_array($entry->reason, [CreditReason::ChargeOffset, CreditReason::ProviderInvoiceOffset], true);
     }
 
-    /** One owner's balance in one currency — the unit a FIFO replay is meaningful over. */
+    /**
+     * One owner's balance in one currency — the unit a FIFO replay is meaningful over.
+     *
+     * The kept movements of an erased owner name no owner, so their key stands in for it, and the balance of one
+     * erased owner replays apart from every other's.
+     */
     private static function balanceKey(CreditLedgerEntry $entry): string
     {
-        return $entry->owner_type.'|'.$entry->owner_id.'|'.$entry->currency;
+        return $entry->erased_owner_key !== null
+            ? 'erased|'.$entry->erased_owner_key.'|'.$entry->currency
+            : $entry->owner_type.'|'.$entry->owner_id.'|'.$entry->currency;
     }
 
     /**

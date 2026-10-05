@@ -7,6 +7,8 @@ namespace Pushery\Billing\Notifications;
 use DateTimeInterface;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Enums\BillingAction;
+use Pushery\Billing\Support\LocalizedDate;
 
 /**
  * The confirmation sent when a subscription is canceled, stating the date access runs until (the end
@@ -22,13 +24,12 @@ final class SubscriptionCanceledNotification extends BillingNotification
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.subscription_canceled.subject'))
             ->line(Lang::get('billing::notifications.subscription_canceled.intro'))
-            ->line($this->accessEndsAt->format('Y-m-d'))
-            ->line(Lang::get('billing::notifications.subscription_canceled.outro'));
+            ->line(Lang::get('billing::notifications.subscription_canceled.outro', ['date' => LocalizedDate::long($this->accessEndsAt)]));
 
         return $this->withAction(
             $mail,
             Lang::get('billing::notifications.subscription_canceled.cta'),
-            $this->actionUrl('billing.account.plan'),
+            $this->actionFor($notifiable, BillingAction::Plan),
         );
     }
 

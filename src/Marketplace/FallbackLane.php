@@ -6,8 +6,10 @@ namespace Pushery\Billing\Marketplace;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
+use InvalidArgumentException;
 use Pushery\Billing\Enums\ReviewState;
 use Pushery\Billing\Models\SubmittedInvoice;
+use Pushery\Billing\ValueObjects\Money;
 
 /**
  * The fallback lane's review: reconcile a creator's submitted invoice against what they actually earned, and
@@ -16,7 +18,8 @@ use Pushery\Billing\Models\SubmittedInvoice;
  * The reconciliation is the whole point. Without it the platform pays out what the creator WRITES — a
  * creator who invoices 300.00 net when the transactions of the period come to 270.00 would be overpaid by
  * 30.00. So the submitted net and tax must match the expected figures within a tolerance (config, default
- * exact); a mismatch is a finding per field, and only a passing review may release the payout.
+ * exact); a mismatch is a finding per field, and only a passing review may release the payout. The figures
+ * are compared in their currency first: 27,000 yen are not 270.00 euros, however alike the digits are.
  *
  * WHERE THAT LOCK IS NOT, and it matters: `holdsPayout()` has no caller in this package, because there is
  * no payout path here to hang it on. This class ANSWERS whether a creator may be paid; nothing in `src/`
@@ -39,20 +42,35 @@ final readonly class FallbackLane
     /**
      * Reconcile a submission against the expected net and tax the creator earned this period, storing the
      * result and the per-field findings on it. Only an exact-or-within-tolerance match passes.
+     *
+     * An invoice in another currency is a finding of its own, and its amounts are not compared: minor units of
+     * two currencies are not the same quantity, so a match between them would pass by coincidence.
      */
-    public function reconcile(SubmittedInvoice $invoice, int $expectedNetMinor, int $expectedTaxMinor): SubmittedInvoice
+    public function reconcile(SubmittedInvoice $invoice, Money $expectedNet, Money $expectedTax): SubmittedInvoice
     {
+        if ($expectedTax->currency !== $expectedNet->currency) {
+            throw new InvalidArgumentException(
+                "The expected net is in {$expectedNet->currency} and the expected tax in {$expectedTax->currency}; "
+                .'one invoice states both in one currency.'
+            );
+        }
+
         $tolerance = $this->config->get('billing.marketplace.fallback.tolerance_minor', 0);
         $tolerance = is_int($tolerance) ? $tolerance : 0;
 
         $findings = [];
+        $submittedCurrency = strtoupper($invoice->currency);
 
-        if (abs($invoice->net_minor - $expectedNetMinor) > $tolerance) {
-            $findings['net'] = ['submitted' => $invoice->net_minor, 'expected' => $expectedNetMinor];
-        }
+        if ($submittedCurrency !== $expectedNet->currency) {
+            $findings['currency'] = ['submitted' => $submittedCurrency, 'expected' => $expectedNet->currency];
+        } else {
+            if (abs($invoice->net_minor - $expectedNet->minorUnits) > $tolerance) {
+                $findings['net'] = ['submitted' => $invoice->net_minor, 'expected' => $expectedNet->minorUnits];
+            }
 
-        if (abs($invoice->tax_minor - $expectedTaxMinor) > $tolerance) {
-            $findings['tax'] = ['submitted' => $invoice->tax_minor, 'expected' => $expectedTaxMinor];
+            if (abs($invoice->tax_minor - $expectedTax->minorUnits) > $tolerance) {
+                $findings['tax'] = ['submitted' => $invoice->tax_minor, 'expected' => $expectedTax->minorUnits];
+            }
         }
 
         $invoice->forceFill([

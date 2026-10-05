@@ -6,6 +6,7 @@ namespace Pushery\Billing\Invoicing;
 
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\DeadlockException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
@@ -15,6 +16,7 @@ use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\OrderItem;
+use Pushery\Billing\ValueObjects\Money;
 use Throwable;
 
 /**
@@ -105,11 +107,19 @@ final readonly class OrderInvoiceIssuer
      * Never throws into the billing cycle. The money is already collected at this point, and a failure to
      * produce the document must not undo that or stop the run — a missing invoice is recoverable, a cycle
      * that reports failure after taking the money is not.
+     *
+     * The document is written in a transaction of its own, which inside the cycle's is a savepoint. On
+     * PostgreSQL a failed statement aborts the transaction it runs in, so without one the cycle's next
+     * statement failed too; and a number the failed document drew goes back with it, so the series keeps no
+     * gap. A deadlock is the one failure passed on: the server has already ended the cycle's whole
+     * transaction, and there is nothing left to carry on in.
      */
     public function issue(Order $order): ?InvoiceRecord
     {
         try {
-            return $this->raise($order);
+            return $order->getConnection()->transaction(fn (): ?InvoiceRecord => $this->raise($order));
+        } catch (DeadlockException $deadlock) {
+            throw $deadlock;
         } catch (Throwable) {
             return null;
         }
@@ -145,12 +155,10 @@ final readonly class OrderInvoiceIssuer
             // and wrong under a taxable one, and nobody determined which — so the document says nothing
             // rather than guessing, exactly as it already does about the tax.
             //
-            // THE RENDERED DOCUMENT IS UNCHANGED, AND THAT WAS MEASURED BEFORE THIS WAS TOUCHED. Both
-            // readers of the column derive the same figure from what is left: `InvoiceDocumentRenderer`
-            // falls back to `total_minor - (tax_minor ?? 0)`, and `NormalizesInvoiceModel` — the one the
-            // e-invoice goes through — sums the frozen LINES whenever there are any, which this issuer
-            // always writes. So nothing a consumer sees moves; what stops is the record asserting a number
-            // as established when it was assumed.
+            // The page falls back to `total_minor - (tax_minor ?? 0)` where the column is null, and the
+            // e-invoice reads the net from the frozen LINES, which carry theirs wherever this column does —
+            // see frozenLines(). What stops is the record asserting a number as established when it was
+            // assumed.
             //
             // The two tax readers never saw it either: `PeriodicTaxReturn` skips a sale that is not `oss`
             // with a destination country, and `InvoiceCrossBorderSalesCounter` selects on a non-empty
@@ -160,7 +168,7 @@ final readonly class OrderInvoiceIssuer
             'currency' => $order->currency,
             'status' => InvoiceStatus::Paid,
             'issued_at' => $issuedAt,
-            'lines' => $this->frozenLines($order),
+            'lines' => $this->frozenLines($order, $tax, $lateFee),
         ]);
 
         $invoice->fill($lateFee ? $this->outsideTheScope() : $this->taxAttributes($tax));
@@ -293,6 +301,9 @@ final readonly class OrderInvoiceIssuer
         return [
             'tax_minor' => $tax->tax->minorUnits,
             'tax_rate_bps' => $tax->rateBps,
+            // The statutory rate beside the charged quotient: the return groups by it and the ledger picks its
+            // revenue account by it, and neither may see 19.07 % where the law says 19 %.
+            'supply_rate_bps' => $tax->appliedRateBps > 0 ? $tax->appliedRateBps : null,
             'reverse_charge' => $tax->reverseCharge,
             'tax_exempt' => $tax->exempt,
             'oss' => $tax->oneStopShop,
@@ -311,26 +322,91 @@ final readonly class OrderInvoiceIssuer
     }
 
     /**
-     * The lines as they stood, in the order they were billed.
+     * The lines as they stood, in the order they were billed, each stated the way a document line is read.
      *
      * A discount or a credit line carries a negative total and is kept as such: an invoice that shows the
      * gross and quietly nets the discount away tells the reader a price that was never charged.
      *
+     * The order was priced gross, and a document line is read for its NET, its net unit price and its rate:
+     * {@see Line::fromArray()} takes a missing net as zero and a missing rate as 0%. Frozen with neither, every
+     * e-invoice of this engine stated 0.00 in category Z and every line on the page showed 0%. So the
+     * determined tax is shared out over the lines in proportion to their totals, which makes the line nets add
+     * up to the document's net exactly, and each line carries the statutory rate the supply was taxed at. A late
+     * fee is outside the scope of the tax, so its lines are their totals at 0%. A document with no basis states
+     * neither, as it states no net and no tax above them.
+     *
      * @return list<array<string, mixed>>
      */
-    private function frozenLines(Order $order): array
+    private function frozenLines(Order $order, ?DeterminedOrderTax $tax, bool $lateFee): array
     {
-        // The arrow function's parameter is typed like any other, because the type-coverage floor counts it
-        // like any other — and here it is also the only thing saying WHAT is being frozen. A line whose
-        // shape nobody states is one somebody later reads a different column off, and this array is copied
-        // onto an issued document that must not change afterwards.
-        return array_values($order->items()->orderBy('id')->get()->map(static fn (OrderItem $item): array => [
-            'description' => $item->description,
-            'quantity' => $item->quantity,
-            'unit_price_minor' => $item->unit_price_minor,
-            'total_minor' => $item->total_minor,
-            'currency' => $item->currency,
-            'type' => $item->type->value,
-        ])->all());
+        // Typed like any other value, because the type-coverage floor counts it like any other — and here it
+        // is also the only thing saying WHAT is being frozen. A line whose shape nobody states is one somebody
+        // later reads a different column off, and this array is copied onto an issued document that must not
+        // change afterwards.
+        /** @var list<OrderItem> $items */
+        $items = array_values($order->items()->orderBy('id')->get()->all());
+        $shares = $tax instanceof DeterminedOrderTax ? $this->taxShares($tax->tax, $items) : [];
+        $rate = $tax instanceof DeterminedOrderTax ? $this->lineRate($tax) : 0.0;
+
+        $lines = [];
+
+        foreach ($items as $index => $item) {
+            $line = [
+                'description' => $item->description,
+                'quantity' => $item->quantity,
+                'unit_price_minor' => $item->unit_price_minor,
+                'total_minor' => $item->total_minor,
+                'currency' => $item->currency,
+                'type' => $item->type->value,
+            ];
+
+            if ($lateFee || $tax instanceof DeterminedOrderTax) {
+                $net = $item->total_minor - ($shares[$index] ?? 0);
+
+                $line['unit_price_minor'] = $item->quantity !== 0 ? intdiv($net, $item->quantity) : $net;
+                $line['net_minor'] = $net;
+                $line['tax_rate'] = $rate;
+            }
+
+            $lines[] = $line;
+        }
+
+        return $lines;
+    }
+
+    /**
+     * The rate a line states, as a percentage: the statutory rate the supply was taxed at.
+     *
+     * The quotient of the rounded amounts is no rate a country has, and a line states the law's. Where the
+     * calculator named no rate although tax was charged, the quotient to one decimal stands in, which is what
+     * the lines frozen from Stripe state for the same reason.
+     */
+    private function lineRate(DeterminedOrderTax $tax): float
+    {
+        if ($tax->appliedRateBps > 0) {
+            return $tax->appliedRateBps / 100;
+        }
+
+        return $tax->net->minorUnits > 0 ? round($tax->tax->minorUnits / $tax->net->minorUnits * 100, 1) : 0.0;
+    }
+
+    /**
+     * The document's tax shared out over its lines in proportion to their totals, adding up to it exactly.
+     *
+     * A discount line takes a negative share, as its total is negative. Lines that add up to nothing have no
+     * proportion to share by, and their order charged no tax to share either.
+     *
+     * @param  list<OrderItem>  $items
+     * @return list<int>
+     */
+    private function taxShares(Money $tax, array $items): array
+    {
+        $totals = array_map(static fn (OrderItem $item): int => $item->total_minor, $items);
+
+        if ($tax->isZero() || $totals === [] || array_sum($totals) <= 0) {
+            return array_fill(0, count($totals), 0);
+        }
+
+        return array_map(static fn (Money $share): int => $share->minorUnits, $tax->allocate(...$totals));
     }
 }

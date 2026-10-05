@@ -9,11 +9,13 @@ use Carbon\CarbonImmutable;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
+use InvalidArgumentException;
 use Pushery\Billing\Contracts\CreatorTaxStatusResolver;
 use Pushery\Billing\Contracts\RoutesMoney;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\RefundAttemptStatus;
 use Pushery\Billing\Enums\RefundKind;
 use Pushery\Billing\Enums\TaxBaseChangeReason;
 use Pushery\Billing\Exceptions\CommissionTermsUnknown;
@@ -23,8 +25,10 @@ use Pushery\Billing\Marketplace\RoutedRefundCorrector;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\RefundAttempt;
+use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
+use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
 use Pushery\Billing\ValueObjects\RefundResult;
@@ -81,12 +85,37 @@ final readonly class BillingAdmin
         $this->log->record('admin.comp', $owner, ['tier' => $tierKey, 'reason' => $reason], AuditSource::Admin, $actor);
     }
 
-    /** Cancel an owner's subscription immediately (support-initiated), recording the reason. */
-    public function cancel(Model $owner, ?string $reason = null, ?Model $actor = null): void
+    /**
+     * Cancel an owner's subscription immediately (support-initiated), recording the reason.
+     *
+     * Answers whether there was a running subscription to cancel, in the scope and of the type named: the
+     * platform's default contract unless a merchant or a type is given. The row read is the one the actions end,
+     * the latest in that scope, and it counts as running unless it is terminated or in a terminal state. Nothing
+     * running is reported rather than recorded. The actions return quietly when they find no row, and recording
+     * the cancel anyway told support a subscription had ended that went on billing.
+     */
+    public function cancel(Model $owner, ?string $reason = null, ?Model $actor = null, ?MerchantScope $merchant = null, ?string $type = null): bool
     {
-        $this->actions->cancelNow($owner);
+        $subscription = Subscription::model()::query()
+            ->forOwner($owner)
+            ->forMerchant($merchant)
+            ->ofType($type)
+            ->latest('id')
+            ->first();
 
-        $this->log->record('admin.cancel', $owner, ['reason' => $reason], AuditSource::Admin, $actor);
+        if (! $subscription instanceof Subscription || $subscription->terminated() || $subscription->isReplaceableByANewSubscription()) {
+            return false;
+        }
+
+        $this->actions->cancelNow($owner, $merchant, $type);
+
+        $this->log->record('admin.cancel', $owner, [
+            'reason' => $reason,
+            ...($merchant instanceof MerchantScope ? ['merchant' => $merchant->uid()] : []),
+            ...($type !== null ? ['type' => $type] : []),
+        ], AuditSource::Admin, $actor);
+
+        return true;
     }
 
     /**
@@ -99,8 +128,7 @@ final readonly class BillingAdmin
      * goes back AND the customer no longer keeps the credit they were refunded for. A refund of anything
      * that is not a tracked add-on (a subscription invoice) reverses nothing. The provider round-trip is
      * kept OUTSIDE any transaction; only the local reversal is transactional.
-     */
-    /**
+     *
      * @param  ?string  $reason  what happened in THIS case, in somebody's own words
      * @param  RefundKind  $kind  what KIND of thing it was — a category the books can group by, which a
      *                            sentence cannot. Trailing and defaulted so every existing call site keeps
@@ -113,12 +141,20 @@ final readonly class BillingAdmin
         // row twice is two readings that can differ: a concurrent reversal between them would price this
         // refund against one state and cap it against another.
         $charge = $this->routedChargeFor($chargeReference);
-        $attempt = $charge instanceof MerchantCharge ? $this->beginReversal($charge, $amount) : null;
+        $attempt = $charge instanceof MerchantCharge ? $this->attemptFor($charge, $amount, $idempotencyKey) : null;
+
+        // A refund the caller's key has already made. The provider answered once under that key and the money
+        // is booked; asking again would be answered from its idempotency window while that lasts and as a second
+        // refund after it, which nothing here would book.
+        if ($attempt instanceof RefundAttempt && $attempt->status === RefundAttemptStatus::Succeeded) {
+            return $this->madeBy($attempt);
+        }
 
         // The attempt's key when there is one. The row is written BEFORE the provider is called and its id
         // is what the key is derived from, so a retry of the same intent reaches the provider with the same
         // key and is collapsed there -- which a key recomputed from amounts cannot promise, because the
-        // amounts are exactly what a partly-applied reversal changes.
+        // amounts are exactly what a partly-applied reversal changes. A caller that named the refund with a
+        // key of its own finds that key on the row instead.
         //
         // Unchanged for a single-seller charge. There is no attempt row, so the shipped key is byte-for-byte
         // what it always was.
@@ -159,12 +195,15 @@ final readonly class BillingAdmin
         }
 
         if ($result->successful) {
-            $this->refunds->reverse($chargeReference, $amount, $reason, AuditSource::Admin, $actor);
+            $this->refunds->reverse($chargeReference, $this->refundedHere($owner, $chargeReference, $result, $amount), $reason, AuditSource::Admin, $actor);
             $this->correctChain($chargeReference, $result->amount, $attempt);
         }
 
         $this->log->record('admin.refund', $owner, [
             'charge' => $chargeReference,
+            // The provider's reference for this refund, which tells a second refund from a retry of the first
+            // when the add-on reversal sums what was refunded here.
+            'refund' => $result->reference,
             'amount' => $amount->minorUnits,
             'currency' => $amount->currency,
             'reason' => $reason,
@@ -175,6 +214,47 @@ final readonly class BillingAdmin
         ], AuditSource::Admin, $actor);
 
         return $result;
+    }
+
+    /**
+     * What this charge has been refunded through here, this refund included: the cumulative total the add-on reversal
+     * reads.
+     *
+     * The reversal takes a cumulative total because the provider's refund webhook reports one, and handing it this
+     * refund's own amount made a second partial refund take back only the difference between the two. Summed from
+     * this package's record of the refunds of the sale it made, each counted once by the reference the provider gave
+     * it, so a retry under the same key is not counted twice. The sum can lag the provider's total and never exceed
+     * it: a refund made elsewhere reaches the reversal with the webhook's total, and a webhook that arrived before
+     * this call returned leaves nothing new to take back. Adding this amount to what the purchase had reversed would
+     * have counted that refund twice.
+     */
+    private function refundedHere(Model $owner, string $chargeReference, RefundResult $result, Money $amount): Money
+    {
+        $refunds = [$this->refundIdentity($result->reference, $chargeReference, $amount->minorUnits, $amount->currency) => $amount->minorUnits];
+
+        $recorded = BillingEvent::model()::query()
+            ->where('type', 'admin.refund')
+            ->where('subject_type', $owner->getMorphClass())
+            ->where('subject_id', $owner->getKey())
+            ->pluck('payload');
+
+        foreach ($recorded as $payload) {
+            // A refund of the platform's own supply is no refund of the sale; recorded before it said so, it carries
+            // the one kind that path is taken for.
+            if (! is_array($payload) || ($payload['charge'] ?? null) !== $chargeReference || ($payload['currency'] ?? null) !== $amount->currency || ($payload['successful'] ?? null) !== true || ! is_int($payload['amount'] ?? null) || ($payload['supply'] ?? null) === 'platform' || ($payload['kind'] ?? null) === RefundKind::WithdrawnBuyerFee->value) {
+                continue;
+            }
+
+            $refunds[$this->refundIdentity($payload['refund'] ?? null, $chargeReference, $payload['amount'], $amount->currency)] = $payload['amount'];
+        }
+
+        return new Money(array_sum($refunds), $amount->currency);
+    }
+
+    /** One refund's identity: the provider's reference, or for a refund recorded without one the key a retry of it collapses onto. */
+    private function refundIdentity(mixed $reference, string $chargeReference, int $amount, string $currency): string
+    {
+        return is_string($reference) && $reference !== '' ? $reference : 'refund:'.$chargeReference.':'.$amount.':'.$currency;
     }
 
     /**
@@ -283,6 +363,8 @@ final readonly class BillingAdmin
 
         $this->log->record('admin.refund', $owner, [
             'charge' => $chargeReference,
+            // Not a refund of the sale: what the add-on reversal sums leaves this out.
+            'supply' => 'platform',
             'amount' => $amount->minorUnits,
             'currency' => $amount->currency,
             'reason' => $reason,
@@ -316,18 +398,6 @@ final readonly class BillingAdmin
         return is_string($column) ? $column : 'plan';
     }
 
-    /**
-     * The routing a refund has to know about, or null when this charge was not routed.
-     *
-     * Read off the ROW rather than resolved again, and that is the whole point of the row carrying it. The
-     * lane decides how the reversal happens -- a destination charge unwinds its transfer with the refund, a
-     * separate transfer needs its own call -- so taking it from today's configuration would reverse an old
-     * sale as though it had been made under the current lane, silently and in either direction.
-     *
-     * A row written before the lane was recorded answers null here, and null is the honest answer: it means
-     * nobody can say which reversal this sale needs, and inventing one is how a merchant either keeps a
-     * refunded share or receives a flag that does nothing.
-     */
     /** The routed charge behind a reference, or null when the payment was never routed at all. */
     private function routedChargeFor(string $chargeReference): ?MerchantCharge
     {
@@ -347,7 +417,7 @@ final readonly class BillingAdmin
      *
      * @throws CommissionTermsUnknown when a partial reversal has no terms to price the remainder with
      */
-    private function beginReversal(MerchantCharge $charge, Money $amount): RefundAttempt
+    private function beginReversal(MerchantCharge $charge, Money $amount, ?string $idempotencyKey = null): RefundAttempt
     {
         $terms = $charge->frozenFee();
         $full = $charge->refunded_minor + $amount->minorUnits >= $charge->gross_minor;
@@ -366,11 +436,83 @@ final readonly class BillingAdmin
 
         [$merchantClawback, $feeReturned] = new ClawbackCalculator()->forRefund($charge, $terms, $amount);
 
-        return $this->routed->beginRefund($charge, $amount, $merchantClawback, $feeReturned);
+        return $this->routed->beginRefund($charge, $amount, $merchantClawback, $feeReturned, idempotencyKey: $idempotencyKey);
     }
 
     /**
-     * The lane a reversal has to take, built from the charge ALREADY IN HAND.
+     * The reversal a refund on a routed sale is made under: the one the caller's own key already opened, or a new one.
+     *
+     * A caller that names its refund with a key of its own retries under that key, and the retry has to find the
+     * row the first try wrote. It used to open a second row, keyed from that row's id, so the provider took the
+     * retry for a different refund: a partial one was paid out twice, and a full one came back refused and was
+     * booked as a failure. Without a key of the caller's, every call is a refund of its own, as before.
+     *
+     * The latest row the key opened on this charge answers. One still pending is asked again under its key, and the
+     * provider collapses the repeat; one that succeeded is the refund already made. Only a refusal opens another,
+     * under the key and a count, because nothing moved under it and the same key would only fetch the refusal back.
+     *
+     * @throws InvalidArgumentException when the key already names a refund of another charge or another amount
+     */
+    private function attemptFor(MerchantCharge $charge, Money $amount, ?string $idempotencyKey): RefundAttempt
+    {
+        if ($idempotencyKey === null) {
+            return $this->beginReversal($charge, $amount);
+        }
+
+        $opened = RefundAttempt::model()::query()
+            ->where('provider', $charge->provider)
+            ->where('charge_reference', $charge->charge_reference)
+            ->orderBy('id')
+            ->get()
+            ->filter(static fn (RefundAttempt $attempt): bool => $attempt->idempotency_key === $idempotencyKey || str_starts_with($attempt->idempotency_key, $idempotencyKey.'#'));
+
+        $latest = $opened->last();
+
+        if (! $latest instanceof RefundAttempt) {
+            if (RefundAttempt::model()::query()->where('idempotency_key', $idempotencyKey)->exists()) {
+                throw new InvalidArgumentException("The idempotency key [{$idempotencyKey}] already names a refund of another charge.");
+            }
+
+            return $this->beginReversal($charge, $amount, $idempotencyKey);
+        }
+
+        if ($latest->amount_minor !== $amount->minorUnits || $latest->currency !== $amount->currency) {
+            throw new InvalidArgumentException("The idempotency key [{$idempotencyKey}] already names a refund of another amount.");
+        }
+
+        if ($latest->status === RefundAttemptStatus::Failed) {
+            return $this->beginReversal($charge, $amount, $idempotencyKey.'#'.($opened->count() + 1));
+        }
+
+        return $latest;
+    }
+
+    /**
+     * What a refund the caller's key has already made returns, without the provider being asked again.
+     *
+     * The provider's own reference for the refund is not kept, so the result carries the key the refund was asked
+     * under, and the amount the row recorded.
+     */
+    private function madeBy(RefundAttempt $attempt): RefundResult
+    {
+        return new RefundResult(
+            successful: true,
+            reference: $attempt->idempotency_key,
+            amount: new Money($attempt->amount_minor, $attempt->currency),
+        );
+    }
+
+    /**
+     * The lane a reversal has to take, built from the charge ALREADY IN HAND, or null when it was not routed.
+     *
+     * Read off the ROW rather than resolved again, and that is the whole point of the row carrying it. The
+     * lane decides how the reversal happens -- a destination charge unwinds its transfer with the refund, a
+     * separate transfer needs its own call -- so taking it from today's configuration would reverse an old
+     * sale as though it had been made under the current lane, silently and in either direction.
+     *
+     * A row written before the lane was recorded answers null here, and null is the honest answer: it means
+     * nobody can say which reversal this sale needs, and inventing one is how a merchant either keeps a
+     * refunded share or receives a flag that does nothing.
      *
      * It used to look the row up itself, from a reference, while `refund()` had just looked up the same row
      * — and `refund()` carried a comment saying the charge was resolved once. The comment described the

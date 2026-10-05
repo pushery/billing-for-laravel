@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Pushery\Billing\Discounts\CouponCodes;
 use Pushery\Billing\Discounts\CouponRedeemer;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Events\MandateEstablished;
@@ -17,6 +18,7 @@ use Pushery\Billing\Models\Coupon;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Models\SubscriptionIntent;
 use Pushery\Billing\Support\TierInterval;
+use Pushery\Billing\Support\UniqueRow;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
@@ -145,7 +147,8 @@ final readonly class StartSubscriptionOnMandate
         //
         // Reusing the row rather than inserting a second one is also the right answer on its own terms: the
         // id survives, and so does everything joined to it.
-        $subscription = Subscription::model()::query()->updateOrCreate(
+        $subscription = UniqueRow::updateOrCreate(
+            Subscription::model()::query(),
             [
                 'owner_type' => $intent->owner_type,
                 'owner_id' => $intent->owner_id,
@@ -224,7 +227,7 @@ final readonly class StartSubscriptionOnMandate
 
         // Scoped to the issuer, matching the merchant this effect writes its subscription row for — which
         // is the platform on this lane (see the merchant_uid it upserts with).
-        $coupon = Coupon::model()::query()->issuedBy(MerchantScope::platform())->where('code', $code)->first();
+        $coupon = CouponCodes::find(Coupon::model()::query()->issuedBy(MerchantScope::platform()), $code);
         $owner = $this->ownerOf($intent);
 
         if (! $coupon instanceof Coupon || ! $owner instanceof Model) {

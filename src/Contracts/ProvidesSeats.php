@@ -9,7 +9,12 @@ namespace Pushery\Billing\Contracts;
  */
 interface ProvidesSeats
 {
-    /** The number of seats the owner is entitled to / paying for. */
+    /**
+     * The number of seats the owner is entitled to / paying for.
+     *
+     * Asked again after a seat sync wrote, so that a sync overtaken by a later membership change corrects itself:
+     * count afresh on every call rather than return a figure loaded with the model.
+     */
     public function seatCount(): int;
 
     /** The number of seats currently occupied. */

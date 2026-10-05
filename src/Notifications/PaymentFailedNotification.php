@@ -6,6 +6,8 @@ namespace Pushery\Billing\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Enums\BillingAction;
+use Pushery\Billing\Support\LocalizedMoney;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -30,13 +32,13 @@ final class PaymentFailedNotification extends BillingNotification
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.payment_failed.subject'))
             ->line(Lang::get('billing::notifications.payment_failed.intro'))
-            ->line($this->amount->format().' · '.$this->invoiceReference)
+            ->line(LocalizedMoney::format($this->amount).' · '.$this->invoiceReference)
             ->line(Lang::get('billing::notifications.payment_failed.outro'));
 
         return $this->withAction(
             $mail,
             Lang::get('billing::notifications.payment_failed.cta'),
-            $this->actionUrl('billing.account.recovery'),
+            $this->actionFor($notifiable, BillingAction::Recovery),
         );
     }
 

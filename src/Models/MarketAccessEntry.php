@@ -50,7 +50,7 @@ class MarketAccessEntry extends Model
     #[Override]
     protected static function appendOnlyDeleteRefusal(): string
     {
-        return 'This row carries a statutory retention window; retention removes it on its schedule, '
-            .'inside purging(). A caller does not delete it.';
+        return 'A market-access entry is not deleted by a caller, and no retention rule removes it: the '
+            .'sales made while a market was open need the record that explains them.';
     }
 }

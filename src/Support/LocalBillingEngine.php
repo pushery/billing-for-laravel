@@ -63,17 +63,16 @@ use Throwable;
  *
  * **How the next driver gets this cycle — the extension point, and it is not inheritance.**
  *
- * Construct it. `new LocalBillingEngine('adyen', $adyenRails, $credit, $config)` is the whole of what a
+ * Construct it. `new LocalBillingEngine('acme', $acmeRails, $credit, $config)` is the whole of what a
  * second driver does; there is no method to implement and no hook to fill. Everything provider-shaped —
  * how to charge, what a mandate is, what a result means — already crosses the `PaymentRails` seam, so a
  * driver supplies rails and a name and inherits the cycle by using it.
  *
- * The milestone asked for an abstract base class the second driver extends. An abstract class earns its
- * keep when subclasses must supply something, and here they must not: it would have no abstract member,
- * which is a base class in name only. It would also cost something real — a subclass can override any
- * step, so "Adyen runs what Mollie runs" quietly degrades into "Adyen runs something similar", which is
- * the outcome the shared core exists to prevent. The milestone's own criterion allows this reading: the
- * provider-specific parts are to be extracted as abstract methods **or injected collaborators**.
+ * This engine is not an abstract base class the second driver extends. An abstract class earns its keep
+ * when subclasses must supply something, and here they must not: it would have no abstract member, which is
+ * a base class in name only. It would also cost something real — a subclass can override any step, so "the
+ * second driver runs what Mollie runs" quietly degrades into "it runs something similar", which is the
+ * outcome the shared core exists to prevent. The provider-specific parts are injected collaborators instead.
  *
  * Two things hold that claim rather than stating it. `LocalEngineIsReusableByASecondDriverTest` drives the
  * full cycle — including the dunning half, not just the happy path — for a provider that exists nowhere in
@@ -90,6 +89,9 @@ use Throwable;
  */
 final readonly class LocalBillingEngine implements BillingEngine
 {
+    /** What a collected cycle resets: the dunning level, the clock the dunning run escalates by, and the last reminder's day. */
+    private const array ARREARS_CLEARED = ['dunning_level' => 0, 'delinquent_since' => null, 'payment_reminded_on' => null];
+
     public function __construct(
         private string $provider,
         private PaymentRails $rails,
@@ -154,14 +156,15 @@ final readonly class LocalBillingEngine implements BillingEngine
     {
         $moment = $now instanceof DateTimeInterface ? Carbon::instance($now) : Carbon::now();
 
-        // `cursor()` rather than `get()`: the run is a scheduled sweep over the whole table, and holding
+        // `lazyById()` rather than `get()`: the run is a scheduled sweep over the whole table, and holding
         // every due subscription in memory is the shape that works in development and dies on the install
-        // that most needs it to work.
+        // that most needs it to work. Nor `cursor()`, which PDO buffers whole on MySQL and PostgreSQL, and
+        // which keeps its statement open while the cycle below writes and rolls back. Each page here is read
+        // completely before any subscription on it is processed.
         $due = Subscription::model()::query()
             ->where('provider', $this->provider)
             ->dueForProcessing($moment)
-            ->orderBy('id')
-            ->cursor();
+            ->lazyById();
 
         foreach ($due as $subscription) {
             try {
@@ -205,8 +208,7 @@ final readonly class LocalBillingEngine implements BillingEngine
                 SubscriptionState::Grace->value,
                 SubscriptionState::Trialing->value,
             ])
-            ->orderBy('id')
-            ->cursor();
+            ->lazyById();
 
         foreach ($lapsed as $subscription) {
             $subscription->update(['status' => SubscriptionState::Ended->value]);
@@ -439,12 +441,7 @@ final readonly class LocalBillingEngine implements BillingEngine
      */
     public function settle(string $paymentReference, ?string $currency = null): void
     {
-        $order = Order::model()::query()
-            ->where('provider', $this->provider)
-            ->where('payment_reference', $paymentReference)
-            ->where('status', OrderStatus::Processing)
-            ->whereNotNull('subscription_id')
-            ->first();
+        $order = $this->cycleInFlight($paymentReference);
 
         if (! $order instanceof Order) {
             // Not a cycle. A late fee in flight is the other order this engine charges, and it closes on its own
@@ -522,12 +519,7 @@ final readonly class LocalBillingEngine implements BillingEngine
      */
     public function fail(string $paymentReference, string $reason = 'charge_refused'): void
     {
-        $order = Order::model()::query()
-            ->where('provider', $this->provider)
-            ->where('payment_reference', $paymentReference)
-            ->where('status', OrderStatus::Processing)
-            ->whereNotNull('subscription_id')
-            ->first();
+        $order = $this->cycleInFlight($paymentReference);
 
         if (! $order instanceof Order) {
             // A refused late fee is open again for the next paid cycle, and nobody is dunned for it. The reference
@@ -540,6 +532,10 @@ final readonly class LocalBillingEngine implements BillingEngine
         $subscription = Subscription::model()::query()->find($order->subscription_id);
 
         if (! $subscription instanceof Subscription) {
+            // The subscription is gone, so nobody is dunned. The credit the cycle spent is still the
+            // customer's, and the order names them.
+            $this->returnSpentCreditTo($this->ownerFor($order->owner_type, $order->owner_id), $order);
+
             $order->update(['status' => OrderStatus::Failed, 'processed_at' => Carbon::now()]);
 
             return;
@@ -676,6 +672,10 @@ final readonly class LocalBillingEngine implements BillingEngine
      * quantity and unit price. After a change inside the period, or when a cancellation ends it early, each
      * quantity is billed for the days it held ({@see Subscription::seatDaysUntil()}), and the line names the
      * seat-days, because no single seat count describes such a period.
+     *
+     * The tier is priced the same way. The line is priced at the tier in force when the period closes, and a tier
+     * held earlier in the period adds the difference its own price makes for the days it held
+     * ({@see Subscription::accrueTierChange()}), so each tier is billed for its days.
      */
     private function planLine(Subscription $subscription, Money $plan): OrderItemDraft
     {
@@ -686,8 +686,9 @@ final readonly class LocalBillingEngine implements BillingEngine
 
         if ($seats === null || ! $start instanceof Carbon || ! $periodEnd instanceof Carbon) {
             $provided = $this->planForTheDaysProvided($subscription, $plan);
+            $billed = max(0, $provided->minorUnits + $this->tierAdjustment($subscription));
 
-            return new OrderItemDraft($description, $provided->minorUnits, $seats ?? 1, $provided->currency, OrderItemType::Subscription);
+            return new OrderItemDraft($description, $billed, $seats ?? 1, $provided->currency, OrderItemType::Subscription);
         }
 
         $days = (int) round($start->diffInDays($periodEnd));
@@ -699,14 +700,37 @@ final readonly class LocalBillingEngine implements BillingEngine
 
         // One quantity for the whole period is a quantity. Seat-days that merely divide by the period are not:
         // two seats and then five can add up to four seats' worth, and no invoice should claim four seats.
-        if ($subscription->seat_days_accrued === 0 && $seatDays === $seats * $days) {
+        if ($subscription->seat_days_accrued === 0 && $seatDays === $seats * $days && $subscription->tier_adjustment_accrued === 0) {
             return new OrderItemDraft($description, $plan->minorUnits, $seats, $plan->currency, OrderItemType::Subscription);
         }
 
-        // allocate() gives the odd minor unit to the first share, the same way the prorated refund decides it.
-        [$billed] = $plan->multipliedBy($seatDays)->allocate(1, $days - 1);
+        // The earlier tiers' difference is added BEFORE the division, so the period is rounded once. allocate() gives
+        // the odd minor unit to the first share, the same way the prorated refund decides it.
+        $value = max(0, $plan->minorUnits * $seatDays + $subscription->tier_adjustment_accrued);
+        [$billed] = Money::of($value, $plan->currency)->allocate(1, $days - 1);
 
         return new OrderItemDraft("{$description} ({$seatDays} seat-days)", $billed->minorUnits, 1, $plan->currency, OrderItemType::Subscription);
+    }
+
+    /**
+     * What the tiers held earlier in the period add to the plan charge of a subscription without seats, in minor units.
+     *
+     * The accrued difference divided by the period's days. A period shorter than two days has no whole day an
+     * earlier tier could have held apart from the one it is billed for, and adds nothing, as it splits nothing
+     * for seats either.
+     */
+    private function tierAdjustment(Subscription $subscription): int
+    {
+        $start = $subscription->current_period_start;
+        $periodEnd = $subscription->current_period_end;
+
+        if ($subscription->tier_adjustment_accrued === 0 || ! $start instanceof Carbon || ! $periodEnd instanceof Carbon) {
+            return 0;
+        }
+
+        $days = (int) round($start->diffInDays($periodEnd));
+
+        return $days < 2 ? 0 : (int) round($subscription->tier_adjustment_accrued / $days);
     }
 
     /**
@@ -854,8 +878,9 @@ final readonly class LocalBillingEngine implements BillingEngine
      * The unique constraint is what makes the claim atomic, so a concurrent tick loses the insert rather
      * than racing on a read. An order that already exists and is not still open belongs to a completed
      * attempt and is left alone.
+     *
+     * @param  list<OrderItemDraft>  $drafts
      */
-    /** @param  list<OrderItemDraft>  $drafts */
     private function claimCycle(Subscription $subscription, Money $amount, array $drafts, Carbon $moment): ?Order
     {
         return DB::transaction(function () use ($subscription, $amount, $drafts, $moment): ?Order {
@@ -869,6 +894,18 @@ final readonly class LocalBillingEngine implements BillingEngine
                 // was never collected, so the cycle is reopened rather than left alone. Anything else —
                 // paid, or still processing — belongs to an attempt that is not ours to touch.
                 if ($existing->status !== OrderStatus::Failed) {
+                    return null;
+                }
+
+                // Taken from `failed` by one run only. Two overlapping runs both read the failed order, and an
+                // unconditional reopen let both of them charge the cycle and book its credit twice; the status in
+                // the statement makes the database decide, as the unique key decides a first attempt.
+                $claimed = Order::model()::query()
+                    ->whereKey($existing->getKey())
+                    ->where('status', OrderStatus::Failed)
+                    ->update(['status' => OrderStatus::Processing]);
+
+                if ($claimed !== 1) {
                     return null;
                 }
 
@@ -1100,7 +1137,7 @@ final readonly class LocalBillingEngine implements BillingEngine
                 $subscription->update([
                     'status' => SubscriptionState::Ended->value,
                     'scheduled_processing_at' => null,
-                    'dunning_level' => 0,
+                    ...self::ARREARS_CLEARED,
                 ]);
 
                 return;
@@ -1108,9 +1145,14 @@ final readonly class LocalBillingEngine implements BillingEngine
 
             $subscription->advanceCycle(new TierInterval($this->config)->for($subscription->tier_key));
 
-            if ($subscription->status === SubscriptionState::PastDue->value) {
-                $subscription->update(['status' => SubscriptionState::Active->value, 'dunning_level' => 0]);
-            }
+            // A collected cycle ends the arrears, whatever the status said. The clock goes with the level: the
+            // dunning run escalates by `delinquent_since` alone, so a clock left behind went on warning, charging
+            // a fee to and locking out a customer who had paid, and the next failure took it over and found no
+            // retry left on a ladder that had run out long before.
+            $subscription->update([
+                ...($subscription->status === SubscriptionState::PastDue->value ? ['status' => SubscriptionState::Active->value] : []),
+                ...self::ARREARS_CLEARED,
+            ]);
 
             // A collected trial is a paying customer, and the status has to say so. Left at `trialing` the
             // presenter goes on reporting a trial that ended — so the account hub says "free trial" to
@@ -1130,17 +1172,26 @@ final readonly class LocalBillingEngine implements BillingEngine
             }
         });
 
-        // Outside the transaction above, and deliberately. The money is collected and the cycle has moved
-        // on; raising the document is a separate concern, and rolling those two back together would undo a
-        // correct cycle because a piece of paper failed. The issuer swallows its own failure for the same
-        // reason — a missing invoice is recoverable, a cycle that reports failure after taking the money
-        // is not.
-        $this->invoices?->issue($order->fresh() ?? $order);
+        // Once the cycle is committed, and not before. A run of its own, as the sweep makes, holds no
+        // transaction here, and this happens at once. A webhook effect that settles a held cycle does hold one,
+        // and the transaction above is only a savepoint inside it: the document would take the number lock
+        // and keep it until that run ends, while the fees below wait on the provider, and a run that rolled
+        // back after a fee was charged would put the fee back to open with the money already taken. So all
+        // three wait for the commit, and a run that rolls back leaves no document, no announcement and no
+        // charge behind it.
+        DB::afterCommit(function () use ($subscription, $order, $amount, $reference): void {
+            // Outside the transaction above, and deliberately. The money is collected and the cycle has moved
+            // on; raising the document is a separate concern, and rolling those two back together would undo a
+            // correct cycle because a piece of paper failed. The issuer swallows its own failure for the same
+            // reason — a missing invoice is recoverable, a cycle that reports failure after taking the money
+            // is not.
+            $this->invoices?->issue($order->fresh() ?? $order);
 
-        Event::dispatch(new PaymentSucceeded((string) $subscription->owner_id, $amount, $reference ?? (string) $order->id));
+            Event::dispatch(new PaymentSucceeded((string) $subscription->owner_id, $amount, $reference ?? (string) $order->id));
 
-        // After the cycle, never inside it: the cycle is collected and recorded whatever becomes of a fee.
-        $this->collectLateFees($subscription);
+            // After the cycle, never inside it: the cycle is collected and recorded whatever becomes of a fee.
+            $this->collectLateFees($subscription);
+        });
     }
 
     /**
@@ -1253,6 +1304,27 @@ final readonly class LocalBillingEngine implements BillingEngine
         $this->invoices?->issue($fee->fresh() ?? $fee);
     }
 
+    /**
+     * The cycle whose charge is in flight under this reference, or null for anything else.
+     *
+     * A cycle names its subscription. Once that row is deleted, the foreign key nulls the column on every
+     * engine that enforces it, so a cycle is known by the period it bills as well: a one-time purchase and
+     * a late fee carry neither.
+     */
+    private function cycleInFlight(string $paymentReference): ?Order
+    {
+        $cycle = Order::model()::query()
+            ->where('provider', $this->provider)
+            ->where('payment_reference', $paymentReference)
+            ->where('status', OrderStatus::Processing)
+            ->where(static fn (Builder $named): Builder => $named
+                ->whereNotNull('subscription_id')
+                ->orWhereNotNull('period_start'))
+            ->first();
+
+        return $cycle instanceof Order ? $cycle : null;
+    }
+
     /** The late fee whose charge is in flight under this reference, or null for anything else. */
     private function lateFeeInFlight(string $paymentReference): ?Order
     {
@@ -1301,15 +1373,6 @@ final readonly class LocalBillingEngine implements BillingEngine
     }
 
     /**
-     * Resolve the subscription's owner back to a model through the morph map.
-     *
-     * The same shape ScheduledSwapRunner and AdvanceDunningCommand use, and for the same reason: the owner
-     * is the CONSUMER's model, so there is no relation on the subscription to follow — only a morph type
-     * the application registered. An owner that cannot be resolved (deleted between the sweep selecting the
-     * row and this running) yields null rather than an exception, because a missing owner is an ordinary
-     * race here, not a defect.
-     */
-    /**
      * When the next collection attempt is due, or null once the ladder is exhausted.
      *
      * The clock runs from when the arrears STARTED, not from the last attempt — a ladder anchored to
@@ -1357,6 +1420,15 @@ final readonly class LocalBillingEngine implements BillingEngine
         return $method === '' || $this->capabilities->canRecurWith($method);
     }
 
+    /**
+     * Resolve the subscription's owner back to a model through the morph map.
+     *
+     * The same shape ScheduledSwapRunner and AdvanceDunningCommand use, and for the same reason: the owner
+     * is the CONSUMER's model, so there is no relation on the subscription to follow — only a morph type
+     * the application registered. An owner that cannot be resolved (deleted between the sweep selecting the
+     * row and this running) yields null rather than an exception, because a missing owner is an ordinary
+     * race here, not a defect.
+     */
     private function ownerOf(Subscription $subscription): ?Model
     {
         return $this->ownerFor($subscription->owner_type, $subscription->owner_id);

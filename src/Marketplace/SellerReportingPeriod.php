@@ -113,14 +113,17 @@ final readonly class SellerReportingPeriod
         foreach ([1, 2, 3, 4] as $quarter) {
             $period = CountingPeriod::quarter($year, $quarter);
 
+            // One reading per counter and quarter. Asking each figure on its own read the same documents twice
+            // and the same sales three times, for every seller and quarter of the period.
+            $settled = $this->inflow->figuresIn($seller, $currency, $period);
+            $arranged = $this->intermediated()->figuresIn($seller, $currency, $period);
+
             $quarters[$quarter] = new SellerQuarterFigures(
                 quarter: $quarter,
                 // What reached the seller, from both kinds of record: the settlement documents of the chain,
                 // and the sales the platform arranged as an intermediary, which produce no such document.
-                grossInflow: $this->inflow->countedIn($seller, $currency, $period)
-                    ->plus($this->intermediated()->countedIn($seller, $currency, $period)),
-                transactions: $this->inflow->transactionsIn($seller, $currency, $period)
-                    + $this->intermediated()->transactionsIn($seller, $currency, $period),
+                grossInflow: $settled['gross']->plus($arranged['gross']),
+                transactions: $settled['transactions'] + $arranged['transactions'],
                 // Not simply what the platform kept. "Separately withheld fees" asks what the SELLER was
                 // charged. Under a commission chain the answer is nothing: the platform's margin is the
                 // difference between two supplies, never billed to them, and reporting it would invent a
@@ -128,7 +131,7 @@ final readonly class SellerReportingPeriod
                 // the seller for arranging the sale, and that fee is exactly what the field is for. So the
                 // field carries the intermediated fee and nothing from the chain, per sale rather than per
                 // seller, because one seller can have sold both ways.
-                feesWithheld: $this->intermediated()->feesIn($seller, $currency, $period),
+                feesWithheld: $arranged['fees'],
             );
         }
 

@@ -13,6 +13,8 @@ use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Models\BillingWebhookEvent;
 use Pushery\Billing\Models\WebhookEffectRun;
+use Pushery\Billing\Support\WebhookEffectLedger;
+use Pushery\Billing\Webhooks\RepeatableEffect;
 use Pushery\Billing\Webhooks\WebhookEffectRegistry;
 
 /**
@@ -35,25 +37,42 @@ final class ReplayWebhooksCommand extends Command
     protected $signature = 'billing:webhooks:replay
         {--event=* : Replay these provider event ids (repeatable)}
         {--failed : Replay every delivery that has a failed effect run}
+        {--type=* : Only deliveries of these provider event types (repeatable)}
+        {--rerun=* : Run this effect again where it already did its work; only an effect that implements RepeatableEffect (repeatable)}
         {--since= : Only deliveries received after this date (e.g. "-7 days")}
         {--limit=100 : Stop after this many deliveries}
         {--dry-run : List what would be replayed, change nothing}';
 
     protected $description = 'Re-drive stored webhook deliveries whose effects failed';
 
-    public function handle(WebhookEventMapper $platform, WebhookEffectRegistry $registry): int
+    public function handle(WebhookEventMapper $platform, WebhookEffectRegistry $registry, WebhookEffectLedger $ledger): int
     {
         /** @var list<string> $ids */
         $ids = array_values(array_filter((array) $this->option('event'), is_string(...)));
+        /** @var list<string> $types */
+        $types = array_values(array_filter((array) $this->option('type'), is_string(...)));
+        /** @var list<string> $rerun */
+        $rerun = array_values(array_filter((array) $this->option('rerun'), is_string(...)));
         $failedOnly = (bool) $this->option('failed');
 
-        if ($ids === [] && ! $failedOnly) {
-            $this->error('Refusing to replay everything: pass --event=<id> or --failed.');
+        // Only an effect that says it can run twice is run twice. Checked before anything is read, so a name that
+        // cannot be honored changes nothing at all.
+        foreach ($rerun as $effect) {
+            if (! is_a($effect, RepeatableEffect::class, true)) {
+                $this->error("Refusing to run {$effect} again: only an effect that implements ".RepeatableEffect::class.' can run over a delivery it already handled without doing its work twice.');
+
+                return self::INVALID;
+            }
+        }
+
+        // A rerun selects by type, and a type alone selects too broadly to replay.
+        if ($ids === [] && ! $failedOnly && ($rerun === [] || $types === [])) {
+            $this->error('Refusing to replay everything: pass --event=<id>, --failed, or --rerun=<effect> with --type=<type>.');
 
             return self::INVALID;
         }
 
-        $deliveries = $this->deliveries($ids, $failedOnly);
+        $deliveries = $this->deliveries($ids, $failedOnly, $types);
 
         if ($deliveries === []) {
             $this->info('Nothing to replay.');
@@ -64,6 +83,7 @@ final class ReplayWebhooksCommand extends Command
         $dryRun = (bool) $this->option('dry-run');
         $queued = 0;
         $silent = 0;
+        $released = 0;
 
         foreach ($deliveries as $delivery) {
             $events = $this->mapperFor($delivery, $platform)->map($this->rebuild($delivery));
@@ -73,6 +93,14 @@ final class ReplayWebhooksCommand extends Command
                 $effects += count($registry->for($event));
 
                 if (! $dryRun) {
+                    // The named effects only, and only where they already did their work: every other effect of the
+                    // delivery still meets its handled run and is skipped.
+                    foreach (array_intersect($registry->for($event), $rerun) as $effect) {
+                        $key = $delivery->getKey();
+                        $reference = $ledger->referenceFor($delivery->provider, $delivery->event_id, $delivery->account_reference, $effect, is_int($key) ? $key : null);
+                        $released += (int) $ledger->release($delivery->provider, $reference, $effect);
+                    }
+
                     $registry->dispatch($event, $delivery);
                 }
             }
@@ -112,19 +140,28 @@ final class ReplayWebhooksCommand extends Command
             $silent,
         ));
 
+        if ($rerun !== [] && ! $dryRun) {
+            $this->info("Released {$released} handled run(s) of the named effect(s) to run again.");
+        }
+
         return self::SUCCESS;
     }
 
     /**
      * @param  list<string>  $ids
+     * @param  list<string>  $types
      * @return list<BillingWebhookEvent>
      */
-    private function deliveries(array $ids, bool $failedOnly): array
+    private function deliveries(array $ids, bool $failedOnly, array $types): array
     {
         $query = BillingWebhookEvent::model()::query();
 
         if ($ids !== []) {
             $query->whereIn('event_id', $ids);
+        }
+
+        if ($types !== []) {
+            $query->whereIn('type', $types);
         }
 
         if ($failedOnly) {

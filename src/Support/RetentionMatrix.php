@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Support;
 
 use Illuminate\Contracts\Config\Repository;
+use InvalidArgumentException;
 use Pushery\Billing\Enums\RetentionAction;
 use Pushery\Billing\Enums\RetentionClock;
 use Pushery\Billing\Enums\RetentionExecutor;
@@ -89,7 +90,9 @@ final class RetentionMatrix
         $rules['billing_place_evidence'] = new RetentionRule(
             object: 'billing_place_evidence',
             action: RetentionAction::Delete,
-            clock: RetentionClock::CreatedAt,
+            // From the end of the year of the supply, as the records of a one-stop-shop return are kept, and as
+            // `billing:prune` counts every window of an erased person's records.
+            clock: RetentionClock::IssueYearEnd,
             days: $this->days('place_evidence_days', 3650),
             basisKey: 'billing::retention.basis.books',
             // The erasure axis already carries this table (it is in an axis's `retained` list). The rule
@@ -105,7 +108,8 @@ final class RetentionMatrix
         $rules['billing_tax_return_exports'] = new RetentionRule(
             object: 'billing_tax_return_exports',
             action: RetentionAction::Delete,
-            clock: RetentionClock::CreatedAt,
+            // From the end of the year the file was produced in, as the books it belongs to are kept.
+            clock: RetentionClock::IssueYearEnd,
             days: $this->days('audit_days', 3650),
             basisKey: 'billing::retention.basis.books',
             executor: RetentionExecutor::TimePruner,
@@ -118,10 +122,30 @@ final class RetentionMatrix
         $rules['billing_reporting_exports'] = new RetentionRule(
             object: 'billing_reporting_exports',
             action: RetentionAction::Delete,
-            clock: RetentionClock::CreatedAt,
+            // From the end of the year the record was produced in, which is where its window starts.
+            clock: RetentionClock::IssueYearEnd,
             days: $this->days('audit_days', 3650),
             basisKey: 'billing::retention.basis.books',
             executor: RetentionExecutor::TimePruner,
+            // A record that was filed stays for as long as its filing does. The filing is the record of a
+            // statutory act and restricts the deletion of what it filed, so a pruner that took every old
+            // record would end on that refusal and never reach the tables after this one.
+            referencedBy: ['billing_reporting_filings' => 'export_id'],
+        );
+
+        // The filings of those records are records of their own, of the statutory act, and keep the same
+        // window. They leave a reporting period at a time: a correction names the filing it corrects, so the
+        // filings of a period go together, once the youngest of them has had the window, and the records they
+        // filed go after them.
+        $rules['billing_reporting_filings'] = new RetentionRule(
+            object: 'billing_reporting_filings',
+            action: RetentionAction::Delete,
+            // From the end of the year a filing was recorded in.
+            clock: RetentionClock::IssueYearEnd,
+            days: $this->days('audit_days', 3650),
+            basisKey: 'billing::retention.basis.books',
+            // Not the time pruner: a filing goes only with its whole period, and newest first.
+            executor: RetentionExecutor::DedicatedPruner,
         );
 
         // A consumer's own rules last, so one may override a derived rule for the same object rather than
@@ -160,15 +184,21 @@ final class RetentionMatrix
      * its creation, so such a table silently ran on the wrong clock — by up to a year, in the direction that
      * deletes too early.
      *
-     * The column must be a LITERAL, and that is a security boundary rather than a style preference: the
-     * pruner interpolates it into raw SQL (`COALESCE(<column>, created_at) < ?` in SubjectScopedRecords),
-     * where a value that came from a request or a database row would be an injection. Requiring a
-     * literal-string is what keeps that impossible to reach from outside the source file that declares it.
+     * The column names a column in the pruner's query, so it is held to a plain identifier here, at run time:
+     * letters, digits and underscores, not starting with a digit, at most 64 characters. The `literal-string`
+     * type says the same to static analysis, which never sees a consumer's code. The pruner hands the column to
+     * the query builder, which quotes it, so a name in mixed case reaches the column it names.
      *
      * @param  literal-string  $column
+     *
+     * @throws InvalidArgumentException when the column is not a plain identifier
      */
     public function datesBy(string $table, string $column): void
     {
+        if (preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,63}$/', $column) !== 1) {
+            throw new InvalidArgumentException("The issue-date column for {$table}, '{$column}', is not a plain identifier: use letters, digits and underscores, not starting with a digit, at most 64 characters.");
+        }
+
         $this->declaredIssueColumns[$table] = $column;
     }
 

@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\ConformityUpdatePolicy;
 use Pushery\Billing\Exceptions\ConformityWaiverNotPermitted;
+use Pushery\Billing\Exceptions\InvalidBillingConfig;
 use Pushery\Billing\Models\AccessGrant;
 
 /**
@@ -43,10 +44,14 @@ final readonly class ConformityUpdateGate
         private ConformityUpdatePolicy $policy,
     ) {}
 
-    /** Whether a consumer-rights profile is active at all. */
+    /**
+     * Whether a consumer-rights profile is active at all.
+     *
+     * @throws InvalidBillingConfig when the profile is neither off nor a name that selects a reading ({@see ConsumerRightsProfile})
+     */
     public function isEnforced(): bool
     {
-        return $this->config->get('billing.consumer_rights.profile') !== null;
+        return ConsumerRightsProfile::isActive($this->config, $this->policy);
     }
 
     /**

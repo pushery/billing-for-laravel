@@ -6,6 +6,8 @@ namespace Pushery\Billing\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Enums\BillingAction;
+use Pushery\Billing\Support\LocalizedMoney;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -30,7 +32,7 @@ final class SuspensionWarningNotification extends BillingNotification
             ->line(Lang::get('billing::notifications.suspension_warning.intro'));
 
         if ($this->lateFee->isPositive()) {
-            $mail->line(Lang::get('billing::notifications.suspension_warning.late_fee', ['amount' => $this->lateFee->format()]));
+            $mail->line(Lang::get('billing::notifications.suspension_warning.late_fee', ['amount' => LocalizedMoney::format($this->lateFee)]));
         }
 
         $mail->line(Lang::get('billing::notifications.suspension_warning.outro'));
@@ -38,7 +40,7 @@ final class SuspensionWarningNotification extends BillingNotification
         return $this->withAction(
             $mail,
             Lang::get('billing::notifications.suspension_warning.cta'),
-            $this->actionUrl('billing.account.recovery'),
+            $this->actionFor($notifiable, BillingAction::Recovery),
         );
     }
 

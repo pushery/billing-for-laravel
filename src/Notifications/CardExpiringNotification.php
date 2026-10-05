@@ -6,6 +6,7 @@ namespace Pushery\Billing\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Enums\BillingAction;
 use Pushery\Billing\ValueObjects\PaymentMethod;
 
 /**
@@ -27,7 +28,7 @@ final class CardExpiringNotification extends BillingNotification
         return $this->withAction(
             $mail,
             Lang::get('billing::notifications.card_expiring.cta'),
-            $this->actionUrl('billing.account.payment-methods'),
+            $this->actionFor($notifiable, BillingAction::PaymentMethods),
         );
     }
 

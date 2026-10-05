@@ -49,6 +49,7 @@ return [
         'submit' => 'Annulla abbonamento',
         'canceled' => 'Abbonamento annullato.',
         'not_found' => 'Nessun titolare trovato per questo ID.',
+        'nothing_running' => 'Questo titolare non ha alcun abbonamento attivo da annullare.',
     ],
 
     'audit' => [

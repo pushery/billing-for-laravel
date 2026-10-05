@@ -22,13 +22,17 @@ use RuntimeException;
  * The scalars can: `isDirty()` is a reliable, engine-neutral comparison for them, and the frozen set is
  * `InvoiceRecord::FROZEN_SCALARS` — one list, read here and by everything else that has to know it.
  *
- * `lines` and `seller` are JSON columns, and `isDirty()` compares the ENCODED string. A provider engine
- * re-serializes the same content differently — a MySQL JSON round-trip is not byte-identical to PHP's
- * `json_encode` — so a faithful re-persist of unchanged lines would falsely trip. They are compared DECODED
- * with a loose inequality instead, which catches a real edit while ignoring serialization noise.
+ * `lines` and `seller` are JSON columns cast to arrays, and `isDirty()` compares the decoded arrays with
+ * `===`, which is strict about key order and about `19` against `19.0`. A provider engine re-serializes the
+ * same content in its own way — a MySQL JSON round-trip reorders keys and is not byte-identical to PHP's
+ * `json_encode` — so a faithful re-persist of unchanged lines would falsely trip. They are compared decoded
+ * with a loose inequality instead, which catches a real edit while ignoring that noise.
  *
- * `buyer` is deliberately NOT here: it stays mutable so a credit note persisted before its original can
- * backfill it. A seller that mirrored buyer would be mutable and would break its own immutability.
+ * `buyer` is frozen as well, compared the same way, from the moment it names somebody. The recipient's name,
+ * address and VAT id are mandatory on the document, and a reverse-charge invoice rests on that VAT id; an
+ * issued document is corrected by a document of its own that refers to it, never by rewriting it. A buyer
+ * that is still EMPTY may be filled once: a credit note persisted before the invoice it corrects carries no
+ * buyer of its own, and takes the invoice's when that arrives.
  */
 final class ImmutableIssuedInvoiceGuard
 {
@@ -45,13 +49,26 @@ final class ImmutableIssuedInvoiceGuard
         }
 
         foreach (self::FROZEN_JSON as $field) {
-            $raw = $invoice->getRawOriginal($field);
-            $original = is_string($raw) ? json_decode($raw, true) : null;
-
-            if ($original != $invoice->getAttribute($field)) {
+            if ($this->storedJson($invoice, $field) != $invoice->getAttribute($field)) {
                 throw $this->refusal($field);
             }
         }
+
+        $buyer = $this->storedJson($invoice, 'buyer');
+
+        // Loose on purpose, like the comparison above: an empty buyer may be filled, and the same buyer in another
+        // key order is no change.
+        if (! in_array($buyer, [null, [], $invoice->getAttribute('buyer')])) {
+            throw $this->refusal('buyer');
+        }
+    }
+
+    /** A JSON column as it was loaded, decoded, or null where it held nothing. */
+    private function storedJson(InvoiceRecord $invoice, string $field): mixed
+    {
+        $raw = $invoice->getRawOriginal($field);
+
+        return is_string($raw) ? json_decode($raw, true) : null;
     }
 
     private function refusal(string $field): RuntimeException

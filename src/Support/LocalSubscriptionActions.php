@@ -6,16 +6,18 @@ namespace Pushery\Billing\Support;
 
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
-use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
+use Pushery\Billing\Contracts\AppliesScheduledSwaps;
 use Pushery\Billing\Contracts\CanTransactMoney;
+use Pushery\Billing\Contracts\EndsNowOnTheOwnersRequest;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Drivers\NullSubscriptionActions;
 use Pushery\Billing\Enums\SubscriptionState;
+use Pushery\Billing\Enums\SwapTiming;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\EndInsidePeriodIsFinal;
 use Pushery\Billing\Models\Subscription;
@@ -46,15 +48,17 @@ use Pushery\Billing\ValueObjects\Plan;
  * Swapping reprices and books a proration — a money movement — so it is refused for an ineligible owner
  * even when a caller bypassed the UI. Cancel, resume and cancelNow move no money and stay ungated, which
  * is deliberate: account deletion must always be able to cancel, and an eligibility failure that blocked
- * it would trap a customer in a subscription they are trying to leave.
+ * it would trap a customer in a subscription they are trying to leave. `endNow()` stays ungated for the
+ * same reason: it moves no money either, it only brings the last cycle forward, and the run collects that
+ * cycle like any other.
  */
-final readonly class LocalSubscriptionActions implements SubscriptionActions
+final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, EndsNowOnTheOwnersRequest, SubscriptionActions
 {
     public function __construct(
         private PlanCatalog $plans,
         private ProrationStrategy $proration,
         private CanTransactMoney $eligibility,
-        private Repository $config,
+        private PlanSwapPlanner $planner,
     ) {}
 
     /**
@@ -142,11 +146,12 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
     }
 
     /**
-     * End it now, giving up the remainder of the paid period.
+     * End it now and bill nothing more, not even the days of the period in progress.
      *
-     * Deliberately ungated and deliberately not refunding: this is the path account deletion takes, and it
-     * must not be able to fail. Whether the unused remainder is owed back is a separate decision with its
-     * own document.
+     * This engine bills a period at its end, so those days have not been paid, and ending here gives them up.
+     * That is what account deletion, a withdrawal and a reversed sale need, and they take this path. It is
+     * deliberately ungated, because account deletion must not be able to fail. An owner who asks to leave is
+     * ended through {@see self::endNow()} instead, which bills the days they had.
      */
     public function cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
@@ -156,6 +161,62 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
             return;
         }
 
+        $this->endWithoutBilling($subscription);
+    }
+
+    /**
+     * End it now because the owner asked, and bill the days of the period in progress they have already had.
+     *
+     * Those days were provided and nothing has been paid for them yet, so they are owed, and ending the row the
+     * way {@see self::cancelNow()} does would leave them unbilled. This is {@see self::cancelAt()} at the present
+     * moment instead: the last cycle is due now, and the next run bills the days up to it and closes the
+     * subscription. Until that run the row stays what it was, as it does after any `cancelAt()`, so it cannot be
+     * replaced by a new subscription while its last cycle is still open.
+     *
+     * A period that has already ended is billed in full, because every day of it was provided. Its collection is
+     * due or being retried, so the row ends at that period end and keeps its schedule. A row that does not know
+     * its period, or is in a state no run collects, has nothing that could be billed and ends as `cancelNow()`
+     * ends it.
+     */
+    public function endNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
+
+        if (! $subscription instanceof Subscription) {
+            return;
+        }
+
+        $periodEnd = $subscription->current_period_end;
+
+        if ($periodEnd === null || ! in_array($subscription->status, Subscription::COLLECTED_STATES, true)) {
+            $this->endWithoutBilling($subscription);
+
+            return;
+        }
+
+        $now = CarbonImmutable::now();
+
+        if ($periodEnd->lessThanOrEqualTo($now)) {
+            $subscription->update([
+                'ends_at' => CarbonImmutable::instance($periodEnd),
+                'scheduled_tier_key' => null,
+                'scheduled_swap_at' => null,
+            ]);
+
+            return;
+        }
+
+        $subscription->update([
+            'ends_at' => $now,
+            'scheduled_processing_at' => $now,
+            'scheduled_tier_key' => null,
+            'scheduled_swap_at' => null,
+        ]);
+    }
+
+    /** End the row at once with nothing left on the schedule, so no run bills it again. */
+    private function endWithoutBilling(Subscription $subscription): void
+    {
         $subscription->update([
             'status' => SubscriptionState::Ended->value,
             'ends_at' => CarbonImmutable::now(),
@@ -179,6 +240,17 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
             throw EligibilityDenied::forMoneyMovement();
         }
 
+        $this->reprice($billable, $tierKey, $prorate, $merchant, $type);
+    }
+
+    /** The swap a scheduled change comes to, without asking the gate again: it was asked when the change was made. */
+    public function applyScheduledSwap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        $this->reprice($billable, $tierKey, $prorate, $merchant, $type);
+    }
+
+    private function reprice(Model $billable, string $tierKey, bool $prorate, ?MerchantScope $merchant, ?string $type): void
+    {
         $plan = $this->plans->planFor($tierKey);
 
         if (! $plan instanceof Plan) {
@@ -198,21 +270,43 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
             );
         }
 
-        if (! $this->isDueSchedule($subscription, $tierKey) && $this->landsAtPeriodEnd($subscription, $plan)) {
+        $due = $this->isDueSchedule($subscription, $tierKey);
+
+        if (! $due && $this->landsAtPeriodEnd($subscription, $tierKey)) {
             $subscription->scheduleSwap($tierKey, $subscription->current_period_end ?? CarbonImmutable::now());
 
             return;
         }
 
         // Proration first, then the tier: the strategy reads the plan the subscriber is LEAVING to work
-        // out what the unused remainder is worth, so repricing the row first would credit them against
-        // the plan they are moving to.
-        if ($prorate) {
+        // out what the swap is worth, so repricing the row first would price it against the plan they are
+        // moving to.
+        if ($prorate && $due) {
+            $this->carryTheTierBeingLeft($subscription, $plan);
+        } elseif ($prorate) {
             $this->proration->applySwap($billable, $plan);
         }
 
         $subscription->update(['tier_key' => $tierKey]);
         $subscription->cancelScheduledSwap();
+    }
+
+    /**
+     * Carry the tier a due schedule leaves into the bill of the period it leaves, up to the moment it was scheduled for.
+     *
+     * A scheduled swap takes effect at its own moment, not when the run gets to it. That moment is where the period
+     * it was deferred to begins, and when the run has already opened that period the tier being left held none of
+     * its days, so nothing is carried. When the period before is still open, because its collection failed and is
+     * being retried, that period ran on the tier being left from its first day to its last, and the retry has to
+     * bill it at that tier and not at the one that follows.
+     */
+    private function carryTheTierBeingLeft(Subscription $subscription, Plan $plan): void
+    {
+        $current = $subscription->tier_key === null ? null : $this->plans->planFor($subscription->tier_key);
+
+        if ($current instanceof Plan && $subscription->scheduled_swap_at !== null) {
+            $subscription->accrueTierChange($current->amount, $plan->amount, $subscription->scheduled_swap_at);
+        }
     }
 
     /**
@@ -236,20 +330,14 @@ final readonly class LocalSubscriptionActions implements SubscriptionActions
      * Only a downgrade waits, and only while the install says so. An upgrade never does — somebody asking
      * for more capacity wants it now, and making them wait for the period end is the one answer nobody
      * asked for.
+     *
+     * Asked of {@see PlanSwapPlanner}, the reading the account hub prices the swap by. This used to compare the
+     * prices of the two tiers while the planner read their rank, so a tier ranked higher and priced lower was an
+     * immediate upgrade on the screen, credited there at once, and a downgrade here, scheduled for the period end.
      */
-    private function landsAtPeriodEnd(Subscription $subscription, Plan $plan): bool
+    private function landsAtPeriodEnd(Subscription $subscription, string $tierKey): bool
     {
-        if ($this->config->get('billing.subscriptions.downgrade_timing', 'period_end') !== 'period_end') {
-            return false;
-        }
-
-        $current = $subscription->tier_key === null ? null : $this->plans->planFor($subscription->tier_key);
-
-        if (! $current instanceof Plan) {
-            return false;
-        }
-
-        return $plan->amount->minorUnits < $current->amount->minorUnits;
+        return $subscription->tier_key !== null && $this->planner->timingFor($subscription->tier_key, $tierKey) === SwapTiming::PeriodEnd;
     }
 
     private function subscriptionFor(Model $billable, ?MerchantScope $merchant, ?string $type = null): ?Subscription

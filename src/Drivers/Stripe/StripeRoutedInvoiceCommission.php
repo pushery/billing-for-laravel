@@ -6,7 +6,6 @@ namespace Pushery\Billing\Drivers\Stripe;
 
 use Pushery\Billing\Contracts\ReadsRoutedInvoiceCommission;
 use Pushery\Billing\Enums\ChargeType;
-use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
 use Pushery\Billing\ValueObjects\RoutedInvoiceCommission;
 use Stripe\Exception\RateLimitException;
@@ -98,8 +97,8 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
 
             return new RoutedInvoiceCommission(
                 merchantAccountReference: $account,
-                gross: Money::of($gross, strtoupper($currency)),
-                fee: Money::of($fee, strtoupper($currency)),
+                gross: StripeAmount::toMoney($gross, strtoupper($currency)),
+                fee: StripeAmount::toMoney($fee, strtoupper($currency)),
                 feeBps: $this->feeBpsOf($invoice->toArray()),
                 paymentReference: $intentId,
             );
@@ -146,7 +145,7 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
             return null;
         }
 
-        $gross = Money::of($paid, strtoupper($currency));
+        $gross = StripeAmount::toMoney($paid, strtoupper($currency));
         [$fee] = $terms->splitOf($gross);
 
         return new RoutedInvoiceCommission(

@@ -40,6 +40,15 @@ final readonly class SaleTaxFacts
          * to a sale made under a different one, and the two answers are indistinguishable afterwards.
          */
         public ?TaxPointDecision $taxPoint = null,
+        /**
+         * The rate the regime applies to this supply, in basis points: the statutory rate, where `rateBps` is the
+         * quotient of the two rounded amounts. 19 % is 1900 here whatever a 9.99 gross rounds its parts to, and
+         * zero where no tax applies.
+         *
+         * A return groups its lines by rate and a ledger picks its revenue account by it, and both have to see
+         * a rate the law knows. The quotient of 160 on 839 is 19.07 %, a rate no country has.
+         */
+        public int $appliedRateBps = 0,
     ) {}
 
     /**
@@ -63,6 +72,7 @@ final readonly class SaleTaxFacts
             rateCategory: $this->rateCategory,
             exemption: $this->exemption,
             taxPoint: $this->taxPoint,
+            appliedRateBps: $this->appliedRateBps,
         );
     }
 

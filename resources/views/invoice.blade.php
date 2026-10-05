@@ -107,9 +107,22 @@
             <td>{{ $reverseCharge ? __('billing::invoice.vat_reverse_charge') : __('billing::invoice.vat') }}</td>
             <td class="num">{{ $tax }}</td>
         </tr>
+        @elseif ($collected !== null)
+        {{-- The rate stated over the amount that carries it. An amount collected on behalf of the seller carries
+             none, and a total stated as including the rate would claim the tax on that amount as well. --}}
+        <tr>
+            <td>{{ __('billing::invoice.total_including_vat', ['rate' => $taxRate]) }}</td>
+            <td class="num">{{ $supplyTotal }}</td>
+        </tr>
+        @endif
+        @if ($collected !== null)
+        <tr>
+            <td>{{ __('billing::invoice.collected_on_behalf') }}</td>
+            <td class="num">{{ $collected }}</td>
+        </tr>
         @endif
         <tr class="total">
-            <td>{{ $itemisesTax ? __('billing::invoice.total') : __('billing::invoice.total_including_vat', ['rate' => $taxRate]) }}</td>
+            <td>{{ $itemisesTax || $collected !== null || $marginScheme ? __('billing::invoice.total') : __('billing::invoice.total_including_vat', ['rate' => $taxRate]) }}</td>
             <td class="num">{{ $total }}</td>
         </tr>
     </table>

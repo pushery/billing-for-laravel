@@ -21,8 +21,11 @@ use Stripe\StripeClient;
  * retries a report which can never succeed and then reports perfectly-billed revenue as lost.
  *
  * The timestamp is the moment the usage happened, so a flush delayed by an outage still lands in the
- * right cycle — Stripe accepts a back-dated event within its acceptance window, and past that window the
- * event is a lost charge, which is why the flusher escalates rather than retrying forever.
+ * right cycle. Stripe takes an event from the past 35 days up to five minutes ahead, and refuses one outside
+ * that window. It bills an event only while the invoice of the event's period is still a draft: one that
+ * arrives after that invoice is finalized is counted in the meter and billed on no invoice. That is why the
+ * flusher holds usage stamped ahead, fails usage of a period whose invoice has closed, and escalates rather
+ * than retrying forever.
  *
  * The value crosses the wire RAW. Stripe's price does the packaging (`transform_quantity`) and the
  * allowance (a graduated first tier priced at zero) — doing either here as well would bill the customer

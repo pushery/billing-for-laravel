@@ -9,11 +9,13 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\View as ViewFacade;
 use Illuminate\View\View as ConcreteView;
 use Livewire\Component;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\CanTransactMoney;
+use Pushery\Billing\Contracts\TierResolver;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Models\Subscription;
@@ -73,18 +75,15 @@ abstract class AccountScreen extends Component
         Container::getInstance()->make(BillingEventLog::class)->record($type, $this->owner(), $payload, AuditSource::Customer, $this->actor());
     }
 
-    /** The owner's current tier key from its denormalized tier column (fail-safe to the zero tier). */
+    /**
+     * The owner's current tier key, as the bound tier resolver answers it (the zero tier when nothing grants one).
+     *
+     * Asked of the resolver rather than read off the tier column, so the hub shows the tier entitlements apply: on
+     * the local engine nothing writes that column, and the screen showed the zero tier to a paying subscriber.
+     */
     protected function currentTierKey(): string
     {
-        $config = Container::getInstance()->make(Repository::class);
-
-        $column = $config->get('billing.tier_column', 'plan');
-        $zero = $config->get('billing.zero_tier', 'free');
-        $zero = is_string($zero) ? $zero : 'free';
-
-        $value = $this->owner()->getAttribute(is_string($column) ? $column : 'plan');
-
-        return is_string($value) && $value !== '' ? $value : $zero;
+        return Container::getInstance()->make(TierResolver::class)->resolve($this->owner())->key;
     }
 
     /** The owner's default subscription row, or null when there is no local row yet. */
@@ -169,9 +168,33 @@ abstract class AccountScreen extends Component
         /** @var ConcreteView $rendered */
         $rendered = ViewFacade::make($name, $data);
 
+        $rendered->layout(is_string($layout) ? $layout : 'billing::layouts.account');
+
+        // The package's own layout titles a page by its navigation entry first; a host's layout reads `$title`,
+        // which is what this fills.
+        $heading = $this->headingKey();
+
+        if ($heading !== null) {
+            $rendered->title(Lang::get($heading));
+        }
+
         /** @var View $view */
-        $view = $rendered->layout(is_string($layout) ? $layout : 'billing::layouts.account');
+        $view = $rendered;
 
         return $view;
+    }
+
+    /**
+     * The translation key of the screen's own heading, which is also its page title, or null for a screen that
+     * sets none.
+     *
+     * A host that renders the hub in its own layout reads the title from `$title`, and without one every screen
+     * was named only after the application, in the browser tab, the history and a search result alike. Every
+     * screen of the package names its heading here. A screen of your own that extends this class names its own,
+     * and one that does not keeps the title its layout gives it.
+     */
+    protected function headingKey(): ?string
+    {
+        return null;
     }
 }
