@@ -33,8 +33,9 @@ use Pushery\Billing\ValueObjects\Money;
  * ## FIFO, and the reason is not neatness
  *
  * Oldest credit first. It is deterministic, it is explainable to a customer looking at their own
- * balance, and it makes a reversal exact: a returned offset gives back the same lots its offset took,
- * because reversing the replay of an append-only log reaches the same answer every time. Anything
+ * balance, and the replay of an append-only log reaches the same answer every time, so what a spend
+ * took can always be read again. A returned offset does not reopen the lots its offset took: it comes
+ * back as a credit of its own, queued behind every credit older than it. Anything
  * proportional would split a single invoice's correction across several tax periods for no reason
  * anybody could state afterwards.
  *
@@ -69,7 +70,7 @@ final readonly class CreditConsumption
             if ($entry->id >= $spend->id) {
                 // The spend consumes what existed BEFORE it. Its own entry and everything after are
                 // not available to it, and a later credit is not retroactively spent by an earlier
-                // offset — which is what makes a reversal give back the same lots.
+                // offset — which is what makes a spend read the same lots whenever it is replayed.
                 break;
             }
 

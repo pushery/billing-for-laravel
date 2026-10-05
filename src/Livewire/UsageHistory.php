@@ -27,6 +27,11 @@ final class UsageHistory extends AccountScreen
     // movement stream pages; periods and top-ups are bounded by their own limits.
     use WithPagination;
 
+    protected function headingKey(): string
+    {
+        return 'billing::account.usage_history.heading';
+    }
+
     public function render(): View
     {
         $owner = $this->owner();

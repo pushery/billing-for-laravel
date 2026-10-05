@@ -29,7 +29,7 @@ use Stripe\StripeClient;
  * caller-supplied `id`, so the identity is computed from the discount itself — issuer, code, type, value,
  * currency, duration, cycles — and the coupon is retrieved under it before anything is created. Two asks for
  * the same discount therefore converge on one coupon, and a row whose value changed asks for a different id,
- * which is the invalidation the ticket asks for without a second mechanism to keep in step.
+ * so a changed discount never reuses the old coupon and there is no second mechanism to keep in step.
  *
  * The id is a digest rather than the readable parts. A coupon id is a bounded string and a code is free
  * text; the readable identity travels in `metadata`, where somebody debugging will look anyway.

@@ -9,6 +9,7 @@ use Pushery\Billing\Contracts\PairsReadersByTheirCode;
 use Pushery\Billing\Enums\InPersonSaleStatus;
 use Pushery\Billing\Exceptions\ReaderUnavailable;
 use Pushery\Billing\Models\InPersonSaleRecord;
+use Pushery\Billing\Support\UniqueRow;
 use Pushery\Billing\Tax\SaleTaxDecision;
 use Pushery\Billing\ValueObjects\InPersonCollection;
 use Pushery\Billing\ValueObjects\InPersonSale;
@@ -89,7 +90,7 @@ final readonly class StripeCardPresentPayments implements CardPresentPayments, P
 
         $intent = $this->stripe->paymentIntents->create(
             [
-                'amount' => $sale->gross->minorUnits,
+                'amount' => StripeAmount::of($sale->gross),
                 'currency' => strtolower($sale->gross->currency),
                 'payment_method_types' => ['card_present'],
                 'capture_method' => 'automatic',
@@ -104,7 +105,8 @@ final readonly class StripeCardPresentPayments implements CardPresentPayments, P
 
         // Kept before the reader is asked, so a confirmation can never arrive for a sale the package has no row for.
         // A retried sale reaches the same payment through its idempotency key, and the same row through this key.
-        InPersonSaleRecord::model()::query()->firstOrCreate(
+        UniqueRow::firstOrCreate(
+            InPersonSaleRecord::model()::query(),
             ['provider' => 'stripe', 'payment_reference' => $intent->id],
             [
                 'reader' => $reader,

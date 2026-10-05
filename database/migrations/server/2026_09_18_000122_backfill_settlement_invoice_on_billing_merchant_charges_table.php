@@ -34,15 +34,14 @@ use Illuminate\Support\Facades\DB;
  * today's behavior; a wrong one places it by a document that documents a DIFFERENT sale, and nothing about
  * the resulting figure looks unusual.
  *
- * - **A document naming no provider matches nothing, and that is the comparison rather than a filter.** A
- *   charge reference is unique only per provider, so on an installation with two drivers a reference alone
- *   can find the wrong row — the collision `SettlementCorrectionIssuer` was hardened against. Legacy
- *   documents from before the provider was frozen are exactly those rows. They are excluded because the
- *   provider is compared for EQUALITY and nothing equals null in SQL, so no `whereNotNull` is needed above.
- *   An explicit one was written first and then removed: with it deleted, all six arms stayed green, which
- *   means it guarded nothing. The behavior is pinned by an arm regardless, because it is the comparison and
- *   not the intent that carries it — a later simplification that made the match null-aware would break the
- *   promise silently, and that arm is what would notice.
+ * - **A document naming no provider matches nothing.** A charge reference is unique only per provider, so
+ *   on an installation with two drivers a reference alone can find the wrong row — the collision
+ *   `SettlementCorrectionIssuer` was hardened against. Legacy documents from before the provider was frozen
+ *   are exactly those rows, and the document query leaves them out by name. Without that filter they would
+ *   still match nothing, but only by way of another table: the query builder turns `where('provider', null)`
+ *   into `provider IS NULL`, and it is the NOT NULL constraint on the charges' `provider` column that makes
+ *   that find no row. The behavior is pinned by an arm regardless, so a later change to either side that
+ *   lets such a document match is noticed.
  * - **The merchant has to match as well.** The pair is unique in the table, so the risk is not two creators
  *   holding it; it is one creator's document naming another's charge. Without this a stranger's sale would
  *   read as settled by a document that never mentioned them.
@@ -59,6 +58,7 @@ return new class extends Migration
         DB::table('billing_invoices')
             ->whereNotNull('settlement_document_type')
             ->whereNotNull('settled_charge_reference')
+            ->whereNotNull('provider')
             ->whereNull('correction_kind')
             ->select(['id', 'owner_type', 'owner_id', 'provider', 'settled_charge_reference'])
             ->orderBy('id')

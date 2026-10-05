@@ -6,6 +6,7 @@ namespace Pushery\Billing\ValueObjects;
 
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 use Pushery\Billing\Contracts\ArrearsRoster;
 
 /**
@@ -30,6 +31,8 @@ use Pushery\Billing\Contracts\ArrearsRoster;
  */
 final readonly class ArrearsEntry
 {
+    use SerializesModels;
+
     public function __construct(
         public Model $owner,
         public MerchantScope $merchant,

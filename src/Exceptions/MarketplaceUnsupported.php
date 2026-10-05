@@ -54,8 +54,7 @@ final class MarketplaceUnsupported extends RuntimeException
      * This refusal is PERMANENT and correct, not a placeholder. The rails alone genuinely cannot serve the
      * lane: the transfer can only be made once the payment has actually succeeded, which is after charge()
      * has already returned. RoutedPayment is where the two halves meet, and it is the supported path.
-     */
-    /**
+     *
      * Named for what the caller should DO, not for a gap that no longer exists.
      *
      * It used to be `separateTransferNotImplemented`, and by the time the transfer was built that name was

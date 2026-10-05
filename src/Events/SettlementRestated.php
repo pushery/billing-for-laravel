@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Events;
 
+use Illuminate\Queue\SerializesModels;
 use Pushery\Billing\Models\InvoiceRecord;
 
 /**
@@ -19,6 +20,8 @@ use Pushery\Billing\Models\InvoiceRecord;
  */
 final readonly class SettlementRestated implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public function __construct(
         public InvoiceRecord $original,
         public InvoiceRecord $cancellation,

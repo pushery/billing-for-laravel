@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\View\Components;
 
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
@@ -18,17 +19,20 @@ use Pushery\Billing\ValueObjects\BannerNotice;
  * The app-shell billing banner. Drop `<x-billing::banner />` into your layout: it resolves the signed-in
  * actor's billing owner itself and renders the one notice that needs attention (a failed payment, a
  * lapsing grace period, a trial about to end), or nothing at all when the account is healthy — so it is
- * safe to leave in the shell permanently.
+ * safe to leave in the shell permanently, also in an application with billing switched off, where it shows
+ * nothing and asks nothing of the subscription state such an application does not keep.
  */
 final class Banner extends Component
 {
     public ?BannerNotice $notice;
 
-    public function __construct(BillingBanner $banner, BillingEntityResolver $resolver)
+    public function __construct(BillingBanner $banner, BillingEntityResolver $resolver, Repository $config)
     {
         $actor = Auth::user();
 
-        $this->notice = $actor instanceof Model ? $banner->for($resolver->ownerFor($actor)) : null;
+        $this->notice = (bool) $config->get('billing.enabled', true) && $actor instanceof Model
+            ? $banner->for($resolver->ownerFor($actor))
+            : null;
     }
 
     #[Override]

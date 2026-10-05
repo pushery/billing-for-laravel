@@ -73,18 +73,34 @@ final readonly class DocumentDeliveryLog
             && in_array(DocumentDeliveryEvent::Notified, $events, true);
     }
 
-    /** When the document became delivered — the later of the two events that together deliver it. */
+    /**
+     * When the document became delivered: the later of the FIRST time it was within reach and the FIRST time
+     * its recipient was told.
+     *
+     * The first of each, because a document is delivered once. A reminder sent later, or the document put
+     * within reach again, does not deliver it a second time, and moving the date with them would move every
+     * deduction date and objection window that runs from it.
+     */
     public function deliveredAt(string $documentNumber): ?Carbon
     {
-        if (! $this->delivered($documentNumber)) {
+        $provided = $this->firstOccurrence($documentNumber, DocumentDeliveryEvent::Provided);
+        $notified = $this->firstOccurrence($documentNumber, DocumentDeliveryEvent::Notified);
+
+        if (! $provided instanceof Carbon || ! $notified instanceof Carbon) {
             return null;
         }
 
+        return $provided->greaterThan($notified) ? $provided : $notified;
+    }
+
+    /** The earliest time an event of one kind was recorded for a document. */
+    private function firstOccurrence(string $documentNumber, DocumentDeliveryEvent $event): ?Carbon
+    {
         return DocumentDelivery::model()::query()
             ->where('document_number', $documentNumber)
-            ->whereIn('event', [DocumentDeliveryEvent::Provided->value, DocumentDeliveryEvent::Notified->value])
-            ->orderByDesc('occurred_at')
-            ->orderByDesc('id')
+            ->where('event', $event->value)
+            ->orderBy('occurred_at')
+            ->orderBy('id')
             ->first()?->occurred_at;
     }
 

@@ -8,6 +8,7 @@ use Pushery\Billing\Contracts\SuppliesMonthlyRecapitulativeStatement;
 use Pushery\Billing\Enums\RecapitulativeSupplyKind;
 use Pushery\Billing\Exceptions\CurrencyMismatch;
 use Pushery\Billing\Exceptions\RecapitulativeStatementIncomplete;
+use Pushery\Billing\Exceptions\ReportingRateMissing;
 use Pushery\Billing\Invoicing\EnInvoiceTaxCategory;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\ValueObjects\RecapitulativeStatementLine;
@@ -43,15 +44,17 @@ final readonly class RecapitulativeStatement
      * The lines for one period, sorted by VAT id and kind.
      *
      * @param  iterable<InvoiceRecord>  $documents  the documents issued in the period, corrections included
+     * @param  ?ReportingConversion  $conversion  states every document in its currency, at the statement's own rate
      * @return list<RecapitulativeStatementLine>
      *
      * @throws RecapitulativeStatementIncomplete when a reverse-charged sale names no VAT id
+     * @throws ReportingRateMissing when a sale in another currency carries no statement rate
      */
-    public function linesFor(iterable $documents): array
+    public function linesFor(iterable $documents, ?ReportingConversion $conversion = null): array
     {
         /** @var array<string, RecapitulativeStatementLine> $lines */
         $lines = [];
-        $currency = null;
+        $currency = $conversion?->currency();
         $withoutVatId = [];
 
         foreach ($documents as $document) {
@@ -60,10 +63,11 @@ final readonly class RecapitulativeStatement
             }
 
             // One statement covers one currency, refused here for the reason PeriodicTaxReturn gives: the
-            // figures are bare minor units, and two currencies added are a sum in no unit at all.
+            // figures are bare minor units, and two currencies added are a sum in no unit at all. With a
+            // conversion every document is stated in its currency, at the rate the statement froze for it.
             $currency ??= $document->currency;
 
-            if ($document->currency !== $currency) {
+            if (! $conversion instanceof ReportingConversion && $document->currency !== $currency) {
                 throw CurrencyMismatch::between($currency, (string) $document->currency);
             }
 
@@ -79,6 +83,7 @@ final readonly class RecapitulativeStatement
                 ? RecapitulativeSupplyKind::Goods
                 : RecapitulativeSupplyKind::Services;
             $net = $document->subtotal_minor ?? 0;
+            $net = $conversion instanceof ReportingConversion ? $conversion->of($document, $net) : $net;
             // A correction states positive magnitudes and its role inverts them, applied once, here.
             $line = new RecapitulativeStatementLine($vatId, $kind, $document->isCorrection() ? -$net : $net);
             $existing = $lines[$line->key()] ?? null;
@@ -104,9 +109,10 @@ final readonly class RecapitulativeStatement
      * ({@see SuppliesMonthlyRecapitulativeStatement}). The limit is about what was supplied, so a sale counts
      * whether or not it names a VAT id yet: a missing id must not keep a seller under it.
      *
-     * @param  iterable<InvoiceRecord>  $documents  the documents issued in one quarter, in one currency
+     * @param  iterable<InvoiceRecord>  $documents  the documents issued in one quarter, in one currency unless converted
+     * @param  ?ReportingConversion  $conversion  states every document in its currency, at the statement's own rate
      */
-    public function goodsNetMinor(iterable $documents): int
+    public function goodsNetMinor(iterable $documents, ?ReportingConversion $conversion = null): int
     {
         $net = 0;
 
@@ -118,6 +124,7 @@ final readonly class RecapitulativeStatement
             }
 
             $amount = $document->subtotal_minor ?? 0;
+            $amount = $conversion instanceof ReportingConversion ? $conversion->of($document, $amount) : $amount;
             $net += $document->isCorrection() ? -$amount : $amount;
         }
 

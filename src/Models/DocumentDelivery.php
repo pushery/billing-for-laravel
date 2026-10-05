@@ -19,7 +19,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  *
  * Append-only, and enforced rather than intended: a delivery log whose rows can be edited proves nothing,
  * because the version produced in a dispute would be the version written after the dispute started. An
- * update or a delete throws.
+ * update or a delete made through the model throws.
  *
  * @property int $id
  * @property string $document_number
@@ -70,7 +70,10 @@ class DocumentDelivery extends Model
         return ['merchant_type', 'merchant_id', 'merchant_erased_at'];
     }
 
-    /** Never, by any path: this row is unlinked from an erased person rather than removed. */
+    /**
+     * Never through the model, inside `purging()` or not. The erasure axis holds this table as RETAINED:
+     * unlinked when its merchant is erased, and removed by query once the retention window has passed.
+     */
     protected static function appendOnlyDeletion(): AppendOnlyDeletion
     {
         return AppendOnlyDeletion::Never;
@@ -88,7 +91,8 @@ class DocumentDelivery extends Model
     #[Override]
     protected static function appendOnlyDeleteRefusal(): string
     {
-        return 'A delivery log entry is the evidence that a document was delivered and shares its retention '
-            .'period; it is unlinked from an erased person, never deleted.';
+        return 'A delivery log entry is the evidence that a document was delivered and is not deleted by a '
+            .'caller. An erasure unlinks it from the merchant, and retention removes it once the window it '
+            .'shares with the document has passed.';
     }
 }

@@ -6,7 +6,9 @@ namespace Pushery\Billing\Events;
 
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Events\ShouldDispatchAfterCommit;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 use Pushery\Billing\Enums\ToastLevel;
 use Pushery\Billing\Events\Concerns\BroadcastsToOwner;
 use Pushery\Billing\Support\OwnerToast;
@@ -23,10 +25,14 @@ use Pushery\Billing\Support\OwnerToast;
  * The message is a finished sentence, already in the owner's language, because the bridge that receives it
  * hands the text to a toast without a translation step. {@see OwnerToast}, which
  * is where that translation happens and why.
+ *
+ * Raised inside a transaction, it leaves when that transaction commits, as the mail beside it does: a webhook
+ * run that rolls back and is retried raises its toast once, not once per attempt.
  */
-final readonly class AccountToastNotified implements ShouldBroadcast
+final readonly class AccountToastNotified implements ShouldBroadcast, ShouldDispatchAfterCommit
 {
     use BroadcastsToOwner;
+    use SerializesModels;
 
     public function __construct(
         public Model $owner,

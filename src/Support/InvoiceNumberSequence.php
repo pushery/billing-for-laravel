@@ -33,18 +33,18 @@ final class InvoiceNumberSequence
     public function next(string $scope): int
     {
         return DB::transaction(function () use ($scope): int {
-            NumberSequence::model()::query()->insertOrIgnore([
+            $row = NumberSequence::model()::query()->where('scope', $scope);
+
+            $sequence = LockedRow::take($row, [
                 'scope' => $scope,
                 'next_number' => 1,
                 'created_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
             ]);
-
-            $sequence = NumberSequence::model()::query()->where('scope', $scope)->lockForUpdate()->firstOrFail();
             $number = $sequence->next_number;
             $sequence->update(['next_number' => $number + 1]);
 
             return $number;
-        });
+        }, LockedRow::ATTEMPTS);
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Events;
 
+use Illuminate\Queue\SerializesModels;
 use Pushery\Billing\Contracts\ArrearsRoster;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\ArrearsEntry;
@@ -40,6 +41,8 @@ use Pushery\Billing\ValueObjects\ArrearsEntry;
  */
 final readonly class PaymentReminderDue implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public function __construct(
         public ArrearsEntry $entry,
         public int $daysLeft,

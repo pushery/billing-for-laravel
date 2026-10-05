@@ -12,6 +12,8 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Consumer\GermanWithdrawalPolicy;
+use Pushery\Billing\Consumer\WithdrawalGate;
+use Pushery\Billing\Consumer\WithdrawalTypeResolver;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\AddonContentMap;
 use Pushery\Billing\Contracts\BuyerPartyResolver;
@@ -19,19 +21,27 @@ use Pushery\Billing\Contracts\ClassifiesReportability;
 use Pushery\Billing\Contracts\ConsumerWithdrawalPolicy;
 use Pushery\Billing\Contracts\DefinesUnionMembership;
 use Pushery\Billing\Contracts\DescribesSellerStanding;
+use Pushery\Billing\Contracts\EInvoice;
+use Pushery\Billing\Contracts\IdentifiesBusinessBuyers;
 use Pushery\Billing\Contracts\JurisdictionProfile;
 use Pushery\Billing\Contracts\ProductTaxonomy;
 use Pushery\Billing\Contracts\ReportingProfile;
+use Pushery\Billing\Contracts\SuppliesBuyerAudiences;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Contracts\SuppliesTaxRates;
 use Pushery\Billing\Contracts\TaxDisclosurePolicy;
 use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
+use Pushery\Billing\Enums\BuyerAudience;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Enums\TaxArchetype;
+use Pushery\Billing\Enums\WithdrawalType;
+use Pushery\Billing\Exceptions\InvalidBillingConfig;
 use Pushery\Billing\Invoicing\NullBuyerPartyResolver;
+use Pushery\Billing\Invoicing\XRechnungInvoice;
 use Pushery\Billing\Marketplace\GermanTaxDisclosurePolicy;
 use Pushery\Billing\Marketplace\UnmovedMerchantShares;
 use Pushery\Billing\Models\ExchangeRateRecord;
+use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
@@ -39,6 +49,7 @@ use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
 use Pushery\Billing\Preflight\Profiles\GermanSellerStanding;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\BillingSchema;
+use Pushery\Billing\Support\NoBusinessBuyers;
 use Pushery\Billing\Tax\DatabaseExchangeRateSource;
 use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
 use Pushery\Billing\Tax\ShippedTaxRates;
@@ -124,7 +135,7 @@ final class DoctorCommand extends Command
         ConsumerWithdrawalPolicy::class => GermanWithdrawalPolicy::class,
     ];
 
-    public function handle(Repository $config, StripeClient $stripe, AddonCatalog $addons, AddonContentMap $works, DistanceSaleThresholdMonitor $thresholds, UnmovedMerchantShares $unmoved, BillingManager $drivers, BuyerPartyResolver $buyers): int
+    public function handle(Repository $config, StripeClient $stripe, AddonCatalog $addons, AddonContentMap $works, DistanceSaleThresholdMonitor $thresholds, UnmovedMerchantShares $unmoved, BillingManager $drivers, BuyerPartyResolver $buyers, WithdrawalGate $withdrawals, WithdrawalTypeResolver $types, IdentifiesBusinessBuyers $businesses, EInvoice $einvoice): int
     {
         if (! (bool) $config->get('billing.enabled', true)) {
             $this->components->info('Billing is disabled; nothing to check.');
@@ -139,13 +150,24 @@ final class DoctorCommand extends Command
         //
         // A finding does not stop being true because a later check could not run, so nothing here ever
         // subtracts from $failing.
-        $failing = $this->reportRateTableAge($config);
+        //
+        // The key type comes first, and reads no table: it is the one setting that has to be right before the
+        // tables exist.
+        $failing = $this->reportUnrecognizedHostKeyType();
+
+        // Before the first `migrate` no table exists, and that is when this command is run to check what has to
+        // be right first. The checks that read a table are skipped then, so the run reaches the ones behind them.
+        $migrated = ! $this->reportMissingTables();
+
+        $failing = $this->reportRateTableAge($config) || $failing || ! $migrated;
 
         $this->reportUnionMembershipAge();
 
         $this->reportDistanceSaleThresholdAge($thresholds);
 
-        $failing = $this->reportExchangeRateSeriesAge($config) || $failing;
+        if ($migrated) {
+            $failing = $this->reportExchangeRateSeriesAge($config) || $failing;
+        }
 
         $this->reportProfileInheritance();
 
@@ -153,14 +175,22 @@ final class DoctorCommand extends Command
 
         $this->reportUnnamedBuyers($drivers, $buyers);
 
-        $failing = $this->reportWorksTheProfileDoesNotCover($config, $addons, $works) || $failing;
+        $failing = $this->reportWorksTheProfileDoesNotCover($config, $addons, $works, $withdrawals) || $failing;
+
+        $failing = $this->reportAddonsTheCheckoutRefuses($config, $works, $withdrawals, $types) || $failing;
+
+        $this->reportBusinessOffersNobodyIsShown($config, $businesses);
+
+        $this->reportXRechnungSellerGaps($config, $einvoice);
 
         // Folded into $failing rather than carried alongside it: verdict() exists precisely because a
         // check held separately has to be remembered at every exit, and forgetting one is invisible —
         // the command still prints the warning, it just stops counting it.
-        $failing = $this->reportStrandedOrders() || $failing;
+        if ($migrated) {
+            $failing = $this->reportStrandedOrders() || $failing;
 
-        $failing = $this->reportUnmovedMerchantShares($unmoved) || $failing;
+            $failing = $this->reportUnmovedMerchantShares($unmoved) || $failing;
+        }
 
         $failing = $this->reportHostKeyTypeMismatch() || $failing;
 
@@ -360,9 +390,19 @@ final class DoctorCommand extends Command
      * config-driven answers for keys this loop never sees, and the closing line says how many were examined
      * so the silence is never mistaken for a clean bill.
      */
-    private function reportWorksTheProfileDoesNotCover(Repository $config, AddonCatalog $catalog, AddonContentMap $works): bool
+    private function reportWorksTheProfileDoesNotCover(Repository $config, AddonCatalog $catalog, AddonContentMap $works, WithdrawalGate $withdrawals): bool
     {
-        if ($config->get('billing.consumer_rights.profile') === null) {
+        // Asked of the gate, so this check reads the switch exactly as checkout does. A profile that names no
+        // reading is refused there at the first purchase, and reported here as the failure it will be.
+        try {
+            $enforced = $withdrawals->isEnforced();
+        } catch (InvalidBillingConfig $refused) {
+            $this->components->error($refused->getMessage());
+
+            return true;
+        }
+
+        if (! $enforced) {
             return false; // no profile, no gate, nothing to be uncovered BY
         }
 
@@ -390,6 +430,10 @@ final class DoctorCommand extends Command
                 continue; // not a work — a credit pack has no withdrawal right to extinguish
             }
 
+            if ($catalog instanceof SuppliesBuyerAudiences && $catalog->audienceFor($key) === BuyerAudience::Business) {
+                continue; // sold only to businesses — no consumer right arises to extinguish
+            }
+
             if (! $catalog->archetypeFor($key) instanceof TaxArchetype) {
                 $uncovered[] = $key;
             }
@@ -411,6 +455,110 @@ final class DoctorCommand extends Command
         }
 
         return true;
+    }
+
+    /**
+     * Name the add-ons the account hub's checkout refuses while a consumer-rights profile is set.
+     *
+     * The checkout asks every add-on which withdrawal right it carries and refuses one with no answer, because
+     * "nobody classified this" and "this needs no declarations" look the same at that point. A work nobody
+     * classified is reported above. This names the rest: an add-on that hands over no work and grants no units, and
+     * whose archetype leaves the answer open or that has none. It sells nothing through the hub while the profile is
+     * set, and a money credit is the usual case.
+     */
+    private function reportAddonsTheCheckoutRefuses(Repository $config, AddonContentMap $works, WithdrawalGate $withdrawals, WithdrawalTypeResolver $types): bool
+    {
+        try {
+            $enforced = $withdrawals->isEnforced();
+        } catch (InvalidBillingConfig) {
+            return false; // reported once already, by the check above
+        }
+
+        if (! $enforced) {
+            return false;
+        }
+
+        $addons = $config->get('billing.addons', []);
+        $refused = [];
+
+        foreach (array_keys(is_array($addons) ? $addons : []) as $key) {
+            $key = is_string($key) ? $key : (string) $key;
+
+            if ($works->contentFor($key) instanceof ContentReference) {
+                continue; // a work, which the check above answers for
+            }
+
+            if (! $types->forAddon($key) instanceof WithdrawalType) {
+                $refused[] = $key;
+            }
+        }
+
+        foreach ($refused as $key) {
+            $this->components->error(
+                "Add-on '{$key}' hands over no work, grants no units and carries no withdrawal answer, so the hub's "
+                .'checkout refuses it while the consumer-rights profile is set. Give it an archetype whose withdrawal '
+                ."the profile fixes, 'voucher' for a money credit, or set its buyers to 'business' if only businesses "
+                .'buy it.'
+            );
+        }
+
+        return $refused !== [];
+    }
+
+    /**
+     * Say when an offer only businesses may buy is shown to nobody, because nothing names an owner as a business.
+     *
+     * A warning rather than a failure: the offer is hidden, which is the safe side, but it is probably not what the
+     * configuration was written for.
+     */
+    private function reportBusinessOffersNobodyIsShown(Repository $config, IdentifiesBusinessBuyers $businesses): void
+    {
+        if (! $businesses instanceof NoBusinessBuyers) {
+            return;
+        }
+
+        foreach (['tiers' => 'Tier', 'addons' => 'Add-on'] as $scope => $kind) {
+            $offers = $config->get("billing.{$scope}", []);
+
+            foreach (is_array($offers) ? $offers : [] as $key => $offer) {
+                if (is_array($offer) && ($offer['buyers'] ?? null) === BuyerAudience::Business->value) {
+                    $this->components->warn(
+                        "{$kind} '{$key}' is sold only to businesses, and no IdentifiesBusinessBuyers is bound to "
+                        .'say which owners are, so the account hub shows it to nobody.'
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * Report the seller details an XRechnung needs that the configuration does not give.
+     *
+     * The default EInvoice writes XRechnung, whose German rules refuse a document without a seller contact (a contact
+     * point, a telephone number and an email address) or without payment instructions. The writer leaves out what is
+     * not configured rather than invent it, so the gap would show only at the recipient's validator. A warning, not a
+     * failure: an install that sends no XRechnung needs none of it.
+     */
+    private function reportXRechnungSellerGaps(Repository $config, EInvoice $einvoice): void
+    {
+        if (! $einvoice instanceof XRechnungInvoice) {
+            return;
+        }
+
+        $company = $config->get('billing.company');
+        $company = is_array($company) ? $company : [];
+
+        $missing = array_values(array_filter(
+            ['contact_name', 'contact_phone', 'contact_email', 'iban'],
+            static fn (string $key): bool => ! is_string($company[$key] ?? null) || $company[$key] === '',
+        ));
+
+        if ($missing !== []) {
+            $this->components->warn(
+                'An XRechnung needs billing.company.'.implode(', billing.company.', $missing).': without them the documents '
+                .'the default EInvoice writes miss the seller contact or the payment instructions the German rules require.'
+            );
+        }
     }
 
     /**
@@ -496,42 +644,62 @@ final class DoctorCommand extends Command
     }
 
     /**
-     * Report cycles that were CLAIMED and never collected.
+     * The tables this command reads that the database does not have.
      *
-     * The local engine claims a due cycle by committing its order before it calls the provider — the claim
-     * has to survive the call, or a second run bills the same cycle twice. The cost of that ordering is a
-     * window: a process that dies between the claim and the charge leaves an order in `processing` with no
-     * payment behind it.
+     * Before the first `migrate` none of them exists. A check that queries a missing table ends the run on a
+     * query exception: the checks behind it never speak, and the output names a table where it should name
+     * the step that was skipped.
      *
-     * Nothing recovers from that on its own, and each reason alone would be survivable. The claim makes the
-     * cycle look taken, so the next tick skips the subscriber. No payment was created, so the provider will
-     * never send a webhook to reconcile against. And until this check existed, `processing` was written in
-     * one place and read in none — the whole of `src` mentioned it exactly once, on the line that sets it.
-     *
-     * Together they mean a subscriber is silently never billed, and the only trace is a row nobody queries.
-     * That is the most expensive failure a LOCAL-engine driver has: under Stripe a gap means the provider
-     * handles it; here it means nobody does.
-     *
-     * This reports rather than repairs, and that is deliberate. Retaking the claim is not obviously safe —
-     * the process may have died AFTER the provider was called and before the reference was written, and a
-     * retry would then charge a second time. That decision is open; being able to SEE the state is not a
-     * decision, and it is what was missing.
-     *
-     * ## Two shapes, and the `payment_reference` is what tells them apart
-     *
-     * The filter below is `whereNull('payment_reference')`, and it is narrow ON PURPOSE: a processing order
-     * that HAS one is a charge in flight, which is now an ordinary state rather than a fault. A bank debit
-     * is accepted at once and settles days later, so the cycle is held open until the provider says which
-     * way it went.
-     *
-     * But a held cycle whose webhook never arrives is stuck just as badly, and it would fall outside this
-     * query entirely. So it gets its own check with its own advice — the two situations are not the same
-     * problem and must not be reported as one: for a claim with no payment nobody has been charged, while
-     * for a held one somebody's money may already be moving, and telling an operator to "retry" is right
-     * for the first and dangerous for the second.
-     *
-     * @return bool whether any stranded order was found
+     * @return bool whether a table is missing
      */
+    private function reportMissingTables(): bool
+    {
+        $missing = [];
+
+        foreach ([Order::resolve(), MerchantCharge::resolve(), ExchangeRateRecord::resolve()] as $model) {
+            if (! $model->getConnection()->getSchemaBuilder()->hasTable($model->getTable())) {
+                $missing[] = $model->getTable();
+            }
+        }
+
+        if ($missing === []) {
+            return false;
+        }
+
+        $this->components->error(
+            'The database has no '.implode(', ', $missing).'. Run `php artisan migrate` first; the checks that '
+            .'read the billing tables were skipped.'
+        );
+
+        return true;
+    }
+
+    /**
+     * A host key type that names none of the three.
+     *
+     * The migrations read such a value as `int` rather than refusing it, so that a mistyped setting cannot stop
+     * them halfway. Comparing what they fell back to with the columns finds integers on both sides, so the value
+     * as written is the finding: `UUID` or `guid` builds integer keys under an application keyed by UUIDs, and
+     * the first write fails naming a column and no setting.
+     *
+     * @return bool whether the setting names no key type
+     */
+    private function reportUnrecognizedHostKeyType(): bool
+    {
+        $unrecognized = BillingSchema::unrecognizedHostKeyType();
+
+        if ($unrecognized === null) {
+            return false;
+        }
+
+        $this->components->error(
+            "billing.schema.host_key_type is '{$unrecognized}', which is none of int, uuid or ulid, so the "
+            .'migrations read it as int. Name the key type your models use, spelled in lowercase.'
+        );
+
+        return true;
+    }
+
     /**
      * The configured host key type against what the tables actually hold.
      *
@@ -594,6 +762,43 @@ final class DoctorCommand extends Command
         return true;
     }
 
+    /**
+     * Report cycles that were CLAIMED and never collected.
+     *
+     * The local engine claims a due cycle by committing its order before it calls the provider — the claim
+     * has to survive the call, or a second run bills the same cycle twice. The cost of that ordering is a
+     * window: a process that dies between the claim and the charge leaves an order in `processing` with no
+     * payment behind it.
+     *
+     * Nothing recovers from that on its own, and each reason alone would be survivable. The claim makes the
+     * cycle look taken, so the next tick skips the subscriber. No payment was created, so the provider will
+     * never send a webhook to reconcile against. And until this check existed, `processing` was written in
+     * one place and read in none — the whole of `src` mentioned it exactly once, on the line that sets it.
+     *
+     * Together they mean a subscriber is silently never billed, and the only trace is a row nobody queries.
+     * That is the most expensive failure a LOCAL-engine driver has: under Stripe a gap means the provider
+     * handles it; here it means nobody does.
+     *
+     * This reports rather than repairs, and that is deliberate. Retaking the claim is not obviously safe —
+     * the process may have died AFTER the provider was called and before the reference was written, and a
+     * retry would then charge a second time. That decision is open; being able to SEE the state is not a
+     * decision, and it is what was missing.
+     *
+     * ## Two shapes, and the `payment_reference` is what tells them apart
+     *
+     * The filter below is `whereNull('payment_reference')`, and it is narrow ON PURPOSE: a processing order
+     * that HAS one is a charge in flight, which is now an ordinary state rather than a fault. A bank debit
+     * is accepted at once and settles days later, so the cycle is held open until the provider says which
+     * way it went.
+     *
+     * But a held cycle whose webhook never arrives is stuck just as badly, and it would fall outside this
+     * query entirely. So it gets its own check with its own advice — the two situations are not the same
+     * problem and must not be reported as one: for a claim with no payment nobody has been charged, while
+     * for a held one somebody's money may already be moving, and telling an operator to "retry" is right
+     * for the first and dangerous for the second.
+     *
+     * @return bool whether any stranded order was found
+     */
     private function reportStrandedOrders(): bool
     {
         // The model's own scope, which `billing:release-claim` refuses to act outside of. Inlining the three

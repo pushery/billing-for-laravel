@@ -11,6 +11,7 @@ use Illuminate\Support\ServiceProvider;
 use Mollie\Api\MollieApiClient;
 use Override;
 use Pushery\Billing\Contracts\AddonCatalog;
+use Pushery\Billing\Contracts\AttachesVerifiedVatIds;
 use Pushery\Billing\Contracts\BillingDriver;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\CardPresentPayments;
@@ -57,7 +58,7 @@ use Pushery\Billing\Invoicing\LocalInvoices;
 use Pushery\Billing\Invoicing\OrderInvoiceIssuer;
 use Pushery\Billing\Invoicing\ProrationCreditCorrectionIssuer;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
-use Pushery\Billing\Proration\CreditBalanceProrationStrategy;
+use Pushery\Billing\Proration\ArrearsProrationStrategy;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\Support\CreditLedger;
@@ -104,6 +105,7 @@ final class MollieServiceProvider extends ServiceProvider
         $this->app->singleton(MolliePaymentRails::class, static fn (Container $app): MolliePaymentRails => new MolliePaymentRails(
             $app->make(MollieApiClient::class),
             self::webhookUrl($app->make(Repository::class)),
+            $app->make(CheckoutUrls::class),
         ));
         $this->app->singleton(MolliePaymentMethods::class);
         $this->app->bind(MollieCardPresentPayments::class, static fn (Container $app): MollieCardPresentPayments => new MollieCardPresentPayments(
@@ -140,9 +142,10 @@ final class MollieServiceProvider extends ServiceProvider
         // about a subscription it never saw. This engine collects a period at its end, which the local reader says.
         $this->app->bind(ReadsSubscriptionPayments::class, LocalSubscriptionPayments::class);
         // Without this the local driver kept Stripe's strategy, whose applySwap() is a deliberate no-op
-        // because Stripe books the proration itself. Mollie does not — so a plan change credited the
-        // subscriber nothing for the time they had already paid for, and no state anywhere looked wrong.
-        $this->app->bind(ProrationStrategy::class, CreditBalanceProrationStrategy::class);
+        // because Stripe books the proration itself. The local engine bills a period when it closes, so a plan
+        // change is priced into that bill: each tier for the days it held. A credit for unused time would give
+        // back days nobody had paid for yet.
+        $this->app->bind(ProrationStrategy::class, ArrearsProrationStrategy::class);
         $this->app->bind(PaymentMethods::class, MolliePaymentMethods::class);
         $this->app->bind(PaymentCsp::class, MolliePaymentCsp::class);
         // Payment in person, on Mollie's own terminals. Rebound because the Stripe provider binds its reader path
@@ -156,6 +159,8 @@ final class MollieServiceProvider extends ServiceProvider
         // and the documentation tells a host to ask the container whether the step exists, so on this driver the
         // binding is taken out rather than left to answer yes and reach Stripe without a key.
         $this->app->offsetUnset(SubmitsDisputeEvidence::class);
+        // Nor does a Mollie customer carry tax ids, so there is nowhere to attach a proven VAT number.
+        $this->app->offsetUnset(AttachesVerifiedVatIds::class);
         // The paths that reach the provider on Stripe, answered for this engine. The Stripe provider binds its own
         // unconditionally, and each would ask Stripe about a customer whose reference Mollie issued. Credit stays in
         // the package's ledger, which this engine spends at the cycle; usage is rated from the package's own
@@ -232,7 +237,7 @@ final class MollieServiceProvider extends ServiceProvider
     }
 
     /**
-     * The absolute URL Mollie returns customers to and posts its status pings at.
+     * The absolute URL Mollie posts its status pings at. Customers return to the checkout URLs instead.
      *
      * Configuration rather than a generated route URL, because neither of the two things `route()` needs is
      * reliably there: a package cannot know the public host, and the scheduled billing run creates payments
@@ -265,7 +270,6 @@ final class MollieServiceProvider extends ServiceProvider
         return is_array($declared) ? $declared : [];
     }
 
-    /** Whether Mollie is the driver this installation actually bills through. */
     /**
      * The local engine this driver bills with, built from the container.
      *
@@ -289,6 +293,7 @@ final class MollieServiceProvider extends ServiceProvider
         );
     }
 
+    /** Whether Mollie is the driver this installation actually bills through. */
     private function isActive(): bool
     {
         $config = $this->app->make(Repository::class);
@@ -304,9 +309,10 @@ final class MollieServiceProvider extends ServiceProvider
      * at the first charge — inside a scheduled run, hours later, against a real subscriber, with the error
      * in a log rather than in front of whoever deployed.
      *
-     * A webhook signing secret is deliberately NOT required. Mollie's legacy generation carries no
-     * signature at all, so demanding one would refuse to boot every install not yet on the next
-     * generation; the verifier treats a configured secret as the switch instead.
+     * A webhook signing secret is deliberately NOT required. The classic ping of every payment carries no
+     * signature at all, and an account without next-generation webhooks has no secret to configure, so
+     * demanding one would refuse to boot every such install. The verifier checks a signature wherever one
+     * is configured and arrives.
      */
     private function guardCredentials(): void
     {
@@ -328,9 +334,9 @@ final class MollieServiceProvider extends ServiceProvider
             is_string($secret) ? $secret : null,
             static fn (): null => Log::warning(
                 'billing: Mollie is configured without a webhook signing secret, so this endpoint accepts '.
-                'unsigned pings. That is correct for an account on Mollie\'s legacy webhooks and a real gap '.
-                'on an account using the next generation, which signs every request — set '.
-                'billing.mollie.webhook_secret if the Mollie dashboard shows signing enabled.',
+                'next-generation webhook events unsigned. The classic ping of each payment is never signed '.
+                'and is checked by fetching the payment back either way — set billing.mollie.webhook_secret '.
+                'if the Mollie dashboard has next-generation webhooks set up.',
             ),
         );
     }

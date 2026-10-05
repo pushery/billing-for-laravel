@@ -6,6 +6,7 @@ namespace Pushery\Billing\Support;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Enums\BuyerAudience;
 use Pushery\Billing\Exceptions\InvalidBillingConfig;
 use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
 
@@ -97,13 +98,55 @@ final readonly class BillingConfigValidator
             }
 
             $this->assertCurrency('tiers.'.$key.'.price_display', $tier['price_display'] ?? null);
+            $this->assertAudience('billing.tiers.'.$key.'.buyers', $tier['buyers'] ?? null);
         }
 
         foreach ((array) $this->config->get('billing.addons', []) as $key => $addon) {
             if (is_array($addon)) {
                 $this->assertCurrency('addons.'.$key.'.price_display', $addon['price_display'] ?? null);
+                $this->assertGrant((string) $key, $addon['grants'] ?? null);
+                $this->assertAudience('billing.addons.'.$key.'.buyers', $addon['buyers'] ?? null);
             }
         }
+    }
+
+    /**
+     * An add-on's unit grant reads as a non-empty meter and a positive whole number of units, or is absent.
+     *
+     * Checked here because every reader of it runs after the customer has paid. A grant the catalog cannot read
+     * fails the webhook that should hand the units over, and a scalar in its place used to be taken for no grant,
+     * which credits money instead. A value read through `env()` arrives as a string, the ordinary way to get there.
+     */
+    private function assertGrant(string $key, mixed $grant): void
+    {
+        if ($grant === null) {
+            return;
+        }
+
+        $meter = is_array($grant) ? ($grant['meter'] ?? null) : null;
+        $units = is_array($grant) ? ($grant['units'] ?? null) : null;
+
+        if (! is_string($meter) || $meter === '' || ! is_int($units) || $units <= 0) {
+            throw InvalidBillingConfig::forKey(
+                'billing.addons.'.$key.'.grants',
+                "must be ['meter' => a meter key, 'units' => a positive whole number], or absent",
+            );
+        }
+    }
+
+    /**
+     * Who may buy an offer reads as one of the audiences, or is absent.
+     *
+     * Refused at boot because the catalog refuses it when the hub asks, and a typo read as "anyone" would sell an
+     * offer meant for businesses to consumers.
+     */
+    private function assertAudience(string $where, mixed $buyers): void
+    {
+        if ($buyers === null || (is_string($buyers) && BuyerAudience::tryFrom($buyers) instanceof BuyerAudience)) {
+            return;
+        }
+
+        throw InvalidBillingConfig::forKey($where, "must be 'anyone' or 'business', or absent");
     }
 
     private function assertCurrency(string $where, mixed $priceDisplay): void

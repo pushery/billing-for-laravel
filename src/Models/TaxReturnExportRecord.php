@@ -67,15 +67,6 @@ class TaxReturnExportRecord extends Model
     ];
 
     /**
-     * Run a retention purge, the one context in which these rows may be deleted.
-     *
-     * @template T
-     *
-     * @param  callable(): T  $callback
-     * @return T
-     */
-
-    /**
      * Where the file was put may be corrected — a disk gets renamed, a file gets archived elsewhere, and
      * none of that changes what was filed. The figures and the bytes cannot move.
      *
@@ -97,7 +88,7 @@ class TaxReturnExportRecord extends Model
     #[Override]
     protected static function appendOnlyDeleteRefusal(): string
     {
-        return 'A produced return cannot be deleted; it is the only evidence of which figures were filed. '
-            .'Retention removes it on its schedule, inside purging() — a caller does not.';
+        return 'A produced return cannot be deleted by a caller; it is the only evidence of which figures '
+            .'were filed. Retention removes it once the book-keeping window has passed.';
     }
 }

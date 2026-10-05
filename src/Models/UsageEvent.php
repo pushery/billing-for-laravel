@@ -6,6 +6,7 @@ namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\UsageEventState;
 use Pushery\Billing\Models\Concerns\Replaceable;
 
@@ -22,6 +23,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * @property string $period
  * @property string $identifier
  * @property ?string $source_key
+ * @property ?string $source_scope
  * @property UsageEventState $state
  * @property ?Carbon $reported_at
  * @property int $attempts
@@ -68,7 +70,10 @@ class UsageEvent extends Model
         'attempts' => 'integer',
         'rolled_up_into' => 'integer',
         'is_rollup' => 'boolean',
-        'occurred_at' => 'datetime',
+        // The recorder writes the moment in UTC, so it is read as UTC: under the framework's `datetime` cast an
+        // application in another zone reported every meter event shifted by its offset. The two timestamps below
+        // are written and compared in the application's zone alike.
+        'occurred_at' => UtcDateTime::class,
         'reported_at' => 'datetime',
         'next_attempt_at' => 'datetime',
         'state' => UsageEventState::class,

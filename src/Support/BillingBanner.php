@@ -9,9 +9,8 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Pushery\Billing\Contracts\MerchantPartyResolver;
+use Pushery\Billing\Contracts\MerchantDisplayName;
 use Pushery\Billing\Enums\SubscriptionState;
-use Pushery\Billing\Exceptions\MerchantPartyUnavailable;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Trials\Trials;
 use Pushery\Billing\ValueObjects\BannerNotice;
@@ -68,7 +67,7 @@ final readonly class BillingBanner
         private SubscriptionPresenter $presenter,
         private Repository $config,
         private Trials $trials,
-        private MerchantPartyResolver $merchants,
+        private MerchantDisplayName $merchantNames,
     ) {}
 
     public function for(Model $owner): ?BannerNotice
@@ -179,12 +178,12 @@ final readonly class BillingBanner
     }
 
     /**
-     * The name of the merchant a contract is with, or null for the platform's own contract of another
-     * type, or where the install cannot name its merchants.
+     * The name the owner knows the merchant of a contract by, or null for the platform's own contract of
+     * another type, or where the install names no merchants.
      *
-     * The shipped resolver refuses to name any merchant, deliberately, because a nameless invoice is not
-     * an invoice. A banner is not an invoice: it still shows, without the name, rather than taking the
-     * app shell down with it.
+     * Asked of {@see MerchantDisplayName}, never of the invoice party: on a creator marketplace the party is
+     * the creator's legal name, given to the platform for its documents and not to the fans who read this
+     * banner. The shipped binding names nobody, and the notice then shows without a name.
      */
     private function merchantName(Subscription $subscription): ?string
     {
@@ -198,11 +197,9 @@ final readonly class BillingBanner
             return null;
         }
 
-        try {
-            return $this->merchants->partyFor($merchant)->name;
-        } catch (MerchantPartyUnavailable) {
-            return null;
-        }
+        $name = $this->merchantNames->nameFor($merchant);
+
+        return is_string($name) && trim($name) !== '' ? $name : null;
     }
 
     /** Whether the trial ends within the configured warning window (default 3 days). */

@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Models\AddonPurchase;
 use Pushery\Billing\ValueObjects\AddonReversal;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\UnitGrant;
 
 /**
  * Records one-time add-on purchases once per checkout reference. recordOnce returns true exactly on
@@ -29,10 +30,16 @@ final class AddonPurchases
      *                                         PAYMENT id and the declarations are not keyed on it -- without
      *                                         it that lookup answers null, and null there reads as "the
      *                                         buyer declared nothing"
+     * @param  ?bool  $moneyCredit  whether this purchase puts money on the buyer's credit balance, kept so the
+     *                              refund and the prepaid volume read what the purchase did rather than what the
+     *                              catalog says about the key at the time they ask
+     * @param  ?UnitGrant  $granted  the usage units this purchase grants, kept so a refund takes back a share of
+     *                               them rather than of whatever the catalog grants for the key by then
      */
-    public function recordOnce(Model $owner, string $reference, string $addonKey, Money $amount, ?string $paymentReference = null, ?string $declarationReference = null): bool
+    public function recordOnce(Model $owner, string $reference, string $addonKey, Money $amount, ?string $paymentReference = null, ?string $declarationReference = null, ?bool $moneyCredit = null, ?UnitGrant $granted = null): bool
     {
-        return AddonPurchase::model()::query()->firstOrCreate(
+        return UniqueRow::firstOrCreate(
+            AddonPurchase::model()::query(),
             ['reference' => $reference],
             [
                 'owner_type' => $owner->getMorphClass(),
@@ -42,6 +49,9 @@ final class AddonPurchases
                 'currency' => $amount->currency,
                 'payment_reference' => $paymentReference,
                 'declaration_reference' => $declarationReference,
+                'money_credit' => $moneyCredit,
+                'granted_meter_key' => $granted?->meterKey,
+                'granted_units' => $granted?->units,
             ],
         )->wasRecentlyCreated;
     }
@@ -89,6 +99,8 @@ final class AddonPurchases
                 Money::of($delta, $purchase->currency),
                 $purchase->addon_key,
                 $purchase->amount_minor,
+                $purchase->money_credit,
+                $purchase->granted_meter_key !== null && $purchase->granted_units !== null ? new UnitGrant($purchase->granted_meter_key, $purchase->granted_units) : null,
             );
         });
     }

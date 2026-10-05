@@ -181,13 +181,14 @@ return [
 
     'reconfirm' => [
         'prompt' => 'Confirma tu contraseña para continuar.',
+        'prompt_email' => 'Confirma el correo electrónico de tu cuenta para continuar.',
         'wrong' => 'No coincide. Inténtalo de nuevo.',
         'throttled' => 'Demasiados intentos. Vuelve a intentarlo en :seconds segundos.',
     ],
 
     'danger' => [
         'heading' => 'Zona de peligro',
-        'explanation' => 'Si cancelas ahora, la facturación se detiene de inmediato, sin periodo de gracia.',
+        'explanation' => 'Si cancelas ahora, tu suscripción termina de inmediato, sin periodo de gracia. Los días que ya has usado y aún no has pagado se facturan igualmente.',
         'cancel_now' => 'Cancelar la facturación ahora',
         'confirm_question' => 'Esto no se puede deshacer. ¿Cancelar la facturación de inmediato?',
         'confirm_yes' => 'Sí, cancelar ahora',

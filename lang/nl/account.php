@@ -181,13 +181,14 @@ return [
 
     'reconfirm' => [
         'prompt' => 'Bevestig je wachtwoord om door te gaan.',
+        'prompt_email' => 'Bevestig het e-mailadres van je account om door te gaan.',
         'wrong' => 'Dat klopt niet. Probeer het opnieuw.',
         'throttled' => 'Te veel pogingen. Probeer het over :seconds seconden opnieuw.',
     ],
 
     'danger' => [
         'heading' => 'Gevarenzone',
-        'explanation' => 'Nu opzeggen stopt de facturering onmiddellijk, zonder respijtperiode.',
+        'explanation' => 'Nu opzeggen beëindigt je abonnement onmiddellijk, zonder respijtperiode. Dagen die je al hebt gebruikt en nog niet hebt betaald, worden wel nog gefactureerd.',
         'cancel_now' => 'Facturering nu stopzetten',
         'confirm_question' => 'Dit kan niet ongedaan worden gemaakt. Facturering onmiddellijk stopzetten?',
         'confirm_yes' => 'Ja, nu stopzetten',

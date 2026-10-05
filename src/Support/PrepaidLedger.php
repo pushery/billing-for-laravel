@@ -53,7 +53,7 @@ final readonly class PrepaidLedger
             ]);
 
             return $row->balance;
-        });
+        }, LockedRow::ATTEMPTS);
     }
 
     /**
@@ -79,7 +79,7 @@ final readonly class PrepaidLedger
             }
 
             return $taken;
-        });
+        }, LockedRow::ATTEMPTS);
     }
 
     /**
@@ -89,7 +89,12 @@ final readonly class PrepaidLedger
      */
     private function locked(string $ownerType, mixed $ownerId, string $meterKey): PrepaidUnits
     {
-        PrepaidUnits::model()::query()->insertOrIgnore([
+        $row = PrepaidUnits::model()::query()
+            ->where('owner_type', $ownerType)
+            ->where('owner_id', $ownerId)
+            ->where('meter_key', $meterKey);
+
+        return LockedRow::take($row, [
             'owner_type' => $ownerType,
             'owner_id' => is_scalar($ownerId) ? $ownerId : '',
             'meter_key' => $meterKey,
@@ -98,12 +103,5 @@ final readonly class PrepaidLedger
             'created_at' => Carbon::now(),
             'updated_at' => Carbon::now(),
         ]);
-
-        return PrepaidUnits::model()::query()
-            ->where('owner_type', $ownerType)
-            ->where('owner_id', $ownerId)
-            ->where('meter_key', $meterKey)
-            ->lockForUpdate()
-            ->firstOrFail();
     }
 }

@@ -34,14 +34,19 @@ final class WebhookEventLedger
         array $payload,
         string $accountReference = '',
     ): BillingWebhookEvent {
-        $delivery = BillingWebhookEvent::model()::query()->firstOrCreate(
+        $delivery = UniqueRow::firstOrCreate(
+            BillingWebhookEvent::model()::query(),
             ['provider' => $provider, 'account_reference' => $accountReference, 'event_id' => $eventId],
             ['type' => $type, 'payload' => $payload, 'status' => WebhookEventState::Pending],
         );
 
         // A redelivery of an event recorded before payloads were kept (or by an older version) still
         // needs its payload, or it could never be replayed.
-        if ($delivery->payload === null) {
+        //
+        // A payload that was REMOVED stays removed. An erasure scrubs it and the retention clock prunes it, and
+        // both stamp the row; refilling one of those would write the person's data back into a row still linked
+        // to them, after the erasure receipt said it was gone.
+        if ($delivery->payload === null && $delivery->payload_removed_at === null) {
             $delivery->forceFill(['payload' => $payload])->save();
         }
 
@@ -77,8 +82,9 @@ final class WebhookEventLedger
         ])->save();
     }
 
+    /** Record that a delivery failed. The error is fitted to its column, so the record cannot fail on its own text. */
     public function markFailed(BillingWebhookEvent $delivery, string $error): void
     {
-        $delivery->forceFill(['status' => WebhookEventState::Failed, 'last_error' => $error])->save();
+        $delivery->forceFill(['status' => WebhookEventState::Failed, 'last_error' => RedactedError::fit($error)])->save();
     }
 }

@@ -28,6 +28,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * @property string $type
  * @property string $value
  * @property TaxIdVerificationStatus $status
+ * @property int $follows The answer of the same tax ID this one changed, `0` for the first.
  * @property string|null $verified_name
  * @property string|null $verified_address
  * @property Carbon $reported_at
@@ -43,12 +44,23 @@ class TaxIdVerification extends Model
     /** @var list<string> */
     protected $fillable = [
         'owner_type', 'owner_id', 'provider', 'customer_reference', 'tax_id_reference', 'type', 'value', 'status',
-        'verified_name', 'verified_address', 'reported_at', 'owner_erased_at',
+        'follows', 'verified_name', 'verified_address', 'reported_at', 'owner_erased_at',
+    ];
+
+    /**
+     * The same defaults the schema carries, so a model created without these columns reads what its row holds.
+     * Held against the migration by ModelSchemaDefaultsTest.
+     *
+     * @var array<string, int>
+     */
+    protected $attributes = [
+        'follows' => 0,
     ];
 
     /** @var array<string,string> */
     protected $casts = [
         'status' => TaxIdVerificationStatus::class,
+        'follows' => 'integer',
         'reported_at' => UtcDateTime::class,
         'owner_erased_at' => UtcDateTime::class,
     ];
@@ -63,7 +75,10 @@ class TaxIdVerification extends Model
         return ['owner_type', 'owner_id', 'owner_erased_at', 'updated_at'];
     }
 
-    /** Never, by any path: the erasure axis holds this table as RETAINED. */
+    /**
+     * Never through the model, inside `purging()` or not. The erasure axis holds this table as RETAINED:
+     * unlinked when its owner is erased, and removed by query once the retention window has passed.
+     */
     protected static function appendOnlyDeletion(): AppendOnlyDeletion
     {
         return AppendOnlyDeletion::Never;
@@ -79,7 +94,8 @@ class TaxIdVerification extends Model
     #[Override]
     protected static function appendOnlyDeleteRefusal(): string
     {
-        return 'A tax ID answer supports invoices that are kept for years, so it is unlinked from an erased owner '
-            .'and never deleted.';
+        return 'A tax ID answer supports invoices that are kept for years and is not deleted by a caller. An '
+            .'erasure unlinks it from its owner, and retention removes it once the window of those invoices '
+            .'has passed.';
     }
 }

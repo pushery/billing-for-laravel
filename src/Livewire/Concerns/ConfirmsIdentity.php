@@ -4,19 +4,19 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Livewire\Concerns;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
+use Pushery\Billing\Contracts\ReconfirmsIdentity;
 use Pushery\Billing\Livewire\AccountScreen;
 
 /**
- * Re-confirm the ACTING user's identity before an irreversible billing action (immediate cancel, the
- * account-deletion hook). Two auth models are handled without the package assuming either: a password
- * account verifies the submitted secret with {@see Hash::check}; a passwordless account (OAuth /
- * magic-link — no password column populated) has nothing to hash-check, so it verifies the submitted
- * value against the account email instead.
+ * Re-confirm the ACTING user's identity before an irreversible billing action (immediate cancel). What proves it
+ * is the bound {@see ReconfirmsIdentity}: by default a password account proves its password and a passwordless
+ * account (OAuth / magic-link) its account email, which a held session knows, so an application without
+ * passwords binds a factor of its own.
  *
  * The attempt is per-user rate-limited (5 tries / 5 minutes) and the limiter is checked BEFORE the
  * credential is verified, so a brute-force is locked out rather than probed one attempt at a time. Only
@@ -50,7 +50,7 @@ trait ConfirmsIdentity
             ]);
         }
 
-        if (! $this->identityMatches($actor, $credential)) {
+        if (! $this->reconfirmation()->confirms($actor, $credential)) {
             RateLimiter::hit($key, 300);
 
             throw ValidationException::withMessages([
@@ -61,20 +61,14 @@ trait ConfirmsIdentity
         RateLimiter::clear($key);
     }
 
-    private function identityMatches(Model $actor, string $credential): bool
+    /** The line that asks the acting user for what {@see confirmIdentity()} checks. */
+    protected function reconfirmationPrompt(): string
     {
-        // A populated password column → the secret is a password; hash-check it.
-        $hash = $actor->getAttribute('password');
+        return $this->reconfirmation()->prompt($this->actor());
+    }
 
-        if (is_string($hash) && $hash !== '') {
-            return Hash::check($credential, $hash);
-        }
-
-        // Passwordless (OAuth / magic-link): match the account email, trimmed + case-insensitive, with a
-        // constant-time compare so a mismatch reveals nothing through timing.
-        $email = $actor->getAttribute('email');
-
-        return is_string($email) && $email !== ''
-            && hash_equals(mb_strtolower($email), mb_strtolower(trim($credential)));
+    private function reconfirmation(): ReconfirmsIdentity
+    {
+        return Container::getInstance()->make(ReconfirmsIdentity::class);
     }
 }

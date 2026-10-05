@@ -58,7 +58,7 @@ final class WebhookEffectRegistry
                 $delivery->provider,
                 $delivery->event_id,
                 is_int($deliveryId) ? $deliveryId : null,
-            ));
+            )->forAccount($delivery->account_reference));
         }
 
         // Fire through the framework too, so a host app can listen or fake. Resolved here, not injected,

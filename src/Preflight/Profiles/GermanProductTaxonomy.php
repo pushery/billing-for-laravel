@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\ArchetypeClassification;
 use Pushery\Billing\ValueObjects\TaxonomyCell;
 
 /**
- * The German reading of the nine product shapes: one table, five answers each.
+ * The German reading of the nine product shapes: one table, a complete classification for each.
  *
  * Three rows are worth reading twice, because they are where a table like this normally goes wrong.
  *
@@ -60,6 +60,10 @@ final readonly class GermanProductTaxonomy implements ProductTaxonomy
                 withdrawal: TaxonomyCell::fixed(WithdrawalType::NotApplicable),
                 placeOfSupplyInPerson: TaxonomyCell::delegated(),
             ),
+            // What a tip on nothing in particular was paid on: consideration for the seller's work as a whole,
+            // supplied electronically like a download and taxed where the buyer is. Nothing is left to provide once
+            // it is paid, so, as with a tip, there is nothing to change one's mind about.
+            TaxArchetype::Support => $this->resale(TaxRateCategory::Standard, WithdrawalType::NotApplicable),
             // Nothing has been bought yet, so nothing is taxable yet — not even in principle.
             TaxArchetype::Voucher => new ArchetypeClassification(
                 regime: TaxonomyCell::deferred(),

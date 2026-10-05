@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Support;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +25,9 @@ use Throwable;
  *
  *  1. In one transaction, a cycle's pending usage for one owner and one meter is folded into a single
  *     ROLLUP event carrying its own identifier and the sum of the units. The sources point at it.
- *  2. Outside any transaction, the rollup is reported.
+ *  2. Outside any transaction, the rollup is reported. A caller that runs inside one, as a webhook effect
+ *     does, flushes after it commits (see FlushUpcomingUsage); inside it, step 1 would be a savepoint that a
+ *     later rollback takes back together with the identifier the provider has already seen.
  *  3. In one transaction, the rollup and its sources are marked reported.
  *
  * A crash between 2 and 3 replays the same identifier, which the provider dedups — the usage is billed
@@ -39,6 +41,11 @@ use Throwable;
  * A provider outage is not a crash: rows stay pending, back off, and are retried. What is NOT tolerated
  * is silence — past the retry budget the event is marked failed and logged as what it is: revenue that
  * will not be collected unless someone acts.
+ *
+ * Usage stamped ahead of the clock waits until its moment has come. A provider takes an event only within a
+ * window around its own clock, Stripe up to five minutes ahead, and an event stamped further ahead is lost
+ * there. Reported once its moment has passed, it is an event of the past like any other, and it lands in
+ * the cycle the recorder counted it in.
  */
 final readonly class UsageFlusher
 {
@@ -69,8 +76,12 @@ final readonly class UsageFlusher
      *
      * Called when the provider signals a customer's next invoice is about to finalize: any usage still in
      * the outbox has to land on THAT invoice, and waiting for the next scheduled flush (or for a rollup's
-     * retry backoff to elapse) would bill it a cycle late. Scoped to the one owner so an upcoming-invoice
+     * retry backoff to elapse) could reach the provider after the invoice is finalized, where it is billed on no
+     * invoice. Scoped to the one owner so an upcoming-invoice
      * signal for one customer never drains everyone else's outbox. Returns how many rollups were reported.
+     *
+     * Usage stamped ahead of the clock still waits for its moment, here as in flush(): reported early, it
+     * would reach the provider as an event of the future.
      */
     public function flushOwner(Model $owner): int
     {
@@ -96,17 +107,23 @@ final readonly class UsageFlusher
      */
     private function coalesce(?string $ownerType = null, mixed $ownerId = null): void
     {
+        // Only usage whose moment has come. A source stamped ahead would carry the rollup's moment, the latest of
+        // its sources, into the future with it, and hold back the usage that has happened. Bound in UTC, the zone
+        // the column is written in.
+        $now = Carbon::now()->utc();
+
         $groups = UsageEvent::model()::query()
             ->where('state', UsageEventState::Pending->value)
             ->where('is_rollup', false)
             ->whereNull('rolled_up_into')
+            ->where('occurred_at', '<=', $now)
             ->when($ownerType !== null, fn (Builder $query): Builder => $query->where('owner_type', $ownerType)->where('owner_id', $ownerId))
             ->select(['owner_type', 'owner_id', 'meter_key', 'period'])
             ->distinct()
             ->get();
 
         foreach ($groups as $group) {
-            DB::transaction(function () use ($group): void {
+            DB::transaction(function () use ($group, $now): void {
                 $sources = UsageEvent::model()::query()
                     ->where('owner_type', $group->owner_type)
                     ->where('owner_id', $group->owner_id)
@@ -115,6 +132,7 @@ final readonly class UsageFlusher
                     ->where('state', UsageEventState::Pending->value)
                     ->where('is_rollup', false)
                     ->whereNull('rolled_up_into')
+                    ->where('occurred_at', '<=', $now)
                     ->lockForUpdate()
                     ->get();
 
@@ -155,14 +173,15 @@ final readonly class UsageFlusher
             ->where('state', UsageEventState::Pending->value)
             ->where('is_rollup', true)
             ->where(fn (Builder $query) => $query->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', Carbon::now()))
+            ->where('occurred_at', '<=', Carbon::now()->utc())
             ->orderBy('id')
             ->get();
     }
 
     /**
-     * Every pending rollup for one owner, backoff IGNORED — the force-flush's queue. A rollup mid-backoff is
-     * still reported here on purpose: the invoice is closing now, so the usage goes on it regardless of when
-     * its next scheduled retry would have been.
+     * Every pending rollup of one owner whose moment has come, backoff IGNORED — the force-flush's queue. A
+     * rollup mid-backoff is still reported here on purpose: the invoice is closing now, so the usage goes on it
+     * regardless of when its next scheduled retry would have been.
      *
      * @return Collection<int, UsageEvent>
      */
@@ -173,16 +192,20 @@ final readonly class UsageFlusher
             ->where('is_rollup', true)
             ->where('owner_type', $ownerType)
             ->where('owner_id', $ownerId)
+            ->where('occurred_at', '<=', Carbon::now()->utc())
             ->orderBy('id')
             ->get();
     }
 
     private function report(UsageEvent $rollup): bool
     {
+        // The usage happened while the owner existed, so an owner the application has soft-deleted since is still the
+        // one it is billed to: its row, and the provider customer it names, are still there.
         $meter = $rollup->provider_meter;
-        $customer = $this->customerReference($rollup);
+        $owner = OwnerOfRecord::find($rollup->owner_type, $rollup->owner_id);
+        $customer = $owner instanceof Model ? $this->customerReference($owner) : null;
 
-        if ($meter === null || $customer === null) {
+        if ($meter === null || ! $owner instanceof Model || $customer === null) {
             $this->fail($rollup, 'The usage has no provider meter or no provider customer to bill it to.');
 
             return false;
@@ -200,6 +223,15 @@ final readonly class UsageFlusher
             $this->settleReported($rollup);
 
             return true;
+        }
+
+        // A period's usage reaches its invoice only while the provider still holds that invoice open. Later, the provider
+        // takes the event, counts it in its meter and bills it on no invoice, so it is not handed over to be marked
+        // reported: it fails, loudly, as usage that will not be billed unless someone acts.
+        if ($this->arrivesAfterItsInvoiceClosed($rollup, $owner)) {
+            $this->fail($rollup, 'The usage reached the flush after its billing period ended and the grace in which the provider still bills it had passed.');
+
+            return false;
         }
 
         try {
@@ -242,9 +274,11 @@ final readonly class UsageFlusher
             return;
         }
 
+        // The provider's message, fitted to its column: a longer one would fail this write, and the usage would
+        // neither retry nor fail. The log below keeps the whole of it.
         $rollup->forceFill([
             'attempts' => $attempts,
-            'last_error' => $error,
+            'last_error' => RedactedError::fit($error),
             'next_attempt_at' => Carbon::now()->addSeconds($this->backoffSeconds() * 2 ** ($attempts - 1)),
         ])->save();
 
@@ -262,7 +296,7 @@ final readonly class UsageFlusher
             $rollup->forceFill([
                 'state' => UsageEventState::Failed,
                 'attempts' => max($attempts, $rollup->attempts),
-                'last_error' => $error,
+                'last_error' => RedactedError::fit($error),
             ])->save();
 
             UsageEvent::model()::query()
@@ -281,21 +315,24 @@ final readonly class UsageFlusher
         ]);
     }
 
-    /** The owner's provider customer reference (Cashier's `stripe_id` by default), or null. */
-    private function customerReference(UsageEvent $rollup): ?string
+    /**
+     * Whether the rollup belongs to a period that ended longer than the configured grace ago.
+     *
+     * The period that holds the present moment starts where the rollup's own period ended, or later. A rollup stamped
+     * before that start belongs to an ended period, and the provider finalized that period's invoice once the grace
+     * after the start had passed.
+     */
+    private function arrivesAfterItsInvoiceClosed(UsageEvent $rollup, Model $owner): bool
     {
-        $class = Relation::getMorphedModel($rollup->owner_type) ?? $rollup->owner_type;
+        $current = Container::getInstance()->make(PeriodResolver::class)->forOwner($owner);
 
-        if (! is_subclass_of($class, Model::class)) {
-            return null;
-        }
+        return $rollup->occurred_at->lessThan($current->start)
+            && Carbon::now()->greaterThan($current->start->copy()->addMinutes($this->closedPeriodGraceMinutes()));
+    }
 
-        $owner = $class::query()->find($rollup->owner_id);
-
-        if (! $owner instanceof Model) {
-            return null;
-        }
-
+    /** The owner's provider customer reference (Cashier's `stripe_id` by default), or null. */
+    private function customerReference(Model $owner): ?string
+    {
         $column = $this->config->get('billing.customer.column', 'stripe_id');
         $reference = $owner->getAttribute(is_string($column) ? $column : 'stripe_id');
 
@@ -314,5 +351,12 @@ final readonly class UsageFlusher
         $value = $this->config->get('billing.metering.backoff_seconds', 60);
 
         return is_int($value) && $value > 0 ? $value : 60;
+    }
+
+    private function closedPeriodGraceMinutes(): int
+    {
+        $value = $this->config->get('billing.metering.closed_period_grace_minutes', 60);
+
+        return is_int($value) && $value >= 0 ? $value : 60;
     }
 }

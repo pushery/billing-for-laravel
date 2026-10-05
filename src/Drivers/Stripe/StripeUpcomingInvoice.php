@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Pushery\Billing\Contracts\UpcomingInvoice as UpcomingInvoiceContract;
 use Pushery\Billing\Models\Subscription;
-use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\UpcomingInvoicePreview;
 use Stripe\StripeClient;
 use Throwable;
@@ -25,6 +24,12 @@ use Throwable;
  * 3. A FAILURE is never cached. Cache::remember stores only a value the callback RETURNS; a thrown outage
  *    propagates out of remember uncached, so the next render retries Stripe instead of pinning the preview
  *    to "no estimate" for the whole TTL.
+ *
+ * What is cached is three scalars, not the value object. The Laravel 13 skeleton sets
+ * `cache.serializable_classes` to false, so every store unserializes without classes, and a cached object
+ * came back as `__PHP_Incomplete_Class`: every hit failed the return type and the catch below made it null, so
+ * the line was missing on almost every render. The key carries `v2` so an object an earlier version cached is
+ * never read back.
  */
 final readonly class StripeUpcomingInvoice implements UpcomingInvoiceContract
 {
@@ -48,10 +53,10 @@ final readonly class StripeUpcomingInvoice implements UpcomingInvoiceContract
         }
 
         try {
-            return Cache::remember(
-                "upcoming_invoice:{$customerId}",
+            $preview = Cache::remember(
+                "upcoming_invoice:v2:{$customerId}",
                 self::CACHE_TTL_SECONDS,
-                fn (): UpcomingInvoicePreview => $this->fetch($customerId, $subscriptionId),
+                fn (): array => $this->fetch($customerId, $subscriptionId),
             );
         } catch (Throwable) {
             // A provider outage (or nothing to preview) — degrade to null rather than 500 the screen. The
@@ -63,23 +68,32 @@ final readonly class StripeUpcomingInvoice implements UpcomingInvoiceContract
             // it through would 500 a page whose whole job is to be informational.
             return null;
         }
+
+        return new UpcomingInvoicePreview(
+            date: new DateTimeImmutable('@'.$preview['at']),
+            amount: StripeAmount::toMoney($preview['minor'], $preview['currency']),
+        );
     }
 
-    private function fetch(string $customerId, string $subscriptionId): UpcomingInvoicePreview
+    /**
+     * The preview as the scalars it is cached as.
+     *
+     * @return array{at: int, minor: int, currency: string}
+     */
+    private function fetch(string $customerId, string $subscriptionId): array
     {
         $preview = $this->stripe->invoices->createPreview([
             'customer' => $customerId,
             'subscription' => $subscriptionId,
         ]);
 
-        $timestamp = $preview->next_payment_attempt ?? $preview->period_end;
-
-        return new UpcomingInvoicePreview(
-            date: new DateTimeImmutable('@'.$timestamp),
+        return [
+            'at' => $preview->next_payment_attempt ?? $preview->period_end,
             // The raw total (minor units, VAT included) — what the customer is actually charged, not
             // amount_due, which nets off any customer-balance credit and would understate the next invoice.
-            amount: Money::of($preview->total, strtoupper($preview->currency)),
-        );
+            'minor' => $preview->total,
+            'currency' => strtoupper($preview->currency),
+        ];
     }
 
     /** The provider subscription reference from the billable's local subscription row, or null. */

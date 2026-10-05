@@ -89,8 +89,10 @@ final readonly class LaravelHttpMollieAdapter implements HttpAdapterContract
                     'body' => (string) $request->getBody(),
                 ]);
         } catch (ConnectionException $unreachable) {
-            // Retryable, and the distinction matters to the SDK: a request that never arrived may be sent
-            // again safely, while one that did must not be. Only a connection failure qualifies.
+            // Retryable. Laravel raises this for any transport failure that brought back no response, a
+            // timeout or a dropped connection after sending as well as a refused one, so Mollie may have
+            // received the request. Sending it again is safe because the SDK builds the request once and
+            // resends it with the same Idempotency-Key, which every mutating request carries.
             throw new RetryableNetworkRequestException($pendingRequest, $unreachable->getMessage());
         }
 
@@ -118,8 +120,8 @@ final readonly class LaravelHttpMollieAdapter implements HttpAdapterContract
      */
     public function version(): ?string
     {
-        // Both names, and the second is not a fallback for tidiness. `laravel/framework` REPLACES all 38
-        // `illuminate/*` splits, so in a tree where the full framework is installed — which is every
+        // Both names, and the second is not a fallback for tidiness. `laravel/framework` REPLACES every
+        // `illuminate/*` split, so in a tree where the full framework is installed — which is every
         // application, and this package's own test tree through Testbench — Composer answers for the split
         // with a null VERSION even though it reports it as installed. Asking only for the split therefore
         // reports nothing precisely where the component is most certainly present.

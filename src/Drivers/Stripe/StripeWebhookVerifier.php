@@ -44,8 +44,10 @@ final readonly class StripeWebhookVerifier implements WebhookVerifier
             return false;
         }
 
+        // Cashier reads STRIPE_WEBHOOK_TOLERANCE without a cast, so a value set in the environment arrives as a
+        // string. It is the number it names, as it is to Cashier's own middleware.
         $tolerance = $this->config->get('cashier.webhook.tolerance', 300);
-        $tolerance = is_int($tolerance) ? $tolerance : 300;
+        $tolerance = is_numeric($tolerance) ? (int) $tolerance : 300;
 
         try {
             Webhook::constructEvent($request->getContent(), $signature, $secret, $tolerance);

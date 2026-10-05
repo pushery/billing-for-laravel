@@ -13,8 +13,8 @@ namespace Pushery\Billing\Enums;
  *
  * This is deliberately neutral money vocabulary: the value object knows a "portion" and a "remainder", not
  * a platform or a creator. The mapping from a fee policy (config `billing.marketplace.fee.rounding`, whose
- * default `platform_first` sends the residual to the fee portion) to one of these cases lives at the fee
- * call site, not here — Money carries no tax or marketplace meaning.
+ * default `platform_first` sends the residual to the fee portion) to one of these cases is
+ * `fromConfigured()` below, so Money itself carries no tax or marketplace meaning.
  */
 enum RoundingResidual: string
 {
@@ -41,5 +41,23 @@ enum RoundingResidual: string
             'creator_first' => self::ToRemainder,
             default => null,
         };
+    }
+
+    /**
+     * The direction to rebuild a past sale under, when the sale itself never recorded one.
+     *
+     * The money side of a correction rebuilds the sale from its charge, the document side from its
+     * settlement, and their results are subtracted from one another. A row written before the direction was
+     * recorded falls back to what the installation does today, and both sides take that fallback from here,
+     * so the cent they subtract cannot land on different sides.
+     *
+     * A value neither direction can honor lands on `ToPortion` rather than throwing. This rebuilds something
+     * that already happened, and refusing to answer would make an old charge unreadable over a setting that
+     * has nothing to do with it. The resolver that PRICES a sale does throw, because a sale not yet made can
+     * still be stopped.
+     */
+    public static function forReconstruction(mixed $configured): self
+    {
+        return self::fromConfigured($configured) ?? self::ToPortion;
     }
 }

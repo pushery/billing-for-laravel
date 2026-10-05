@@ -14,9 +14,32 @@ final readonly class Party
     /** EAS (Electronic Address Scheme) code for an email address — the truest routing address. */
     private const string EAS_EMAIL = 'EM';
 
-    /** EAS code for a German VAT identification number (USt-IdNr.) used as an electronic address. */
-    private const string EAS_GERMAN_VAT = '9930';
+    /**
+     * EAS codes for a VAT identification number used as an electronic address, by the country prefix of the number.
+     *
+     * The schemes the EAS code list gives a country's VAT number (horstoeko/zugferd's ZugferdElectronicAddressScheme,
+     * v1.0.132): the entries named as a country's VAT number, and Austria's Umsatzsteuer-Identifikationsnummer, Finland's
+     * Value Add Tax Identifier, Italy's Partita IVA and Spain's tax agency, which Peppol labels ES:VAT. Greece issues its
+     * numbers with the prefix EL. A number from a country without such a scheme, Denmark for one, is not stated under
+     * another country's.
+     */
+    private const array EAS_VAT_BY_COUNTRY = [
+        'AD' => '9922', 'AL' => '9923', 'AT' => '9914', 'BA' => '9924', 'BE' => '9925', 'BG' => '9926',
+        'CH' => '9927', 'CY' => '9928', 'CZ' => '9929', 'DE' => '9930', 'EE' => '9931', 'EL' => '9933',
+        'ES' => '9920', 'FI' => '0213', 'FR' => '9957', 'GB' => '9932', 'GR' => '9933', 'HR' => '9934',
+        'HU' => '9910', 'IE' => '9935', 'IT' => '0211', 'LI' => '9936', 'LT' => '9937', 'LU' => '9938',
+        'LV' => '9939', 'MC' => '9940', 'ME' => '9941', 'MK' => '9942', 'MT' => '9943', 'NL' => '9944',
+        'PL' => '9945', 'PT' => '9946', 'RO' => '9947', 'RS' => '9948', 'SE' => '9955', 'SI' => '9949',
+        'SK' => '9950', 'SM' => '9951', 'TR' => '9952', 'VA' => '9953',
+    ];
 
+    /**
+     * @param  ?string  $contactName  the contact point (BT-41 for a seller), a department or a person
+     * @param  ?string  $contactPhone  the contact's telephone number (BT-42)
+     * @param  ?string  $contactEmail  the contact's email address (BT-43)
+     * @param  ?string  $iban  the account a payment by credit transfer goes to (BT-84)
+     * @param  ?string  $bic  the bank of that account (BT-86)
+     */
     public function __construct(
         public string $name,
         public string $address,
@@ -26,6 +49,11 @@ final readonly class Party
         public ?string $vatId,
         public ?string $endpointId,
         public string $endpointScheme,
+        public ?string $contactName = null,
+        public ?string $contactPhone = null,
+        public ?string $contactEmail = null,
+        public ?string $iban = null,
+        public ?string $bic = null,
     ) {}
 
     /**
@@ -48,6 +76,11 @@ final readonly class Party
             'vat_id' => $this->vatId,
             'endpoint_id' => $this->endpointId,
             'endpoint_scheme' => $this->endpointScheme,
+            'contact_name' => $this->contactName,
+            'contact_phone' => $this->contactPhone,
+            'contact_email' => $this->contactEmail,
+            'iban' => $this->iban,
+            'bic' => $this->bic,
         ];
     }
 
@@ -66,7 +99,18 @@ final readonly class Party
             vatId: $vatId,
             endpointId: $endpointId,
             endpointScheme: $endpointScheme,
+            contactName: self::nonEmptyString($data, 'contact_name'),
+            contactPhone: self::nonEmptyString($data, 'contact_phone'),
+            contactEmail: self::nonEmptyString($data, 'contact_email'),
+            iban: self::nonEmptyString($data, 'iban'),
+            bic: self::nonEmptyString($data, 'bic'),
         );
+    }
+
+    /** Whether the party names a contact at all (BG-6 for a seller, BG-9 for a buyer). */
+    public function hasContact(): bool
+    {
+        return $this->contactName !== null || $this->contactPhone !== null || $this->contactEmail !== null;
     }
 
     /**
@@ -76,7 +120,9 @@ final readonly class Party
      *
      *   1. an explicitly configured endpoint (a real delivery address) + its scheme (default "EM")
      *   2. an email → EAS "EM", a genuine routing address (what the standard actually intends)
-     *   3. the VAT id → EAS "9930", an identifier pressed into service — validator-safe last resort
+     *   3. the VAT id → the EAS code of its country's VAT-number scheme, an identifier pressed into service. A number
+     *      from a country the code list gives no such scheme yields none rather than another country's: a French
+     *      number stated as a German one names a scheme that does not hold it
      *
      * Only a party with none of these yields a null endpoint; that is a configuration gap (the resulting
      * XML would be rejected), not something to invent a value for, so it degrades rather than fabricating.
@@ -98,8 +144,10 @@ final readonly class Party
             return [$email, self::EAS_EMAIL];
         }
 
-        if ($vatId !== null) {
-            return [$vatId, self::EAS_GERMAN_VAT];
+        $scheme = $vatId === null ? null : (self::EAS_VAT_BY_COUNTRY[strtoupper(substr($vatId, 0, 2))] ?? null);
+
+        if ($vatId !== null && $scheme !== null) {
+            return [$vatId, $scheme];
         }
 
         return [null, self::string($data, 'endpoint_scheme', self::EAS_EMAIL)];

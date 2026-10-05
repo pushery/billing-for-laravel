@@ -23,6 +23,7 @@ return [
     'vat_reverse_charge' => 'IVA (inversione contabile)',
     'total' => 'Totale',
     'total_including_vat' => 'Totale IVA :rate inclusa',
+    'collected_on_behalf' => 'Incassato in nome e per conto del venditore',
     'reverse_charge_note' => 'Inversione contabile: l’imposta è dovuta dal destinatario.',
     'small_business_note' => 'Esente da IVA ai sensi del regime delle piccole imprese (§ 19 UStG).',
     'union_small_business_note' => 'Esente da IVA ai sensi del regime delle piccole imprese dello Stato membro del fornitore.',

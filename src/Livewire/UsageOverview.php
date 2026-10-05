@@ -22,6 +22,11 @@ final class UsageOverview extends AccountScreen
 {
     use DegradesGracefully;
 
+    protected function headingKey(): string
+    {
+        return 'billing::account.usage.heading';
+    }
+
     public function render(): View
     {
         $state = $this->currentState();

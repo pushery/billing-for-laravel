@@ -8,6 +8,7 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Lang;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\CanReceiveMoney;
@@ -48,6 +49,12 @@ use Stripe\StripeClient;
  */
 final readonly class StripeOneTimeCharge implements OneTimeCharge
 {
+    /**
+     * The metadata key under which a routed hosted sale carries the package's own reference for itself, on the
+     * session and on the payment the session creates once the buyer confirms. The webhook mapper reads it back.
+     */
+    public const string SALE_METADATA_KEY = 'billing_sale';
+
     public function __construct(
         private StripeClient $stripe,
         private AddonCatalog $addons,
@@ -120,7 +127,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         return [
             'price_data' => [
                 'currency' => strtolower($fee->gross->currency),
-                'unit_amount' => $fee->gross->minorUnits,
+                'unit_amount' => StripeAmount::of($fee->gross),
                 'tax_behavior' => 'inclusive',
                 // Named from the package's own translations so a buyer sees their language rather than an
                 // internal key, and so an operator can publish a wording of their own.
@@ -191,9 +198,15 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // joins them — the shape stays anyway, because a relationship the code relies on is cheaper said
         // than inferred, and this one cost nothing to say.
         $intent = null;
+        $saleReference = null;
 
         if ($routed !== null) {
             $intent = $routed['intent'];
+
+            // The reference the sale is written down under, carried on the payment Stripe creates once the buyer
+            // confirms, which is where the confirmation finds it again (see recordPendingSale()).
+            $saleReference = $this->newSaleReference();
+            $intent['metadata'] = [self::SALE_METADATA_KEY => $saleReference];
 
             // On a separate transfer there is no application fee to raise: the platform keeps the whole payment,
             // the buyer fee with it, and moves only the merchant's net share of the ITEM afterwards.
@@ -202,7 +215,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
                 // everything that is not the application fee to the merchant — so leaving it alone would hand
                 // the platform's own intermediation revenue to the seller, on every sale, silently. What must
                 // not move is the merchant's share of the ITEM.
-                $intent['application_fee_amount'] += $buyerFee->gross->minorUnits;
+                $intent['application_fee_amount'] += StripeAmount::of($buyerFee->gross);
             }
         }
 
@@ -222,6 +235,9 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
                 'addon_key' => $addonKey,
                 'withdrawal_declaration' => $declarationReference,
                 'caller_reference' => $callerReference,
+                // On the session as well as on the payment: a buyer who walks away leaves no payment, and the
+                // session's expiry is then the only event that can close the sale.
+                self::SALE_METADATA_KEY => $saleReference,
             ], static fn (?string $value): bool => $value !== null && $value !== ''),
             'success_url' => $successUrl,
             'cancel_url' => $cancelUrl,
@@ -277,11 +293,10 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         if ($routed !== null) {
             // `?? null` rather than a plain read, and the operator is doing real work here. A Stripe object
             // answers an UNDEFINED property by emitting a notice and returning null — so reading it to find
-            // out whether it is there writes to the output of whatever is running, and the refusal path
-            // below (the one case where it is legitimately absent) printed a warning every time it did its
-            // job. The null-coalescing operator asks `__isset` first, which looks in the same value bag
-            // without complaining.
-            $this->recordPendingSale($routed, $session->payment_intent ?? null, $buyerFee, MerchantChargePurpose::AddonPurchase);
+            // out whether it is there writes to the output of whatever is running, and under the pinned API
+            // version the session names no payment at all. The null-coalescing operator asks `__isset` first,
+            // which looks in the same value bag without complaining.
+            $this->recordPendingSale($routed, $session->payment_intent ?? null, $saleReference, $buyerFee, MerchantChargePurpose::AddonPurchase);
         }
 
         $url = $session->url ?? null;
@@ -345,6 +360,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         $customerId = $this->customers->resolve($billable);
         $merchantKey = $merchant->getKey();
         $routed = $this->tipRouting($merchant, $chosen);
+        $saleReference = $this->newSaleReference();
 
         $payload = array_filter([
             'mode' => 'payment',
@@ -357,7 +373,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
                 'quantity' => 1,
                 'price_data' => [
                     'currency' => strtolower($chosen->currency),
-                    'unit_amount' => $chosen->minorUnits,
+                    'unit_amount' => StripeAmount::of($chosen),
                     'product_data' => ['name' => $this->tipLineName()],
                 ],
             ]],
@@ -382,10 +398,11 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
                 // typed `mixed` and a custom one need not be scalar, and metadata is a string map.
                 'tip_merchant' => is_scalar($merchantKey) ? (string) $merchantKey : '',
                 'withdrawal_declaration' => $declarationReference,
+                self::SALE_METADATA_KEY => $saleReference,
             ], static fn (?string $value): bool => $value !== null && $value !== ''),
             'success_url' => $successUrl,
             'cancel_url' => $cancelUrl,
-            'payment_intent_data' => $routed['intent'],
+            'payment_intent_data' => [...$routed['intent'], 'metadata' => [self::SALE_METADATA_KEY => $saleReference]],
         ]);
 
         // NO BUYER FEE ON A TIP, and the omission is a decision. A buyer fee is charged ON TOP of a price
@@ -398,7 +415,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // address. The lane records no rate rather than asserting the provider's.
         $session = $this->stripe->checkout->sessions->create($payload);
 
-        $this->recordPendingSale($routed, $session->payment_intent ?? null, null, MerchantChargePurpose::Tip);
+        $this->recordPendingSale($routed, $session->payment_intent ?? null, $saleReference, null, MerchantChargePurpose::Tip);
 
         $url = $session->url ?? null;
 
@@ -640,7 +657,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         }
 
         return [
-            'application_fee_amount' => $platformFee->minorUnits,
+            'application_fee_amount' => StripeAmount::of($platformFee),
             'transfer_data' => ['destination' => $account->accountId],
         ];
     }
@@ -681,18 +698,18 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      * that payload carries `amount_total` but NOT `transfer_data` — the routing lives on the PaymentIntent,
      * and the session names it only as an id. A webhook payload cannot be expanded.
      *
-     * ## Why it is keyed on the PaymentIntent and not the session
+     * ## Why it is keyed on the sale's own reference
      *
-     * Because the confirmation arrives under the PaymentIntent's id, and Stripe guarantees no ordering
-     * between `checkout.session.completed` and `payment_intent.succeeded`. A row keyed on the session and
-     * re-keyed later would be missed by every confirmation that overtook the re-keying. Keyed this way the
-     * row exists before any webhook can fire, so the two halves cannot race.
+     * Since Stripe's API version 2022-08-01 a payment-mode session creates its PaymentIntent only when the buyer
+     * confirms, so the session this lane opens names none. The sale is written down under a reference of the
+     * package's own instead, which rides on the session's metadata and on the metadata of the payment Stripe
+     * creates later. Every `payment_intent.*` event carries it, so the confirmation finds this row in whatever
+     * order it arrives beside `checkout.session.completed`, and the row takes the payment's id as its reference
+     * from then on, which is what a refund, a withdrawal and a dispute hand the provider. A session that lapses
+     * unpaid names no payment at all, and its expiry closes the row through the session's metadata.
      *
-     * ## Why a missing id refuses instead of carrying on
-     *
-     * A payment-mode session names its PaymentIntent the moment it is created. If that is ever absent, the
-     * sale cannot be recorded — and handing back a checkout URL for a routed sale nothing can track is the
-     * exact defect this method exists to end. The session goes unused and expires.
+     * A session that does name its PaymentIntent, under an older API version, is written down under that id,
+     * as it was before the deferral.
      *
      * @param  array{
      *     merchant: Model,
@@ -707,6 +724,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
     private function recordPendingSale(
         array $routed,
         mixed $paymentIntent,
+        string $saleReference,
         ?FeeLine $buyerFee,
         // REQUIRED rather than defaulted, though the ledger accepts null: both lanes that reach here know
         // exactly what they are selling, and a lane added later must be made to say so instead of silently
@@ -714,21 +732,14 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // and a new row is never that.
         MerchantChargePurpose $purpose,
     ): void {
-        // Stripe hands this back as an id, and as an expanded object when something asked it to. Both are
-        // answered; anything else is the refusal below rather than a silent null.
+        // Stripe hands a payment back as an id, and as an expanded object when something asked it to. Under the
+        // pinned API version it hands back neither, and the sale's own reference stands in until the
+        // confirmation names the payment.
         $reference = match (true) {
-            is_string($paymentIntent) => $paymentIntent,
+            is_string($paymentIntent) && $paymentIntent !== '' => $paymentIntent,
             $paymentIntent instanceof PaymentIntent => $paymentIntent->id,
-            default => null,
+            default => $saleReference,
         };
-
-        if (! is_string($reference) || $reference === '') {
-            throw new RuntimeException(
-                'Stripe opened a routed one-off checkout session without naming its PaymentIntent, so the '.
-                'sale cannot be recorded. Refusing rather than returning a checkout URL for a routed sale '.
-                'that nothing would be able to reverse, count or attribute afterwards.'
-            );
-        }
 
         $this->ledger->record(
             $routed['merchant'],
@@ -769,6 +780,14 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             purpose: $purpose,
             taxArchetype: $routed['archetype'],
         );
+    }
+
+    /**
+     * A fresh reference for a routed hosted sale, unique without asking anything and never shaped like a Stripe id.
+     */
+    private function newSaleReference(): string
+    {
+        return 'billing_sale_'.strtolower((string) Str::ulid());
     }
 
     /** A configured hosted-checkout return URL, or a loud error — Stripe cannot open checkout without it. */

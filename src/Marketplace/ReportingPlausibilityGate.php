@@ -7,6 +7,7 @@ namespace Pushery\Billing\Marketplace;
 use Pushery\Billing\Exceptions\ReportingNotPlausible;
 use Pushery\Billing\Models\ReportingFindingAcknowledgement;
 use Pushery\Billing\ValueObjects\PlausibilityFinding;
+use Pushery\Billing\ValueObjects\SellerPeriodReport;
 
 /**
  * The § 18 check, as a step of its own that runs BEFORE anything is produced.
@@ -45,11 +46,13 @@ final readonly class ReportingPlausibilityGate
      * that hid acknowledged findings would make a period look cleaner every time somebody waved one
      * through.
      *
+     * @param  list<SellerPeriodReport>|null  $reports  the period's reports when the caller already holds them,
+     *                                                  as an export does; read here otherwise
      * @return list<PlausibilityFinding>
      */
-    public function findingsFor(int $year, string $currency): array
+    public function findingsFor(int $year, string $currency, ?array $reports = null): array
     {
-        $reports = $this->period->reportsFor($year, $currency);
+        $reports ??= $this->period->reportsFor($year, $currency);
         $findings = [];
 
         foreach ($this->rules->all() as $rule) {
@@ -64,14 +67,15 @@ final readonly class ReportingPlausibilityGate
     /**
      * The findings still standing in the way, in the catalog's order.
      *
+     * @param  list<SellerPeriodReport>|null  $reports  the period's reports when the caller already holds them
      * @return list<PlausibilityFinding>
      */
-    public function openFindingsFor(int $year, string $currency): array
+    public function openFindingsFor(int $year, string $currency, ?array $reports = null): array
     {
         $answered = $this->acknowledgedKeys($year, $currency);
 
         return array_values(array_filter(
-            $this->findingsFor($year, $currency),
+            $this->findingsFor($year, $currency, $reports),
             static fn (PlausibilityFinding $finding): bool => ! in_array($finding->key(), $answered, true),
         ));
     }
@@ -83,11 +87,16 @@ final readonly class ReportingPlausibilityGate
      * on purpose: a boolean invites a caller to look at it and carry on, and the whole point of the step is
      * that carrying on is not one of the options.
      *
+     * An export hands over the reports it is about to render, so the period is judged over exactly what is
+     * filed and is read once rather than once for the check and again for the record.
+     *
+     * @param  list<SellerPeriodReport>|null  $reports  the period's reports when the caller already holds them
+     *
      * @throws ReportingNotPlausible
      */
-    public function assertClear(int $year, string $currency): void
+    public function assertClear(int $year, string $currency, ?array $reports = null): void
     {
-        $open = $this->openFindingsFor($year, $currency);
+        $open = $this->openFindingsFor($year, $currency, $reports);
 
         if ($open !== []) {
             throw new ReportingNotPlausible($year, $currency, $open);

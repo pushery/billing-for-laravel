@@ -27,6 +27,11 @@ final class PaymentMethodManager extends AccountScreen
 {
     use DegradesGracefully;
 
+    protected function headingKey(): string
+    {
+        return 'billing::account.payment_methods.heading';
+    }
+
     public function render(): View
     {
         return $this->view('billing::livewire.payment-method-manager', [

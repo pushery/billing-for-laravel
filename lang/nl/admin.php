@@ -49,6 +49,7 @@ return [
         'submit' => 'Abonnement opzeggen',
         'canceled' => 'Abonnement opgezegd.',
         'not_found' => 'Geen eigenaar gevonden met dat ID.',
+        'nothing_running' => 'Deze eigenaar heeft geen lopend abonnement om op te zeggen.',
     ],
 
     'audit' => [

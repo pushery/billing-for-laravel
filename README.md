@@ -39,7 +39,7 @@ Everything crosses a small set of contracts, so your app talks to _billing_ — 
 - PHP 8.4+
 - Laravel 13+
 
-Tested against SQLite, PostgreSQL and MySQL 8.4, so it runs on Laravel Cloud (serverless Postgres and MySQL 8.4 LTS) out of the box.
+Tested on PostgreSQL and MySQL 8.4, the databases Laravel Cloud runs (serverless Postgres and MySQL 8.4 LTS), so it runs there out of the box. The fast suite runs on SQLite.
 
 ## Installation
 

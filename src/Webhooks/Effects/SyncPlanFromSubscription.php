@@ -17,6 +17,7 @@ use Pushery\Billing\Events\AccountBillingUpdated;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
+use Pushery\Billing\Support\UntouchableTiers;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
@@ -27,7 +28,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * leaving a stale paid value. An access-granting subscription whose price maps to no configured tier
  * falls back to the last tier resolved on the local row, and only leaves the column alone when no tier
  * was ever known — unknown is not zero, and the owner is paying. Admin-comped tiers (config
- * `untouchable_tiers`) are never overwritten by the provider.
+ * `untouchable_tiers`, or a tier's own `untouchable` flag) are never overwritten by the provider.
  *
  * Ordering-safe: the read and the writes commit in one transaction under a row lock, and an out-of-
  * order or retried OLDER event (by the provider event timestamp) is ignored rather than regressing a
@@ -94,10 +95,10 @@ final readonly class SyncPlanFromSubscription
      * Tell the owner's open screens to re-fetch — AFTER the transaction that earned the right to say so.
      *
      * Inside it would be wrong in a way nothing would catch: the broadcast leaves the process immediately,
-     * a rollback cannot recall it, and the screens would re-fetch state that was never written. Deferring
-     * it with `ShouldDispatchAfterCommit` is the framework's answer to the same problem and is not usable
-     * here — the suite runs inside a transaction that never commits, so the event would never fire in any
-     * test and the wiring would be provably present and provably unexercised.
+     * a rollback cannot recall it, and the screens would re-fetch state that was never written. On the
+     * webhook path this effect runs inside the run's own transaction, where the one above is a savepoint, so
+     * leaving it is not enough: `AccountBillingUpdated` is dispatched after commit, and waits for the
+     * outermost one.
      *
      * Silence is the common case: a provider redelivers freely, and an event that moved nothing must not
      * make every open screen re-fetch.
@@ -162,7 +163,9 @@ final readonly class SyncPlanFromSubscription
 
         $column = $this->string('billing.tier_column', 'plan');
 
-        if (in_array($owner->getAttribute($column), $this->untouchableTiers(), true)) {
+        $held = $owner->getAttribute($column);
+
+        if (is_string($held) && UntouchableTiers::has($this->config, $held)) {
             return $moved;
         }
 
@@ -482,13 +485,5 @@ final readonly class SyncPlanFromSubscription
         $value = $this->config->get($key, $default);
 
         return is_string($value) ? $value : $default;
-    }
-
-    /** @return list<string> */
-    private function untouchableTiers(): array
-    {
-        $tiers = $this->config->get('billing.untouchable_tiers', []);
-
-        return is_array($tiers) ? array_values(array_filter($tiers, is_string(...))) : [];
     }
 }

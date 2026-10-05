@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\UsageHistoryProvider;
 use Pushery\Billing\Models\AddonPurchase;
 use Pushery\Billing\Models\UsageCounter;
+use Pushery\Billing\Support\PeriodResolver;
 use Pushery\Billing\ValueObjects\AddonTopup;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PeriodUsage;
@@ -19,16 +20,34 @@ use Pushery\Billing\ValueObjects\PeriodUsage;
  * bought — scoped to the owner and never touching a provider. Column-authoritative by construction, so
  * the history reflects exactly what was metered and paid, independent of any downstream rating.
  */
-final class DatabaseUsageHistory implements UsageHistoryProvider
+final readonly class DatabaseUsageHistory implements UsageHistoryProvider
 {
+    public function __construct(private PeriodResolver $cycles = new PeriodResolver) {}
+
+    /**
+     * Every meter of the owner's last `$limit` finished periods, newest period first.
+     *
+     * The limit counts periods, not rows: an owner with five meters sees each period whole, where a row
+     * limit of twelve cut the oldest card short and hid meters as if they had not been used. The running
+     * period is left out, because its figures are still moving; the overview shows them.
+     */
     public function periods(Model $owner, int $limit = 12): array
     {
+        $finished = UsageCounter::model()::query()
+            ->where('owner_type', $owner->getMorphClass())
+            ->where('owner_id', $owner->getKey())
+            ->where('period', '!=', $this->cycles->forOwner($owner)->key)
+            ->distinct()
+            ->orderByDesc('period')
+            ->limit($limit)
+            ->pluck('period');
+
         $rows = UsageCounter::model()::query()
             ->where('owner_type', $owner->getMorphClass())
             ->where('owner_id', $owner->getKey())
+            ->whereIn('period', $finished)
             ->orderByDesc('period')
             ->orderBy('meter_key')
-            ->limit($limit)
             ->get();
 
         return array_values($rows

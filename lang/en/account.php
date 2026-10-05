@@ -181,13 +181,14 @@ return [
 
     'reconfirm' => [
         'prompt' => 'Confirm your password to continue.',
+        'prompt_email' => 'Confirm your account email to continue.',
         'wrong' => 'That didn’t match. Please try again.',
         'throttled' => 'Too many attempts. Try again in :seconds seconds.',
     ],
 
     'danger' => [
         'heading' => 'Danger zone',
-        'explanation' => 'Canceling now stops billing immediately, with no grace period.',
+        'explanation' => 'Canceling now ends your subscription immediately, with no grace period. Days you have already used and not yet paid for are still billed.',
         'cancel_now' => 'Cancel billing now',
         'confirm_question' => 'This cannot be undone. Cancel billing immediately?',
         'confirm_yes' => 'Yes, cancel now',

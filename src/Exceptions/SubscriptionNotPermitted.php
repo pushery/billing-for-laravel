@@ -43,9 +43,9 @@ final class SubscriptionNotPermitted extends RuntimeException
     public static function untouchableTier(string $tierKey): self
     {
         return new self(
-            'The tier "'.$tierKey.'" is listed in billing.untouchable_tiers, which means it is granted by '
-            .'hand and deliberately kept outside the billing flow. Selling it through checkout would let '
-            .'the next provider event overwrite the grant, which is the exact thing that listing prevents.'
+            'The tier "'.$tierKey.'" is untouchable (billing.untouchable_tiers, or its own untouchable flag): it '
+            .'is granted by hand and deliberately kept outside the billing flow. The plan sync never moves an owner '
+            .'off such a tier, so one sold through checkout would stay with its buyer after the subscription ends.'
         );
     }
 

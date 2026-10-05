@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Events;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 
 /**
  * Our ledger and the provider's meter DISAGREE about how much usage a customer had.
@@ -18,6 +19,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 final readonly class UsageReconciliationDrift implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public function __construct(
         public Model $owner,
         public string $meterKey,

@@ -181,13 +181,14 @@ return [
 
     'reconfirm' => [
         'prompt' => 'Bestätige dein Passwort, um fortzufahren.',
+        'prompt_email' => 'Bestätige die E-Mail-Adresse deines Kontos, um fortzufahren.',
         'wrong' => 'Das hat nicht gepasst. Bitte versuche es erneut.',
         'throttled' => 'Zu viele Versuche. Versuche es in :seconds Sekunden erneut.',
     ],
 
     'danger' => [
         'heading' => 'Gefahrenzone',
-        'explanation' => 'Wenn du jetzt kündigst, endet die Abrechnung sofort – ohne Übergangsfrist.',
+        'explanation' => 'Wenn du jetzt kündigst, endet dein Abo sofort – ohne Übergangsfrist. Tage, die du schon genutzt und noch nicht bezahlt hast, werden trotzdem abgerechnet.',
         'cancel_now' => 'Abrechnung sofort beenden',
         'confirm_question' => 'Das lässt sich nicht rückgängig machen. Abrechnung sofort beenden?',
         'confirm_yes' => 'Ja, sofort beenden',

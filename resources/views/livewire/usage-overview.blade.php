@@ -24,14 +24,14 @@
                     <div class="flex items-center justify-between">
                         <span class="font-medium">{{ $dimension->label }}</span>
                         <span class="text-sm text-gray-500 dark:text-gray-400">
-                            {{ $dimension->used }}@if ($dimension->limit !== null) / {{ $dimension->limit }}@endif {{ $dimension->unit }}
+                            {{ \Pushery\Billing\Support\LocalizedNumber::format($dimension->used) }}@if ($dimension->limit !== null) / {{ \Pushery\Billing\Support\LocalizedNumber::format($dimension->limit) }}@endif {{ $dimension->unit }}
                         </span>
                     </div>
 
                     @if (($prepaid[$dimension->key] ?? 0) > 0)
                         {{-- Bought units that roll over across cycles, distinct from the per-cycle included allowance. --}}
                         <p class="mt-1 text-xs font-medium text-gray-500 dark:text-gray-400">
-                            {{ __('billing::account.usage.prepaid', ['units' => $prepaid[$dimension->key], 'unit' => $dimension->unit]) }}
+                            {{ __('billing::account.usage.prepaid', ['units' => \Pushery\Billing\Support\LocalizedNumber::format($prepaid[$dimension->key]), 'unit' => $dimension->unit]) }}
                         </p>
                     @endif
 
@@ -71,7 +71,7 @@
                     @if ($dimension->hasForecast())
                         <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">
                             {{ __('billing::account.usage.forecast', [
-                                'rate' => number_format($dimension->ratePerDay, $dimension->ratePerDay < 10 ? 1 : 0),
+                                'rate' => \Pushery\Billing\Support\LocalizedNumber::format($dimension->ratePerDay, $dimension->ratePerDay < 10 ? 1 : 0),
                                 'unit' => $dimension->unit,
                                 'date' => \Pushery\Billing\Support\LocalizedDate::short($dimension->exhaustedAt),
                             ]) }}

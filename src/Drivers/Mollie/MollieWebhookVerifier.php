@@ -11,27 +11,35 @@ use Mollie\Api\Webhooks\SignatureValidator;
 use Pushery\Billing\Contracts\WebhookVerifier;
 
 /**
- * Authenticates a Mollie webhook — by signature where the account signs, and by the shape of the ping
- * where it does not.
+ * Authenticates a Mollie webhook — by signature where Mollie signs, and by the shape of the ping where it
+ * does not.
  *
- * Mollie runs two generations of webhook. The next generation carries an HMAC-SHA256 in
- * `X-Mollie-Signature`; the legacy one carries nothing at all and is authenticated by the fetch the mapper
- * does, since an attacker cannot invent a status Mollie will confirm.
+ * Mollie runs two generations of webhook, and one account receives both at once:
  *
- * **Which generation an account runs is a dashboard setting**, so the configured secret is the switch
- * rather than a guess in code. Both halves matter:
+ * - **The classic ping** answers the `webhookUrl` the driver sets on every payment it creates. Mollie posts
+ *   the payment's id and nothing else, and never signs it, whatever the account has set up in the
+ *   dashboard. It is authenticated by the fetch the mapper does, since an attacker cannot invent a status
+ *   Mollie will confirm.
+ * - **The next-generation event** is subscribed in the dashboard. Its body names a `type` and an
+ *   `entityId`, and it carries an HMAC-SHA256 in `X-Mollie-Signature`.
  *
- * - **A secret is configured** → the signature is checked with the SDK's own validator, which knows the
- *   header format and accepts a list of secrets so a key can be rotated without losing webhooks. An
- *   UNSIGNED ping is then refused: the operator told us their account signs, so an unsigned request is
- *   either a misconfiguration or somebody knocking, and both deserve the same answer.
- * - **No secret is configured** → the legacy path. This fallback is not optional; without it every
- *   install still on legacy webhooks would start refusing every ping on the day it updated.
+ * So the configured secret decides what can be checked, not which channel exists:
  *
- * Fetching back stays a real defense either way, but it is the WEAKER one, and that is worth saying
- * plainly because this class used to claim the opposite: it lets anybody who can reach the endpoint drive
- * unbounded processing and API calls against the account by posting real ids. A signature throws that away
- * before anything happens.
+ * - **A secret is configured** → a request that carries a signature has to carry a valid one, checked
+ *   with the SDK's own validator, which knows the header format and accepts a list of secrets so a key
+ *   can be rotated without losing webhooks. An unsigned request is accepted in the classic shape only. A
+ *   body that announces an event claims to come from the generation that signs every delivery, so
+ *   arriving unsigned it is not Mollie's. Refusing the unsigned classic ping as well would refuse every
+ *   payment status the classic channel carries.
+ * - **No secret is configured** → nothing can be checked, and every ping goes on to the fetch.
+ *
+ * Either way an unsigned classic ping has to name a payment, `tr_` and letters and digits, because the
+ * driver sets its `webhookUrl` on payments and on nothing else. Anything else is refused before it is
+ * recorded, so a made-up id writes no row of its own.
+ *
+ * Fetching back is the WEAKER defense: it lets anybody who can reach the endpoint drive processing and API
+ * calls against the account by posting real ids. A signature throws a forged event away before anything
+ * happens, which is why a request that carries one is never let through on its shape.
  */
 final readonly class MollieWebhookVerifier implements WebhookVerifier
 {
@@ -46,32 +54,46 @@ final readonly class MollieWebhookVerifier implements WebhookVerifier
         }
 
         $secrets = $this->signingSecrets();
+        $signature = $request->header(SignatureValidator::SIGNATURE_HEADER);
 
-        if ($secrets === []) {
-            return true;
+        if ($secrets !== [] && is_string($signature) && $signature !== '') {
+            return $this->signatureHolds($request, $signature, $secrets);
         }
 
-        return $this->signatureHolds($request, $secrets);
+        if ($this->isClassicPing($request)) {
+            return $this->namesAPayment($id);
+        }
+
+        // An event with no signature that could be checked. Without a secret nothing can be checked, and the
+        // fetch authenticates it as it does the classic ping. With one, the event claims to come from the
+        // generation that signs every delivery, so arriving unsigned it is not Mollie's.
+        return $secrets === [];
+    }
+
+    /** Whether the id has the shape of a Mollie payment id, the only resource a classic ping here names. */
+    private function namesAPayment(string $id): bool
+    {
+        return preg_match('/\Atr_[A-Za-z0-9]+\z/', $id) === 1;
     }
 
     /**
-     * Whether the request carries a signature made with one of the configured secrets.
+     * Whether an unsigned request has the shape of the classic ping: a resource id and no event.
      *
-     * The SDK's validator answers in three ways and each maps to a different decision here: true for a
-     * valid signature, false when the request carries NO signature at all, and an exception when
-     * signatures are present but none matches. The middle case is a legacy ping — which on an install
-     * that configured a secret is not legitimate, so it is refused along with the tampered one.
+     * The same two fields tell the mapper which generation it reads, so a request let through here as a
+     * classic ping is read as one there.
+     */
+    private function isClassicPing(Request $request): bool
+    {
+        return $request->input('type') === null && $request->input('entityId') === null;
+    }
+
+    /**
+     * Whether the signature the request carries was made with one of the configured secrets.
      *
      * @param  list<string>  $secrets
      */
-    private function signatureHolds(Request $request, array $secrets): bool
+    private function signatureHolds(Request $request, string $signature, array $secrets): bool
     {
-        $signature = $request->header(SignatureValidator::SIGNATURE_HEADER);
-
-        if (! is_string($signature) || $signature === '') {
-            return false;
-        }
-
         // Only the documented exception is caught. Anything ELSE the validator might throw surfaces
         // deliberately: refusing quietly on an unexpected library error would write "somebody sent us a
         // bad signature" into the log for what is actually our own bug — an attack that never happened,

@@ -23,7 +23,12 @@ use Pushery\Billing\Enums\VatIdValidation;
 interface SmallBusinessIdValidator
 {
     /**
-     * A NOTE FOR WHOEVER WRITES THE REAL IMPLEMENTATION: do not reject on format.
+     * Whether the register confirms this small-business registration.
+     *
+     * `Unavailable` is not a soft `Invalid`. It says the question was never answered — and the caller must
+     * treat that as unestablished rather than as either verdict.
+     *
+     * ## A note for whoever writes the real implementation: do not reject on format
      *
      * The obvious starting point is the ordinary tax-id validator, which refuses a malformed id locally
      * before spending a network call on it. Copied here, that pattern produces a merchant who is never
@@ -40,13 +45,6 @@ interface SmallBusinessIdValidator
      * entitled to give one — which is the whole point of asking. Anything a local check would legitimately
      * catch (an empty value, an implausible length) is cheap to answer as `Unavailable` rather than
      * `Invalid`, because "we did not ask" is the honest description of not having asked.
-     */
-
-    /**
-     * Whether the register confirms this small-business registration.
-     *
-     * `Unavailable` is not a soft `Invalid`. It says the question was never answered — and the caller must
-     * treat that as unestablished rather than as either verdict.
      */
     public function validate(?string $registrationId): VatIdValidation;
 }

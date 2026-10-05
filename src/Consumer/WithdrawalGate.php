@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\ConsumerWithdrawalPolicy;
 use Pushery\Billing\Contracts\StatesWithdrawalWindow;
 use Pushery\Billing\Enums\WithdrawalType;
+use Pushery\Billing\Exceptions\InvalidBillingConfig;
 use Pushery\Billing\Exceptions\WithdrawalConsentMissing;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\WithdrawalConsent;
@@ -32,10 +33,14 @@ final readonly class WithdrawalGate
         private ConsumerWithdrawalPolicy $policy,
     ) {}
 
-    /** Whether a consumer-rights profile is active at all. */
+    /**
+     * Whether a consumer-rights profile is active at all.
+     *
+     * @throws InvalidBillingConfig when the profile is neither off nor a name that selects a reading ({@see ConsumerRightsProfile})
+     */
     public function isEnforced(): bool
     {
-        return $this->config->get('billing.consumer_rights.profile') !== null;
+        return ConsumerRightsProfile::isActive($this->config, $this->policy);
     }
 
     /**

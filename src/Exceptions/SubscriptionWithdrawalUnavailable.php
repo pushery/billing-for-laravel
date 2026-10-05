@@ -39,6 +39,15 @@ final class SubscriptionWithdrawalUnavailable extends RuntimeException
         );
     }
 
+    /** The tier is sold only to businesses, and no consumer right of withdrawal arises from a contract with one. */
+    public static function noConsumerRight(string $tierKey): self
+    {
+        return new self(
+            "Tier '{$tierKey}' is sold only to businesses, so no consumer right of withdrawal arises from it. End the "
+            .'subscription with a cancellation, and settle any money through BillingAdmin::refund().'
+        );
+    }
+
     /** The period's payment is still being collected, and settling now could miss money that is yet to arrive. */
     public static function paymentInFlight(string $reference): self
     {

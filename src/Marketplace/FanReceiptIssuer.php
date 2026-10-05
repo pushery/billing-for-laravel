@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Closure;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
+use Pushery\Billing\Contracts\MerchantPartyResolver;
 use Pushery\Billing\Enums\DocumentSeries;
 use Pushery\Billing\Enums\FanReceiptTier;
 use Pushery\Billing\Enums\InvoiceStatus;
@@ -61,11 +63,18 @@ final readonly class FanReceiptIssuer
      * @var list<string>
      */
     public const array RESTATED_DIFFERENTLY = [
-        // A new document gets a new number from the buyer-receipt series.
+        // A new document gets a new number, from the series of the document it restates.
         'number',
+        // Its own date of issue: a restatement is issued on the day it is asked for, in the year its number is drawn
+        // for. The day of the sale stays on it as the date of supply, below.
+        'issued_at',
+        // The date of supply, which a restatement keeps as the receipt recorded it. A receipt that recorded none was
+        // issued on the day of the sale, and that day becomes the restatement's date of supply, unless the receipt
+        // covers a period, which states its own.
+        'delivered_on',
         // That is the whole point of the restatement: the short receipt becomes a full invoice.
         'receipt_tier',
-        // Set explicitly to the buyer-receipt series, which is what a restatement always is.
+        // Set explicitly to the series of the document it restates.
         'document_series',
         // A unique index spans period and series, so a second row carrying the same period could not exist.
         'settlement_period',
@@ -78,6 +87,7 @@ final readonly class FanReceiptIssuer
     public function __construct(
         private DocumentNumberAllocator $numbers,
         private Repository $config,
+        private MerchantPartyResolver $merchantParty,
     ) {}
 
     /**
@@ -134,15 +144,7 @@ final readonly class FanReceiptIssuer
         // the caller had nothing, which is what they already did when these were eight separate arguments.
         $characteristics ??= SupplyTaxCharacteristics::unknown();
 
-        if ($buyer !== null && $tier !== FanReceiptTier::FullInvoice) {
-            throw new InvalidArgumentException(
-                'Buyer details belong only on a full invoice, which is issued when the buyer asks for one. '
-                .'A simplified receipt or a payment record carries none — holding them there would be '
-                .'collection with no ground, and in a commission chain it would also disclose the buyer and '
-                .'the merchant to each other. Drop them at the call site rather than here, so the decision '
-                .'stays where somebody made it.'
-            );
-        }
+        $this->refuseBuyerBelowFullInvoice($buyer, $tier);
 
         if ($taxRateBps instanceof ProviderComputedTax && ! $taxRateBps->accountsFor($gross)) {
             throw new InvalidArgumentException(
@@ -219,9 +221,9 @@ final readonly class FanReceiptIssuer
             'destination_country' => $characteristics->destinationCountry,
             'destination_subdivision' => $characteristics->destinationSubdivision,
             'tax_rate_category' => $characteristics->rateCategory,
-            // BT-72, and it had the same shape as the characteristics above: both renderers emit it, the
-            // column is frozen against later change, and no issuer wrote it — so the term was absent on
-            // every document this package produced while a closed ticket said it rendered.
+            // BT-72, the delivery date. Like the characteristics above, both renderers emit it and the column
+            // is frozen against later change, so a term the issuer does not write here is missing from the
+            // document for good.
             'delivered_on' => $characteristics->deliveredOn,
             // WHY no tax was charged, where none was. It has to be stated rather than inferred, because the
             // renderer can only infer ONE of the two: with this absent it falls back to "reverse charge, or
@@ -320,6 +322,11 @@ final readonly class FanReceiptIssuer
         // arrive; `DocumentRoleGuardTest` holds the guard itself in both directions.
         [$feeNet, $feeTax] = $feeGross->baseFromMarkup($feeRateBps);
 
+        // The merchant is the recipient of this invoice and is named as its buyer, from the resolver the marketplace
+        // binds for its merchants, before a number is drawn. Unbound, the resolver refuses rather than let an invoice
+        // out that names nobody, as it does for a self-billed document.
+        $merchant = $this->merchantParty->partyFor($sellerOwner)->toArray();
+
         return $this->issueOnce(
             $sellerOwner,
             null,
@@ -341,7 +348,7 @@ final readonly class FanReceiptIssuer
                 'settled_charge_reference' => $chargeReference,
                 'provider' => $provider,
                 'seller' => $this->platformParty(),
-                'buyer' => [],
+                'buyer' => $merchant,
                 'lines' => [
                     [
                         'description' => 'Commission',
@@ -349,7 +356,9 @@ final readonly class FanReceiptIssuer
                         'unit' => 'C62',
                         'unit_price_minor' => $feeNet->minorUnits,
                         'net_minor' => $feeNet->minorUnits,
-                        'tax_rate' => $feeRateBps,
+                        // A line's rate is a percentage, as every other writer here hands it over: the basis
+                        // points went onto the documents as 1900 %.
+                        'tax_rate' => $feeRateBps / 100,
                     ],
                 ],
             ]),
@@ -515,28 +524,24 @@ final readonly class FanReceiptIssuer
         return $this->buyerDocuments($buyerOwner)
             ->whereNotNull('service_period_start')
             ->whereNotNull('service_period_end')
-            // `whereDate`, not a plain comparison against the date string, and the difference is a whole
-            // month. The columns are `date` casts, but a date is SERIALIZED with the connection's datetime
-            // format, so the stored value reads "2026-01-01 00:00:00". Compared against the bare
-            // "2026-01-01" a string comparison finds it GREATER — the longer string wins on the shared
+            // `whereDate`, not a plain comparison against the date string, and on SQLite the difference is a
+            // whole month. The columns are `date` casts, and SQLite, which has no date type, keeps the text the
+            // cast serializes with the connection's datetime format: "2026-01-01 00:00:00". Compared against
+            // the bare "2026-01-01" a string comparison finds it GREATER — the longer string wins on the shared
             // prefix — so the one cycle whose start equals the term's start slips through while every later
-            // month matches. Measured: a prepaid year plus its cycles left exactly the January document
-            // behind, which is the least suspicious possible number of escapees.
+            // month matches. MySQL and PostgreSQL keep the date alone in a `date` column, and `whereDate`
+            // compares the date on all three. Measured on SQLite: a prepaid year plus its cycles left exactly
+            // the January document behind, which is the least suspicious possible number of escapees.
             ->whereDate('service_period_start', '<=', $period->from)
             ->whereDate('service_period_end', '>=', $period->to)
             ->first();
     }
 
     /**
-     * The buyer's own documents, and the narrowing is the point.
+     * This owner's documents in one series, and the narrowing is the point.
      *
      * A creator's settlement for the same month carries a period too, and matching on the period alone would
      * hand a buyer's billing run the creator's document.
-     *
-     * @return Builder<InvoiceRecord>
-     */
-    /**
-     * This owner's documents in one series.
      *
      * The SERIES is a parameter, and that is the half of this fix nobody would have missed until it was too
      * late. It was hard-wired to the buyer receipt, so routing the intermediated issuer through the repeat
@@ -574,6 +579,8 @@ final readonly class FanReceiptIssuer
      *
      * @param  Money  $goodsGross  what the buyer paid the seller — passing through, not the platform's
      * @param  Money  $feeGross  what the buyer paid the platform for arranging it
+     * @param  ?array<string, mixed>  $buyer  the buyer's details — permitted ONLY for a full invoice, as on every
+     *                                        buyer's document
      */
     public function issueIntermediated(
         Model $buyerOwner,
@@ -583,7 +590,10 @@ final readonly class FanReceiptIssuer
         int $feeRateBps,
         CarbonImmutable $soldOn,
         ?string $chargeReference = null,
+        ?array $buyer = null,
     ): InvoiceRecord {
+        $this->refuseBuyerBelowFullInvoice($buyer, $tier);
+
         if ($goodsGross->currency !== $feeGross->currency) {
             throw new InvalidArgumentException(
                 'The goods and the fee were paid in one transaction and cannot be in two currencies; adding '
@@ -629,7 +639,7 @@ final readonly class FanReceiptIssuer
                 'receipt_tier' => $tier,
                 'settled_charge_reference' => $chargeReference,
                 'seller' => $this->platformParty(),
-                'buyer' => [],
+                'buyer' => $buyer ?? [],
                 'lines' => [
                     [
                         'description' => 'Purchase',
@@ -659,6 +669,10 @@ final readonly class FanReceiptIssuer
     /**
      * The full invoice a buyer asked for after they already had a receipt.
      *
+     * A buyer's receipt is restated, and so is the platform's invoice to the buyer of an intermediated sale, each in
+     * its own series. The second states the fee the buyer paid the platform beside the goods it passed on, and a
+     * buyer who needs their details on it, a business deducting the tax on the fee, asks for it the same way.
+     *
      * NOT routed through the repeat guard, and deliberately so — this is the one entry point that is SUPPOSED
      * to draw a fresh number. It restates a sale a buyer already has a document for, and a second document
      * for one sale is the whole point of it. Stated here because the next reader counting direct writes will
@@ -686,6 +700,16 @@ final readonly class FanReceiptIssuer
             );
         }
 
+        // Only a buyer's document that is short of a full invoice is restated: a buyer's receipt, or the platform's
+        // invoice to the buyer of an intermediated sale. Any other document has a buyer who already holds a full
+        // one, or is no buyer's document at all.
+        if (! $this->issuedToTheBuyer($receipt) || $receipt->receipt_tier === FanReceiptTier::FullInvoice) {
+            throw new InvalidArgumentException(
+                "Invoice {$receipt->number} is not a buyer's receipt short of a full invoice, so there is no "
+                .'full invoice to issue for it.'
+            );
+        }
+
         // Everything that decided how the sale was TAXED comes across unchanged, and it is TAKEN from the
         // frozen list rather than typed again here. A restatement that lost the destination, the rate
         // category or the exemption reason would describe a different supply to the one person who asked
@@ -700,20 +724,89 @@ final readonly class FanReceiptIssuer
             $carried[$column] = $receipt->getAttribute($column);
         }
 
-        return InvoiceRecord::model()::query()->create([
-            ...$carried,
-            'owner_type' => $receipt->owner_type,
-            'owner_id' => $receipt->owner_id,
-            'number' => $this->numbers->allocate(DocumentSeries::BuyerReceipt, $requestedOn->year),
-            'currency' => $receipt->currency,
-            'status' => $receipt->status,
-            'document_series' => DocumentSeries::BuyerReceipt,
-            'receipt_tier' => FanReceiptTier::FullInvoice,
-            'reissue_of_invoice_id' => $receipt->id,
-            'seller' => $receipt->seller,
-            'buyer' => $buyer,
-            'lines' => $receipt->lines,
-        ]);
+        // One full invoice per receipt. Two requests for it, a double click or a retry, are serialized on the
+        // receipt's row, and the second is answered with the invoice the first issued rather than with a second
+        // numbered document stating the same tax.
+        // From the series of the document it restates: an intermediated sale's invoice is the platform's commission
+        // invoice, and its restatement is one too.
+        $series = $receipt->document_series === DocumentSeries::CommissionInvoice ? DocumentSeries::CommissionInvoice : DocumentSeries::BuyerReceipt;
+
+        return $receipt->getConnection()->transaction(function () use ($receipt, $carried, $buyer, $requestedOn, $series): InvoiceRecord {
+            InvoiceRecord::model()::query()->whereKey($receipt->getKey())->lockForUpdate()->first();
+
+            $issued = InvoiceRecord::model()::query()->where('reissue_of_invoice_id', $receipt->getKey())->first();
+
+            if ($issued instanceof InvoiceRecord) {
+                return $issued;
+            }
+
+            return InvoiceRecord::model()::query()->create([
+                ...$carried,
+                'owner_type' => $receipt->owner_type,
+                'owner_id' => $receipt->owner_id,
+                'number' => $this->numbers->allocate($series, $requestedOn->year),
+                'issued_at' => $requestedOn,
+                'delivered_on' => self::restatedSupplyDate($receipt),
+                'currency' => $receipt->currency,
+                'status' => $receipt->status,
+                'document_series' => $series,
+                'receipt_tier' => FanReceiptTier::FullInvoice,
+                'reissue_of_invoice_id' => $receipt->id,
+                'seller' => $receipt->seller,
+                'buyer' => $buyer,
+                'lines' => $receipt->lines,
+            ]);
+        });
+    }
+
+    /**
+     * The date of supply a restatement of this receipt states: the one it recorded, or else the day of the sale.
+     *
+     * A receipt is issued on the day of the sale, so its date of issue is that day. A restatement is issued later and
+     * carries its own date of issue, which would leave the day of the sale off the document. A receipt that covers a
+     * period states the period instead and gets no single day.
+     */
+    public static function restatedSupplyDate(InvoiceRecord $receipt): ?CarbonInterface
+    {
+        if ($receipt->delivered_on instanceof CarbonInterface) {
+            return $receipt->delivered_on;
+        }
+
+        return $receipt->service_period_start === null ? $receipt->issued_at : null;
+    }
+
+    /**
+     * Buyer details belong only on a full invoice.
+     *
+     * @param  ?array<string, mixed>  $buyer
+     */
+    private function refuseBuyerBelowFullInvoice(?array $buyer, FanReceiptTier $tier): void
+    {
+        if ($buyer !== null && $tier !== FanReceiptTier::FullInvoice) {
+            throw new InvalidArgumentException(
+                'Buyer details belong only on a full invoice, which is issued when the buyer asks for one. '
+                .'A simplified receipt or a payment record carries none — holding them there would be '
+                .'collection with no ground, and in a commission chain it would also disclose the buyer and '
+                .'the merchant to each other. Drop them at the call site rather than here, so the decision '
+                .'stays where somebody made it.'
+            );
+        }
+    }
+
+    /**
+     * Whether a document was issued to the buyer of a sale: a buyer's receipt, or the platform's invoice for the fee of
+     * an intermediated sale, which carries the buyer's receipt tier. The platform's commission invoice to a seller
+     * carries none.
+     */
+    private function issuedToTheBuyer(InvoiceRecord $document): bool
+    {
+        if ($document->document_series === DocumentSeries::BuyerReceipt) {
+            return true;
+        }
+
+        return $document->document_series === DocumentSeries::CommissionInvoice
+            && $document->supply_regime === SupplyRegime::Intermediation
+            && $document->receipt_tier instanceof FanReceiptTier;
     }
 
     /** @return array<string, ?string> */

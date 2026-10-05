@@ -32,6 +32,11 @@ final class PaymentRecovery extends AccountScreen
     use DegradesGracefully;
     use PollsWhileActivating;
 
+    protected function headingKey(): string
+    {
+        return 'billing::account.recovery.heading';
+    }
+
     public function render(): View
     {
         $states = [$this->currentState(), ...$this->otherContractStates()];

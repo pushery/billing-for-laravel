@@ -122,7 +122,7 @@ final readonly class SellerRecordCompleteness
      */
     public static function checksumHolds(string $account): bool
     {
-        $normalized = strtoupper(preg_replace('/\s+/', '', $account) ?? '');
+        $normalized = strtoupper(preg_replace('/\s+/u', '', $account) ?? '');
 
         if (preg_match('/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/', $normalized) !== 1) {
             return false;
@@ -139,23 +139,33 @@ final readonly class SellerRecordCompleteness
     }
 
     /**
-     * The identifier's own check digit.
+     * Whether the identifier has the structure the German tax administration publishes for its identification
+     * number.
      *
-     * Eleven digits, the last of which is derived from the other ten, with no digit appearing more than
-     * three times and at least one repeating — the properties that make a typo detectable rather than
-     * merely unlikely.
+     * Eleven digits, the last a check digit derived from the other ten. Among those ten exactly one digit occurs
+     * twice or three times, and three of a kind never stand side by side. Together these make most typos
+     * detectable rather than merely unlikely. A leading zero passes: it marks a test identification number,
+     * which the administration issues with the same structure.
      */
     public static function taxIdentifierHolds(string $identifier): bool
     {
-        $digits = preg_replace('/\s+/', '', $identifier) ?? '';
+        $digits = preg_replace('/\s+/u', '', $identifier) ?? '';
 
         if (preg_match('/^\d{11}$/', $digits) !== 1) {
             return false;
         }
 
+        $leading = substr($digits, 0, 10);
+        $occurrences = array_count_values(str_split($leading));
+        $repeated = array_keys(array_filter($occurrences, static fn (int $count): bool => $count > 1));
+
+        if (count($repeated) !== 1 || $occurrences[$repeated[0]] > 3 || str_contains($leading, str_repeat((string) $repeated[0], 3))) {
+            return false;
+        }
+
         $product = 10;
 
-        foreach (str_split(substr($digits, 0, 10)) as $digit) {
+        foreach (str_split($leading) as $digit) {
             $sum = ((int) $digit + $product) % 10;
             $sum = $sum === 0 ? 10 : $sum;
             $product = (2 * $sum) % 11;

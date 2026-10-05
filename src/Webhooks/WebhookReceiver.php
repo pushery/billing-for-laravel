@@ -33,8 +33,13 @@ use Throwable;
  * (`billing:webhooks:replay`), rather than depending on the provider to redeliver — which it stops doing
  * once its own retry window closes.
  *
- * Effects are queued, not run here, so the provider gets its 204 immediately and a slow (or failing)
+ * Effects are queued, not run here, so the provider gets its 200 immediately and a slow (or failing)
  * effect can neither hold the request open nor turn into a 500 the provider reads as our outage.
+ *
+ * The success answer is `200 OK` with an empty body, never `204 No Content`. Mollie accepts exactly 200
+ * and counts every other status as a failed delivery: it calls the webhook up to ten times in all, at
+ * growing intervals over 26 hours, and each of those calls fetches the payment back with the platform's
+ * API key. Stripe accepts any 2xx.
  */
 final readonly class WebhookReceiver
 {
@@ -59,8 +64,11 @@ final readonly class WebhookReceiver
             return new Response('', Response::HTTP_BAD_REQUEST);
         }
 
+        // A body that is no JSON object is kept as the form it was posted as. Mollie pings a payment as the form
+        // field `id=tr_…`, and keeping only a decoded JSON body stored `[]`, so `billing:webhooks:replay` rebuilt
+        // an empty request, the mapper found nothing to map, and the replay reported that as success.
         $decoded = json_decode($request->getContent(), true);
-        $payload = is_array($decoded) ? $decoded : [];
+        $payload = is_array($decoded) ? $decoded : $request->request->all();
         $type = $payload['type'] ?? null;
 
         $delivery = $this->deliveries->record(
@@ -78,7 +86,7 @@ final readonly class WebhookReceiver
 
         $this->deliveries->markHandled($delivery);
 
-        return new Response('', Response::HTTP_NO_CONTENT);
+        return new Response('', Response::HTTP_OK);
     }
 
     /**
@@ -102,20 +110,7 @@ final readonly class WebhookReceiver
     }
 
     /**
-     * The key this delivery is recorded and deduped under.
-     *
-     * Read from the REQUEST rather than only from the decoded body, because not every provider posts
-     * JSON. A form-encoded ping (`id=tr_abc`) decodes to nothing, so a body-only read fell through to the
-     * hash — leaving a delivery that is correct and unfindable: somebody investigating holds the provider's
-     * resource id and has no route from it to the row, and `billing:replay` cannot be aimed either.
-     *
-     * The hash fallback stays for a body that names nothing. Removing it would leave such a delivery with
-     * no key at all, which is worse than an opaque one.
-     *
-     * @param  array<array-key, mixed>  $payload
-     */
-    /**
-     * The key this delivery is deduped under, asking the mapper first.
+     * The key this delivery is recorded and deduped under, asking the mapper first.
      *
      * A mapper that implements {@see DerivesDeliveryKey} knows its provider's redelivery semantics better
      * than this receiver can: a provider that pings with a bare resource id sends the SAME id every time
@@ -124,6 +119,15 @@ final readonly class WebhookReceiver
      *
      * The mapper returning null is not an error — it is the answer for a request it would not map — so
      * the default key stands and the delivery is still recorded exactly once.
+     *
+     * The default key is read from the REQUEST rather than only from the decoded body, because not every
+     * provider posts JSON. A form-encoded ping (`id=tr_abc`) decodes to nothing, so a body-only read fell
+     * through to the hash — leaving a delivery that is correct and unfindable: somebody investigating holds
+     * the provider's resource id and has no route from it to the row, and `billing:replay` cannot be aimed
+     * either.
+     *
+     * The hash fallback stays for a body that names nothing. Removing it would leave such a delivery with
+     * no key at all, which is worse than an opaque one.
      *
      * @param  array<array-key, mixed>  $payload
      */

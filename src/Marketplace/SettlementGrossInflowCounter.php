@@ -122,7 +122,23 @@ final readonly class SettlementGrossInflowCounter implements CountsEarnings
         // Prose is the one part of a package no test can contradict, which is exactly why it has to be
         // measured against the code rather than remembered from the design it was written for.
         //
-        // The sign rule below is the part that holds either way, and it is the part that matters here.
+        // The sign rule in figuresIn() is the part that holds either way, and it is the part that matters here.
+        return $this->figuresIn($party, $currency, $period)['gross'];
+    }
+
+    /**
+     * The total and the number of settlements in the window, from one reading of it.
+     *
+     * The two figures a reporting quarter states, {@see countedIn()} and {@see transactionsIn()}, come from the
+     * same documents, and a quarter that asked for each on its own read them twice. This reads them once, with
+     * the sign rule {@see countedIn()} explains.
+     *
+     * @return array{gross: Money, transactions: int}
+     */
+    public function figuresIn(Model $party, string $currency, CountingPeriod $period): array
+    {
+        $this->assertEnabled();
+
         $documents = $this->documentsIn($party, $currency, $period)
             ->get(['total_minor', 'credited_invoice_id']);
 
@@ -134,7 +150,7 @@ final readonly class SettlementGrossInflowCounter implements CountsEarnings
                 : -(int) $document->total_minor;
         }
 
-        return Money::of($total, strtoupper($currency));
+        return ['gross' => Money::of($total, strtoupper($currency)), 'transactions' => $documents->count()];
     }
 
     /**

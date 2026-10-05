@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Events;
 
+use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Models\Subscription;
 
@@ -31,6 +32,8 @@ use Pushery\Billing\Models\Subscription;
  */
 final readonly class SubscriptionExpired implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public function __construct(
         public Subscription $subscription,
         public Carbon $accessEndsAt,

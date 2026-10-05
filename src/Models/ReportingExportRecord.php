@@ -86,7 +86,8 @@ class ReportingExportRecord extends Model
     #[Override]
     protected static function appendOnlyDeleteRefusal(): string
     {
-        return 'This row carries a statutory retention window; retention removes it on its schedule, '
-            .'inside purging(). A caller does not delete it.';
+        return 'A produced reporting record is kept for the book-keeping window and is not deleted by a '
+            .'caller. Retention removes it once that window has passed; a record that was filed stays until '
+            .'the filings of its period go.';
     }
 }

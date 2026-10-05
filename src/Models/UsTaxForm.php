@@ -42,8 +42,10 @@ class UsTaxForm extends Model
     protected $casts = [
         'form_type' => UsTaxFormType::class,
         'status' => UsTaxFormStatus::class,
-        'signed_on' => UtcDateTime::class,
-        'expires_on' => UtcDateTime::class,
+        // Calendar days, not instants: a declaration is signed on a day and runs out on a day. Moved through UTC
+        // on an app east of it, either would reach its `date` column as the day before.
+        'signed_on' => 'date',
+        'expires_on' => 'date',
         'merchant_erased_at' => UtcDateTime::class,
     ];
 }

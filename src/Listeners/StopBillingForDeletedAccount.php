@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Pushery\Billing\Listeners;
 
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Pushery\Billing\Contracts\SubscriptionActions;
@@ -27,6 +29,15 @@ use Throwable;
  * rows, and the platform is always asked as well, as it always was, because a provider can hold a
  * subscription the local mirror has not recorded yet.
  *
+ * ## The subscriptions other people hold with the account
+ *
+ * An account that is a merchant has a second half: the subscriptions its fans hold in its scope. Nothing the
+ * owner holds reaches them, and the erasure purges their rows with the merchant, so a subscription left
+ * running at the provider would go on renewing, and charging the fan, for a merchant who no longer exists,
+ * with no local row left to show it. They end here too, before the rows go. `billing.erasure.merchant_subscriptions`
+ * decides how: `now` ends them immediately, `period_end` lets each run to the end of the period the fan has
+ * paid for and renew no more.
+ *
  * Runs SYNCHRONOUSLY (never queued): the cancel must complete while the owner still exists and before the
  * row is erased. A transient provider failure is TOLERATED, because leaving a user who asked to leave
  * undeletable is worse than a cancel that has to be retried, and a failure in one scope does not stop the
@@ -35,7 +46,10 @@ use Throwable;
  */
 final readonly class StopBillingForDeletedAccount
 {
-    public function __construct(private SubscriptionActions $actions) {}
+    public function __construct(
+        private SubscriptionActions $actions,
+        private Repository $config,
+    ) {}
 
     public function handle(BillableAccountDeleting $event): void
     {
@@ -54,6 +68,74 @@ final readonly class StopBillingForDeletedAccount
                 $this->report(DeletedAccountStillSubscribed::whileDeleting($event->owner, $merchant, $e));
             }
         }
+
+        $this->endSubscriptionsHeldWith($event->owner);
+    }
+
+    /**
+     * End every subscription other people still hold in the deleting account's merchant scope.
+     *
+     * Each one is asked for separately, and a failure is logged and reported like a failure in the owner's
+     * own scopes: one fan's subscription the provider would not end leaves the others to be ended.
+     */
+    private function endSubscriptionsHeldWith(Model $merchant): void
+    {
+        $key = $merchant->getKey();
+
+        // An unsaved model is nobody's merchant, so nothing can be held in its scope.
+        if (! is_int($key) && ! is_string($key)) {
+            return;
+        }
+
+        $scope = MerchantScope::forMerchant($merchant);
+        $atPeriodEnd = $this->config->get('billing.erasure.merchant_subscriptions') === 'period_end';
+
+        foreach ($this->heldWith($merchant, $scope) as $subscription) {
+            $subscriber = $subscription->owner;
+
+            // A subscription whose holder no longer resolves has nobody to end it for. Its row goes with the
+            // merchant's erasure all the same.
+            if (! $subscriber instanceof Model) {
+                continue;
+            }
+
+            $type = $subscription->type === Subscription::TYPE_DEFAULT ? null : $subscription->type;
+
+            try {
+                if ($atPeriodEnd) {
+                    $this->actions->cancel($subscriber, null, $scope, $type);
+                } else {
+                    $this->actions->cancelNow($subscriber, $scope, $type);
+                }
+            } catch (Throwable $e) {
+                Log::warning('Could not stop a subscription held with a deleting merchant; the deletion continues.', [
+                    'exception' => $e::class,
+                    'merchant' => $scope->uid(),
+                    'type' => $subscription->type,
+                ]);
+
+                $this->report(DeletedAccountStillSubscribed::heldWithDeletingMerchant($merchant, $subscriber, $scope, $e));
+            }
+        }
+    }
+
+    /**
+     * The subscriptions in this merchant's scope that are not over, held by anybody but the merchant.
+     *
+     * The merchant's own rows in its own scope are left out: the owner's half above has ended them already.
+     *
+     * @return iterable<Subscription>
+     */
+    private function heldWith(Model $merchant, MerchantScope $scope): iterable
+    {
+        return Subscription::model()::query()
+            ->forMerchant($scope)
+            ->whereNotIn('status', [SubscriptionState::Ended->value, SubscriptionState::IncompleteExpired->value])
+            ->where(static fn (Builder $query): Builder => $query
+                ->where('owner_type', '!=', $merchant->getMorphClass())
+                ->orWhere('owner_id', '!=', $merchant->getKey()))
+            ->with('owner')
+            ->get();
     }
 
     /**

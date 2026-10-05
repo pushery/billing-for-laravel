@@ -106,7 +106,7 @@ final readonly class MarketAllowlist
             // A numeric key is a list entry, not a country code — a consumer who wrote the markets as a
             // plain list of codes has said nothing about their state, and unstated is refused.
             if (is_string($country) && $state === MarketAccess::Open->value) {
-                $open[] = strtoupper($country);
+                $open[] = $country;
             }
         }
 
@@ -134,7 +134,7 @@ final readonly class MarketAllowlist
 
         foreach (array_keys($table) as $country) {
             if (is_string($country)) {
-                $declared[] = strtoupper($country);
+                $declared[] = $country;
             }
         }
 
@@ -172,6 +172,10 @@ final readonly class MarketAllowlist
     /**
      * The configured table, or null when the operator has not configured one.
      *
+     * Its country codes come back in upper case, the case every lookup here compares in. A code written
+     * `de` opens Germany like `DE` does; read as written, it was listed as open and refused at the sale.
+     * Two spellings of one code are refused, because they could give one country two states.
+     *
      * @return ?array<array-key, mixed>
      */
     private function table(): ?array
@@ -189,6 +193,21 @@ final readonly class MarketAllowlist
             );
         }
 
-        return $value;
+        $table = [];
+
+        foreach ($value as $country => $state) {
+            $key = is_string($country) ? strtoupper($country) : $country;
+
+            if (array_key_exists($key, $table)) {
+                throw InvalidBillingConfig::forKey(
+                    'billing.tax_markets',
+                    "names {$key} twice, in two spellings, and one country has one state",
+                );
+            }
+
+            $table[$key] = $state;
+        }
+
+        return $table;
     }
 }

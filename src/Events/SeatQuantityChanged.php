@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Events;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 
 /**
  * A team owner's billed seat quantity was re-synced to a new value.
@@ -16,6 +17,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 final readonly class SeatQuantityChanged implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public function __construct(
         public Model $owner,
         /** The quantity the provider was billing before the sync. */

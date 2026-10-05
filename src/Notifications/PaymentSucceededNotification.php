@@ -6,6 +6,8 @@ namespace Pushery\Billing\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Enums\BillingAction;
+use Pushery\Billing\Support\LocalizedMoney;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\WithdrawalConsent;
 
@@ -39,7 +41,7 @@ final class PaymentSucceededNotification extends BillingNotification
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.payment_succeeded.subject'))
             ->line(Lang::get('billing::notifications.payment_succeeded.intro'))
-            ->line($this->amount->format().' · '.$this->invoiceReference);
+            ->line(LocalizedMoney::format($this->amount).' · '.$this->invoiceReference);
 
         // The WORDING, not a link to it. A receipt pointing at "our withdrawal policy" confirms nothing:
         // the linked text changes and the purchase does not, so what would arrive years later is whatever
@@ -53,7 +55,7 @@ final class PaymentSucceededNotification extends BillingNotification
         return $this->withAction(
             $mail->line(Lang::get('billing::notifications.payment_succeeded.outro')),
             Lang::get('billing::notifications.payment_succeeded.cta'),
-            $this->actionUrl('billing.account.invoices'),
+            $this->actionFor($notifiable, BillingAction::Invoices),
         );
     }
 

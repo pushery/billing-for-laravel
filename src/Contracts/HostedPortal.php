@@ -14,6 +14,12 @@ use Illuminate\Database\Eloquent\Model;
  */
 interface HostedPortal
 {
-    /** A short-lived URL to the provider's hosted billing portal, or null when unavailable. */
-    public function url(Model $billable): ?string;
+    /**
+     * A short-lived URL to the provider's hosted billing portal, or null when unavailable.
+     *
+     * `$returnUrl` is where the portal sends the customer back, for a caller outside the account hub that wants
+     * them back on its own screen. Without one the portal returns to `billing.checkout.portal_return_url`, and
+     * without that to the hub's subscription screen.
+     */
+    public function url(Model $billable, ?string $returnUrl = null): ?string;
 }

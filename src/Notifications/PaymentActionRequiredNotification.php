@@ -6,6 +6,7 @@ namespace Pushery\Billing\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Enums\BillingAction;
 
 /**
  * Prompts the customer to confirm a payment their bank held for authentication (3-D Secure). Nothing is
@@ -28,7 +29,7 @@ final class PaymentActionRequiredNotification extends BillingNotification
         return $this->withAction(
             $mail,
             Lang::get('billing::notifications.payment_action_required.cta'),
-            $this->actionUrl('billing.account.recovery'),
+            $this->actionFor($notifiable, BillingAction::Recovery),
         );
     }
 

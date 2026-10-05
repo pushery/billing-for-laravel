@@ -181,13 +181,14 @@ return [
 
     'reconfirm' => [
         'prompt' => 'Confirme ton mot de passe pour continuer.',
+        'prompt_email' => 'Confirme l’adresse e-mail de ton compte pour continuer.',
         'wrong' => 'Ça ne correspond pas. Réessaie.',
         'throttled' => 'Trop de tentatives. Réessaie dans :seconds secondes.',
     ],
 
     'danger' => [
         'heading' => 'Zone sensible',
-        'explanation' => 'Résilier maintenant arrête la facturation immédiatement, sans délai de grâce.',
+        'explanation' => 'Si tu résilies maintenant, ton abonnement prend fin immédiatement, sans délai de grâce. Les jours que tu as déjà utilisés et pas encore payés sont tout de même facturés.',
         'cancel_now' => 'Arrêter la facturation maintenant',
         'confirm_question' => 'Cette action est irréversible. Arrêter la facturation immédiatement ?',
         'confirm_yes' => 'Oui, arrêter maintenant',

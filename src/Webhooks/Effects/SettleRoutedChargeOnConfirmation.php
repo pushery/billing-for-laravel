@@ -49,20 +49,17 @@ final readonly class SettleRoutedChargeOnConfirmation
 
     public function __invoke(RoutedChargeConfirmed|RoutedChargeAbandoned $event): void
     {
-        // The pending clause NARROWS the query; it does not enforce anything, and the difference is worth
-        // being explicit about because a mutation removing it survives. Enforcement lives in the ledger,
-        // which refuses to settle or fail anything that is not pending — one place owning the state machine
-        // rather than two agreeing. Removing this line would change no outcome, only load a row to be told
-        // no. It stays for the reader and the index; it is not a second guard, and it is not tested as one.
-        $charge = MerchantCharge::model()::query()
-            ->where('provider', $event->provider)
-            ->where('charge_reference', $event->paymentReference)
-            ->where('settlement_state', SettlementState::Pending->value)
-            ->first();
+        $charge = $this->pending($event->provider, $event->paymentReference)
+            ?? ($event->saleReference === null ? null : $this->pending($event->provider, $event->saleReference));
 
         if (! $charge instanceof MerchantCharge) {
             return;
         }
+
+        // A hosted sale was written down under its own reference, because its payment did not exist when the
+        // checkout opened. From here on the row answers under the payment, which is what every later reader hands
+        // the provider, and the jobs below read the row under it too.
+        $this->ledger->nameThePayment($charge, $event->paymentReference);
 
         if ($event instanceof RoutedChargeConfirmed) {
             // A SEPARATE TRANSFER IS NOT SETTLED HERE, because nothing has paid the merchant yet.
@@ -102,5 +99,20 @@ final readonly class SettleRoutedChargeOnConfirmation
         }
 
         $this->ledger->fail($charge);
+    }
+
+    /** The pending routed charge recorded under this reference, or null when there is none. */
+    private function pending(string $provider, string $reference): ?MerchantCharge
+    {
+        // The pending clause NARROWS the query; it does not enforce anything, and the difference is worth
+        // being explicit about because a mutation removing it survives. Enforcement lives in the ledger,
+        // which refuses to settle or fail anything that is not pending — one place owning the state machine
+        // rather than two agreeing. Removing this line would change no outcome, only load a row to be told
+        // no. It stays for the reader and the index; it is not a second guard, and it is not tested as one.
+        return MerchantCharge::model()::query()
+            ->where('provider', $provider)
+            ->where('charge_reference', $reference)
+            ->where('settlement_state', SettlementState::Pending->value)
+            ->first();
     }
 }

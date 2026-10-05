@@ -59,7 +59,8 @@ interface OneTimeCharge
      * A tip has no tax treatment of its own. It is placed by the supply it accompanies — a tip on
      * commissioned work and a tip on a file download are taxed in different countries — so
      * `$soldAlongside` is required rather than defaulted. There is no safe guess, and a default would make
-     * the wrong one the quiet normal case.
+     * the wrong one the quiet normal case. A tip on nothing in particular, given on a profile or on something
+     * offered for free, names `TaxArchetype::Support`.
      *
      * @param  Money  $chosen  the gross amount the buyer chose, tax included, as they will be charged it
      * @param  TaxArchetype  $soldAlongside  what the tip was paid on

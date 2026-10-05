@@ -49,6 +49,7 @@ return [
         'submit' => 'Abo kündigen',
         'canceled' => 'Abo gekündigt.',
         'not_found' => 'Kein Owner mit dieser ID gefunden.',
+        'nothing_running' => 'Dieser Owner hat kein laufendes Abo, das sich kündigen ließe.',
     ],
 
     'audit' => [

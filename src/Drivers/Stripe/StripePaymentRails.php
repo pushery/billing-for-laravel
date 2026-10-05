@@ -58,7 +58,7 @@ final readonly class StripePaymentRails implements PaymentRails
     public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null): ChargeResult
     {
         $params = $this->routed([
-            'amount' => $amount->minorUnits,
+            'amount' => StripeAmount::of($amount),
             'currency' => strtolower($amount->currency),
             'payment_method' => $token,
             'confirm' => true,
@@ -70,7 +70,7 @@ final readonly class StripePaymentRails implements PaymentRails
             // are present or absent depending on the charge type, and an unrouted payment must carry neither.
             // The payload IS a valid PaymentIntent request; its exact fields are asserted one by one in
             // StripeMarketplaceRoutingTest, including the assertion that an unrouted charge emits none of them.
-            // @phpstan-ignore argument.type
+            // @phpstan-ignore argument.type (the SDK's generated shape cannot express a payload assembled at run time)
             fn (): PaymentIntent => $this->stripe->paymentIntents->create($this->traced($params, $idempotencyKey, $narrative), $this->options($idempotencyKey)),
             $amount,
             $routing,
@@ -122,7 +122,7 @@ final readonly class StripePaymentRails implements PaymentRails
         $params = $this->routed(
             $customer !== null
                 ? [
-                    'amount' => $amount->minorUnits,
+                    'amount' => StripeAmount::of($amount),
                     'currency' => strtolower($amount->currency),
                     'payment_method' => $mandate->id,
                     'confirm' => true,
@@ -130,7 +130,7 @@ final readonly class StripePaymentRails implements PaymentRails
                     'customer' => $customer,
                 ]
                 : [
-                    'amount' => $amount->minorUnits,
+                    'amount' => StripeAmount::of($amount),
                     'currency' => strtolower($amount->currency),
                     'payment_method' => $mandate->id,
                     'confirm' => true,
@@ -145,7 +145,7 @@ final readonly class StripePaymentRails implements PaymentRails
             // are present or absent depending on the charge type, and an unrouted payment must carry neither.
             // The payload IS a valid PaymentIntent request; its exact fields are asserted one by one in
             // StripeMarketplaceRoutingTest, including the assertion that an unrouted charge emits none of them.
-            // @phpstan-ignore argument.type
+            // @phpstan-ignore argument.type (the SDK's generated shape cannot express a payload assembled at run time)
             fn (): PaymentIntent => $this->stripe->paymentIntents->create($this->traced($params, $idempotencyKey, $narrative), $options),
             $amount,
             $routing,
@@ -154,7 +154,7 @@ final readonly class StripePaymentRails implements PaymentRails
 
     public function refund(string $chargeReference, Money $amount, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): RefundResult
     {
-        $params = ['payment_intent' => $this->paymentIntentFor($chargeReference), 'amount' => $amount->minorUnits];
+        $params = ['payment_intent' => $this->paymentIntentFor($chargeReference), 'amount' => StripeAmount::of($amount)];
 
         // The flag only means something on a DESTINATION charge, where the transfer is part of the payment
         // and the provider can unwind both together. On a separate transfer the money moved in its own call,
@@ -264,7 +264,7 @@ final readonly class StripePaymentRails implements PaymentRails
 
         if ($routing->type === ChargeType::Destination) {
             $params['transfer_data'] = ['destination' => $routing->destination->accountId];
-            $params['application_fee_amount'] = $routing->applicationFee->minorUnits;
+            $params['application_fee_amount'] = StripeAmount::of($routing->applicationFee);
         }
 
         // A separate transfer moves the merchant's share after the payment settles, so the intent itself

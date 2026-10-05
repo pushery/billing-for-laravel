@@ -6,11 +6,16 @@ namespace Pushery\Billing\Drivers\Mollie;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Mollie\Api\Exceptions\RequestException;
+use Mollie\Api\Http\Requests\GetMandateRequest;
 use Mollie\Api\Http\Requests\GetPaymentRequest;
 use Mollie\Api\MollieApiClient;
+use Mollie\Api\Resources\Mandate;
 use Mollie\Api\Resources\Payment;
+use Mollie\Api\Types\MandateMethod;
 use Pushery\Billing\Contracts\DerivesDeliveryKey;
 use Pushery\Billing\Contracts\WebhookEventMapper;
+use Pushery\Billing\Enums\ReversalCause;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\ChargebackReceived;
@@ -20,6 +25,7 @@ use Pushery\Billing\Events\MandateEstablished;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\PaymentMethod;
 use Throwable;
 
 /**
@@ -38,25 +44,11 @@ use Throwable;
  */
 final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEventMapper
 {
+    /** The mandate method of a card, whose details name the card's expiry. */
+    private const string CARD_MANDATE = 'creditcard';
+
     public function __construct(private readonly MollieApiClient $client) {}
 
-    /**
-     * Which resource this ping is about, across both of Mollie's webhook generations.
-     *
-     * The legacy ping is a form with a single `id` field naming the payment. The next generation is signed
-     * JSON describing an event, and it carries BOTH: `id` is the event (`evt_…`) and `entityId` is the
-     * resource the event happened to. So `entityId` is read first — the other order fetches the event id as
-     * if it were a payment, and the failure mode is silence rather than an error, because the fetch simply
-     * does not resolve and this class is built to say nothing about an id it cannot follow.
-     *
-     * Both generations then run the SAME path from here, which is the reason this returns an id rather than
-     * branching. Two paths would be two behaviors to keep in step, and the one that runs on fewer installs
-     * is the one that would quietly fall behind.
-     *
-     * The SDK ships a mapper for the next-generation payload and it is deliberately not used: its map
-     * covers the event types it knows and THROWS on anything else, and ordinary payment transitions are not
-     * among them — the events this package exists for are the ones it would refuse.
-     */
     /**
      * Payments already read back during this request, memoized so the key and the mapping share one round trip.
      *
@@ -71,6 +63,10 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
      * Keyed on the id alone, everything after the first ping reads as a duplicate and is dropped — a
      * payment that succeeds after an `open` ping would book nothing, silently. The status is what makes
      * two pings about the same resource distinguishable, so it belongs in the key.
+     *
+     * A refund or a chargeback leaves the status as it was, so every ping about one arrives under the key of
+     * the ping before. The effects that act on them dedupe on what the event reports instead, the cumulative
+     * refunded total or the chargeback, and a second refund lands under the same key as the first.
      *
      * Null for anything this mapper would not map anyway: a next-generation event, an id that names no
      * payment, a resource that does not resolve. The receiver then falls back to its own key, which
@@ -96,6 +92,23 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
         return $id.':'.$status;
     }
 
+    /**
+     * Which resource this ping is about, across both of Mollie's webhook generations.
+     *
+     * The legacy ping is a form with a single `id` field naming the payment. The next generation is signed
+     * JSON describing an event, and it carries BOTH: `id` is the event (`evt_…`) and `entityId` is the
+     * resource the event happened to. So `entityId` is read first — the other order fetches the event id as
+     * if it were a payment, and the failure mode is silence rather than an error, because the fetch simply
+     * does not resolve and this class is built to say nothing about an id it cannot follow.
+     *
+     * Both generations then run the SAME path from here, which is the reason this returns an id rather than
+     * branching. Two paths would be two behaviors to keep in step, and the one that runs on fewer installs
+     * is the one that would quietly fall behind.
+     *
+     * The SDK ships a mapper for the next-generation payload and it is deliberately not used: its map
+     * covers the event types it knows and THROWS on anything else, and ordinary payment transitions are not
+     * among them — the events this package exists for are the ones it would refuse.
+     */
     private function entityIdOf(Request $request): ?string
     {
         $entityId = $request->input('entityId');
@@ -161,9 +174,11 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
 
             yield from $this->mandateOf($payment, $customer);
 
-            yield from $this->refundOf($payment);
+            $chargebacks = $this->chargebacksOf($payment);
 
-            yield from $this->chargebacksOf($payment, $customer);
+            yield from $this->refundOf($payment, $amount, $chargebacks);
+
+            yield from MollieChargebackEvents::from($chargebacks, $customer, MollieValue::id($payment->id));
 
             return;
         }
@@ -241,22 +256,6 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
     }
 
     /**
-     * Whether this id names a payment at all — and a line in the log when it does not.
-     *
-     * Mollie's legacy webhook posts a bare id, and not every id it posts is a payment: a refund (`rfd_`), a
-     * subscription (`sub_`), a chargeback (`chb_`) and a mandate (`mdt_`) all arrive through the same one
-     * field. Fetching those as a payment produces a failed call and then silence — indistinguishable from
-     * a forged ping, so an install receiving them would see nothing at all and have nothing to search for.
-     *
-     * Two things follow. The round trip is not spent, because the prefix already answers the question the
-     * call would ask. And the drop carries the kind, so it can be found — the same property the unmapped
-     * status warning exists for, one level earlier.
-     *
-     * Deliberately a prefix check rather than a resolver: following a refund id would mean fetching the
-     * refund, then its payment, then deciding whether that is the same event the payment's own ping already
-     * produced. That is its own piece of work, and guessing at it here would emit the same refund twice.
-     */
-    /**
      * Whether this delivery announces a next-generation type this package deliberately does not act on.
      *
      * Three states, and the middle one is what this adds. A type that was CONSIDERED and declined passes
@@ -277,7 +276,10 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
 
         $type = trim($type);
 
-        if (! MollieNextGenEventTypes::known($type)) {
+        // A family the mapper acts on goes on to the mapping, whether the installed SDK lists the type yet or not:
+        // a `payment.paid` names the payment it is about, and dropping it with a warning once the SDK learned its
+        // name would lose the status for a host that subscribed to it.
+        if (MollieNextGenEventTypes::actedOn($type) || ! MollieNextGenEventTypes::known($type)) {
             return false;
         }
 
@@ -295,6 +297,22 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
         return true;
     }
 
+    /**
+     * Whether this id names a payment at all — and a line in the log when it does not.
+     *
+     * Mollie's legacy webhook posts a bare id, and not every id it posts is a payment: a refund (`rfd_`), a
+     * subscription (`sub_`), a chargeback (`chb_`) and a mandate (`mdt_`) all arrive through the same one
+     * field. Fetching those as a payment produces a failed call and then silence — indistinguishable from
+     * a forged ping, so an install receiving them would see nothing at all and have nothing to search for.
+     *
+     * Two things follow. The round trip is not spent, because the prefix already answers the question the
+     * call would ask. And the drop carries the kind, so it can be found — the same property the unmapped
+     * status warning exists for, one level earlier.
+     *
+     * Deliberately a prefix check rather than a resolver: following a refund id would mean fetching the
+     * refund, then its payment, then deciding whether that is the same event the payment's own ping already
+     * produced. That is its own piece of work, and guessing at it here would emit the same refund twice.
+     */
     private function namesAPayment(string $id): bool
     {
         if (str_starts_with($id, 'tr_')) {
@@ -347,7 +365,51 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
         // The payment id travels with the mandate, because under this provider the payment IS how the
         // mandate was granted — and it is the only thing that says which request this answers. A customer
         // adding a second card establishes a mandate too; without the reference the two are the same event.
-        yield new MandateEstablished($customer, trim($mandateId), 'mollie', $method, MollieValue::id($payment->id));
+        yield new MandateEstablished(
+            $customer,
+            trim($mandateId),
+            'mollie',
+            $method,
+            MollieValue::id($payment->id),
+            $this->cardOf($customer, trim($mandateId), $method),
+        );
+    }
+
+    /**
+     * The card behind a card mandate, read from the mandate itself: the payment does not carry the card's expiry.
+     *
+     * Only for a card mandate, so a direct debit costs no request. The SDK maps the first payment's method onto
+     * the mandate it established, the mapping the payment rails use as well. A mandate Mollie no longer knows
+     * yields no card; any other failure travels, as the payment's own does, so the ping is delivered again.
+     */
+    private function cardOf(string $customer, string $mandateId, ?string $method): ?PaymentMethod
+    {
+        if ($method === null || MandateMethod::getForFirstPaymentMethod($method) !== self::CARD_MANDATE) {
+            return null;
+        }
+
+        try {
+            $mandate = MollieValue::narrow($this->client->send(new GetMandateRequest($customer, $mandateId)), Mandate::class);
+        } catch (RequestException $refusal) {
+            if (! $this->saysItDoesNotExist($refusal)) {
+                throw $refusal;
+            }
+
+            return null;
+        }
+
+        $details = is_object($mandate?->details) ? get_object_vars($mandate->details) : [];
+        $text = static fn (string $field): ?string => is_string($details[$field] ?? null) && $details[$field] !== '' ? $details[$field] : null;
+        $expiry = preg_match('/^(\d{4})-(\d{2})-\d{2}$/', $text('cardExpiryDate') ?? '', $parts) === 1 ? $parts : null;
+
+        return new PaymentMethod(
+            id: $mandateId,
+            type: self::CARD_MANDATE,
+            brand: $text('cardLabel'),
+            last4: $text('cardNumber'),
+            expMonth: $expiry === null ? null : (int) $expiry[2],
+            expYear: $expiry === null ? null : (int) $expiry[1],
+        );
     }
 
     /**
@@ -403,37 +465,55 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
      * remembering anything. Sending the payment's own amount instead would reverse the whole purchase for a
      * partial refund, and the customer would lose access they still paid for.
      *
-     * An unreadable amount yields nothing rather than a zero. A refund reported as zero reverses nothing
-     * and looks like it worked, which is the failure that leaves no trace to find later.
+     * A chargeback that still stands is money gone back as well, so it is part of the same figure. The
+     * reversal of the purchase and the credit note both count against what they have already taken back, and
+     * a second figure for the same payment would read to each of them as the whole of it. Where a chargeback
+     * is in the figure, the event says so with the reason a lost dispute carries on every driver.
      *
+     * An unreadable refunded amount yields nothing rather than a zero, and a warning that names the payment and
+     * what Mollie sent. A refund reported as zero reverses nothing and looks like it worked; one dropped without
+     * a word is the same failure, so the log is where it can be found later. An ABSENT one is a payment Mollie
+     * offers no refund on, which has refunded nothing.
+     *
+     * @param  iterable<mixed>  $chargebacks
      * @return iterable<AddonRefunded>
      */
-    private function refundOf(Payment $payment): iterable
+    private function refundOf(Payment $payment, Money $amount, iterable $chargebacks): iterable
     {
-        // No null check of its own: an absent amount is as unreadable as a malformed one, and the reader refuses
-        // both into the same silent return.
         try {
-            $refunded = MollieAmount::fromResource($payment->amountRefunded);
+            $refunded = MollieAmount::fromOptionalResource($payment->amountRefunded, $amount->currency);
         } catch (Throwable) {
+            Log::warning('billing: Mollie reported a refunded amount this package cannot read, so nothing was reversed', [
+                'payment' => MollieValue::id($payment->id),
+                'amount' => $payment->amountRefunded,
+            ]);
+
             return;
         }
 
-        if (! $refunded->isPositive()) {
+        $chargedBack = MollieChargebackEvents::standing($chargebacks, $refunded->currency);
+        $cumulative = $refunded->plus($chargedBack);
+
+        if (! $cumulative->isPositive()) {
             return;
         }
 
-        yield new AddonRefunded(MollieValue::id($payment->id), $refunded);
+        yield new AddonRefunded(
+            MollieValue::id($payment->id),
+            $cumulative,
+            reason: $chargedBack->isPositive() ? ReversalCause::DisputeLost->value : null,
+        );
     }
 
     /**
-     * The chargebacks this payment turned out to carry, one event each.
+     * The chargebacks this payment turned out to carry.
      *
      * Mollie's legacy webhook never names a chargeback — it pings with the PAYMENT id, and the chargeback
      * is something the fetched payment turns out to have. So it is noticed here and then ASKED for,
      * because the one number that matters is not on the payment.
      *
-     * Each chargeback is its own event with its own amount and reference, and both halves of that matter.
-     * A chargeback is not necessarily the whole payment — partial ones exist, and reporting the payment's
+     * Each chargeback becomes its own event with its own amount, and both halves of that matter. A
+     * chargeback is not necessarily the whole payment — partial ones exist, and reporting the payment's
      * amount would claim money back that was never taken. And a payment can carry more than one, so a
      * single event per payment would lose the second entirely: the one somebody finds months later in a
      * reconciliation.
@@ -441,33 +521,41 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
      * The payment's own success is still reported alongside. Both are true and both matter — emitting only
      * the chargeback would leave the order unbooked, emitting only the payment would hide the reversal.
      *
-     * @return iterable<ChargebackReceived>
+     * @return iterable<mixed>
      */
-    private function chargebacksOf(Payment $payment, string $customer): iterable
+    private function chargebacksOf(Payment $payment): iterable
     {
         if (! $payment->hasChargebacks()) {
-            return;
+            return [];
         }
 
         try {
-            $chargebacks = $payment->chargebacks();
-        } catch (Throwable) {
-            // The payment said it has them and the follow-up failed. Reporting nothing is the safe half of
-            // a bad situation: the alternative is inventing an amount, and a chargeback booked at the wrong
-            // figure is worse than one booked late — the redelivery will bring it round again.
-            return;
-        }
+            return $payment->chargebacks();
+        } catch (RequestException $refusal) {
+            // A follow-up that failed for a reason that says nothing about the chargebacks travels. Answered
+            // with nothing, the receiver marked the delivery handled with a 200 and Mollie never delivered it
+            // again, so the chargeback waited for an unrelated later ping, if one came. Thrown, the receiver
+            // answers 500 and Mollie delivers the ping again; no amount is ever invented in between.
+            if (! $this->saysItDoesNotExist($refusal)) {
+                throw $refusal;
+            }
 
-        yield from MollieChargebackEvents::from($chargebacks, $customer);
+            return [];
+        }
     }
 
     /**
-     * Ask Mollie what happened, answering null when it will not say.
+     * Ask Mollie what happened, answering null where the payment does not exist.
      *
-     * A refusal here is not an error to escalate: an id that does not resolve is what a forged ping looks
+     * That refusal is not an error to escalate: an id that does not resolve is what a forged ping looks
      * like, and also what a redelivery of a payment somebody deleted in test mode looks like. Both want
      * the same outcome — nothing recorded, nothing changed — and letting the exception through would turn
      * a stranger's request into a 500 in our own error tracker.
+     *
+     * Every other failure travels. A rate limit, an outage or a timeout says nothing about the payment, and
+     * answered with null the receiver marked the delivery handled with a 200: Mollie never asked again, and the
+     * paid cycle, the failed one or the first mandate the ping announced was lost without a line anywhere.
+     * Thrown, the receiver answers 500 and Mollie delivers the ping again.
      */
     private function fetch(string $id): ?Payment
     {
@@ -477,10 +565,20 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
 
         try {
             $payment = $this->client->send(new GetPaymentRequest($id));
-        } catch (Throwable) {
+        } catch (RequestException $refusal) {
+            if (! $this->saysItDoesNotExist($refusal)) {
+                throw $refusal;
+            }
+
             return $this->fetched[$id] = null;
         }
 
         return $this->fetched[$id] = MollieValue::narrow($payment, Payment::class);
+    }
+
+    /** Whether Mollie answered that the resource does not exist, the one refusal that is itself an answer. */
+    private function saysItDoesNotExist(RequestException $refusal): bool
+    {
+        return in_array($refusal->getStatusCode(), [404, 410], true);
     }
 }

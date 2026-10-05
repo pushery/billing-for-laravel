@@ -1,6 +1,6 @@
 @php($intent = $state->badgeIntent())
-{{-- While the subscription is still "activating" after checkout, poll (bounded) until it settles — unless
-     realtime broadcasting is on, in which case the .billing.updated event refreshes instead. --}}
+{{-- While the subscription is still "activating" after checkout, poll (bounded) until it settles. The poll
+     does not depend on realtime broadcasting: a broadcast notifies the owner and does not re-render this screen. --}}
 <div class="space-y-6" @if ($poll) wire:poll.{{ $poll }}="activationTick" @endif>
     <header>
         <h1 class="text-2xl font-semibold">{{ __('billing::account.subscription.heading') }}</h1>
@@ -42,7 +42,7 @@
         @if ($preview)
             <p class="mt-4 text-sm text-gray-600 dark:text-gray-300">
                 {{ __('billing::account.subscription.next_invoice', [
-                    'amount' => $preview->amount->format(),
+                    'amount' => \Pushery\Billing\Support\LocalizedMoney::format($preview->amount),
                     'date' => \Pushery\Billing\Support\LocalizedDate::short($preview->date),
                 ]) }}
             </p>
@@ -74,7 +74,7 @@
                     <label class="flex max-w-xs flex-col gap-1 text-sm text-gray-600 dark:text-gray-300">
                         <span>{{ __('billing::account.cancel_survey.prompt') }}</span>
                         <select id="cancel-reason" wire:model.live="cancelReason"
-                            class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900">
+                            class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-base sm:text-sm dark:border-gray-700 dark:bg-gray-900">
                             <option value="">{{ __('billing::account.cancel_survey.no_reason') }}</option>
                             @foreach (\Pushery\Billing\Enums\CancellationReason::cases() as $reason)
                                 <option value="{{ $reason->value }}">{{ __('billing::account.cancel_survey.reason.'.$reason->value) }}</option>
@@ -87,7 +87,7 @@
                             <span class="sr-only">{{ __('billing::account.cancel_survey.detail_label') }}</span>
                             <textarea wire:model="cancelDetail" rows="2" maxlength="1000"
                                 placeholder="{{ __('billing::account.cancel_survey.detail_placeholder') }}"
-                                class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-700 dark:bg-gray-900"></textarea>
+                                class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-base sm:text-sm dark:border-gray-700 dark:bg-gray-900"></textarea>
                         </label>
                     @endif
 
@@ -154,7 +154,7 @@
     @if ($credit !== null)
         <section class="rounded-xl border border-emerald-200 bg-emerald-50 p-6 dark:border-emerald-900/50 dark:bg-emerald-950/30">
             <p class="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                {{ __('billing::account.credit.balance', ['amount' => $credit->format()]) }}
+                {{ __('billing::account.credit.balance', ['amount' => \Pushery\Billing\Support\LocalizedMoney::format($credit)]) }}
             </p>
             <p class="mt-2 text-sm text-emerald-800 dark:text-emerald-200">
                 {{ __('billing::account.credit.explanation') }}

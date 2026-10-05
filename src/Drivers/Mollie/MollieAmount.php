@@ -11,7 +11,7 @@ use Pushery\Billing\ValueObjects\Money;
 /**
  * Between the package's minor units and Mollie's decimal strings.
  *
- * Stripe and Adyen speak integer minor units, Mollie speaks `{"currency":"EUR","value":"19.00"}`. The
+ * Stripe speaks integer minor units, Mollie speaks `{"currency":"EUR","value":"19.00"}`. The
  * conversion itself is neutral and already lives on {@see Money} — `toDecimal()` and `fromDecimal()` both
  * work from the currency's minor-unit exponent, so a zero-decimal currency renders without a point and a
  * three-decimal one keeps all three.
@@ -61,5 +61,17 @@ final readonly class MollieAmount
         }
 
         return Money::fromDecimal($amount->value, $amount->currency);
+    }
+
+    /**
+     * An amount Mollie leaves out where there is nothing to state, read as zero where it is absent.
+     *
+     * Only absence reads as zero. A present amount that cannot be read still refuses, for the reason above.
+     * The parameter stays `mixed` because the two majors of the SDK disagree about the type: version 4 hands
+     * over its own money object, version 3 the decoded JSON object.
+     */
+    public static function fromOptionalResource(mixed $amount, string $currency): Money
+    {
+        return $amount === null ? Money::zero($currency) : self::fromResource($amount);
     }
 }

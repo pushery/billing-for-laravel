@@ -122,12 +122,15 @@ final readonly class ProratedCancellation
             return $settlement;
         }
 
+        // One key per paid period rather than per end. Two cancellations at once both pass the check on the row
+        // before either writes its end, and the provider, or the routed charge's refund attempt, takes the second
+        // as the first only when both carry the same key. A period ends early once, so one refund is all there is.
         $result = $this->admin->refund(
             $owner,
             $payment->chargeReference,
             $settlement->refundable,
             $reason,
-            'prorated-cancellation:'.$payment->chargeReference.':'.$settlement->endsAt->getTimestamp(),
+            'prorated-cancellation:'.$payment->chargeReference,
             $actor,
             RefundKind::UnusedPrepaidPeriod,
         );
@@ -183,7 +186,9 @@ final readonly class ProratedCancellation
      */
     private function settle(Subscription $subscription, ?SubscriptionPeriodPayment $payment, CarbonInterface $endsAt): CancellationSettlement
     {
-        $end = CarbonImmutable::instance($endsAt);
+        // In UTC, whatever zone the moment came in. The period end it may be clamped to is UTC already, and a
+        // caller that stores the end in a column of its own would otherwise read a zoned wall clock back as UTC.
+        $end = CarbonImmutable::instance($endsAt)->utc();
         $periodEnd = $this->periodEnd($subscription, $payment);
 
         if ($periodEnd instanceof CarbonImmutable && ! $end->lessThan($periodEnd)) {

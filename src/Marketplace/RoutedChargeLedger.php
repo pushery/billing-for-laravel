@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Marketplace;
 
+use DateTimeInterface;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Pushery\Billing\Contracts\FindsMovedShare;
+use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\MerchantChargePurpose;
 use Pushery\Billing\Enums\RefundAttemptStatus;
@@ -22,9 +25,13 @@ use Pushery\Billing\Events\MerchantShareNotMoved;
 use Pushery\Billing\Events\MerchantTransferReversed;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\RefundAttempt;
+use Pushery\Billing\Support\RedactedError;
+use Pushery\Billing\Support\UniqueRow;
 use Pushery\Billing\ValueObjects\FeeLine;
+use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
+use Pushery\Billing\ValueObjects\TransferResult;
 use Throwable;
 
 /**
@@ -157,7 +164,8 @@ final readonly class RoutedChargeLedger
          */
         ?TaxArchetype $taxArchetype = null,
     ): MerchantCharge {
-        return MerchantCharge::model()::query()->firstOrCreate(
+        return UniqueRow::firstOrCreate(
+            MerchantCharge::model()::query(),
             ['provider' => $provider, 'charge_reference' => $chargeReference],
             [
                 'merchant_type' => $merchant->getMorphClass(),
@@ -246,6 +254,26 @@ final readonly class RoutedChargeLedger
     }
 
     /**
+     * Name the payment a hosted sale was written down without.
+     *
+     * A hosted checkout creates its payment only when the buyer confirms, so its sale was recorded under the
+     * package's own reference. The confirmation names the payment, and from then on the row answers under it: a
+     * refund, a withdrawal and a dispute hand the provider the payment, and the provider knows nothing of the
+     * package's reference. Only a pending row is renamed, under the same lock as every other transition, and a
+     * row already recorded under this payment is left as it is.
+     */
+    public function nameThePayment(MerchantCharge $charge, string $paymentReference): bool
+    {
+        if ($charge->charge_reference === $paymentReference) {
+            return false;
+        }
+
+        return $this->changeWhilePending($charge, static fn (): array => [
+            'charge_reference' => $paymentReference,
+        ]);
+    }
+
+    /**
      * Mark a charge as one that will not complete.
      *
      * Only from pending. A settled charge that later goes wrong is a refund or a dispute, not a failure —
@@ -288,6 +316,46 @@ final readonly class RoutedChargeLedger
         }
 
         return $recorded;
+    }
+
+    /**
+     * The transfer an earlier attempt already made for this sale, where the provider can look one up.
+     *
+     * A retry asks again under the sale's idempotency key, and the provider answers from a key only while it keeps
+     * it, which a share held behind withheld payouts can outlast. An attempt whose transfer the provider made and whose
+     * answer was lost would then be made a second time. So a sale that was asked for before is looked up first: the
+     * transfer to the same merchant funded by the same payment moved this sale's share.
+     *
+     * Null on a first attempt, where nothing can have been made yet, from a provider that cannot look a transfer up,
+     * and when the provider holds none. A transfer cannot predate the payment that funds it, so the search starts a
+     * day before the sale was recorded.
+     */
+    public function earlierTransfer(MerchantCharge $charge, MovesMerchantShare $transfers, MerchantAccountReference $destination): ?TransferResult
+    {
+        if ($charge->transfer_requested_at === null && $charge->transfer_failed_at === null) {
+            return null;
+        }
+
+        if (! $transfers instanceof FindsMovedShare) {
+            return null;
+        }
+
+        $recorded = $charge->created_at instanceof DateTimeInterface ? Carbon::instance($charge->created_at) : Carbon::now();
+
+        return $transfers->transferOf($destination, $charge->charge_reference, $recorded->copy()->subDay());
+    }
+
+    /**
+     * Note that the share is being asked of the provider now, before the answer comes.
+     *
+     * A run that stops before the answer leaves no failure and no settlement on the sale, and this time is
+     * what `UnmovedMerchantShares` finds it by once it is too old to be a transfer still on its way. Nothing is
+     * announced: nothing has failed, and a merchant told on every transfer that their share did not move would
+     * stop reading it. A settled sale keeps the time as the record of its last request.
+     */
+    public function recordTransferRequested(MerchantCharge $charge): bool
+    {
+        return $this->changeWhilePending($charge, static fn (): array => ['transfer_requested_at' => Carbon::now()]);
     }
 
     /**
@@ -348,7 +416,9 @@ final readonly class RoutedChargeLedger
      *
      * The row is written first and its id becomes the provider's idempotency key, so a retry of the same
      * intent reaches the provider with the same key and is collapsed there. Deriving the key from a
-     * recomputed local total instead is what turns a timeout into a second refund.
+     * recomputed local total instead is what turns a timeout into a second refund. A caller that names its
+     * intent with a key of its own hands that key in, and the row carries it instead: such a caller retries
+     * by the key, not by the row, and has to find this row again by it.
      *
      * All three amounts are recorded, not one and two derivations. The buyer's refund, what comes back
      * from the merchant and what the platform returns of its own commission are NOT proportional to each
@@ -363,10 +433,11 @@ final readonly class RoutedChargeLedger
         ?Money $feeRefund = null,
         ReversalCause $cause = ReversalCause::Refund,
         ?Money $disputeFee = null,
+        ?string $idempotencyKey = null,
     ): RefundAttempt {
         $fee = $feeRefund ?? new Money(0, $amount->currency);
 
-        return DB::transaction(function () use ($charge, $amount, $transferReversal, $fee, $cause, $disputeFee): RefundAttempt {
+        return DB::transaction(function () use ($charge, $amount, $transferReversal, $fee, $cause, $disputeFee, $idempotencyKey): RefundAttempt {
             $attempt = RefundAttempt::model()::query()->create([
                 'provider' => $charge->provider,
                 'charge_reference' => $charge->charge_reference,
@@ -378,11 +449,14 @@ final readonly class RoutedChargeLedger
                 // Null, not zero, when no dispute happened — the two are different claims and the
                 // schema keeps them apart deliberately.
                 'dispute_fee_minor' => $disputeFee?->minorUnits,
-                // Placeholder until the id exists; replaced in the same transaction below.
-                'idempotency_key' => 'pending:'.bin2hex(random_bytes(8)),
+                // The caller's own key, or a placeholder until the id exists, replaced in the same transaction
+                // below.
+                'idempotency_key' => $idempotencyKey ?? 'pending:'.bin2hex(random_bytes(8)),
             ]);
 
-            $attempt->forceFill(['idempotency_key' => RefundAttempt::keyFor($attempt->id)])->save();
+            if ($idempotencyKey === null) {
+                $attempt->forceFill(['idempotency_key' => RefundAttempt::keyFor($attempt->id)])->save();
+            }
 
             return $attempt;
         });
@@ -423,7 +497,7 @@ final readonly class RoutedChargeLedger
      */
     public function completeRefund(RefundAttempt $attempt, ?Money $actuallyReversed = null, bool $reversalRequested = true): array
     {
-        /** @var array{0: ?MerchantCharge, 1: array{refunded: int, reversed: int, fee: int}, 2: ?int} $result */
+        /** @var array{0: ?MerchantCharge, 1: array{refunded: int, reversed: int, fee: int}, 2: ?int, 3: ?RefundAttempt} $result */
         $result = DB::transaction(function () use ($attempt, $actuallyReversed): array {
             $nothing = ['refunded' => 0, 'reversed' => 0, 'fee' => 0];
 
@@ -434,12 +508,22 @@ final readonly class RoutedChargeLedger
                 ->first();
 
             if (! $charge instanceof MerchantCharge) {
-                return [null, $nothing, null];
+                return [null, $nothing, null, null];
             }
 
-            if ($attempt->status === RefundAttemptStatus::Succeeded) {
-                return [null, $nothing, null];
+            // The attempt is read again under a lock of its own, after the charge's, and never taken from the
+            // caller's object. A job the queue delivers twice loads the attempt twice, both copies say pending,
+            // and the second run waited on the charge's lock and then booked the same reversal again from its
+            // stale copy: the caps below only bind once a charge is exhausted, so a partial refund went through
+            // twice and `MerchantTransferReversed` was announced twice. The caller's object is brought up to date
+            // below, so it reads what was written.
+            $locked = RefundAttempt::model()::query()->whereKey($attempt->getKey())->lockForUpdate()->first();
+
+            if (! $locked instanceof RefundAttempt || $locked->status === RefundAttemptStatus::Succeeded) {
+                return [null, $nothing, null, null];
             }
+
+            $attempt = $locked;
 
             $refunded = min($attempt->amount_minor, $charge->refundableMinor());
 
@@ -490,10 +574,14 @@ final readonly class RoutedChargeLedger
                 'transfer_reversal_short_minor' => $shortfall,
             ])->save();
 
-            return [$charge, ['refunded' => $refunded, 'reversed' => $reversed, 'fee' => $feeRefunded], $shortfall];
+            return [$charge, ['refunded' => $refunded, 'reversed' => $reversed, 'fee' => $feeRefunded], $shortfall, $attempt];
         });
 
-        [$charge, $moved, $shortfall] = $result;
+        [$charge, $moved, $shortfall, $written] = $result;
+
+        if ($written instanceof RefundAttempt) {
+            $attempt->forceFill($written->getAttributes())->syncOriginal();
+        }
 
         if ($charge instanceof MerchantCharge && ($moved['reversed'] > 0 || $moved['fee'] > 0)) {
             $this->announceReversal($attempt, $charge, $moved['reversed'], $moved['fee']);
@@ -506,27 +594,6 @@ final readonly class RoutedChargeLedger
         return $moved;
     }
 
-    /**
-     * Tell a consumer what came back, in the amounts that actually moved.
-     *
-     * The merchant is read through the charge rather than carried on the attempt, because the attempt is
-     * about money and the recipient is a fact about the charge. A charge whose merchant has since been
-     * deleted announces nothing: an event whose subject is gone cannot be acted on, and dispatching it
-     * with a null merchant would push that problem into every listener instead of stopping it here.
-     *
-     * ## Why the read cannot be allowed to throw
-     *
-     * A stored `merchant_type` is a class NAME, and a consumer that renames or removes a model leaves rows
-     * pointing at a class that no longer exists — where `morphTo` raises an `Error` rather than answering
-     * null. By the time this runs the money has already moved and committed. Letting that escape would
-     * report a completed reversal as a failure, and the caller's natural response is to retry: the caps
-     * make the retry a no-op, so the reversal is right, the caller believes it is wrong, and the
-     * announcement is lost anyway.
-     *
-     * So the announcement is the only thing that fails here, never the reversal. Nothing is swallowed
-     * quietly beyond that: an unresolvable merchant is a real problem, but it is a problem about the
-     * consumer's own model map, and this is not the operation that should surface it.
-     */
     /**
      * Tell a consumer how much less came back than the reversal asked for.
      *
@@ -555,6 +622,27 @@ final readonly class RoutedChargeLedger
         ));
     }
 
+    /**
+     * Tell a consumer what came back, in the amounts that actually moved.
+     *
+     * The merchant is read through the charge rather than carried on the attempt, because the attempt is
+     * about money and the recipient is a fact about the charge. A charge whose merchant has since been
+     * deleted announces nothing: an event whose subject is gone cannot be acted on, and dispatching it
+     * with a null merchant would push that problem into every listener instead of stopping it here.
+     *
+     * ## Why the read cannot be allowed to throw
+     *
+     * A stored `merchant_type` is a class NAME, and a consumer that renames or removes a model leaves rows
+     * pointing at a class that no longer exists — where `morphTo` raises an `Error` rather than answering
+     * null. By the time this runs the money has already moved and committed. Letting that escape would
+     * report a completed reversal as a failure, and the caller's natural response is to retry: the caps
+     * make the retry a no-op, so the reversal is right, the caller believes it is wrong, and the
+     * announcement is lost anyway.
+     *
+     * So the announcement is the only thing that fails here, never the reversal. Nothing is swallowed
+     * quietly beyond that: an unresolvable merchant is a real problem, but it is a problem about the
+     * consumer's own model map, and this is not the operation that should surface it.
+     */
     private function announceReversal(RefundAttempt $attempt, MerchantCharge $charge, int $reversed, int $feeReturned): void
     {
         if (! $this->merchantClassExists($charge)) {
@@ -601,7 +689,6 @@ final readonly class RoutedChargeLedger
         return class_exists(Relation::getMorphedModel($stored) ?? $stored);
     }
 
-    /** Record that the provider refused an attempt, so a later reading knows it was tried. */
     /**
      * Count a buyer fee that has gone back, and answer how much of it actually did.
      *
@@ -656,11 +743,18 @@ final readonly class RoutedChargeLedger
         return new Money($applied, $charge->currency);
     }
 
+    /**
+     * Record that the provider refused an attempt, so a later reading knows it was tried.
+     *
+     * The reason is cut to the 255 characters of its column. A provider's message can run longer, the one Stripe's
+     * client raises for a timed-out request runs to almost 400, and a longer value would fail this write and leave
+     * the attempt pending.
+     */
     public function failRefund(RefundAttempt $attempt, string $reason): void
     {
         $attempt->forceFill([
             'status' => RefundAttemptStatus::Failed,
-            'failure_reason' => $reason,
+            'failure_reason' => RedactedError::fit($reason, 255),
             'completed_at' => Carbon::now(),
         ])->save();
     }

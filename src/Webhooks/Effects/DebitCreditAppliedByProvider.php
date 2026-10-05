@@ -8,7 +8,6 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Enums\CreditReason;
 use Pushery\Billing\Events\InvoiceFinalized;
-use Pushery\Billing\Models\CreditLedgerEntry;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Support\CreditLedger;
 use Pushery\Billing\ValueObjects\CreditSource;
@@ -45,8 +44,10 @@ use Pushery\Billing\ValueObjects\Money;
  * A provider redelivers, and `invoice.finalized` and `invoice.payment_succeeded` both carry the same invoice
  * object. A second debit is not a duplicate row, it is a customer charged twice for one offset — so the
  * ledger is asked whether it already carries this reason against this record, and the write is skipped if it
- * does. Read rather than caught: a unique index would make the second delivery an exception to swallow, and
- * swallowing exceptions around money is how a real failure gets mistaken for a replay.
+ * does. Asked under the balance row's lock ({@see CreditLedger::debitOnce()}), because two deliveries run as
+ * two parallel transactions and a question asked before the lock gets "not yet" in both. Read rather than
+ * caught: a unique index would make the second delivery an exception to swallow, and swallowing exceptions
+ * around money is how a real failure gets mistaken for a replay.
  */
 final readonly class DebitCreditAppliedByProvider
 {
@@ -80,25 +81,11 @@ final readonly class DebitCreditAppliedByProvider
             return;
         }
 
-        if ($this->alreadyDebited($record)) {
-            return;
-        }
-
-        $this->ledger->debit(
+        $this->ledger->debitOnce(
             $owner,
             Money::of($snapshot->creditAppliedMinor, $snapshot->currency),
             CreditReason::ProviderInvoiceOffset,
             CreditSource::for($record),
         );
-    }
-
-    /** Whether this invoice already took its offset off the ledger. */
-    private function alreadyDebited(InvoiceRecord $record): bool
-    {
-        return CreditLedgerEntry::model()::query()
-            ->where('source_type', $record->getMorphClass())
-            ->where('source_id', $record->getKey())
-            ->where('reason', CreditReason::ProviderInvoiceOffset)
-            ->exists();
     }
 }

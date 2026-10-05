@@ -4,15 +4,15 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Exceptions;
 
+use Carbon\CarbonInterface;
 use RuntimeException;
 use Throwable;
 
 /**
- * A prorated cancellation found nothing it could settle safely, so nothing was done.
+ * A cancellation found nothing it could settle safely, so nothing was done.
  *
- * Every case is found while reading, before the subscription ends and before money moves. A cancellation that had
- * ended the subscription first and only then found it could not settle would leave the owner with an end and no
- * answer about their money.
+ * Every case is found before the subscription ends, before money moves and before a document number is drawn. A cancellation that had ended the subscription first and only then found it could not settle would leave
+ * the owner with an end and no answer about their money.
  *
  * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping a fragment
  * measures where the line was wrapped, not what a test asserts.
@@ -39,5 +39,22 @@ final class CancellationUnavailable extends RuntimeException
             .'payment has succeeded or failed.',
             previous: $previous,
         );
+    }
+
+    /**
+     * The prepaid term paid by this charge was canceled already, and its refund was asked for then.
+     *
+     * @param  CarbonInterface  $canceledAt  when the first cancellation was stamped on the charge
+     */
+    public static function termAlreadyCanceled(string $provider, string $chargeReference, CarbonInterface $canceledAt): self
+    {
+        return new self(sprintf(
+            'The prepaid term paid by %s charge %s was canceled already, at %s, and its refund was asked for then. '
+            .'A term is canceled once; a second cancellation would refund the unused part a second time. The outcome '
+            .'of that refund is in its admin.refund audit record, and a refund still owed goes through BillingAdmin::refund().',
+            $provider,
+            $chargeReference,
+            $canceledAt->toIso8601String(),
+        ));
     }
 }

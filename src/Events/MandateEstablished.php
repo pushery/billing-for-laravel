@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Events;
 
 use Pushery\Billing\Contracts\IdentifiesCustomer;
+use Pushery\Billing\ValueObjects\PaymentMethod;
 
 /**
  * A payment method the package can now charge off-session was granted — the counterpart to
@@ -38,5 +39,13 @@ final readonly class MandateEstablished implements BillingDomainEvent, Identifie
          * a question somebody asked days earlier.
          */
         public ?string $paymentReference = null,
+        /**
+         * The card behind a card mandate, where the provider names it: its brand, the last four digits and the
+         * expiry, which the expiring-card warning reads.
+         *
+         * Trailing and nullable for the same reason as the payment: a direct debit has no card, and a provider
+         * that does not answer with one leaves it out rather than guessing.
+         */
+        public ?PaymentMethod $card = null,
     ) {}
 }

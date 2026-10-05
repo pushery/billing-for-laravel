@@ -21,9 +21,11 @@ use Pushery\Billing\Exceptions\UnknownTaxCountry;
  *
  * The owner's rule for this package is explicit: the EU must be perfect, trade out of the EU is built,
  * everything else is built as far as it is genuinely known — and beyond that a developer extends it
- * themselves rather than finding a plausible guess already in place. This map is therefore replaceable
- * wholesale by a jurisdiction profile. Growing the shipped list to cover the world would be the opposite of
- * that instruction: it would put answers in the package that nobody here can defend.
+ * themselves rather than finding a plausible guess already in place. This map is therefore bound wholesale by
+ * the host, and the package ships none. Growing a shipped list to cover the world would be the opposite of that
+ * instruction: it would put answers in the package that nobody here can defend.
+ *
+ * Bound, it is asked by the `eu_oss` calculator before every price; unbound, pricing stays as it is.
  */
 final readonly class CoverageMap
 {

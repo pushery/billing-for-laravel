@@ -8,10 +8,13 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\URL;
+use Pushery\Billing\Contracts\BillingActionUrls;
+use Pushery\Billing\Enums\BillingAction;
 
 /**
  * The base every billing notice extends. It carries the three things that are the same for all of them,
@@ -77,11 +80,29 @@ abstract class BillingNotification extends Notification implements ShouldQueueAf
     }
 
     /**
+     * The button of a notice to a billing owner: the screen where its reader acts on the notice, or null for none.
+     *
+     * The bound `BillingActionUrls` answers, asked with the model the notice goes to. A recipient that is not a
+     * model, such as an address the notice was routed to on demand, has no owner to ask about and is sent to the
+     * hub's screen. A blank answer counts as none, so it cannot render a button that leads nowhere.
+     */
+    protected function actionFor(object $notifiable, BillingAction $action): ?string
+    {
+        if (! $notifiable instanceof Model) {
+            return $this->actionUrl($action->route());
+        }
+
+        $url = Container::getInstance()->make(BillingActionUrls::class)->for($notifiable, $action);
+
+        return $url === null || trim($url) === '' ? null : $url;
+    }
+
+    /**
      * A mail line plus a call to action, where one can be built.
      *
-     * Written once here because eleven notices need the same two-branch shape, and eleven copies of it is
-     * eleven places the guard above can be forgotten — which is the failure that produces a dead link in a
-     * transactional mail rather than a missing one.
+     * Written once here because every notice with a call to action needs the same two-branch shape, and a
+     * copy in each of them is a place each where the guard above can be forgotten — which is the failure that
+     * produces a dead link in a transactional mail rather than a missing one.
      */
     protected function withAction(MailMessage $mail, string $label, ?string $url): MailMessage
     {

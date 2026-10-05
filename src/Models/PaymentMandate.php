@@ -24,6 +24,10 @@ use Pushery\Billing\ValueObjects\MandateReference;
  * @property string $status
  * @property bool $is_default
  * @property ?string $customer_reference
+ * @property ?string $card_brand
+ * @property ?string $card_last4
+ * @property ?int $card_exp_month
+ * @property ?int $card_exp_year
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
@@ -44,6 +48,7 @@ class PaymentMandate extends Model
     protected $fillable = [
         'owner_type', 'owner_id', 'provider', 'mandate_reference',
         'method', 'status', 'is_default', 'customer_reference',
+        'card_brand', 'card_last4', 'card_exp_month', 'card_exp_year',
     ];
 
     /**
@@ -57,7 +62,7 @@ class PaymentMandate extends Model
     ];
 
     /** @var array<string,string> */
-    protected $casts = ['is_default' => 'boolean'];
+    protected $casts = ['is_default' => 'boolean', 'card_exp_month' => 'integer', 'card_exp_year' => 'integer'];
 
     /**
      * The chargeable default for an owner at one provider, or null when they currently have no way to pay.
@@ -68,7 +73,7 @@ class PaymentMandate extends Model
      */
     public static function defaultFor(string $ownerType, int|string $ownerId, string $provider): ?self
     {
-        return self::query()
+        return static::model()::query()
             ->where('owner_type', $ownerType)
             ->where('owner_id', $ownerId)
             ->where('provider', $provider)
@@ -100,7 +105,7 @@ class PaymentMandate extends Model
     public function makeDefault(): void
     {
         $this->getConnection()->transaction(function (): void {
-            self::query()
+            static::model()::query()
                 ->where('owner_type', $this->owner_type)
                 ->where('owner_id', $this->owner_id)
                 ->where('provider', $this->provider)

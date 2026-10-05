@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Support;
 
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Schema\Builder;
 use Illuminate\Database\Schema\ColumnDefinition;
 use Illuminate\Support\Facades\Config;
 
@@ -33,7 +34,19 @@ use Illuminate\Support\Facades\Config;
  * other half.
  *
  * References to this package's OWN models stay `bigint` and are not routed through here — the credit
- * ledger's `source` names an order or an add-on purchase, both of which this package keys itself.
+ * ledger's `source` names an order or an add-on purchase, both of which this package keys itself, and it is
+ * declared with `nullableNumericMorphs()`, because a plain `nullableMorphs()` follows the framework's default
+ * into a uuid column under `Schema::morphUsingUuids()`.
+ *
+ * ## Not set, it is the framework's answer
+ *
+ * An application keyed by UUIDs or ULIDs says so to the framework with `Schema::morphUsingUuids()` or
+ * `morphUsingUlids()`, and every morph the framework declares follows that. Without a setting of its own this
+ * package follows the same answer. It used to read `int` instead, while the morph columns it declared through
+ * the framework followed the switch: a fresh installation got UUID morph columns beside integer host keys, in
+ * some tables side by side, and on MySQL and PostgreSQL the migrations stopped part way. A setting that is given
+ * wins, and on the integer path every morph is declared numeric, so the columns agree with the keys beside them
+ * whatever the framework's default says.
  *
  * ## Changing it later is a data migration, not a setting change
  *
@@ -43,12 +56,37 @@ use Illuminate\Support\Facades\Config;
  */
 final class BillingSchema
 {
-    /** What the host keys its own models with. `int` is the framework default and this package's. */
+    /** The key types the setting can name, spelled as the framework spells them. */
+    private const array HOST_KEY_TYPES = ['int', 'uuid', 'ulid'];
+
+    /** What the host keys its own models with: the setting, or the framework's morph key type when it is not given. */
     public static function hostKeyType(): string
     {
-        $configured = Config::get('billing.schema.host_key_type', 'int');
+        $configured = Config::get('billing.schema.host_key_type');
 
-        return in_array($configured, ['int', 'uuid', 'ulid'], true) ? $configured : 'int';
+        if ($configured === null || $configured === '') {
+            $configured = Builder::$defaultMorphKeyType;
+        }
+
+        return in_array($configured, self::HOST_KEY_TYPES, true) ? $configured : 'int';
+    }
+
+    /**
+     * The setting as written, when it names none of the key types; null when it names one or is not given.
+     *
+     * {@see hostKeyType()} reads such a value as `int` rather than refusing it, because it is read while a table
+     * is created and an exception there leaves a half-migrated schema. So a value like `UUID` or `guid` builds
+     * integer columns without a word, and this is how `billing:doctor` names it instead.
+     */
+    public static function unrecognizedHostKeyType(): ?string
+    {
+        $configured = Config::get('billing.schema.host_key_type');
+
+        if ($configured === null || $configured === '' || in_array($configured, self::HOST_KEY_TYPES, true)) {
+            return null;
+        }
+
+        return is_scalar($configured) ? (string) $configured : get_debug_type($configured);
     }
 
     /**
@@ -61,53 +99,53 @@ final class BillingSchema
      * MySQL refuses to create the index, so the whole migration fails.
      *
      * 191 characters is far more than a class name or a morph alias needs and brings the same index to 2948.
-     * It is applied ONLY on the uuid/ulid path: the integer path stays byte-identical to `Blueprint::morphs()`,
-     * so no existing installation's schema changes shape because this helper appeared.
+     * It is applied ONLY on the uuid/ulid path: the integer path stays byte-identical to
+     * `Blueprint::numericMorphs()`, so no existing installation's schema changes shape because this helper appeared.
      *
      * Found by the MySQL mirror. SQLite and PostgreSQL both create the index without complaint.
      */
     private const int TYPE_LENGTH = 191;
 
-    /** A required reference to one of the host's models. */
-    public static function morphs(Blueprint $table, string $name, ?string $indexName = null): void
-    {
-        if (self::hostKeyType() === 'int') {
-            $table->morphs($name, $indexName);
-
-            return;
-        }
-
-        $table->string($name.'_type', self::TYPE_LENGTH);
-        self::hostKey($table, $name.'_id');
-        $table->index([$name.'_type', $name.'_id'], $indexName);
-    }
-
-    /** An optional reference to one of the host's models. */
-    public static function nullableMorphs(Blueprint $table, string $name, ?string $indexName = null): void
-    {
-        if (self::hostKeyType() === 'int') {
-            $table->nullableMorphs($name, $indexName);
-
-            return;
-        }
-
-        $table->string($name.'_type', self::TYPE_LENGTH)->nullable();
-        self::hostKey($table, $name.'_id')->nullable();
-        $table->index([$name.'_type', $name.'_id'], $indexName);
-    }
-
     /**
-     * The id half alone, for a table that declares its morph columns by hand.
+     * A required reference to one of the host's models.
      *
-     * `billing_access_grants` does that because its unique index needs explicit string LENGTHS — four
-     * default-length strings overrun MySQL's 3072-byte index key. It still has to follow the host's key
-     * type, so the id column comes from here rather than being spelled `unsignedBigInteger` beside it.
-     *
-     * The definition is RETURNED so a caller can chain, which the erasure migration needs: it makes an
-     * existing owner column nullable with `->nullable()->change()`. Spelled `unsignedBigInteger` there, that
-     * one line would have cast a uuid column back to bigint — a migration that UNDOES the setting, on a
-     * table that already holds data. That is not hypothetical; it is what this method was written after.
+     * `$indexed: false` leaves out the index on the pair, for a table whose own composite index leads with it.
+     * That index answers every lookup by the pair, and a second one on the pair alone costs a write on every
+     * insert and update and serves no query.
      */
+    public static function morphs(Blueprint $table, string $name, ?string $indexName = null, bool $indexed = true): void
+    {
+        if (self::hostKeyType() === 'int' && $indexed) {
+            $table->numericMorphs($name, $indexName);
+
+            return;
+        }
+
+        self::hostType($table, $name.'_type');
+        self::hostKey($table, $name.'_id');
+
+        if ($indexed) {
+            $table->index([$name.'_type', $name.'_id'], $indexName);
+        }
+    }
+
+    /** An optional reference to one of the host's models, with the same choice about its index. */
+    public static function nullableMorphs(Blueprint $table, string $name, ?string $indexName = null, bool $indexed = true): void
+    {
+        if (self::hostKeyType() === 'int' && $indexed) {
+            $table->nullableNumericMorphs($name, $indexName);
+
+            return;
+        }
+
+        self::hostType($table, $name.'_type')->nullable();
+        self::hostKey($table, $name.'_id')->nullable();
+
+        if ($indexed) {
+            $table->index([$name.'_type', $name.'_id'], $indexName);
+        }
+    }
+
     /**
      * The TYPE half of a host reference, at the same width the pair was created with.
      *
@@ -124,13 +162,26 @@ final class BillingSchema
             : $table->string($column, self::TYPE_LENGTH);
     }
 
+    /**
+     * The id half alone, for a table that declares its morph columns by hand.
+     *
+     * `billing_access_grants` does that because its unique index needs explicit string LENGTHS — four
+     * default-length strings overrun MySQL's 3072-byte index key. It still has to follow the host's key
+     * type, so the id column comes from here rather than being spelled `unsignedBigInteger` beside it.
+     *
+     * The definition is RETURNED so a caller can chain, which the erasure migration needs: it makes an
+     * existing owner column nullable with `->nullable()->change()`. Spelled `unsignedBigInteger` there, that
+     * one line would have cast a uuid column back to bigint — a migration that UNDOES the setting, on a
+     * table that already holds data. That is not hypothetical; it is what this method was written after.
+     */
     public static function hostKey(Blueprint $table, string $column): ColumnDefinition
     {
         return match (self::hostKeyType()) {
-            // 36 and 26 are the exact rendered lengths of a UUID and a ULID. Char, not string, because the
-            // value is fixed-width and an index over it is smaller — which is the whole reason the table
-            // that uses this declares its columns by hand.
-            'uuid' => $table->char($column, 36),
+            // The type Laravel's own uuidMorphs() and a host's `$table->uuid('id')` declare: the native uuid
+            // type on PostgreSQL, char(36) on MySQL. PostgreSQL compares a uuid with no character column, so a
+            // host table joined to one of these columns, which is what whereHas() compiles to, needs the same
+            // type on both sides. 26 is the exact rendered length of a ULID, as Laravel's ulidMorphs() has it.
+            'uuid' => $table->uuid($column),
             'ulid' => $table->char($column, 26),
             default => $table->unsignedBigInteger($column),
         };

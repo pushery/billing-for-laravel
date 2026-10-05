@@ -20,7 +20,7 @@ use Pushery\Billing\Support\BillingManager;
  */
 final class ReconcileMerchantJournalCommand extends Command
 {
-    protected $signature = 'billing:merchants:reconcile {--driver= : the driver whose rows to audit, defaulting to the active one} {--limit=500 : how many journal rows one sweep reads}';
+    protected $signature = 'billing:merchants:reconcile {--driver= : the driver whose rows to audit, defaulting to the active one} {--limit=500 : how many journal rows one sweep reads, newest first} {--before= : read the rows older than this id, where a sweep left off}';
 
     protected $description = 'Compare the merchant journal against what the payment provider says it moved';
 
@@ -62,12 +62,25 @@ final class ReconcileMerchantJournalCommand extends Command
         }
 
         $limit = (int) $this->option('limit');
+        $limit = $limit > 0 ? $limit : 500;
+        $before = is_numeric($this->option('before')) ? (int) $this->option('before') : null;
 
-        $findings = new ProviderJournalReconciler($reader, $events)
-            ->sweep($driver, $limit > 0 ? $limit : 500);
+        $reconciler = new ProviderJournalReconciler($reader, $events);
+        $findings = $reconciler->sweep($driver, $limit, $before);
+
+        // How far the sweep reached, so a journal larger than one sweep says so instead of passing quietly.
+        $total = $reconciler->rowsIn($driver, $before);
+        $read = min($limit, $total);
+        $oldest = $reconciler->oldestRead($driver, $limit, $before);
+
+        if ($read < $total && $oldest !== null) {
+            $this->components->warn(
+                "Read the newest {$read} of {$total} {$driver} journal rows. The older ones: --before={$oldest}."
+            );
+        }
 
         if ($findings === []) {
-            $this->components->info("No drift across the first {$limit} {$driver} journal rows.");
+            $this->components->info("No drift across the newest {$read} of {$total} {$driver} journal rows.");
 
             return self::SUCCESS;
         }

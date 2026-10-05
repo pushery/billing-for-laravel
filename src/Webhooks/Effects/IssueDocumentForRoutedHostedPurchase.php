@@ -22,6 +22,7 @@ use Pushery\Billing\Marketplace\ProductClassifier;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\ValueObjects\ProviderComputedTax;
 use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
+use Pushery\Billing\Webhooks\RepeatableEffect;
 
 /**
  * The buyer's document for a routed sale that was paid on the provider's own checkout page.
@@ -69,9 +70,11 @@ use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
  *
  * Through `issue()`, which goes to the repeat guard keyed on the charge reference. A second delivery finds
  * the document that exists instead of drawing a second number out of a gapless series — the one failure a
- * repeat cannot heal.
+ * repeat cannot heal. For the same reason the replay may run it again over a delivery it already handled,
+ * named with `--rerun`: a sale it could not document then, because the provider's tax was read without the
+ * taxes of the line items, is documented now, and a sale that has its document keeps the one it has.
  */
-final readonly class IssueDocumentForRoutedHostedPurchase
+final readonly class IssueDocumentForRoutedHostedPurchase implements RepeatableEffect
 {
     public function __construct(
         private CustomerDirectory $directory,

@@ -6,9 +6,12 @@ namespace Pushery\Billing\Catalogs;
 
 use Illuminate\Contracts\Config\Repository;
 use InvalidArgumentException;
+use Pushery\Billing\Contracts\SuppliesBuyerAudiences;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Contracts\TierCatalog;
+use Pushery\Billing\Enums\BuyerAudience;
 use Pushery\Billing\Enums\TaxArchetype;
+use Pushery\Billing\Support\UntouchableTiers;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\TierIdentity;
 
@@ -16,9 +19,15 @@ use Pushery\Billing\ValueObjects\TierIdentity;
  * The config-driven tier catalog: reads config('billing.tiers') (an ordered map keyed by tier key)
  * and answers identity/label/price-display questions. The configured order is the upgrade ranking.
  */
-final readonly class ConfigTierCatalog implements SuppliesProductArchetypes, TierCatalog
+final readonly class ConfigTierCatalog implements SuppliesBuyerAudiences, SuppliesProductArchetypes, TierCatalog
 {
     public function __construct(private Repository $config) {}
+
+    /** Who may buy the offer, from `billing.tiers.<key>.buyers`: anyone unless it says `business`. */
+    public function audienceFor(string $key): BuyerAudience
+    {
+        return BuyerAudience::fromConfig($this->config->get("billing.tiers.{$key}.buyers"), "billing.tiers.{$key}");
+    }
 
     /**
      * What kind of subscription this tier sells, from `billing.tiers.<key>.archetype`.
@@ -66,9 +75,17 @@ final readonly class ConfigTierCatalog implements SuppliesProductArchetypes, Tie
         return $out;
     }
 
+    /**
+     * The tier the key names, or null where the catalog has none by that key.
+     *
+     * Read off the key set rather than through `billing.tiers.{$key}`: the repository resolves a dot as nesting, so
+     * a sub-map of a tier, such as `pro.price_display`, would answer as a tier of its own.
+     */
     public function find(string $key): ?TierIdentity
     {
-        return is_array($this->config->get("billing.tiers.{$key}")) ? $this->identity($key) : null;
+        $tiers = $this->config->get('billing.tiers');
+
+        return is_array($tiers) && is_array($tiers[$key] ?? null) ? $this->identity($key) : null;
     }
 
     public function label(string $key): string
@@ -85,7 +102,7 @@ final readonly class ConfigTierCatalog implements SuppliesProductArchetypes, Tie
 
     public function isUntouchable(string $key): bool
     {
-        return $this->config->get("billing.tiers.{$key}.untouchable") === true;
+        return UntouchableTiers::has($this->config, $key);
     }
 
     public function priceDisplay(string $key): ?Money

@@ -25,6 +25,8 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * @property string $event_id
  * @property string $type
  * @property ?array<array-key, mixed> $payload
+ * @property ?Carbon $payload_removed_at when the payload was removed on purpose, by an erasure or the retention
+ *                                       clock; a redelivery never refills a payload that carries it
  * @property WebhookEventState $status
  * @property ?string $last_error
  * @property ?Carbon $handled_at
@@ -61,6 +63,7 @@ class BillingWebhookEvent extends Model
     /** @var array<string, string> */
     protected $casts = [
         'payload' => 'array',
+        'payload_removed_at' => 'datetime',
         'status' => WebhookEventState::class,
         'handled_at' => 'datetime',
     ];

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Listeners;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\AffectsSeats;
 use Pushery\Billing\Seats\SeatSync;
+use Pushery\Billing\Support\Concerns\BacksOffBetweenAttempts;
 
 /**
  * Re-syncs a team's billed seat count whenever its membership changes.
@@ -26,10 +28,26 @@ use Pushery\Billing\Seats\SeatSync;
  */
 final readonly class SyncSeatsOnMembershipChange implements ShouldQueueAfterCommit
 {
+    use BacksOffBetweenAttempts;
+
     public function __construct(
         private SeatSync $seats,
         private Repository $config,
     ) {}
+
+    /**
+     * As many attempts as a webhook run gets, from `billing.webhooks.tries`. Without it the worker's default of
+     * one applied, and a single provider timeout left the billed seat count wrong until the next change.
+     *
+     * Read from the container rather than from the configuration the constructor received, because Laravel
+     * asks an instance it builds without its constructor.
+     */
+    public function tries(): int
+    {
+        $tries = Container::getInstance()->make(Repository::class)->get('billing.webhooks.tries');
+
+        return is_int($tries) ? $tries : 5;
+    }
 
     public function handle(object $event): void
     {

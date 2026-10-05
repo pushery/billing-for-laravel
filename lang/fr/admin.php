@@ -49,6 +49,7 @@ return [
         'submit' => 'Résilier l\'abonnement',
         'canceled' => 'Abonnement résilié.',
         'not_found' => 'Aucun titulaire trouvé pour cet ID.',
+        'nothing_running' => 'Ce titulaire n\'a aucun abonnement en cours à résilier.',
     ],
 
     'audit' => [

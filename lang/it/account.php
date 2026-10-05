@@ -181,13 +181,14 @@ return [
 
     'reconfirm' => [
         'prompt' => 'Conferma la tua password per continuare.',
+        'prompt_email' => 'Conferma l’indirizzo e-mail del tuo account per continuare.',
         'wrong' => 'Non corrisponde. Riprova.',
         'throttled' => 'Troppi tentativi. Riprova tra :seconds secondi.',
     ],
 
     'danger' => [
         'heading' => 'Zona pericolosa',
-        'explanation' => 'Se annulli ora, la fatturazione si interrompe immediatamente, senza periodo di tolleranza.',
+        'explanation' => 'Se annulli ora, il tuo abbonamento termina immediatamente, senza periodo di tolleranza. I giorni che hai già usato e non hai ancora pagato vengono comunque fatturati.',
         'cancel_now' => 'Interrompi la fatturazione ora',
         'confirm_question' => 'L’azione non è reversibile. Interrompere la fatturazione immediatamente?',
         'confirm_yes' => 'Sì, interrompi ora',

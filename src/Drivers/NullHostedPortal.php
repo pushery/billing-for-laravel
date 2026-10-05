@@ -16,7 +16,7 @@ use Pushery\Billing\Contracts\HostedPortal;
  */
 final readonly class NullHostedPortal implements HostedPortal
 {
-    public function url(Model $billable): ?string
+    public function url(Model $billable, ?string $returnUrl = null): ?string
     {
         return null;
     }

@@ -11,7 +11,6 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\EInvoice;
 use Pushery\Billing\Contracts\SellerPartyResolver;
-use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Invoicing\Concerns\NormalizesInvoiceModel;
 use Pushery\Billing\Marketplace\ConfigSellerPartyResolver;
 use Pushery\Billing\Models\InvoiceRecord;
@@ -202,12 +201,12 @@ final readonly class ZugferdCiiInvoice implements EInvoice
     }
 
     /** The line-level VAT category (BT-151/152): code + rate only; the exemption reason lives on the header band. */
-    private function lineTax(DOMDocument $doc, float $rate, EnInvoiceTaxTreatment $treatment): DOMElement
+    private function lineTax(DOMDocument $doc, ?float $rate, EnInvoiceTaxTreatment $treatment): DOMElement
     {
         $tax = $doc->createElement('ram:ApplicableTradeTax');
         $this->el($doc, $tax, 'ram:TypeCode', 'VAT');
-        $this->el($doc, $tax, 'ram:CategoryCode', $this->categoryFor($rate, $treatment)->code);
-        $this->el($doc, $tax, 'ram:RateApplicablePercent', $this->rate($treatment->reverseCharge || $treatment->exempt ? 0.0 : $rate));
+        $this->el($doc, $tax, 'ram:CategoryCode', EnInvoiceTaxCategory::forDocument($treatment->invoice, $rate)->code);
+        $this->el($doc, $tax, 'ram:RateApplicablePercent', $this->rate($treatment->reverseCharge || $treatment->exempt || $rate === null ? 0.0 : $rate));
 
         return $tax;
     }
@@ -281,7 +280,21 @@ final readonly class ZugferdCiiInvoice implements EInvoice
             $settlement->appendChild($period);
         }
 
-        $settlement->appendChild($this->monetarySummation($doc, $treatment->net, $treatment->tax, $currency));
+        // BT-9, for a document that still has an amount due (BR-CO-25). CII orders the payment terms after the
+        // period and before the totals. A settled document states its amount as paid instead, and is due nothing.
+        if (! $this->settled($invoice)) {
+            $terms = $doc->createElement('ram:SpecifiedTradePaymentTerms');
+            $this->periodDate($doc, $terms, 'ram:DueDateDateTime', $this->dueDateOf($invoice));
+            $settlement->appendChild($terms);
+        }
+
+        $settlement->appendChild($this->monetarySummation(
+            $doc,
+            $treatment->net,
+            $treatment->tax,
+            $this->settled($invoice) ? $treatment->net + $treatment->tax : 0,
+            $currency,
+        ));
 
         if ($invoice->isCorrection() && $invoice->credited_invoice_number !== null) {
             $referenced = $doc->createElement('ram:InvoiceReferencedDocument');
@@ -322,22 +335,23 @@ final readonly class ZugferdCiiInvoice implements EInvoice
      * category AE at 0% carrying the exemption reason BR-AE-* require — not the zero-rated Z a 0% rate
      * would otherwise get.
      *
-     * @param  array{rate: float, taxable: int, tax: int}  $band
+     * @param  array{rate: ?float, taxable: int, tax: int}  $band
      */
     private function headerTax(DOMDocument $doc, array $band, string $currency, EnInvoiceTaxTreatment $treatment): DOMElement
     {
-        $zeroRated = $treatment->reverseCharge || $treatment->exempt;
+        $zeroRated = $treatment->reverseCharge || $treatment->exempt || $band['rate'] === null;
 
         $tax = $doc->createElement('ram:ApplicableTradeTax');
         $this->amount($doc, $tax, 'ram:CalculatedAmount', $zeroRated ? 0 : $band['tax'], $currency);
         $this->el($doc, $tax, 'ram:TypeCode', 'VAT');
 
-        $category = $this->categoryFor($band['rate'], $treatment);
+        $category = EnInvoiceTaxCategory::forDocument($treatment->invoice, $band['rate']);
 
         if ($category->needsReason()) {
             // Derived from vat_note where the document carries one, and otherwise the wording that belongs to
-            // the category — never hardcoded past that fallback.
-            $this->el($doc, $tax, 'ram:ExemptionReason', $treatment->exemptionReason ?? $category->reason);
+            // the category — never hardcoded past that fallback. An amount collected on behalf of another party
+            // keeps its own wording: the document's note is about the document's own supply.
+            $this->el($doc, $tax, 'ram:ExemptionReason', $category->isCollectedOnBehalf() ? $category->reason : ($treatment->exemptionReason ?? $category->reason));
         }
 
         $this->amount($doc, $tax, 'ram:BasisAmount', $band['taxable'], $currency);
@@ -350,17 +364,18 @@ final readonly class ZugferdCiiInvoice implements EInvoice
             $this->el($doc, $tax, 'ram:ExemptionReasonCode', $category->vatexCode);
         }
 
-        $this->el($doc, $tax, 'ram:RateApplicablePercent', $this->rate($zeroRated ? 0.0 : $band['rate']));
+        $this->el($doc, $tax, 'ram:RateApplicablePercent', $this->rate($zeroRated ? 0.0 : (float) $band['rate']));
 
         return $tax;
     }
 
     /**
      * The document totals (BG-22). CII order: LineTotalAmount, TaxBasisTotalAmount, TaxTotalAmount,
-     * GrandTotalAmount, DuePayableAmount. Only TaxTotalAmount carries the currencyID attribute — a CII
-     * rule the other summation amounts must NOT repeat.
+     * GrandTotalAmount, TotalPrepaidAmount, DuePayableAmount. Only TaxTotalAmount carries the currencyID
+     * attribute — a CII rule the other summation amounts must NOT repeat. What was already paid (BT-113) is
+     * stated where there is any, and the amount due (BT-115) is what remains (BR-CO-16).
      */
-    private function monetarySummation(DOMDocument $doc, int $net, int $tax, string $currency): DOMElement
+    private function monetarySummation(DOMDocument $doc, int $net, int $tax, int $prepaid, string $currency): DOMElement
     {
         $summation = $doc->createElement('ram:SpecifiedTradeSettlementHeaderMonetarySummation');
         $this->amount($doc, $summation, 'ram:LineTotalAmount', $net, $currency);
@@ -368,30 +383,14 @@ final readonly class ZugferdCiiInvoice implements EInvoice
         $taxTotal = $this->amount($doc, $summation, 'ram:TaxTotalAmount', $tax, $currency);
         $taxTotal->setAttribute('currencyID', $currency);
         $this->amount($doc, $summation, 'ram:GrandTotalAmount', $net + $tax, $currency);
-        $this->amount($doc, $summation, 'ram:DuePayableAmount', $net + $tax, $currency);
+
+        if ($prepaid !== 0) {
+            $this->amount($doc, $summation, 'ram:TotalPrepaidAmount', $prepaid, $currency);
+        }
+
+        $this->amount($doc, $summation, 'ram:DuePayableAmount', $net + $tax - $prepaid, $currency);
 
         return $summation;
-    }
-
-    /**
-     * The EN 16931 category for one supply, from the frozen facts on the document.
-     *
-     * Deliberately not decided here. Both writers ask the same authority, because two copies of this rule
-     * are two places it can drift — and a drift between them has no symptom: each document stays internally
-     * consistent, and only a reader comparing a UBL and a CII rendering of the SAME invoice would see it.
-     */
-    private function categoryFor(float $rate, EnInvoiceTaxTreatment $treatment): EnInvoiceTaxCategory
-    {
-        $invoice = $treatment->invoice;
-
-        return EnInvoiceTaxCategory::for(
-            $invoice->tax_exemption_reason ?? ($treatment->reverseCharge ? TaxExemptionReason::ReverseCharge : null),
-            $invoice->tax_archetype,
-            $treatment->exempt,
-            $rate,
-            $invoice->destination_country,
-            $invoice->taxation_basis,
-        );
     }
 
     /** A decimal monetary amount element (no currencyID unless the caller adds it — a CII quirk). */
@@ -400,11 +399,11 @@ final readonly class ZugferdCiiInvoice implements EInvoice
         return $this->el($doc, $parent, $name, Money::of($minor, $currency)->toDecimal());
     }
 
-    /** Create a text element under a parent (text-node escaped, never string-concatenated). */
+    /** Create a text element under a parent (text-node escaped, never string-concatenated), as XML 1.0 can carry it. */
     private function el(DOMDocument $doc, DOMElement $parent, string $name, string $text): DOMElement
     {
         $element = $doc->createElement($name);
-        $element->appendChild($doc->createTextNode($text));
+        $element->appendChild($doc->createTextNode($this->xmlText($text)));
         $parent->appendChild($element);
 
         return $element;

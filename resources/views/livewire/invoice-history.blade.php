@@ -14,7 +14,27 @@
         @if ($page->isEmpty())
             <p class="p-6 text-sm text-gray-500 dark:text-gray-400">{{ __('billing::account.invoices.empty') }}</p>
         @else
-            <table class="w-full text-left text-sm">
+            {{-- Below sm each invoice is a card. The table's five columns need far more than a phone's width, and
+                 the download link, the screen's one action, would sit past the edge of the screen. --}}
+            <ul class="divide-y divide-gray-100 sm:hidden dark:divide-gray-800">
+                @foreach ($page->rows as $invoice)
+                    <li wire:key="invoice-card-{{ $invoice->id }}" class="flex items-start justify-between gap-3 px-4 py-3 text-sm">
+                        <div class="min-w-0 space-y-1">
+                            <p class="break-all font-medium">{{ $invoice->number ?? '—' }}</p>
+                            <p class="text-gray-500 dark:text-gray-400">{{ \Pushery\Billing\Support\LocalizedDate::short($invoice->date) }} · {{ \Pushery\Billing\Support\LocalizedMoney::format($invoice->total) }}</p>
+                            @include('billing::components.invoice-status', ['status' => $invoice->status])
+                        </div>
+                        @if ($invoice->isDownloadable())
+                            <a href="{{ route('billing.account.invoice-download', $invoice->id) }}"
+                                class="shrink-0 text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
+                                {{ __('billing::account.invoices.download') }}
+                            </a>
+                        @endif
+                    </li>
+                @endforeach
+            </ul>
+
+            <table class="hidden w-full text-left text-sm sm:table">
                 <thead class="border-b border-gray-200 text-gray-500 dark:border-gray-800 dark:text-gray-400">
                     <tr>
                         <th class="px-4 py-3 font-medium">{{ __('billing::account.invoices.date') }}</th>
@@ -29,19 +49,9 @@
                         <tr wire:key="invoice-{{ $invoice->id }}">
                             <td class="px-4 py-3">{{ \Pushery\Billing\Support\LocalizedDate::short($invoice->date) }}</td>
                             <td class="px-4 py-3">{{ $invoice->number ?? '—' }}</td>
-                            <td class="px-4 py-3">{{ $invoice->total->format() }}</td>
+                            <td class="px-4 py-3">{{ \Pushery\Billing\Support\LocalizedMoney::format($invoice->total) }}</td>
                             <td class="px-4 py-3">
-                                @php($intent = $invoice->status->badgeIntent())
-                                <span @class([
-                                    'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                                    'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200' => $intent === 'success',
-                                    'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200' => $intent === 'info',
-                                    'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $intent === 'warning',
-                                    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' => $intent === 'danger',
-                                    'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200' => $intent === 'neutral',
-                                ])>
-                                    {{ __('billing::account.invoice_status.'.$invoice->status->value) }}
-                                </span>
+                                @include('billing::components.invoice-status', ['status' => $invoice->status])
                             </td>
                             <td class="px-4 py-3 text-right">
                                 @if ($invoice->isDownloadable())

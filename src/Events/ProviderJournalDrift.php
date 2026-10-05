@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Events;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -30,6 +31,8 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final readonly class ProviderJournalDrift implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public const string MISSING_AT_PROVIDER = 'missing_at_provider';
 
     public const string AMOUNT_DIFFERS = 'amount_differs';

@@ -70,7 +70,8 @@ final readonly class BillingMetricsReporter
      */
     public function compute(int $windowDays = 30, ?MerchantScope $merchant = null): BillingMetrics
     {
-        $now = Carbon::now();
+        // In UTC, the zone the subscription columns hold: a binding is written in its own zone (see UtcDateTime).
+        $now = Carbon::now()->utc();
 
         $mrrMinor = 0;
         $activeCount = 0;
@@ -150,9 +151,9 @@ final readonly class BillingMetricsReporter
      * A fresh subscription query, narrowed to one seller when one was named.
      *
      * The null branch does NOT fall through to `forMerchant(null)`, which would mean the platform's own
-     * rows rather than all of them. Every figure below goes through here so a fifth one added later is
-     * narrowed too — the alternative is four identical `where` clauses and a fifth that somebody forgets,
-     * which reports a merchant's churn against the whole platform's cancellations.
+     * rows rather than all of them. Every figure below goes through here so one added later is narrowed
+     * too — the alternative is an identical `where` clause per figure and one that somebody forgets, which
+     * reports a merchant's churn against the whole platform's cancellations.
      *
      * @return Builder<Subscription>
      */

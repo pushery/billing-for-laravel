@@ -13,9 +13,8 @@ use Pushery\Billing\Enums\RateChangeClass;
  *
  * A confirmed **increase** applies by default. That looks like the risky direction and is the safe one:
  * failing to apply a real increase means undercharging, which the platform pays and an audit discovers a
- * year later — the exact shape of the incident behind this milestone. Overcharging is noticed by the buyer
- * the same day and can be corrected. Between a mistake that surfaces immediately and one that surfaces at
- * an audit, the automation should be biased toward the first.
+ * year later. Overcharging is noticed by the buyer the same day and can be corrected. Between a mistake that
+ * surfaces immediately and one that surfaces at an audit, the automation should be biased toward the first.
  *
  * A **decrease** holds, for the mirror reason: a decrease that is not real undercharges too.
  *

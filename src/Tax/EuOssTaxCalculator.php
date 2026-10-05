@@ -6,6 +6,7 @@ namespace Pushery\Billing\Tax;
 
 use Carbon\CarbonImmutable;
 use Pushery\Billing\Contracts\TaxCalculator;
+use Pushery\Billing\Enums\RateCoverage;
 use Pushery\Billing\Exceptions\UnknownTaxCountry;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\TaxContext;
@@ -22,7 +23,6 @@ use Pushery\Billing\ValueObjects\TaxContext;
  */
 final readonly class EuOssTaxCalculator implements TaxCalculator
 {
-    /** @var array<string,float> ISO-3166 country → standard VAT rate */
     /*
      * THE RATES USED TO LIVE HERE, AS A `private const array`, BESIDE A FILE THAT SAID IT WAS THE SOURCE.
      *
@@ -41,25 +41,6 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
      * `situation_on` rather than a constant beside them — a date held apart from its numbers is the half
      * that goes quietly wrong.
      */
-
-    /**
-     * Countries whose supplies are treated as another member state's, by that member state's own law.
-     *
-     * These are not third countries and they are not members in their own right — they are places a
-     * jurisdiction has folded into itself for tax purposes. Read as third countries they produce a zero rate
-     * that looks entirely deliberate: the code is a real country, so no guard fires, and the invoice shows a
-     * confident 0% on a supply that owed the full rate of the state it belongs to.
-     *
-     * That is why they are mapped rather than merely removed from the third-country list. Removing them
-     * would make them unknown codes and fail loudly, which is better than silence but still wrong: the
-     * supply is perfectly taxable, and the system knows exactly whose rate applies.
-     *
-     * @var array<string, string>
-     */
-    private const array TREATED_AS = [
-        // Transactions to and from Monaco are treated as French for VAT purposes.
-        'MC' => 'FR',
-    ];
 
     /**
      * The assigned ISO 3166-1 alpha-2 codes that are NOT in the rate table above — i.e. every country
@@ -113,6 +94,15 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
          * carried and ignored, so a caller that started supplying one sees the answer it always got.
          */
         private ?DatedTaxRateTable $history = null,
+        /**
+         * The operator's classification of the countries this installation sells into, where they bound one.
+         *
+         * Null means none is bound, and then nothing changes: a country with a rate is priced at it and one
+         * outside the EU VAT area at nothing. Bound, it is asked before anything is priced. A country in neither
+         * of its lists refuses, one it records as deliberately untaxed prices at nothing, and one it covers is
+         * priced at its rate, refusing where no table carries one.
+         */
+        private ?CoverageMap $coverage = null,
     ) {
         $this->shipped = $shipped ?? ShippedTaxRates::shipped();
     }
@@ -150,7 +140,9 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
      */
     public function knowsRateFor(string $country): bool
     {
-        $code = strtoupper($country);
+        // Resolved as calculate() resolves it, so a place a member folds into itself has that member's rate here
+        // too. Unresolved, an open market Monaco refused the boot over a rate the calculator charges.
+        $code = self::resolveTerritory($country);
 
         return isset($this->shipped->bps[$code]) || in_array($code, self::OUTSIDE_EU_VAT_AREA, true);
     }
@@ -161,6 +153,13 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
         // lower/mixed-case code ("de") must not miss the table and silently drop to 0% VAT.
         $country = self::resolveTerritory($context->countryCode);
         $seller = $this->sellerCountry !== null ? self::resolveTerritory($this->sellerCountry) : null;
+
+        // Asked before pricing, so a refusal comes while there is nothing to un-issue.
+        $coverage = $this->coverage?->assertKnown($country);
+
+        if ($coverage === RateCoverage::DeliberatelyUntaxed) {
+            return Money::zero($net->currency);
+        }
 
         // The configured matrix answers first where it covers the country, because it is the only source
         // that knows the SUPPLY as well as the destination. Where it does not cover a country the built-in
@@ -188,6 +187,10 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
         // supply outside the EU VAT area is correctly zero-rated, a broken code is a data defect that would
         // under-declare VAT. They are separated BEFORE anything can return a zero — including the reverse
         // charge below, which would otherwise zero-rate an unrecognized country on a validated VAT id.
+        if ($rateBps === null && $coverage === RateCoverage::Covered) {
+            throw UnknownTaxCountry::coveredWithoutRate($country);
+        }
+
         if ($rateBps === null && ! in_array($country, self::OUTSIDE_EU_VAT_AREA, true)) {
             throw UnknownTaxCountry::code($context->countryCode);
         }
@@ -211,6 +214,18 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
     }
 
     /**
+     * The country whose rate actually applies to a code, resolving a territorial alias.
+     *
+     * The aliases live in {@see UnionMembership::territoryOf()}, beside the membership, so that the union test
+     * and the place of supply resolve a code exactly as the rate does. A caller that forgot to resolve it
+     * would silently price a taxable supply at zero.
+     */
+    public static function resolveTerritory(?string $country): string
+    {
+        return UnionMembership::territoryOf($country);
+    }
+
+    /**
      * The built-in table's rate for a country, in basis points, or null when it has none.
      *
      * The table is written as decimal fractions because that is how rates are published, but every other
@@ -218,19 +233,6 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
      * primitive as every other proportion. Converting here rather than keeping a second numeric path is what
      * stops a rate arriving as 0.19 in one place and 1900 in another.
      */
-    /**
-     * The country whose rate actually applies to a code, resolving a territorial alias.
-     *
-     * Done once, here, rather than at each caller: the alias is a fact about the code and not about who is
-     * asking, and a caller that forgot to resolve it would silently price a taxable supply at zero.
-     */
-    public static function resolveTerritory(?string $country): string
-    {
-        $code = strtoupper(trim((string) $country));
-
-        return self::TREATED_AS[$code] ?? $code;
-    }
-
     private function standardBpsFor(string $country): ?int
     {
         return $this->shipped->bps[$country] ?? null;

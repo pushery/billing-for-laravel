@@ -22,12 +22,14 @@ use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\Plan;
 
 /**
- * Proration for a provider that has none: the unused remainder of the current plan becomes customer
- * credit, and the next order is offset against it.
+ * Proration for a provider that has none and a period paid in advance: the unused remainder of the current plan
+ * becomes customer credit, and the next order is offset against it.
  *
- * Stripe prorates on its own side, which is what DelegatedProrationStrategy defers to. A local-engine driver
- * has no such thing — a swap there is simply a new order at the new price, and without this the customer
- * pays twice for the same days. Bind this in place of the delegated strategy on such a driver.
+ * Stripe prorates on its own side, which is what DelegatedProrationStrategy defers to. A driver that collects each
+ * period in advance and has no provider-side proration needs this instead: a swap there is simply a new order at
+ * the new price, and without the credit the customer pays twice for the same days. Bind it in place of the
+ * delegated strategy on such a driver. The package's own engine is not one: it bills a period when it closes, so
+ * there is no paid remainder to give back, and it binds {@see ArrearsProrationStrategy}.
  *
  * WHY THE CREDIT IS BOOKED AND THE CHARGE IS NOT. A swap has two halves: the unused old time (a credit,
  * which is money the customer is owed and which nothing else in the system will remember) and the new

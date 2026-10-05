@@ -102,6 +102,24 @@ final readonly class TaxRateMatrix
         return isset($this->rates[strtoupper($country)]);
     }
 
+    /**
+     * Every rate the table holds, in basis points, across its countries and bands.
+     *
+     * @return list<int>
+     */
+    public function rates(): array
+    {
+        $all = [];
+
+        foreach ($this->rates as $bands) {
+            foreach ($bands as $bps) {
+                $all[] = $bps;
+            }
+        }
+
+        return $all;
+    }
+
     /** The day this table was known correct, as a plain date — what a diagnostic prints beside the age. */
     public function validFromDate(): string
     {

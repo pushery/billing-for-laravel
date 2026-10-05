@@ -21,7 +21,7 @@ return [
 
     'trial_ending' => [
         'subject' => 'Tu prueba termina pronto',
-        'intro' => 'Tu prueba gratuita está llegando a su fin.',
+        'intro' => 'Tu prueba gratuita termina el :date.',
         'outro' => 'Añade un método de pago antes de que termine para que tu suscripción siga sin interrupciones.',
         'cta' => 'Añadir un método de pago',
     ],
@@ -29,7 +29,7 @@ return [
     'subscription_canceled' => [
         'subject' => 'Tu suscripción se ha cancelado',
         'intro' => 'Tu suscripción se ha cancelado y no se renovará.',
-        'outro' => 'Conservas el acceso hasta el final del periodo pagado, que se indica abajo.',
+        'outro' => 'Conservas el acceso hasta el :date, el final del periodo pagado.',
         'cta' => 'Ver el plan',
     ],
 
@@ -39,6 +39,16 @@ return [
         'effective' => 'Se aplica desde el :date.',
         'consequence' => 'Desde esa fecha el importe que te llega es mayor, porque el impuesto viaja con él. Lo que te queda no cambia.',
         'outro' => 'Si esto no coincide con tu situación, avísanos: podemos corregirlo.',
+        'statuses' => [
+            'de_standard_rated' => 'sujeto al IVA',
+            'de_standard_rated_pending_validation' => 'sujeto al IVA (registro aún sin confirmar)',
+            'de_small_business' => 'pequeña empresa sin IVA',
+            'eu_small_business_de_exempt' => 'pequeña empresa de otro país de la UE (exenta aquí)',
+            'private_individual' => 'particular',
+            'eu_business' => 'empresa de otro país de la UE',
+            'non_eu_business' => 'empresa de fuera de la UE',
+            'unclarified' => 'aún sin determinar',
+        ],
     ],
 
     'reattestation_due' => [

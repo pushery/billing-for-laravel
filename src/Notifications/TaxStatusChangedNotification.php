@@ -8,6 +8,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\CreatorTaxStatus;
+use Pushery\Billing\Support\LocalizedDate;
 
 /**
  * A merchant's tax standing changed on its own, and they are told.
@@ -47,14 +48,23 @@ final class TaxStatusChangedNotification extends BillingNotification
         return new MailMessage()
             ->subject(Lang::get('billing::notifications.tax_status_changed.subject'))
             ->line(Lang::get('billing::notifications.tax_status_changed.intro', [
-                'from' => $this->previous->value,
-                'to' => $this->current->value,
+                'from' => $this->label($this->previous),
+                'to' => $this->label($this->current),
             ]))
             ->line(Lang::get('billing::notifications.tax_status_changed.effective', [
-                'date' => $this->effectiveFrom->toDateString(),
+                'date' => LocalizedDate::long($this->effectiveFrom),
             ]))
             ->line(Lang::get('billing::notifications.tax_status_changed.consequence'))
             ->line(Lang::get('billing::notifications.tax_status_changed.outro'));
+    }
+
+    /** A standing as the merchant reads it, or its stored value where no translation names it. */
+    private function label(CreatorTaxStatus $status): string
+    {
+        $key = 'billing::notifications.tax_status_changed.statuses.'.$status->value;
+        $label = Lang::get($key);
+
+        return is_string($label) && $label !== $key ? $label : $status->value;
     }
 
     /** @return array<string, string> */

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace;
 
 use Carbon\CarbonImmutable;
+use Generator;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
@@ -107,19 +108,23 @@ final readonly class UnestablishedStandingSweep
      * Asked of the hold rather than reimplemented: whether a standing blocks is its question, and a second
      * copy of that rule here would answer differently the first time either changed.
      *
-     * @return list<Model>
+     * The database reduces the charges to one row per merchant, and those rows are read one at a time. The
+     * charge table grows with every routed sale while the merchants are few, and loading it whole ran out of
+     * memory on a large platform on exactly the days these warnings are due.
+     *
+     * @return Generator<int, Model, mixed, void>
      */
-    private function merchantsAtRisk(CarbonImmutable $deadline): array
+    private function merchantsAtRisk(CarbonImmutable $deadline): Generator
     {
-        $atRisk = [];
-
-        $charges = MerchantCharge::model()::query()
+        $merchants = MerchantCharge::model()::query()
+            ->select(['merchant_type', 'merchant_id'])
+            ->distinct()
             ->whereNull('merchant_erased_at')
-            ->orderBy('id')
-            ->get(['merchant_type', 'merchant_id'])
-            ->unique(fn (MerchantCharge $charge): string => $charge->merchant_type.'|'.$charge->merchant_id);
+            ->orderBy('merchant_type')
+            ->orderBy('merchant_id')
+            ->cursor();
 
-        foreach ($charges as $charge) {
+        foreach ($merchants as $charge) {
             $merchant = $charge->merchant()->first();
 
             if (! $merchant instanceof Model) {
@@ -129,11 +134,9 @@ final readonly class UnestablishedStandingSweep
             // Asked AS OF THE DEADLINE, which is what makes this a warning rather than a report: the hold
             // does not bite today, so asking about today would find nobody.
             if ($this->hold->blocksSales($merchant, $deadline)) {
-                $atRisk[] = $merchant;
+                yield $merchant;
             }
         }
-
-        return $atRisk;
     }
 
     private function alreadyWarned(Model $merchant, CarbonImmutable $deadline): bool

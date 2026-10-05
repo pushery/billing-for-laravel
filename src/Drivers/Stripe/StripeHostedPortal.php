@@ -22,10 +22,10 @@ final readonly class StripeHostedPortal implements HostedPortal
         private CheckoutUrls $urls,
     ) {}
 
-    public function url(Model $billable): ?string
+    public function url(Model $billable, ?string $returnUrl = null): ?string
     {
         $customerId = $this->customers->find($billable);
-        $returnUrl = $this->urls->portalReturnUrl();
+        $returnUrl ??= $this->urls->portalReturnUrl();
 
         if ($customerId === null || $returnUrl === null) {
             return null;

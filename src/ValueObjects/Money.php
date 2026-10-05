@@ -284,8 +284,9 @@ final readonly class Money
      *
      * The magnitude is rounded and the sign reapplied, so a refund (a negative amount) rounds the same
      * distance from zero as the charge it reverses — the alternative (rounding toward negative infinity)
-     * would make a reversal off by a cent from the thing it undoes. The divisor is always positive here
-     * (10000 ± a bounded bps), so only the dividend carries the sign.
+     * would make a reversal off by a cent from the thing it undoes. The divisor is always positive here (10000
+     * plus or minus a bounded rate, or a proportion's denominator, which `proportion()` refuses unless it is
+     * positive), so only the dividend carries the sign.
      */
     private function halfUpDiv(int $dividend, int $divisor): int
     {

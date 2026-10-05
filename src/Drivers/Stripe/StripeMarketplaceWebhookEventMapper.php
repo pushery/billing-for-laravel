@@ -16,11 +16,9 @@ use Pushery\Billing\Events\DisputeOpened;
 use Pushery\Billing\Events\MerchantAccountDeauthorized;
 use Pushery\Billing\Events\MerchantAccountUpdated;
 use Pushery\Billing\Events\MerchantPayoutFailed;
-use Pushery\Billing\Events\MerchantTransferReversedByProvider;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\MerchantScope;
-use Pushery\Billing\ValueObjects\Money;
 
 /**
  * Turns the provider's connected-account events — account lifecycle AND per-merchant subscriptions — into
@@ -71,56 +69,21 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
         }
 
         yield from match ($type) {
-            'account.updated' => [$this->accountUpdated($object, $account)],
+            'account.updated' => [$this->accountUpdated($object, $account, $this->int($payload, 'created'))],
             'account.application.deauthorized' => [new MerchantAccountDeauthorized('stripe', $account)],
             'customer.subscription.created',
             'customer.subscription.updated',
             'customer.subscription.deleted' => $this->subscriptionEvents($object, $this->strictAccount($payload), $this->int($payload, 'created')),
             'charge.dispute.created' => $this->disputeOpenedEvents($object, $account),
             'charge.dispute.closed' => $this->disputeClosedEvents($object, $account),
-            // A reversal the PROVIDER performed. Only here, never on the platform mapper: a single-seller
-            // installation receives no connected transfers, and teaching the shipped mapper this event would
-            // make every existing install start running an effect it has never run, on the next deploy.
-            'transfer.reversed' => $this->transferReversedEvents($object),
             // Whether the money ARRIVED, which is a different question from whether it was sent. Only the
             // failure: the success is the ordinary case and the provider's own dashboard already shows it,
-            // while the failure is the one somebody has to answer for. Merchant endpoint only, for the same
-            // reason as the reversal above — a single-seller installation has no connected payouts, and
-            // teaching the shipped platform mapper this event would start an effect running on every
-            // existing install at the next deploy.
+            // while the failure is the one somebody has to answer for. Read here, on the merchant endpoint: a
+            // connected account's payout is that account's object, so Stripe delivers its events here, while a
+            // payout on the platform endpoint is the platform's own and pays no merchant.
             'payout.failed' => $this->payoutFailedEvents($object, $account),
             default => [],
         };
-    }
-
-    /**
-     * A transfer the provider reversed on its own.
-     *
-     * Attributed on the TRANSFER id, which is the only field that ties the event to a sale this package
-     * recorded — the connected account alone would name a merchant, not a charge, and a merchant can have
-     * many.
-     *
-     * `amount_reversed` is the provider's CUMULATIVE figure, and carrying it as such is what makes the
-     * effect idempotent without a dedup table: a redelivery states the same total, a second reversal states
-     * a higher one, and both are handled by writing what was reported.
-     *
-     * Zero is dropped rather than recorded. `transfer.reversed` fires with the whole transfer object, and a
-     * body that states nothing reversed is either a shape this package does not understand or an event about
-     * something else — either way it is not an instruction to write a zero over a real figure.
-     *
-     * @param  array<array-key, mixed>  $object
-     * @return list<MerchantTransferReversedByProvider>
-     */
-    private function transferReversedEvents(array $object): array
-    {
-        $transfer = $object['id'] ?? null;
-        $reversed = $object['amount_reversed'] ?? null;
-
-        if (! is_string($transfer) || $transfer === '' || ! is_int($reversed) || $reversed <= 0) {
-            return [];
-        }
-
-        return [new MerchantTransferReversedByProvider('stripe', $transfer, $reversed)];
     }
 
     /**
@@ -165,7 +128,7 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
     /**
      * @param  array<array-key, mixed>  $object
      */
-    private function accountUpdated(array $object, string $account): MerchantAccountUpdated
+    private function accountUpdated(array $object, string $account, ?int $occurredAt): MerchantAccountUpdated
     {
         return new MerchantAccountUpdated(new MerchantAccountReference(
             provider: 'stripe',
@@ -173,7 +136,7 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
             chargesEnabled: ($object['charges_enabled'] ?? null) === true,
             payoutsEnabled: ($object['payouts_enabled'] ?? null) === true,
             detailsSubmitted: ($object['details_submitted'] ?? null) === true,
-        ));
+        ), $occurredAt);
     }
 
     /**
@@ -272,7 +235,7 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
         return [new ChargebackReceived(
             customerReference: is_string($object['payment_intent'] ?? null) ? $object['payment_intent'] : $charge,
             reference: $charge,
-            amount: Money::of($this->int($object, 'amount') ?? 0, strtoupper($currency)),
+            amount: StripeAmount::toMoney($this->int($object, 'amount') ?? 0, strtoupper($currency)),
             merchantReference: $account,
             feeAmount: $fee,
             cause: ReversalCause::DisputeLost,

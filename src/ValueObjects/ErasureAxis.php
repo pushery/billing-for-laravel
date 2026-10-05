@@ -29,6 +29,12 @@ final readonly class ErasureAxis
      *                                                         personal data. Literal strings: a column name is interpolated into a query by name rather
      *                                                         than bound, so requiring a literal keeps that safe by construction rather than by review.
      * @param  array<string, array{parent: string, foreign_key: string}>  $cascaded  child table => its parent
+     * @param  array<string, literal-string>  $scrubbedAt  scrubbed table => the column stamped with the time of the
+     *                                                     scrub, where a later write must be able to tell a scrubbed
+     *                                                     value from one that was never there
+     * @param  array<string, literal-string>  $erasedKeys  retained table => the column that keeps the unlinked rows of
+     *                                                     one erased person together under a key that names nobody,
+     *                                                     where they are still read as one person's rows
      */
     public function __construct(
         public string $name,
@@ -39,6 +45,8 @@ final readonly class ErasureAxis
         public array $retained,
         public array $scrubbed,
         public array $cascaded,
+        public array $scrubbedAt = [],
+        public array $erasedKeys = [],
     ) {}
 
     /**

@@ -25,6 +25,12 @@ use Pushery\Billing\Models\MerchantCharge;
  * available balance on the strength of a webhook, so the larger figure stands and the disagreement is left
  * visible rather than silently settled.
  *
+ * ## Two reports at once
+ *
+ * A transfer reversed twice produces two reports, and two workers can take them at the same time. Written from
+ * the row each one read, the smaller figure could land last and undo the larger. The figure is raised in the
+ * statement instead, which changes the row only while it holds less, and the database decides that at the write.
+ *
  * ## An unknown transfer is left alone
  *
  * A transfer this package did not create belongs to somebody else — another platform on the same provider,
@@ -44,6 +50,9 @@ final readonly class RecordProviderTransferReversal
             return;
         }
 
-        $charge->forceFill(['transfer_reversed_minor' => $event->amountReversedMinor])->save();
+        MerchantCharge::model()::query()
+            ->whereKey($charge->getKey())
+            ->where('transfer_reversed_minor', '<', $event->amountReversedMinor)
+            ->update(['transfer_reversed_minor' => $event->amountReversedMinor]);
     }
 }

@@ -80,13 +80,14 @@ final class ImportExchangeRatesCommand extends Command
         [$from, $to] = $this->window($config);
 
         $stored = 0;
+        $imported = [];
+        $failed = [];
 
         foreach ($currencies as $currency) {
-            // WHERE the rates come from is the publisher's to say, not this command's. It used to be a URL
-            // template and the literal 'ECB' written in here, which meant an installation filing under a
-            // different jurisdiction's rule could import rates and store them against a publisher they never
-            // came from -- and that name is frozen onto settlement documents, where it is the evidence an
-            // auditor uses to check a figure against a published table.
+            // WHERE the rates come from is the publisher's to say, not this command's. Its name is frozen onto
+            // settlement documents, where it is the evidence an auditor uses to check a figure against a
+            // published table, so a URL or a name written in here would store rates from one publisher under
+            // another's name on every installation that files under a different jurisdiction's rule.
             $response = Http::timeout(30)->get(
                 $publisher->seriesUrl($currency, $from->toDateString(), $to->toDateString()),
             );
@@ -97,8 +98,9 @@ final class ImportExchangeRatesCommand extends Command
                 // quietly stopped importing is a series that grows a hole and answers it with a later day.
                 $this->components->error(
                     $publisher->describe()." answered {$response->status()} for {$currency}; its rates for "
-                    .'this window were not imported. The others were.'
+                    .'this window were not imported.'
                 );
+                $failed[] = $currency;
 
                 continue;
             }
@@ -107,23 +109,35 @@ final class ImportExchangeRatesCommand extends Command
                 $rates = $parser->parse($response->body());
             } catch (ExchangeRateFeedUnreadable $unreadable) {
                 $this->components->error("{$currency}: {$unreadable->getMessage()}");
+                $failed[] = $currency;
 
                 continue;
             }
 
             $stored += $import->store($rates, ExchangeRateImport::CENTRAL_BANK_BASES, $publisher->sourceName());
+            $imported[] = $currency;
         }
 
-        $this->components->info(sprintf(
-            'Imported %d exchange-rate row(s) for %s between %s and %s. Source: %s.',
-            $stored,
-            implode(', ', $currencies),
-            $from->toDateString(),
-            $to->toDateString(),
-            $publisher->describe(),
-        ));
+        if ($imported !== []) {
+            $this->components->info(sprintf(
+                'Imported %d exchange-rate row(s) for %s between %s and %s. Source: %s.',
+                $stored,
+                implode(', ', $imported),
+                $from->toDateString(),
+                $to->toDateString(),
+                $publisher->describe(),
+            ));
+        }
 
-        return self::SUCCESS;
+        if ($failed === []) {
+            return self::SUCCESS;
+        }
+
+        // The schedule watches the exit status and nothing else, so a currency that did not import fails the
+        // run, after every other one was stored.
+        $this->components->error('Not imported: '.implode(', ', $failed).'.');
+
+        return self::FAILURE;
     }
 
     /** @return array{CarbonImmutable, CarbonImmutable} */

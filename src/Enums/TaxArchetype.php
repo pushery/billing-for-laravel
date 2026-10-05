@@ -45,6 +45,12 @@ enum TaxArchetype: string
     /** A voluntary payment on top of another sale, which it follows in every respect. */
     case Tip = 'tip';
 
+    /**
+     * Support for a seller's work as a whole, accompanying no sale: what a tip given on a profile, or on something
+     * offered for free, was paid on.
+     */
+    case Support = 'support';
+
     /** A multi-purpose voucher: nothing is taxed until it is redeemed for something else. */
     case Voucher = 'voucher';
 

@@ -8,7 +8,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\CreatorTaxStatusResolver;
@@ -24,6 +23,7 @@ use Pushery\Billing\Exceptions\SelfBillingAgreementMissing;
 use Pushery\Billing\Exceptions\TaxDisclosureNotPermitted;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\SettlementRestatement;
+use Pushery\Billing\Support\OwnerOfRecord;
 use Pushery\Billing\ValueObjects\InboundTaxTreatment;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -228,7 +228,7 @@ final readonly class SettlementRestater
                 ->orWhere(static fn (Builder $undated): Builder => $undated
                     ->whereNull('delivered_on')
                     ->whereNull('settlement_period')
-                    ->where('issued_at', '>=', $effectiveFrom))
+                    ->where('issued_at', '>=', $effectiveFrom->utc()))
                 ->orWhere('settlement_period', '>=', $effectiveFrom->format('Y-m')))
             ->orderBy('id')
             ->get()
@@ -280,24 +280,17 @@ final readonly class SettlementRestater
             && $settlement->tax_exemption_reason === $treatment->exemptionReason;
     }
 
-    /** The creator a settlement names, or null where the stored type resolves to no model. */
+    /**
+     * The creator a settlement names, or null where the stored type resolves to no model.
+     *
+     * The settlement stands in the creator's name whether or not the application still shows the creator, so one
+     * soft-deleted or scoped away since is still the party it is restated for.
+     */
     private function ownerOf(InvoiceRecord $settlement): ?Model
     {
         $type = $settlement->getAttribute('owner_type');
 
-        if (! is_string($type) || $type === '') {
-            return null;
-        }
-
-        $class = Relation::getMorphedModel($type) ?? $type;
-
-        if (! class_exists($class)) {
-            return null;
-        }
-
-        $owner = $settlement->owner;
-
-        return $owner instanceof Model ? $owner : null;
+        return OwnerOfRecord::find(is_string($type) ? $type : null, $settlement->getAttribute('owner_id'));
     }
 
     private function block(SettlementRestatement $order, SettlementRestatementBlock $reason, CarbonImmutable $at): SettlementRestatement

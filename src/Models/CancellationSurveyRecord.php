@@ -41,7 +41,7 @@ class CancellationSurveyRecord extends Model
      */
     public static function record(Model $owner, CancellationSurvey $survey): self
     {
-        return self::query()->create([
+        return static::model()::query()->create([
             'owner_type' => $owner->getMorphClass(),
             'owner_id' => $owner->getKey(),
             'reason' => $survey->reason,

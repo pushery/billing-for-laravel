@@ -87,7 +87,7 @@ final readonly class CreditMovement
     /**
      * Whether this movement has money or an invoice behind it — the ones the books can state today.
      *
-     * Four of the six reasons do. {@see CreditReason::ProrationCredit} does not and is the reason this
+     * Every reason but one does. {@see CreditReason::ProrationCredit} does not and is the reason this
      * method exists rather than a `match` at the call site: unused time on a swapped plan becomes spendable
      * balance with **no payment and no credit note** ({@see CreditBalanceProrationStrategy}),
      * so booking it as a liability would create one against nothing. Leaving it out is not an omission —

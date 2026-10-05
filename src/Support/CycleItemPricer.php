@@ -54,6 +54,13 @@ final readonly class CycleItemPricer
             return [];
         }
 
+        // Every line is this subscription's, and pricing a metered line reads its subscription back. Handed
+        // over here, that costs no query per line, and a host running `Model::preventLazyLoading()` would refuse
+        // the query on a cycle with more than one line.
+        foreach ($items as $item) {
+            $item->setRelation('subscription', $subscription);
+        }
+
         $start = $subscription->current_period_start;
 
         if ($start === null) {

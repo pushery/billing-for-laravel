@@ -57,7 +57,7 @@ final readonly class StripeMerchantPriceProvisioner implements MerchantPriceProv
         $key = $merchant->getKey();
 
         $payload = [
-            'unit_amount' => $amount->minorUnits,
+            'unit_amount' => StripeAmount::of($amount),
             'currency' => strtolower($amount->currency),
             'lookup_key' => $lookupKey,
             'product_data' => ['name' => $tierKey],

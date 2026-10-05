@@ -8,6 +8,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Events\DisputeOpened;
 use Pushery\Billing\Models\Dispute;
+use Pushery\Billing\Support\UniqueRow;
 
 /**
  * Keeps every dispute a provider opened, so the rate a card network measures can be read.
@@ -30,7 +31,8 @@ final readonly class RecordOpenedDispute
             ? null
             : $this->accounts->merchantForReference($event->merchantReference);
 
-        Dispute::model()::query()->firstOrCreate(
+        UniqueRow::firstOrCreate(
+            Dispute::model()::query(),
             ['provider' => 'stripe', 'dispute_reference' => $event->disputeReference],
             [
                 'payment_reference' => $event->paymentReference,

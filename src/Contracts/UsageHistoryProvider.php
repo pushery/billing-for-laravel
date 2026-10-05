@@ -19,7 +19,8 @@ use Pushery\Billing\ValueObjects\PeriodUsage;
 interface UsageHistoryProvider
 {
     /**
-     * The owner's usage per meter across recent finished periods, newest first.
+     * The owner's usage per meter across the last `$limit` finished periods, newest first, with every meter
+     * of each period. The limit counts periods, not rows.
      *
      * @return list<PeriodUsage>
      */

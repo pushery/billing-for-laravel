@@ -39,18 +39,29 @@ enum BillingInterval: string
      * than at each call site. Plain month arithmetic turns 31 January into 3 March, and the subscriber's
      * anchor day is then gone for good: every later cycle inherits the drift, and the customer who signed
      * up on the 31st is billed on the 3rd forever after. No-overflow lands on the last day of the shorter
-     * month instead and returns to the 31st when the month allows it again, which is what "monthly on the
-     * 31st" means to the person paying.
+     * month instead.
+     *
+     * Returning to the 31st when the month allows it again needs the anchor, the moment the cycles are counted
+     * from: one step from 28 February knows nothing of the 31st, and every later step would keep the 28th. Given
+     * the anchor, a month or a year lands back on its day wherever the month has it, which is what "monthly on
+     * the 31st" means to the person paying. A step is only ever lengthened to reach that day, never shortened,
+     * so an end that already lies past it is kept.
      */
-    public function advance(CarbonInterface $from): CarbonInterface
+    public function advance(CarbonInterface $from, ?CarbonInterface $anchor = null): CarbonInterface
     {
         $moment = $from->copy();
 
-        return match ($this) {
+        $next = match ($this) {
             self::Day => $moment->addDay(),
             self::Week => $moment->addWeek(),
             self::Month => $moment->addMonthNoOverflow(),
             self::Year => $moment->addYearNoOverflow(),
         };
+
+        if (! $anchor instanceof CarbonInterface || ! in_array($this, [self::Month, self::Year], true) || $next->day >= $anchor->day) {
+            return $next;
+        }
+
+        return $next->day(min($anchor->day, $next->daysInMonth));
     }
 }

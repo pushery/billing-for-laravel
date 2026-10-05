@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Events;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 
 /**
  * A buyer's tax ID turned out not to be registered.
@@ -17,6 +18,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 final readonly class TaxIdVerificationFailed implements BillingDomainEvent
 {
+    use SerializesModels;
+
     /**
      * @param  list<string>  $reverseChargeInvoices
      */

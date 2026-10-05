@@ -9,10 +9,9 @@ use Illuminate\Support\Facades\Schema;
 /**
  * What the provider actually moved to the merchant, beside what the row says they were owed.
  *
- * The two are not the same question and the package only ever recorded the second. `transferShare()` answers
- * with the amount that moved; the caller took the reference off that answer and dropped the rest. A journal
- * built that way cannot disagree with itself — which sounds like consistency and is the opposite: the
- * reconciliation against the provider that this milestone promises had nothing to compare.
+ * The two are not the same question. `transferShare()` answers with the amount that moved, and a journal that
+ * kept only the reference off that answer could not disagree with itself — which sounds like consistency and
+ * is the opposite: a reconciliation against the provider would have nothing to compare.
  *
  * ## Why it also matters after the sale
  *

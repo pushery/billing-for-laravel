@@ -53,6 +53,18 @@ final readonly class RetentionRule
          * the moment the rule is written rather than silent until somebody audits a deletion concept.
          */
         public ?RetentionExecutor $executor = null,
+        /**
+         * Tables whose rows keep a row of this one in place: the table, and its column that names the row.
+         *
+         * A row such a record still points at has not expired, however old it is, unless that record
+         * leaves in the same run. The time pruner leaves it where it is, so the foreign key between the two is
+         * never asked to refuse the deletion.
+         *
+         * Typed as literal strings because both are interpolated into a query by name.
+         *
+         * @var array<literal-string, literal-string>
+         */
+        public array $referencedBy = [],
     ) {}
 
     /** Whether this rule describes a duty to discard rather than a period to wait out. */

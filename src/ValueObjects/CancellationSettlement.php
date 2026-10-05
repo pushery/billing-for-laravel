@@ -23,7 +23,7 @@ use Carbon\CarbonImmutable;
 final readonly class CancellationSettlement
 {
     public function __construct(
-        /** When the subscription ends: the moment asked for, or the period end when that comes first. */
+        /** When the subscription ends, in UTC: the moment asked for, or the period end when that comes first. */
         public CarbonImmutable $endsAt,
         /** What was paid for the period in progress, gross, or null when no payment covers it. */
         public ?Money $paid = null,

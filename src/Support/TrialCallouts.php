@@ -9,6 +9,7 @@ use DateTimeInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\SubscriptionState;
+use Pushery\Billing\Models\PaymentMandate;
 use Pushery\Billing\ValueObjects\TrialCallout;
 
 /**
@@ -16,8 +17,8 @@ use Pushery\Billing\ValueObjects\TrialCallout;
  * are not — so every screen renders exactly one trial CTA, chosen the same way. Policy-driven: a generic
  * trial (no subscription yet) points at picking a plan; a subscription trial started WITHOUT a card points
  * at adding one before it converts; a subscription trial that already has a card points at reviewing the
- * plan. It reads only local columns (the trial clock, the default-payment-method marker) — no provider
- * call — so it is cheap enough to run on every screen render.
+ * plan. It reads only local records (the trial clock, the payment method on file) — no provider call — so it
+ * is cheap enough to run on every screen render.
  */
 final readonly class TrialCallouts
 {
@@ -43,7 +44,7 @@ final readonly class TrialCallouts
 
         // A subscription trial started without a card on file: the one action is to add one, or the plan
         // cannot continue when the trial converts.
-        if (! $this->hasPaymentMethod($owner)) {
+        if (! self::hasPaymentMethod($owner)) {
             return new TrialCallout(
                 state: $state,
                 intent: 'warning',
@@ -77,12 +78,24 @@ final readonly class TrialCallouts
         return max(0, (int) ceil($secondsLeft / 86400));
     }
 
-    /** Whether the owner has a default payment method on file, read from the local Cashier marker column. */
-    private function hasPaymentMethod(Model $owner): bool
+    /**
+     * Whether the owner has a way to pay on file.
+     *
+     * Two records answer it, one for each engine: the Cashier marker column the Stripe engine keeps on the owner,
+     * and a chargeable mandate the local engine keeps in its own table. Both are read, because the local engine
+     * writes no Cashier column, and a trial with a mandate on file was told to add a payment method. Both are
+     * local reads, so a screen still renders without asking a provider.
+     */
+    public static function hasPaymentMethod(Model $owner): bool
     {
         $pmType = $owner->getAttribute('pm_type');
 
-        return is_string($pmType) && $pmType !== '';
+        return (is_string($pmType) && $pmType !== '')
+            || PaymentMandate::model()::query()
+                ->where('owner_type', $owner->getMorphClass())
+                ->where('owner_id', $owner->getKey())
+                ->where('status', PaymentMandate::CHARGEABLE)
+                ->exists();
     }
 
     /** The owner's own trial clock (the Cashier column), normalized to a date-time or null. */

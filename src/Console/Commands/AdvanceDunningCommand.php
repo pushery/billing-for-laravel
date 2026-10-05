@@ -6,6 +6,8 @@ namespace Pushery\Billing\Console\Commands;
 
 use DateTimeInterface;
 use Illuminate\Console\Command;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -17,6 +19,7 @@ use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\ValueObjects\DunningLevel;
+use Throwable;
 
 /**
  * Walks the dunning ladder for every delinquent owner: each run advances a subscription by AT MOST ONE
@@ -40,10 +43,11 @@ final class AdvanceDunningCommand extends Command
         $dryRun = $this->option('dry-run') === true;
         $now = Carbon::now();
         $advanced = 0;
+        $failed = 0;
 
         Subscription::model()::query()->whereNotNull('delinquent_since')->chunkById(100,
             /** @param Collection<int, Subscription> $subscriptions */
-            function (Collection $subscriptions) use ($levels, $notifier, $fees, $log, $dryRun, $now, &$advanced): void {
+            function (Collection $subscriptions) use ($levels, $notifier, $fees, $log, $dryRun, $now, &$advanced, &$failed): void {
                 foreach ($subscriptions as $subscription) {
                     $next = $levels[$subscription->dunning_level] ?? null;
                     // No further rung to climb (already at the top), or its day has not arrived yet.
@@ -60,31 +64,59 @@ final class AdvanceDunningCommand extends Command
                         continue;
                     }
 
-                    $advanced++;
-
                     if ($dryRun) {
+                        $advanced++;
+
                         continue;
                     }
 
-                    $notifier->suspensionWarning($owner, $next->fee);
-
-                    if ($next->hasFee()) {
-                        $fees->apply($owner, $next->fee, "dunning:{$subscription->id}:{$next->position}", "Late fee ({$next->label})", $subscription);
+                    // One subscription a provider refuses for good, a customer deleted there for instance, must not stop
+                    // the ladder for every subscription after it. It is reported and tried again on the next run, where
+                    // its rung has still not been recorded.
+                    try {
+                        $this->advance($subscription, $owner, $next, $notifier, $fees, $log);
+                        $advanced++;
+                    } catch (Throwable $e) {
+                        $failed++;
+                        Container::getInstance()->make(ExceptionHandler::class)->report($e);
+                        $this->components->warn("Could not advance subscription {$subscription->id}: {$e->getMessage()}");
                     }
-
-                    $subscription->forceFill(['dunning_level' => $next->position])->save();
-
-                    $log->record('dunning.advanced', $owner, payload: [
-                        'level' => $next->position,
-                        'label' => $next->label,
-                        'fee' => $next->fee->minorUnits,
-                    ], source: AuditSource::System);
                 }
             });
 
         $this->components->info(($dryRun ? 'Would advance ' : 'Advanced ')."{$advanced} delinquent owner(s) up the dunning ladder.");
 
+        if ($failed > 0) {
+            $this->components->error("{$failed} subscription(s) could not be advanced; the next run tries them again.");
+
+            return self::FAILURE;
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * Climb one rung: the fee first, then the warning that names it, then the rung itself.
+     *
+     * The fee goes first because it is the step a provider can refuse for good. Refused, it stops the rung before
+     * the customer is warned about a fee that was never charged, and the next run does not warn them a second
+     * time for a rung they have not reached. The fee's reference keeps a retry from charging it twice.
+     */
+    private function advance(Subscription $subscription, Model $owner, DunningLevel $next, SuspensionNotifier $notifier, LateFees $fees, BillingEventLog $log): void
+    {
+        if ($next->hasFee()) {
+            $fees->apply($owner, $next->fee, "dunning:{$subscription->id}:{$next->position}", "Late fee ({$next->label})", $subscription);
+        }
+
+        $notifier->suspensionWarning($owner, $next->fee);
+
+        $subscription->forceFill(['dunning_level' => $next->position])->save();
+
+        $log->record('dunning.advanced', $owner, payload: [
+            'level' => $next->position,
+            'label' => $next->label,
+            'fee' => $next->fee->minorUnits,
+        ], source: AuditSource::System);
     }
 
     /**

@@ -105,9 +105,9 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
         $attribution = ReversalAttribution::configured($this->config);
         // The window as strings — comparable identically on every engine, where a YEAR() call is not. It is
         // half-open by construction, so a sale at the last instant of December counts in December and a
-        // closed range's "last second" problem never arises.
-        $start = $period->from->toDateTimeString();
-        $end = $period->until->toDateTimeString();
+        // closed range's "last second" problem never arises. In UTC, the zone `settled_at` holds (see UtcDateTime).
+        $start = $period->from->utc()->toDateTimeString();
+        $end = $period->until->utc()->toDateTimeString();
 
         $charges = $this->chargesTouching($party, $code, $start, $end, $attribution);
 
@@ -236,8 +236,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
      * The tax on "the sale before this refund" depends on how much was already refunded, so each reversal is
      * placed after the ones that completed before it. Ordered by completion and then by id, so two refunds
      * confirmed in the same second still have one definite order rather than whichever the engine returns.
-     */
-    /**
+     *
      * @param  list<RefundAttempt>  $reversals
      * @param  ?string  $start  null when the window is the SALE's rather than the reversal's, in which case
      *                          every succeeded reversal belongs here — including one with no completion

@@ -23,6 +23,7 @@ return [
     'vat_reverse_charge' => 'TVA (autoliquidation)',
     'total' => 'Total',
     'total_including_vat' => 'Total, TVA de :rate incluse',
+    'collected_on_behalf' => 'Encaissé au nom et pour le compte du vendeur',
     'reverse_charge_note' => 'Autoliquidation : le preneur est redevable de la TVA.',
     'small_business_note' => 'Exonéré de TVA en application du régime des petites entreprises (§ 19 UStG).',
     'union_small_business_note' => 'Exonéré de TVA en application du régime des petites entreprises de l\'État membre du fournisseur.',

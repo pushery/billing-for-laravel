@@ -21,7 +21,7 @@ return [
 
     'trial_ending' => [
         'subject' => 'Your trial is ending soon',
-        'intro' => 'Your free trial is coming to an end.',
+        'intro' => 'Your free trial ends on :date.',
         'outro' => 'Add a payment method before it ends to keep your subscription without interruption.',
         'cta' => 'Add a payment method',
     ],
@@ -29,7 +29,7 @@ return [
     'subscription_canceled' => [
         'subject' => 'Your subscription has been canceled',
         'intro' => 'Your subscription has been canceled and will not renew.',
-        'outro' => 'You keep access until the end of the paid period, shown below.',
+        'outro' => 'You keep access until :date, the end of the paid period.',
         'cta' => 'View your plan',
     ],
 
@@ -39,6 +39,16 @@ return [
         'effective' => 'It applies from :date.',
         'consequence' => 'From that date the amount that reaches you is larger, because tax now travels with it. The share you keep is unchanged.',
         'outro' => 'If this does not match your situation, tell us — we can correct it.',
+        'statuses' => [
+            'de_standard_rated' => 'charging VAT',
+            'de_standard_rated_pending_validation' => 'charging VAT (registration not yet confirmed)',
+            'de_small_business' => 'small business without VAT',
+            'eu_small_business_de_exempt' => 'small business in another EU country (exempt here)',
+            'private_individual' => 'private individual',
+            'eu_business' => 'business in another EU country',
+            'non_eu_business' => 'business outside the EU',
+            'unclarified' => 'not yet established',
+        ],
     ],
 
     'reattestation_due' => [

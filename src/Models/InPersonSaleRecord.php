@@ -45,8 +45,8 @@ class InPersonSaleRecord extends Model
     /**
      * The name a receipt from the counter is filed under as its owner.
      *
-     * An alias rather than the class name, registered in the morph map by the service provider, so a host that
-     * enforces a morph map accepts it and a host that replaces this model still resolves to its own class.
+     * An alias rather than the class name, registered in the morph map by the service provider: the receipt's owner
+     * resolves through that entry on every host, and to the host's own class where it replaces this model.
      */
     public const string MORPH_ALIAS = 'billing_in_person_sale';
 

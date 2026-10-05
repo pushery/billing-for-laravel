@@ -17,7 +17,7 @@ namespace Pushery\Billing\ValueObjects;
  *
  * In-person payment is a payment PATH, not a capability: terminal pairing, reader state, offline
  * behavior, a receipt, and a place of supply that is not the one distance selling uses -- which reaches
- * `src/Tax/`, where a wrong answer is a filed return rather than a missing feature. Hanging a tenth
+ * `src/Tax/`, where a wrong answer is a filed return rather than a missing feature. Hanging one more
  * boolean here would let a consumer ask the question and get an answer this package could not keep.
  *
  * That path is `CardPresentPayments`, with pairing beside it in `PairsReadersByTheirCode` or

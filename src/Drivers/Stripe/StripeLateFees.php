@@ -5,18 +5,26 @@ declare(strict_types=1);
 namespace Pushery\Billing\Drivers\Stripe;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\LateFees;
 use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\Money;
 use Stripe\StripeClient;
+use Stripe\StripeObject;
 
 /**
  * The Stripe LateFees: raises a pending invoice item on the owner's customer, so the fee rides on their
- * next invoice. The reference is passed as the idempotency key, so re-running the dunning advance for
- * the same owner at the same rung cannot add the fee twice. An owner with no Stripe customer yet is
- * skipped rather than created — there is nothing to bill a fee against.
+ * next invoice. An owner with no Stripe customer yet is skipped rather than created — there is nothing to
+ * bill a fee against.
+ *
+ * ## Once per rung, past Stripe's idempotency window
+ *
+ * The reference is passed as the idempotency key, which collapses a retry within Stripe's window of a day.
+ * The dunning run is daily, so a run that died after the item was created and before the rung was recorded
+ * comes back when the key may already be gone. The item therefore carries its reference in its metadata as
+ * well, and the customer's items of the last month are read for it before another is raised.
  *
  * ## Not taxed, not discounted, and on the subscription in arrears
  *
@@ -35,6 +43,12 @@ final readonly class StripeLateFees implements LateFees
     /** Stripe's tax code for a line that is not taxable at all. */
     private const string NONTAXABLE = 'txcd_00000000';
 
+    /** The metadata key the item carries its reference under. */
+    private const string REFERENCE = 'billing_reference';
+
+    /** How far back a customer's items are read for a fee already raised; a ladder's rungs are days apart. */
+    private const int LOOKBACK_DAYS = 30;
+
     public function __construct(
         private StripeClient $stripe,
         private StripeCustomerRegistry $customers,
@@ -45,16 +59,17 @@ final readonly class StripeLateFees implements LateFees
     {
         $customerId = $this->customers->find($owner);
 
-        if ($customerId === null) {
+        if ($customerId === null || $this->alreadyRaised($customerId, $reference)) {
             return;
         }
 
         $item = [
             'customer' => $customerId,
-            'amount' => $fee->minorUnits,
+            'amount' => StripeAmount::of($fee),
             'currency' => strtolower($fee->currency),
             'description' => $description,
             'discountable' => false,
+            'metadata' => [self::REFERENCE => $reference],
         ];
 
         $stripeSubscription = $this->stripeSubscriptionOf($subscription);
@@ -69,6 +84,26 @@ final readonly class StripeLateFees implements LateFees
         }
 
         $this->stripe->invoiceItems->create($item, ['idempotency_key' => $reference]);
+    }
+
+    /** Whether one of the customer's recent invoice items already carries this fee's reference. */
+    private function alreadyRaised(string $customerId, string $reference): bool
+    {
+        $items = $this->stripe->invoiceItems->all([
+            'customer' => $customerId,
+            'created' => ['gte' => Carbon::now()->subDays(self::LOOKBACK_DAYS)->getTimestamp()],
+            'limit' => 100,
+        ]);
+
+        foreach ($items->autoPagingIterator() as $item) {
+            $metadata = $item['metadata'] ?? null;
+
+            if ($metadata instanceof StripeObject && ($metadata[self::REFERENCE] ?? null) === $reference) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /** The Stripe id of the subscription in arrears, where it is one this driver created. */

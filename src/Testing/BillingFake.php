@@ -26,8 +26,10 @@ use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\SubscriptionStart;
 
 /**
- * A recording fake for the three money-mutating seams — {@see Checkout}, {@see SubscriptionActions} and
- * {@see OneTimeCharge}. Bind it (via {@see Billing::fake()}) and the app's billing
+ * A recording fake for the seams {@see Billing::fake()} binds: the ones that move a buyer's money ({@see Checkout},
+ * {@see StartsSubscriptions}, {@see SubscriptionActions}, {@see OneTimeCharge}) and the receiving side
+ * ({@see MerchantOnboarding}, and {@see CanReceiveMoney}, which refuses every merchant until
+ * `allowMerchantsToReceive()`). Bind it (via {@see Billing::fake()}) and the app's billing
  * flows record their intent instead of talking to a provider, so a consumer's test can assert what WOULD
  * have happened — the same convenience as `Bus::fake()` / `Notification::fake()`, but for billing.
  *

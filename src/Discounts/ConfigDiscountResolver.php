@@ -32,33 +32,50 @@ final readonly class ConfigDiscountResolver implements DiscountResolver
     public function resolve(string $code, ?MerchantScope $merchant = null): ?Discount
     {
         $coupons = $this->config->get('billing.coupons');
-        $coupon = is_array($coupons) ? ($coupons[$code] ?? null) : null;
+        $key = is_array($coupons) ? CouponCodes::keyIn($coupons, $code) : null;
+        $coupon = is_array($coupons) && $key !== null ? ($coupons[$key] ?? null) : null;
 
-        if (! is_array($coupon) || $this->expired($coupon)) {
+        if ($key === null || ! is_array($coupon) || $this->expired($coupon)) {
             return null;
         }
 
         $percent = $coupon['percent'] ?? null;
 
         if (is_int($percent) && $percent >= 1 && $percent <= 100) {
-            return Discount::percentage($code, $percent);
+            return Discount::percentage($key, $percent);
         }
 
         $amount = $coupon['amount'] ?? null;
         $currency = $coupon['currency'] ?? null;
 
         if (is_int($amount) && is_string($currency)) {
-            return Discount::fixed($code, Money::of($amount, $currency));
+            return Discount::fixed($key, Money::of($amount, $currency));
         }
 
         return null;
     }
 
-    /** @param array<array-key, mixed> $coupon */
+    /**
+     * Whether the code is past its `expires_at`. A date alone names the last day the code resolves on, through
+     * the end of that day: a code advertised until 31 December still works on the 31st. A moment with a time
+     * of day is the moment it stops.
+     *
+     * @param  array<array-key, mixed>  $coupon
+     */
     private function expired(array $coupon): bool
     {
         $expiresAt = $coupon['expires_at'] ?? null;
 
-        return is_string($expiresAt) && Carbon::parse($expiresAt)->isPast();
+        if (! is_string($expiresAt)) {
+            return false;
+        }
+
+        $end = Carbon::parse($expiresAt);
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', trim($expiresAt)) === 1) {
+            $end = $end->endOfDay();
+        }
+
+        return $end->isPast();
     }
 }

@@ -8,6 +8,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\Models\ProviderFee;
+use Pushery\Billing\Support\UniqueRow;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -55,7 +56,8 @@ final readonly class RecordProviderFee
         // uniqueness it is under holds either way.
         $claim = $event->disputeReference ?? $event->reference;
 
-        ProviderFee::model()::query()->firstOrCreate(
+        UniqueRow::firstOrCreate(
+            ProviderFee::model()::query(),
             ['provider' => 'stripe', 'reference' => $claim],
             [
                 'merchant_type' => $merchant?->getMorphClass(),

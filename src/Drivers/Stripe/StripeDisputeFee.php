@@ -56,6 +56,6 @@ final readonly class StripeDisputeFee
             }
         }
 
-        return $total === null ? null : Money::of(abs($total), $currency);
+        return $total === null ? null : StripeAmount::toMoney(abs($total), $currency);
     }
 }

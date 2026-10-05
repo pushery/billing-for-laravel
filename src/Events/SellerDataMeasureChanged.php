@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Events;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Queue\SerializesModels;
 use Pushery\Billing\Enums\SellerDataMeasure;
 
 /**
@@ -18,6 +19,8 @@ use Pushery\Billing\Enums\SellerDataMeasure;
  */
 final readonly class SellerDataMeasureChanged implements BillingDomainEvent
 {
+    use SerializesModels;
+
     public function __construct(
         public Model $merchant,
         public SellerDataMeasure $measure,

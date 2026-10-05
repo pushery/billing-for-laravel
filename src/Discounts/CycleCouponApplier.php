@@ -189,6 +189,10 @@ final readonly class CycleCouponApplier
             ->where(function (Builder $query) use ($subscription): void {
                 $query->whereNull('subscription_id')->orWhere('subscription_id', $subscription->getKey());
             })
+            // Only this contract's. A row is reused when its owner subscribes again, and `started_at` is where the
+            // new contract begins: a coupon redeemed for the one before ended with it, a forever one included. Both
+            // starts write the row first and redeem after, so this contract's own redemption is never earlier.
+            ->when($subscription->started_at !== null, static fn (Builder $query): Builder => $query->where('redeemed_at', '>=', $subscription->started_at))
             ->orderByDesc('redeemed_at')
             ->with('coupon')
             ->first();

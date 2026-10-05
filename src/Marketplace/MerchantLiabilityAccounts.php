@@ -96,10 +96,7 @@ final readonly class MerchantLiabilityAccounts
      */
     private function allocate(string $merchantType, string $merchantId): string
     {
-        $existing = MerchantCreditorAccount::model()::query()
-            ->where('merchant_type', $merchantType)
-            ->where('merchant_id', $merchantId)
-            ->value('number');
+        $existing = $this->numberOf($merchantType, $merchantId);
 
         if (is_string($existing)) {
             return $existing;
@@ -115,10 +112,7 @@ final readonly class MerchantLiabilityAccounts
                 'number' => (string) $next,
             ]);
 
-            $number = MerchantCreditorAccount::model()::query()
-                ->where('merchant_type', $merchantType)
-                ->where('merchant_id', $merchantId)
-                ->value('number');
+            $number = $this->numberOf($merchantType, $merchantId);
 
             if (is_string($number)) {
                 return $number;
@@ -126,5 +120,25 @@ final readonly class MerchantLiabilityAccounts
 
             $next++;
         }
+    }
+
+    /**
+     * The merchant's number, read under a lock.
+     *
+     * A plain read inside a caller's transaction answers on MySQL from the snapshot of its first read, so an
+     * account another process allocated meanwhile would stay invisible: every insert would collide with it on the
+     * merchant, every read-back would miss it, and the loop above would never end. A locking read sees the latest
+     * committed row. Where the merchant has none yet it leaves a gap lock, and two allocations in the same gap can
+     * end one of them as a deadlock, which the database reports rather than letting the loop spin.
+     */
+    private function numberOf(string $merchantType, string $merchantId): ?string
+    {
+        $number = MerchantCreditorAccount::model()::query()
+            ->where('merchant_type', $merchantType)
+            ->where('merchant_id', $merchantId)
+            ->lockForUpdate()
+            ->value('number');
+
+        return is_string($number) ? $number : null;
     }
 }

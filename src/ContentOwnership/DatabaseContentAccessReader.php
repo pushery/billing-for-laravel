@@ -36,8 +36,7 @@ use Pushery\Billing\ValueObjects\VersionResolution;
  * `SubscriptionStateReader::grantsFor()` answers the whole marketplace in one indexed query, and the
  * consumer's scope is asked in memory, once per (subscription, work) pair. So a library screen with fifty
  * works costs one grant query, one subscription query and one batched catalog call — not fifty of anything.
- * That is the acceptance criterion, and it is a property of asking for the whole set up front rather than of
- * anything clever.
+ * That bound is a property of asking for the whole set up front rather than of anything clever.
  */
 final readonly class DatabaseContentAccessReader implements ContentAccessReader
 {
@@ -255,8 +254,8 @@ final readonly class DatabaseContentAccessReader implements ContentAccessReader
      * The rows gathered per work, keyed by the content key.
      *
      * One pass rather than a filter per work: the same person may hold several rows for one reference — one
-     * per merchant — and re-scanning the whole set for each of them would turn a library read into quadratic
-     * work in the exact place the acceptance criterion is about.
+     * per merchant — and re-scanning the whole set for each of them would turn a library read, the one read
+     * this class keeps cheap, into quadratic work.
      *
      * @param  list<AccessGrant>  $rows
      * @return array<string, array{content: ContentReference, rows: list<AccessGrant>}>

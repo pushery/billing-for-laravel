@@ -74,6 +74,14 @@ final readonly class SubjectScopedRecords
         $scrubbed = [];
 
         foreach ($axis->scrubbed as $table => $columns) {
+            $values = array_fill_keys($columns, null);
+
+            // Where the axis names a stamp, the scrub records when it happened, so a later write can tell a
+            // value that was scrubbed from one that was never there and leave the first alone.
+            if (isset($axis->scrubbedAt[$table])) {
+                $values[$axis->scrubbedAt[$table]] = Carbon::now();
+            }
+
             // Only rows that still hold something: counting rows already scrubbed would report work that did
             // not happen, and this count is what an erasure receipt is written from. The alternatives are
             // NESTED — at the top level an `orWhere` would sit beside the two morph conditions and turn
@@ -85,7 +93,7 @@ final readonly class SubjectScopedRecords
                         $q->orWhereNotNull($column);
                     }
                 })
-                ->update(array_fill_keys($columns, null));
+                ->update($values);
         }
 
         return $scrubbed;
@@ -102,12 +110,18 @@ final readonly class SubjectScopedRecords
     public function unlink(ErasureAxis $axis, Model $subject, Carbon $at): array
     {
         $unlinked = [];
+        // One key for this person, the same in every table that keeps one, and drawn at random so that it leads
+        // back to nobody.
+        $key = bin2hex(random_bytes(16));
 
         foreach ($axis->retained as $table) {
+            $keyColumn = $axis->erasedKeys[$table] ?? null;
+
             $unlinked[$table] = $this->scoped($axis, $table, $subject)->update([
                 $axis->typeColumn => null,
                 $axis->idColumn => null,
                 $axis->erasedAtColumn => $at,
+                ...($keyColumn === null ? [] : [$keyColumn => $key]),
             ]);
         }
 
@@ -158,7 +172,10 @@ final readonly class SubjectScopedRecords
      * parameter rather than an optional one: a seam a caller may forget is a seam that silently stops being
      * asked, and the symptom of forgetting it here is a destroyed record nobody can get back.
      *
+     * A record whose document also lives as a file takes the file with it, through `$files`, after the row.
+     *
      * @param  array<string, literal-string>  $issueColumns  table => the column holding its issue date
+     * @param  array<string, string>  $cutoffs  table => the cutoff for that table where its own window is longer than `$cutoff`
      *
      * @throws RetentionHoldUnavailable when the host's seam cannot answer
      */
@@ -168,27 +185,36 @@ final readonly class SubjectScopedRecords
         array $issueColumns,
         bool $dryRun,
         RetentionHoldGate $holds,
+        array $cutoffs = [],
+        ?StoredDocumentFiles $files = null,
     ): int {
         $count = 0;
 
         foreach ($axis->retained as $table) {
             $issueColumn = $issueColumns[$table] ?? 'created_at';
 
+            $before = $cutoffs[$table] ?? $cutoff;
+
+            // A record with no explicit issue date falls back to when it was created — a null issue date must
+            // never read as "infinitely old" and prune early. Written through the builder rather than as a raw
+            // COALESCE, so both columns are quoted like any other and no name is spliced into SQL text.
             $rows = DB::table($table)
                 ->whereNotNull($axis->erasedAtColumn)
-                // COALESCE so a record with no explicit issue date falls back to when it was created — a
-                // null issue date must never read as "infinitely old" and prune early. The cutoff is bound
-                // as a datetime STRING: a raw binding does not go through the datetime caster, so a Carbon
-                // here would compare as an unusable value and quietly match nothing.
-                ->whereRaw("COALESCE({$issueColumn}, created_at) < ?", [$cutoff]);
+                ->where(static fn (Builder $dated): Builder => $dated
+                    ->where($issueColumn, '<', $before)
+                    ->orWhere(static fn (Builder $undated): Builder => $undated->whereNull($issueColumn)->where('created_at', '<', $before)));
 
             $held = $holds->heldIn($table, $rows);
 
             if ($held !== []) {
-                $rows->whereNotIn('id', $held);
+                RetentionHoldGate::whereKeys($rows, 'id', $held, not: true);
             }
 
-            $count += $dryRun ? $rows->count() : $rows->delete();
+            $count += match (true) {
+                ! $files instanceof StoredDocumentFiles => $dryRun ? $rows->count() : $rows->delete(),
+                $dryRun => $files->countWithFiles($table, $rows),
+                default => $files->deleteWithFiles($table, $rows),
+            };
         }
 
         return $count;

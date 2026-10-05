@@ -1,21 +1,24 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
     "name": "pushery/billing-for-laravel",
-    "description": "Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Stripe-first, on provider-neutral contracts.",
+    "description": "Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Two drivers, one set of contracts.",
     "keywords": [
         "laravel",
         "billing",
         "subscriptions",
         "payments",
         "stripe",
+        "mollie",
         "cashier",
         "invoices",
         "e-invoicing",
         "xrechnung",
+        "zugferd",
         "datev",
         "dunning",
         "usage-based-billing",
         "metered-billing",
+        "marketplace",
         "saas"
     ],
     "license": "MIT",
@@ -29,7 +32,8 @@
     ],
     "support": {
         "issues": "https://github.com/pushery/billing-for-laravel/issues",
-        "source": "https://github.com/pushery/billing-for-laravel"
+        "source": "https://github.com/pushery/billing-for-laravel",
+        "docs": "https://docs.pushery.com/billing-for-laravel"
     },
     "require": {
         "php": "^8.4",
@@ -65,7 +69,7 @@
         "adyen/php-api-library": "^25.0|^26.0|^30.1",
         "horstoeko/zugferd": "^1.0",
         "larastan/larastan": "3.12.2",
-        "laravel/ai": "^0.11.2",
+        "laravel/ai": "^1.0",
         "laravel/boost": "^2.10.0",
         "laravel/mcp": "^1.0.1",
         "laravel/pao": "^1.1",
@@ -77,7 +81,7 @@
         "orchestra/testbench-core": "^11.3.5",
         "pestphp/pest": "^5.0",
         "pestphp/pest-plugin-browser": "^5.0",
-        "pestphp/pest-plugin-evals": "^5.0",
+        "pestphp/pest-plugin-evals": "^5.1",
         "pestphp/pest-plugin-laravel": "^5.0",
         "pestphp/pest-plugin-phpstan": "5.2.1",
         "pestphp/pest-plugin-type-coverage": "^5.0",
@@ -89,9 +93,8 @@
     },
     "suggest": {
         "adyen/php-api-library": "Required only for the Adyen driver -- no other driver and no local engine touches it. Deliberately not a hard dependency, the same reasoning that keeps mollie/mollie-api-php optional: an install that never selects Adyen would otherwise carry an API client it never calls. Without it the Adyen webhook verifier refuses every request rather than waving one through.",
-        "anthropic-ai/sdk": "Required only to score evals with a real judge, which is wired only when ANTHROPIC_API_KEY is set. Deliberately not a dev dependency: without it every eval still runs, the judge-backed expectations are skipped, and no install pays for a client it never calls.",
+        "ext-intl": "Writes the amounts in the package's mails the way the reader's language does, through ICU. Without it an amount keeps its currency code and takes the language's decimal mark, as in 29,00 EUR.",
         "horstoeko/zugferd": "Required only to embed the EN 16931 CII XML into a ZUGFeRD/Factur-X hybrid PDF/A-3 via Invoicing\\ZugferdPdfInvoice. The CII and XRechnung XML writers need none of it.",
-        "laravel/ai": "Required only to score evals with a real judge. Not a dev dependency: it requires aws/aws-sdk-php for a provider this package never calls, which is 67 MB and 3512 files in every checkout and every CI lane.",
         "livewire/livewire": "Required only for the optional account-hub UI — the nine Livewire screens. The billing core (models, webhooks, invoicing, tax, contracts) needs none of it.",
         "mollie/mollie-api-php": "Required only for the Mollie driver, version 3.13 or 4 — the local billing engine and every other driver need none of it. Deliberately not a hard dependency: an install that never selects billing.default=mollie would otherwise carry an HTTP client it never calls, the same reasoning that keeps horstoeko/zugferd optional."
     },

@@ -18,6 +18,7 @@ use Pushery\Billing\Contracts\SuppliesExchangeRateBasis;
 use Pushery\Billing\Contracts\SuppliesMarginSchemeWording;
 use Pushery\Billing\Contracts\SuppliesMonthlyRecapitulativeStatement;
 use Pushery\Billing\Contracts\SuppliesRecapitulativeStatementDeadline;
+use Pushery\Billing\Contracts\SuppliesRecapitulativeStatementExchangeRateBasis;
 use Pushery\Billing\Contracts\SuppliesReportingExchangeRateBasis;
 use Pushery\Billing\Contracts\SuppliesTaxRates;
 use Pushery\Billing\Enums\ExchangeRateBasis;
@@ -42,7 +43,7 @@ use Pushery\Billing\ValueObjects\ReportingPeriod;
  * deliberate act with a real cost to every operator — which is the correct cost for "the obligation
  * changed".
  */
-final readonly class GermanJurisdictionProfile implements JurisdictionProfile, RequiresElectronicInvoicing, RequiresTaxStatusHold, SuppliesArchetypeRegimes, SuppliesDistanceSaleThreshold, SuppliesExchangeRateBasis, SuppliesMarginSchemeWording, SuppliesMonthlyRecapitulativeStatement, SuppliesRecapitulativeStatementDeadline, SuppliesReportingExchangeRateBasis, SuppliesTaxRates
+final readonly class GermanJurisdictionProfile implements JurisdictionProfile, RequiresElectronicInvoicing, RequiresTaxStatusHold, SuppliesArchetypeRegimes, SuppliesDistanceSaleThreshold, SuppliesExchangeRateBasis, SuppliesMarginSchemeWording, SuppliesMonthlyRecapitulativeStatement, SuppliesRecapitulativeStatementDeadline, SuppliesRecapitulativeStatementExchangeRateBasis, SuppliesReportingExchangeRateBasis, SuppliesTaxRates
 {
     /**
      * The revision of the marketplace terms package an operator must have published. It moves whenever the
@@ -60,7 +61,7 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
      * moved on its own would say nothing. `billing:doctor` reports the resulting age so an operator learns
      * the table has drifted from a diagnostic rather than from a tax return.
      */
-    public const string RATES_VALID_FROM = '2026-07-01';
+    public const string RATES_VALID_FROM = '2026-10-03';
 
     public function __construct(private Repository $config) {}
 
@@ -106,13 +107,6 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
     }
 
     /**
-     * Every business document electronically, from the first one.
-     *
-     * Issuing early makes the transition questions moot rather than answering them one at a time — including
-     * which side's turnover decides a deadline for a self-billed document, a question with no comfortable
-     * answer and no need for one once every document is already electronic.
-     */
-    /**
      * The prescribed wording for a margin-taxed document.
      *
      * A translation key rather than a literal, and that is the right call here even though the wording is
@@ -143,6 +137,13 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
         };
     }
 
+    /**
+     * Every business document electronically, from the first one.
+     *
+     * Issuing early makes the transition questions moot rather than answering them one at a time — including
+     * which side's turnover decides a deadline for a self-billed document, a question with no comfortable
+     * answer and no need for one once every document is already electronic.
+     */
     public function requiresElectronicInvoicing(): bool
     {
         return true;
@@ -248,6 +249,19 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
     public function reportingExchangeRateBasis(): ExchangeRateBasis
     {
         return ExchangeRateBasis::CentralBankAtPeriodEnd;
+    }
+
+    /**
+     * The statement reports the taxable amount, and the taxable amount converts under § 16 (6) sentence 1 UStG.
+     *
+     * The ministry's average for the month the supply was made, the rule the document follows as well. Sentence 4,
+     * which displaces it for the one-stop-shop return, speaks of that return alone, and the statement is a national
+     * declaration under § 18a UStG.
+     */
+    #[Override]
+    public function recapitulativeStatementExchangeRateBasis(): ExchangeRateBasis
+    {
+        return ExchangeRateBasis::CentralBankMonthlyAverage;
     }
 
     /**

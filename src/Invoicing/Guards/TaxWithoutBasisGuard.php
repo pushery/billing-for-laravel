@@ -82,8 +82,8 @@ final class TaxWithoutBasisGuard
         // making a claim this guard can judge: the gap it exists for is a capability DIFFERENCE between
         // drivers, and there is no driver here to differ. Whether a package-issued document with no
         // provider must carry its own basis is a real question, and a separate one — answering it here
-        // would be a second rule smuggled in under the first, and it would refuse documents this ticket
-        // never looked at.
+        // would be a second rule smuggled in under the first, refusing documents this guard was never
+        // meant to judge.
         if ($provider === null || $provider === '') {
             return;
         }

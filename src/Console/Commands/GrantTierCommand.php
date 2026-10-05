@@ -8,6 +8,7 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Support\BillingAdmin;
+use Pushery\Billing\Support\UntouchableTiers;
 
 /**
  * Comp an owner onto a tier out of band — the terminal form of {@see BillingAdmin::comp()}, for the
@@ -16,8 +17,8 @@ use Pushery\Billing\Support\BillingAdmin;
  *
  * Two guards make it hard to shoot yourself in the foot: an unknown tier key is refused before anything
  * is written (a typo would otherwise comp an owner onto a tier that does not exist), and granting a tier
- * that is NOT in `billing.untouchable_tiers` warns — because the next provider webhook is free to
- * overwrite such a grant, which is rarely what a support comp intends.
+ * that is NOT untouchable (`billing.untouchable_tiers`, or the tier's own `untouchable` flag) warns — because
+ * the next provider webhook is free to overwrite such a grant, which is rarely what a support comp intends.
  */
 final class GrantTierCommand extends Command
 {
@@ -66,8 +67,7 @@ final class GrantTierCommand extends Command
 
         $this->components->info("Granted tier '{$tier}' to owner '{$ownerKey}'.");
 
-        $untouchable = $config->get('billing.untouchable_tiers');
-        if (! is_array($untouchable) || ! in_array($tier, $untouchable, true)) {
+        if (! UntouchableTiers::has($config, $tier)) {
             $this->components->warn("'{$tier}' is not in billing.untouchable_tiers — the next provider webhook may overwrite this grant.");
         }
 

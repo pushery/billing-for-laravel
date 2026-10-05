@@ -56,13 +56,7 @@ final readonly class IntermediatedSalesCounter
     /** What reached the seller: each sale's share, less what was taken back from them. */
     public function countedIn(Model $seller, string $currency, CountingPeriod $period): Money
     {
-        $minor = 0;
-
-        foreach ($this->of($seller, $currency, $period)->get(['net_minor', 'transfer_reversed_minor']) as $sale) {
-            $minor += $sale->net_minor - $sale->transfer_reversed_minor;
-        }
-
-        return Money::of($minor, strtoupper($currency));
+        return $this->figuresIn($seller, $currency, $period)['gross'];
     }
 
     public function transactionsIn(Model $seller, string $currency, CountingPeriod $period): int
@@ -73,13 +67,32 @@ final readonly class IntermediatedSalesCounter
     /** What the platform charged the seller for arranging the sales, less what it refunded of that. */
     public function feesIn(Model $seller, string $currency, CountingPeriod $period): Money
     {
-        $minor = 0;
+        return $this->figuresIn($seller, $currency, $period)['fees'];
+    }
 
-        foreach ($this->of($seller, $currency, $period)->get(['fee_minor', 'fee_refunded_minor']) as $sale) {
-            $minor += $sale->fee_minor - $sale->fee_refunded_minor;
+    /**
+     * What reached the seller, how many sales there were and what they were charged, from one reading of the window.
+     *
+     * A reporting quarter states all three, and asking for each on its own read the same sales three times.
+     *
+     * @return array{gross: Money, transactions: int, fees: Money}
+     */
+    public function figuresIn(Model $seller, string $currency, CountingPeriod $period): array
+    {
+        $gross = 0;
+        $fees = 0;
+        $sales = $this->of($seller, $currency, $period)->get(['net_minor', 'transfer_reversed_minor', 'fee_minor', 'fee_refunded_minor']);
+
+        foreach ($sales as $sale) {
+            $gross += $sale->net_minor - $sale->transfer_reversed_minor;
+            $fees += $sale->fee_minor - $sale->fee_refunded_minor;
         }
 
-        return Money::of($minor, strtoupper($currency));
+        return [
+            'gross' => Money::of($gross, strtoupper($currency)),
+            'transactions' => $sales->count(),
+            'fees' => Money::of($fees, strtoupper($currency)),
+        ];
     }
 
     /**

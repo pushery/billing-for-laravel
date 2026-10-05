@@ -38,10 +38,44 @@ final class UnionMembership
         'IT', 'LV', 'LT', 'LU', 'MT', 'NL', 'PL', 'PT', 'RO', 'SK', 'SI', 'ES', 'SE',
     ];
 
-    /** Whether the given country (case-insensitive) is an EU member state. An empty or unknown code is not. */
+    /**
+     * Places a member state's law folds into itself for VAT: a supply to or from one of them is that member's.
+     *
+     * They are neither members in their own right nor third countries. Read as third countries they are
+     * zero-rated, exempted as exports and left out of every return, and nothing about that looks wrong: the
+     * code is a real country, so no guard fires. Read as unknown codes they are refused, although the law
+     * says exactly whose they are. Transactions to and from Monaco are treated as French (Art. 7(2) of the
+     * VAT Directive).
+     *
+     * @var array<string, string>
+     */
+    private const array TREATED_AS = [
+        'MC' => 'FR',
+    ];
+
+    /**
+     * Whether the given country (case-insensitive) is an EU member state, or a place a member folds into itself
+     * for VAT. An empty or unknown code is not.
+     */
     public static function isMember(?string $country): bool
     {
-        return $country !== null && in_array(strtoupper($country), self::MEMBERS, true);
+        return $country !== null && in_array(self::territoryOf($country), self::MEMBERS, true);
+    }
+
+    /**
+     * The country whose VAT a code's supplies fall under: the member state for a place folded into one, the
+     * code itself otherwise, trimmed and upper-cased.
+     *
+     * Kept here, beside the membership, so that the rate, the union test and the reported country all resolve
+     * a code the same way. When only the calculator resolved it, Monaco was priced at the French rate, treated
+     * as unknown by the check that every open market has a rate, and placed outside the union by the place of
+     * supply, so its French VAT appeared in no return.
+     */
+    public static function territoryOf(?string $country): string
+    {
+        $code = strtoupper(trim((string) $country));
+
+        return self::TREATED_AS[$code] ?? $code;
     }
 
     /**

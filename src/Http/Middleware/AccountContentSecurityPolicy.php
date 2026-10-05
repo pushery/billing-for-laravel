@@ -19,7 +19,8 @@ use Symfony\Component\HttpFoundation\Response;
  * It is on by default for the package's own shipped views. A host that frames the hub in its own
  * layout with external assets can whitelist those via config('account.csp.additional') or turn the
  * header off entirely with config('account.csp.enabled') — the browser enforces the intersection of
- * every CSP header, so a package-set policy must never fight the host's own.
+ * every CSP header, so a package-set policy must never fight the host's own. The one external asset
+ * the package's own layout loads, a compiled stylesheet on another origin, is allowed without that.
  */
 final readonly class AccountContentSecurityPolicy
 {
@@ -50,7 +51,7 @@ final readonly class AccountContentSecurityPolicy
     {
         $directives = $this->base();
 
-        foreach ([$this->csp->directives(), $this->additional()] as $extra) {
+        foreach ([$this->csp->directives(), $this->stylesheet(), $this->additional()] as $extra) {
             foreach ($extra as $directive => $sources) {
                 $directives[$directive] = [...($directives[$directive] ?? []), ...$sources];
             }
@@ -84,6 +85,41 @@ final readonly class AccountContentSecurityPolicy
             // Refuse to be framed by another origin — the money-moving hub must not be clickjacked.
             'frame-ancestors' => ["'self'"],
         ];
+    }
+
+    /**
+     * The origin of the standalone layout's stylesheet, when it is served from another origin.
+     *
+     * The layout links `account.stylesheet` as configured, and the base allows styles from this origin
+     * only. Without this, a compiled build on a CDN would be refused by the header the hub sends beside it,
+     * and the screens would stand unstyled. A relative path adds nothing, and neither does a URL whose host
+     * could carry anything into the header beyond a host.
+     *
+     * @return array<string, list<string>>
+     */
+    private function stylesheet(): array
+    {
+        $url = $this->config->get('account.stylesheet');
+
+        if (! is_string($url)) {
+            return [];
+        }
+
+        $parts = parse_url(trim($url));
+
+        if (! is_array($parts) || ! isset($parts['host']) || preg_match('/\A[A-Za-z0-9.-]+\z/', $parts['host']) !== 1) {
+            return [];
+        }
+
+        $scheme = isset($parts['scheme']) ? strtolower($parts['scheme']) : null;
+
+        if ($scheme !== null && ! in_array($scheme, ['http', 'https'], true)) {
+            return [];
+        }
+
+        $port = isset($parts['port']) ? ':'.$parts['port'] : '';
+
+        return ['style-src' => [($scheme !== null ? $scheme.'://' : '').strtolower($parts['host']).$port]];
     }
 
     /**

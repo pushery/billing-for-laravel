@@ -57,7 +57,10 @@ class DocumentArtifact extends Model
         return ['owner_type', 'owner_id', 'owner_erased_at', 'updated_at'];
     }
 
-    /** Never, by any path: an erasure axis holds this table as RETAINED — unlinked rather than removed. */
+    /**
+     * Never through the model, inside `purging()` or not. The erasure axis holds this table as RETAINED:
+     * unlinked when its owner is erased, and removed by query once the retention window has passed.
+     */
     protected static function appendOnlyDeletion(): AppendOnlyDeletion
     {
         return AppendOnlyDeletion::Never;
@@ -74,7 +77,7 @@ class DocumentArtifact extends Model
     #[Override]
     protected static function appendOnlyDeleteRefusal(): string
     {
-        return 'This record is retained and unlinked when its subject is erased, never deleted — the fact '
-            .'it holds stays true with nobody\'s name on it.';
+        return 'A stored document is not deleted by a caller. An erasure unlinks it from its owner, and '
+            .'retention removes it once the window of an erased owner\'s documents has passed.';
     }
 }

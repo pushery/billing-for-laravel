@@ -21,7 +21,7 @@ return [
 
     'trial_ending' => [
         'subject' => 'Je proefperiode eindigt binnenkort',
-        'intro' => 'Je gratis proefperiode loopt bijna af.',
+        'intro' => 'Je gratis proefperiode eindigt op :date.',
         'outro' => 'Voeg vóór het einde een betaalmethode toe zodat je abonnement zonder onderbreking doorloopt.',
         'cta' => 'Betaalmethode toevoegen',
     ],
@@ -29,7 +29,7 @@ return [
     'subscription_canceled' => [
         'subject' => 'Je abonnement is opgezegd',
         'intro' => 'Je abonnement is opgezegd en wordt niet verlengd.',
-        'outro' => 'Je behoudt toegang tot het einde van de betaalde periode, hieronder aangegeven.',
+        'outro' => 'Je behoudt toegang tot :date, het einde van de betaalde periode.',
         'cta' => 'Abonnement bekijken',
     ],
 
@@ -39,6 +39,16 @@ return [
         'effective' => 'Het geldt vanaf :date.',
         'consequence' => 'Vanaf die datum is het bedrag dat je ontvangt hoger, omdat de belasting meereist. Wat je overhoudt verandert niet.',
         'outro' => 'Klopt dit niet met jouw situatie, laat het ons weten — wij kunnen het corrigeren.',
+        'statuses' => [
+            'de_standard_rated' => 'btw-plichtig',
+            'de_standard_rated_pending_validation' => 'btw-plichtig (registratie nog niet bevestigd)',
+            'de_small_business' => 'kleine ondernemer zonder btw',
+            'eu_small_business_de_exempt' => 'kleine ondernemer in een ander EU-land (hier vrijgesteld)',
+            'private_individual' => 'particulier',
+            'eu_business' => 'onderneming in een ander EU-land',
+            'non_eu_business' => 'onderneming buiten de EU',
+            'unclarified' => 'nog niet vastgesteld',
+        ],
     ],
 
     'reattestation_due' => [

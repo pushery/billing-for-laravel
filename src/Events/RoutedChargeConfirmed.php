@@ -46,5 +46,12 @@ final readonly class RoutedChargeConfirmed implements BillingDomainEvent
          * which is different from "there is none".
          */
         public ?string $transferReference = null,
+        /**
+         * The package's own reference for a hosted sale, carried on the payment's metadata.
+         *
+         * A hosted checkout creates its payment only when the buyer confirms, so the sale was written down under
+         * this reference before the payment had an id. Null for a payment that carries none.
+         */
+        public ?string $saleReference = null,
     ) {}
 }

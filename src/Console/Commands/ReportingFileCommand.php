@@ -109,8 +109,10 @@ final class ReportingFileCommand extends Command
     /**
      * Who submitted it, recorded verbatim.
      *
-     * Falls back to the shell user rather than to a package-invented label: a filing is somebody's act, and
-     * "system" on that column would name nobody at exactly the moment somebody has to be named.
+     * Falls back to the user the command runs as rather than to a package-invented label: a filing is somebody's
+     * act, and "system" on that column would name nobody at exactly the moment somebody has to be named. Not the
+     * user the script file belongs to, which `get_current_user()` answers: `artisan` belongs to whoever deployed
+     * it, and every filing would have named them.
      */
     private function submittedBy(): string
     {
@@ -120,9 +122,16 @@ final class ReportingFileCommand extends Command
             return trim($option);
         }
 
-        $user = get_current_user();
+        return $this->processUser() ?? 'unknown';
+    }
 
-        return $user === '' ? 'unknown' : $user;
+    /** The user this process runs as: from the system where PHP can ask it, else from the login environment. */
+    private function processUser(): ?string
+    {
+        $entry = function_exists('posix_getpwuid') && function_exists('posix_geteuid') ? posix_getpwuid(posix_geteuid()) : false;
+        $name = is_array($entry) ? $entry['name'] : (getenv('USER') ?: getenv('LOGNAME') ?: getenv('USERNAME'));
+
+        return is_string($name) && $name !== '' ? $name : null;
     }
 
     private function currency(Repository $config): string

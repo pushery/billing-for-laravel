@@ -32,7 +32,7 @@ final readonly class DatabaseDiscountResolver implements DiscountResolver
 {
     public function resolve(string $code, ?MerchantScope $merchant = null): ?Discount
     {
-        $coupon = Coupon::model()::query()->issuedBy($merchant)->where('code', $code)->first();
+        $coupon = CouponCodes::find(Coupon::model()::query()->issuedBy($merchant), $code);
 
         if (! $coupon instanceof Coupon || ! $coupon->isLive()) {
             return null;

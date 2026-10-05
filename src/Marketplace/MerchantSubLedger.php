@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Pushery\Billing\Models\MerchantBalance;
+use Pushery\Billing\Support\LockedRow;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -180,7 +181,7 @@ final readonly class MerchantSubLedger
             $after = $this->write($merchant, $before->plus($applied));
 
             return [$gross->minus($applied), $after];
-        });
+        }, LockedRow::ATTEMPTS);
     }
 
     /** Adjust the balance by a signed amount under a row lock. */
@@ -190,19 +191,24 @@ final readonly class MerchantSubLedger
             $balance = $this->lockedBalance($merchant, $amount->currency);
 
             return $this->write($merchant, $balance->plus($amount));
-        });
+        }, LockedRow::ATTEMPTS);
     }
 
     /**
      * The current balance, with the row created if it does not exist and locked for the caller's write.
      *
-     * Insert-or-ignore rather than a check-then-insert, because two settlements arriving together would both
-     * find no row and both try to create one; the loser of that race would fail on the unique key rather
-     * than take the lock it came for.
+     * The insert ignores a collision, because two settlements arriving together can both find no row and both
+     * try to create one, and the loser of that race should take the lock it came for rather than fail on the
+     * unique key. {@see LockedRow} says why it locks first.
      */
     private function lockedBalance(Model $merchant, string $currency): Money
     {
-        MerchantBalance::model()::query()->insertOrIgnore([
+        $query = MerchantBalance::model()::query()
+            ->where('merchant_type', $merchant->getMorphClass())
+            ->where('merchant_id', $merchant->getKey())
+            ->where('currency', $currency);
+
+        $row = LockedRow::take($query, [
             'merchant_type' => $merchant->getMorphClass(),
             'merchant_id' => $merchant->getKey(),
             'currency' => $currency,
@@ -210,13 +216,6 @@ final readonly class MerchantSubLedger
             'created_at' => Carbon::now(),
             'updated_at' => Carbon::now(),
         ]);
-
-        $row = MerchantBalance::model()::query()
-            ->where('merchant_type', $merchant->getMorphClass())
-            ->where('merchant_id', $merchant->getKey())
-            ->where('currency', $currency)
-            ->lockForUpdate()
-            ->firstOrFail();
 
         return Money::of($row->balance_minor, $currency);
     }

@@ -26,8 +26,7 @@ namespace Pushery\Billing\Events;
  * ## It records. It does not adjudicate.
  *
  * Which ledger is authoritative when the provider and this package disagree is a different question, and
- * deliberately not answered here — see the seventh acceptance line of the reconciliation ticket. This event
- * states what the provider reported, and nothing more.
+ * deliberately not answered here. This event states what the provider reported, and nothing more.
  */
 final readonly class MerchantTransferReversedByProvider implements BillingDomainEvent
 {

@@ -166,6 +166,7 @@ final readonly class ProrationCreditCorrectionIssuer
         }
 
         $issuedAt = Carbon::now();
+        $split = CorrectionTax::of($original, $minor);
 
         return InvoiceRecord::model()::query()->create([
             ...$key,
@@ -181,7 +182,11 @@ final readonly class ProrationCreditCorrectionIssuer
                 // Positive, because the document type carries the direction and a minus sign would state
                 // something else. The export's marker reads `isCorrection()` against this sign.
                 'total_minor' => $minor,
-                'subtotal_minor' => $minor,
+                // The reduction is a share of what was paid, so it states its net and its tax at the rate of the
+                // invoice it corrects: § 17 corrects the tax as well as the base. Stated as net alone, it told the
+                // return to reduce the base by the gross and the tax by nothing.
+                'subtotal_minor' => $split?->net,
+                'tax_minor' => $split?->tax,
                 'currency' => $original->currency,
                 // The FROZEN characteristics of the supply being reduced, copied rather than re-derived.
                 // They are what the revenue account is resolved from, and a correction shares the tax
@@ -195,10 +200,11 @@ final readonly class ProrationCreditCorrectionIssuer
                 'lines' => [[
                     'description' => sprintf('Reduction of consideration on %s', $original->number ?? 'invoice'),
                     'quantity' => 1,
-                    'unit_price_minor' => $minor,
+                    'unit_price_minor' => $split->net ?? $minor,
                     'total_minor' => $minor,
                     'currency' => $original->currency,
                     'type' => 'credit',
+                    ...($split instanceof CorrectionTax ? ['net_minor' => $split->net, 'tax_rate' => $split->rate] : []),
                 ]],
             ],
         ]);

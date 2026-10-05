@@ -9,11 +9,13 @@ use Carbon\CarbonInterface;
 use DateTimeImmutable;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 use Pushery\Billing\Contracts\EnsuresProviderCustomer;
 use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\TierCatalog;
+use Pushery\Billing\Discounts\CouponCodes;
 use Pushery\Billing\Discounts\CouponRedeemer;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Exceptions\CouponUnavailable;
@@ -233,10 +235,10 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         return $this->honorableCoupon($this->normalizeCode($code)) instanceof Coupon;
     }
 
-    /** Trimmed, and an empty field is the same as no field. */
+    /** Trimmed of whitespace, invisible characters included, and an empty field is the same as no field. */
     private function normalizeCode(?string $code): ?string
     {
-        $code = trim((string) $code);
+        $code = Str::trim((string) $code);
 
         return $code === '' ? null : $code;
     }
@@ -263,7 +265,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         // platform sentinel), so the explicit scope is the same query it always ran — written out rather
         // than implied, because an unscoped read is what lets one seller's code discount another's sale the
         // day this lane learns about merchants.
-        $coupon = Coupon::model()::query()->issuedBy(MerchantScope::platform())->where('code', $code)->first();
+        $coupon = CouponCodes::find(Coupon::model()::query()->issuedBy(MerchantScope::platform()), $code);
 
         return $coupon instanceof Coupon && $coupon->isLive() ? $coupon : null;
     }
@@ -394,7 +396,8 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         // reached only after `alreadySubscribed()` deliberately let such an owner through, so a plain
         // insert would meet the constraint every time somebody came back — and arrive at them as a raw
         // database error on the subscribe button rather than one of the refusals this flow states.
-        return Subscription::model()::query()->updateOrCreate(
+        return UniqueRow::updateOrCreate(
+            Subscription::model()::query(),
             [
                 'owner_type' => $billable->getMorphClass(),
                 'owner_id' => $ownerKey,

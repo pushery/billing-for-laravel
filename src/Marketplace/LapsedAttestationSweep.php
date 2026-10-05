@@ -45,7 +45,8 @@ final readonly class LapsedAttestationSweep
      */
     public function announce(CarbonImmutable $now): int
     {
-        $at = Carbon::instance($now);
+        // In UTC, the zone the attestation columns hold: a binding is written in its own zone (see UtcDateTime).
+        $at = Carbon::instance($now)->utc();
         $announced = 0;
 
         $lapsed = CreatorTaxStatusRecord::model()::query()
@@ -54,6 +55,9 @@ final readonly class LapsedAttestationSweep
             ->whereNull('hold_announced_at')
             ->where('effective_from', '<=', $at)
             ->orderBy('id')
+            // Every row's merchant in one query. A sweep's row count grows with the customer base, and a host
+            // running `Model::preventLazyLoading()` refuses a load per row from the second row on.
+            ->with('merchant')
             ->get();
 
         foreach ($lapsed as $record) {

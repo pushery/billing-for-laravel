@@ -68,6 +68,32 @@ final readonly class DistanceSaleThresholdMonitor
         return $this->placeFor($year, $currency, $this->thresholdMinor());
     }
 
+    /**
+     * Where a sale of this net is taxed this year, counting the sale itself.
+     *
+     * {@see self::rule()} reads the sales already issued, so it cannot see that the one being decided is the
+     * crossing sale, and the crossing sale is already over the line. This adds it before asking, which is the
+     * question an issuer has: the sale is not on any document yet.
+     */
+    public function ruleForSale(int $year, string $currency, int $netMinor): PlaceOfSupplyRule
+    {
+        $limit = $this->thresholdMinor();
+
+        if ($this->placeFor($year, $currency, $limit) === PlaceOfSupplyRule::Destination) {
+            return PlaceOfSupplyRule::Destination;
+        }
+
+        return $this->counter->crossBorderNetIn($year, $currency)->minorUnits + $netMinor > $limit
+            ? PlaceOfSupplyRule::Destination
+            : PlaceOfSupplyRule::Domestic;
+    }
+
+    /** Whether the threshold is watched at all: not waived, and a limit the active profile supplies. */
+    public function watched(): bool
+    {
+        return ! $this->waived() && $this->thresholdMinor() > 0;
+    }
+
     /** The active profile's limit, or zero where there is none to watch. */
     public function thresholdMinor(): int
     {

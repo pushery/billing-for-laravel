@@ -39,7 +39,8 @@ final readonly class LocalArrearsRoster implements ArrearsRoster
         $due = Subscription::model()::query()
             ->merchantScoped()
             ->whereNotNull('delinquent_since')
-            ->where('delinquent_since', '>', $after)
+            // In UTC, the zone the column holds, whatever zone the caller's moment is in (see UtcDateTime).
+            ->where('delinquent_since', '>', CarbonImmutable::instance($after)->utc())
             ->where(function (Builder $query) use ($onDay): void {
                 $query->whereNull('payment_reminded_on')
                     ->orWhereDate('payment_reminded_on', '<', $onDay);

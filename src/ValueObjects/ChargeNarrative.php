@@ -11,18 +11,26 @@ use InvalidArgumentException;
  * What the CUSTOMER should read on the charge — the service they bought and the period it covers.
  *
  * The money seams carry an amount and a mandate, which is everything the provider needs and nothing a
- * person needs. So the line a subscriber sees on their card statement said `Subscription`, or under an
- * earlier defect a bare order number, for every charge this package has ever made. Neither answers the
- * question that produces a chargeback: what is this, and for when.
+ * person needs. A charge described by those alone reads as a generic word or a bare number, and neither
+ * answers the question that produces a chargeback: what is this, and for when.
+ *
+ * ## Where the customer reads it
+ *
+ * It travels as the payment's `description`, and the providers show that field in different places. Mollie
+ * passes it on to the customer's bank statement where the method allows, and a SEPA direct debit carries it
+ * as the remittance information. Stripe shows it on the payment, its receipt and the dashboard; a card
+ * statement carries Stripe's statement descriptor instead, at most 22 characters made of the account's
+ * prefix and a suffix this package does not set.
  *
  * ## Why a value object rather than a string parameter
  *
  * A `?string $description` would have been one line shorter and is the wrong shape twice. Each caller
  * would format the text itself, so the wording drifts between the cycle charge and whatever calls the
- * rails next; and the two providers have different length limits, so a pre-rendered string is either
- * truncated for the strictest of them everywhere or truncated by the provider — mid-word, on the field
- * the customer reads. Holding the parts lets each driver render to its own limit, and lets the trimming
- * spend the SERVICE name rather than the period (see {@see statement()}).
+ * rails next; and the length limits differ, 1000 characters at Stripe, 255 at Mollie and 140 where Mollie
+ * collects a SEPA direct debit, so a pre-rendered string is either truncated for the strictest of them
+ * everywhere or left for the provider to cut at its limit, mid-word, on the line the customer reads.
+ * Holding the parts lets each driver render to its own limit, and lets the trimming spend the SERVICE name
+ * rather than the period (see {@see statement()}).
  *
  * ## No translator, deliberately
  *
@@ -40,7 +48,10 @@ use InvalidArgumentException;
  */
 final readonly class ChargeNarrative
 {
-    /** Separates the service from its period. A plain hyphen: an en dash is not safe across both providers. */
+    /**
+     * Separates the service from its period. A plain hyphen: Mollie puts the line on the customer's bank
+     * statement where it can, and the SEPA character set has a hyphen but no en dash.
+     */
     private const string PERIOD_SEPARATOR = ' - ';
 
     /**
@@ -75,16 +86,16 @@ final readonly class ChargeNarrative
      *
      * The SERVICE name, never the period. The period is short and fixed-width, so trimming it saves almost
      * nothing; and it is the half that distinguishes this charge from the eleven others that look exactly
-     * like it. A truncated name is still recognizable — `Acme Professional Pl…` — while a truncated period
+     * like it. A truncated name is still recognizable — `Acme Professional Pl` — while a truncated period
      * is a date that reads as complete and is wrong.
      *
      * A service name so long that the period alone would not fit is not trimmed cleverly: the whole line is
      * cut. Nothing sensible survives that case and inventing a rule for it would be a branch no real
      * installation enters.
      *
-     * `mb_*` throughout: the limits below are the providers' CHARACTER limits, and cutting a multi-byte
-     * name with `substr` would send a broken final byte — which Mollie rejects and Stripe stores as a
-     * replacement character on the field the customer reads.
+     * `mb_*` throughout: the limits are the providers' CHARACTER limits, and cutting a multi-byte name with
+     * `substr` would end the line in half a character. That is not valid UTF-8, so it cannot be encoded as the
+     * JSON Mollie's API takes.
      */
     public function statement(int $limit): string
     {

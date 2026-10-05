@@ -10,6 +10,7 @@ use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Enums\OrderItemType;
+use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxIdVerificationStatus;
 use Pushery\Billing\Enums\VoucherInstrumentType;
@@ -17,9 +18,11 @@ use Pushery\Billing\Marketplace\CreditTopUpVolume;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Models\TaxIdVerification;
+use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
 use Pushery\Billing\Tax\PlaceEvidenceStore;
 use Pushery\Billing\Tax\SaleTaxDecision;
 use Pushery\Billing\Tax\SupplyPlaceDecision;
+use Pushery\Billing\Tax\UnionMembership;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\ServicePeriod;
 use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
@@ -91,6 +94,7 @@ final readonly class OrderTaxBasis
         private TierCatalog $tiers,
         private AddonCatalog $addons,
         private Repository $config,
+        private ?DistanceSaleThresholdMonitor $thresholds = null,
     ) {}
 
     /**
@@ -226,16 +230,31 @@ final readonly class OrderTaxBasis
         $gross = Money::of($order->total_minor, $order->currency);
         $buyer = $this->buyerOf($order, $country);
 
+        $paidOn = $order->processed_at === null ? null : CarbonImmutable::parse($order->processed_at->toIso8601String());
+
         // Priced GROSS, because that is how the cycle was charged: the customer paid the order total and
         // the tax is the part of it that belongs to the state. Determining from a net would mean inventing
         // a net nobody charged and then adding tax on top of it, producing a total the customer never paid.
-        $facts = $this->taxes->decideOnGross(
-            $archetype,
-            $gross,
-            $buyer,
-            $period,
-            $order->processed_at === null ? null : CarbonImmutable::parse($order->processed_at->toIso8601String()),
-        );
+        $facts = $this->taxes->decideOnGross($archetype, $gross, $buyer, $period, $paidOn);
+        $destination = $facts->country;
+
+        // Below the distance-sale threshold, a cross-border sale to a consumer is taxed where the seller is
+        // (Art. 59c of the VAT Directive), up to the sale that takes the year past it. The monitor answered that
+        // for the recorded evidence alone, and every cycle was taxed at the destination and reported there
+        // whatever the operator had configured. Asked with this sale's own net, the crossing sale is already
+        // over the line, as the monitor's rule has it.
+        if ($facts->reportableUnderOneStopShop() && $this->thresholds instanceof DistanceSaleThresholdMonitor && $this->thresholds->watched()) {
+            $atTheSeller = $this->taxes->decideOnGross($archetype, $gross, $buyer, $period, $paidOn, belowDistanceSaleThreshold: true);
+            $year = ($paidOn ?? CarbonImmutable::now())->year;
+
+            if ($this->thresholds->ruleForSale($year, $order->currency, $gross->minus($atTheSeller->tax)->minorUnits) === PlaceOfSupplyRule::Domestic) {
+                $facts = $atTheSeller;
+                // The customer's country stays on the document although the tax is the seller's: the column
+                // names where the customer is, and the threshold counts the sale by it. Left empty, the sale
+                // would drop out of the count, and the limit would never be reached.
+                $destination = UnionMembership::territoryOf($buyer->countryCode);
+            }
+        }
 
         return new DeterminedOrderTax(
             net: $gross->minus($facts->tax),
@@ -252,7 +271,7 @@ final readonly class OrderTaxBasis
                 // Deliberately no `deliveredOn`. A cycle billed in advance has not been supplied yet, and
                 // stating a delivery date in the future on a document dated before it is worse than
                 // stating none — the period columns already say what is covered.
-                destinationCountry: $facts->country,
+                destinationCountry: $destination,
                 destinationSubdivision: $this->evidence->subdivisionFor($reference),
             ),
             period: $period,
@@ -262,6 +281,7 @@ final readonly class OrderTaxBasis
             // the zero rate rests on rather than whatever the customer record says later.
             buyerVatId: $buyer->vatIdValid ? $buyer->vatId : null,
             buyerCountry: $buyer->vatIdValid ? $buyer->countryCode : null,
+            appliedRateBps: $facts->appliedRateBps,
         );
     }
 
@@ -318,15 +338,14 @@ final readonly class OrderTaxBasis
      * buyer and the register: an id the register confirmed is confirmed however the question reached it,
      * and scoping the read to the local driver would mean an install that verifies through one provider
      * and bills through another reverse-charges nothing it should.
+     *
+     * A `verified` answer counts only while it is the latest word on its id. A register that later answers
+     * `unverified`, or a customer who removed the number, ends it; reading the latest `verified` row alone
+     * reverse-charged every cycle after either.
      */
     private function buyerOf(Order $order, string $country): TaxContext
     {
-        $verified = TaxIdVerification::model()::query()
-            ->where('owner_type', $order->owner_type)
-            ->where('owner_id', $order->owner_id)
-            ->where('status', TaxIdVerificationStatus::Verified)
-            ->orderByDesc('reported_at')
-            ->first();
+        $verified = $this->standingVerification($order);
 
         if (! $verified instanceof TaxIdVerification) {
             return new TaxContext(countryCode: $country);
@@ -346,6 +365,47 @@ final readonly class OrderTaxBasis
             business: true,
             vatIdValid: true,
         );
+    }
+
+    /**
+     * The verification the reverse charge may rest on: of the customer's tax ids, the most recent whose latest
+     * deciding answer is `verified`.
+     *
+     * An answer decides when it is `verified`, `unverified` or `removed`. A `pending` or `unavailable` one says
+     * the register was not heard, so it neither confirms an id nor takes a confirmation back. An id that turns
+     * `verified` again after an `unverified` answer has a row for that answer too, and the reverse charge rests
+     * on it again.
+     */
+    private function standingVerification(Order $order): ?TaxIdVerification
+    {
+        $answers = TaxIdVerification::model()::query()
+            ->where('owner_type', $order->owner_type)
+            ->where('owner_id', $order->owner_id)
+            ->whereIn('status', array_values(array_filter(
+                TaxIdVerificationStatus::cases(),
+                static fn (TaxIdVerificationStatus $status): bool => $status->decides(),
+            )))
+            ->orderByDesc('reported_at')
+            ->orderByDesc('id')
+            ->get();
+
+        $decided = [];
+
+        foreach ($answers as $answer) {
+            $id = $answer->provider.'|'.$answer->tax_id_reference;
+
+            if (isset($decided[$id])) {
+                continue;
+            }
+
+            $decided[$id] = true;
+
+            if ($answer->status === TaxIdVerificationStatus::Verified) {
+                return $answer;
+            }
+        }
+
+        return null;
     }
 
     /**

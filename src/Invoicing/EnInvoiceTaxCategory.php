@@ -8,6 +8,7 @@ use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxationBasis;
 use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Exceptions\ContradictoryExemption;
+use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Tax\UnionMembership;
 
 /**
@@ -47,9 +48,15 @@ use Pushery\Billing\Tax\UnionMembership;
  *   for exactly that, category `E` carrying the margin scheme's own exemption code. It is decided from the
  *   frozen `taxation_basis` before any exemption reason, because a margin document that also names one is a
  *   contradiction rather than a category question.
+ * - **`E` with `VATEX-EU-79-C`** — an amount the document states but the issuer collected in the name and on
+ *   behalf of another party, such as the goods of an intermediated sale beside the platform's fee. It is not part of
+ *   the taxable amount, which a rate of 0 % would claim: `Z` states a supply of the issuer's, taxed at nothing.
  */
 final readonly class EnInvoiceTaxCategory
 {
+    /** The exemption code an amount collected on behalf of another party is stated with (Article 79(c)). */
+    private const string COLLECTED_ON_BEHALF = 'VATEX-EU-79-C';
+
     private function __construct(
         /** The EN 16931 category code (BT-118 / BT-151). */
         public string $code,
@@ -60,15 +67,53 @@ final readonly class EnInvoiceTaxCategory
     ) {}
 
     /**
+     * The category of one band or line of an issued document, at the rate it states, from the facts the document froze.
+     *
+     * Both writers, the bands they write and the printed page ask this, so that a line, its band, the other syntax and
+     * the page answer one question in one place.
+     */
+    public static function forDocument(InvoiceRecord $invoice, ?float $rate): self
+    {
+        return self::for(
+            $invoice->tax_exemption_reason ?? ((bool) $invoice->reverse_charge ? TaxExemptionReason::ReverseCharge : null),
+            $invoice->tax_archetype,
+            (bool) $invoice->tax_exempt,
+            $rate,
+            $invoice->destination_country,
+            $invoice->taxation_basis,
+        );
+    }
+
+    /**
      * Decide the category for one supply.
      *
      * @param  bool  $exempt  the supply is exempt for a reason the reason enum does not model — a
      *                        small-business relief, for instance, which is exempt (E) and NOT zero-rated (Z)
-     * @param  float  $rate  the rate actually charged, which decides only between S and Z once nothing above applies
+     * @param  ?float  $rate  the rate actually charged, which decides only between S and Z once nothing above applies;
+     *                        null for an amount collected in the name and on behalf of another party
      * @param  ?TaxationBasis  $basis  the basis the document froze; a margin-taxed one decides the category on its own
      */
-    public static function for(?TaxExemptionReason $exemption, ?TaxArchetype $archetype, bool $exempt, float $rate, ?string $destinationCountry = null, ?TaxationBasis $basis = null): self
+    public static function for(?TaxExemptionReason $exemption, ?TaxArchetype $archetype, bool $exempt, ?float $rate, ?string $destinationCountry = null, ?TaxationBasis $basis = null): self
     {
+        // A line without a rate is an amount the issuer collected in the name and on behalf of another party: not its
+        // supply, and not part of the taxable amount (Article 79(c) of the VAT Directive). EN 16931 has no category of
+        // its own for it. `O` would say it most plainly, but BR-O-11 makes `O` exclusive, and the issuer's own supply
+        // beside the amount is taxed. The code list's answer is `E` with VATEX-EU-79-C, whose remark says such an amount
+        // is not an exemption and may be stated as one in this standard.
+        //
+        // A document that is exempt or outside the scope as a whole keeps its own category for the amount. Every line
+        // of a category is summed into that category's band (BR-E-08), and `O` admits no other band, so a second band
+        // of either beside the document's own could not be valid.
+        if ($rate === null) {
+            $document = self::for($exemption, $archetype, $exempt, 0.0, $destinationCountry, $basis);
+
+            if (in_array($document->code, ['E', 'O'], true)) {
+                return $document;
+            }
+
+            return new self('E', self::COLLECTED_ON_BEHALF, 'Collected in the name and on behalf of another party');
+        }
+
         // A supply frozen as leaving the union, stated as going to a member of it, is a contradiction in the
         // document's OWN data. Refused rather than rendered: whichever of the two is wrong, one of them is,
         // and a document that asserts both is worse than no document — it would claim an exemption its own
@@ -76,7 +121,7 @@ final readonly class EnInvoiceTaxCategory
         if ($exemption === TaxExemptionReason::SuppliedOutsideTheUnion
             && $destinationCountry !== null
             && $destinationCountry !== ''
-            && in_array(strtoupper($destinationCountry), array_map(strtoupper(...), UnionMembership::members()), true)
+            && UnionMembership::isMember($destinationCountry)
         ) {
             throw ContradictoryExemption::exportInsideTheUnion($destinationCountry);
         }
@@ -200,6 +245,12 @@ final readonly class EnInvoiceTaxCategory
     public static function isGoods(?TaxArchetype $archetype): bool
     {
         return $archetype === TaxArchetype::ConsumerGoods;
+    }
+
+    /** Whether this is the category of an amount collected on behalf of another party, stated apart from the supply. */
+    public function isCollectedOnBehalf(): bool
+    {
+        return $this->vatexCode === self::COLLECTED_ON_BEHALF;
     }
 
     /** Whether this category must carry an exemption reason on the document band. */

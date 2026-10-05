@@ -23,6 +23,7 @@ return [
     'vat_reverse_charge' => 'Btw (verlegd)',
     'total' => 'Totaal',
     'total_including_vat' => 'Totaal inclusief :rate btw',
+    'collected_on_behalf' => 'Geïnd in naam en voor rekening van de verkoper',
     'reverse_charge_note' => 'Btw verlegd: de afnemer is de btw verschuldigd.',
     'small_business_note' => 'Vrijgesteld van btw op grond van de kleineondernemersregeling (§ 19 UStG).',
     'union_small_business_note' => 'Vrijgesteld van btw op grond van de kleineondernemersregeling van de lidstaat van de leverancier.',

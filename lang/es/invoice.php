@@ -23,6 +23,7 @@ return [
     'vat_reverse_charge' => 'IVA (inversión del sujeto pasivo)',
     'total' => 'Total',
     'total_including_vat' => 'Total con IVA del :rate incluido',
+    'collected_on_behalf' => 'Cobrado en nombre y por cuenta del vendedor',
     'reverse_charge_note' => 'Inversión del sujeto pasivo: el destinatario es responsable del IVA.',
     'small_business_note' => 'Exento de IVA en virtud del régimen de pequeñas empresas (§ 19 UStG).',
     'union_small_business_note' => 'Exento de IVA en virtud del régimen de pequeñas empresas del Estado miembro del proveedor.',

@@ -22,7 +22,7 @@ return [
     |
     */
 
-    'enabled' => env('BILLING_ENABLED', true),
+    'enabled' => (bool) env('BILLING_ENABLED', true),
 
     /*
     |--------------------------------------------------------------------------
@@ -93,10 +93,10 @@ return [
     'mollie' => [
         'api_key' => env('BILLING_MOLLIE_API_KEY'),
 
-        // Where Mollie sends the customer back and posts its status pings. It must be ABSOLUTE and
-        // reachable from the internet, which is why it is configuration rather than a generated route URL:
-        // a package cannot know the public host, and a URL generated from a CLI run — which is exactly
-        // where the scheduled billing run creates payments — has no request to take the host from.
+        // Where Mollie posts its status pings; customers return to the checkout URLs below. It must be
+        // ABSOLUTE and reachable from the internet, which is why it is configuration rather than a generated
+        // route URL: a package cannot know the public host, and a URL generated from a CLI run — which is
+        // exactly where the scheduled billing run creates payments — has no request to take the host from.
         //
         // Left null it falls back to the app URL joined with `billing.webhook_path`. That is right for a
         // single-host install and wrong for anything behind a tunnel in development, where the value has to
@@ -122,13 +122,14 @@ return [
         // ignored, so a trailing comma costs nothing. Both are accepted for as long as both are set;
         // delete the old one when the dashboard no longer signs with it.
         //
-        // Left null, the driver takes the legacy path: the ping is unsigned and the authentication is the
-        // fetch the mapper does, since an attacker cannot invent a status Mollie will confirm. That
-        // fallback is not optional — every install still on legacy webhooks would otherwise start refusing
-        // every ping on the day it updated.
+        // Left null, nothing is checked: every ping is authenticated by the fetch the mapper does, since an
+        // attacker cannot invent a status Mollie will confirm.
         //
-        // Set it, and an UNSIGNED ping is refused: you have said your account signs, so an unsigned
-        // request is either a misconfiguration or somebody knocking.
+        // Set it, and a request that carries a signature has to carry a valid one, and an UNSIGNED request
+        // shaped like a next-generation event (a `type` or an `entityId`) is refused, because that
+        // generation signs every delivery. The classic ping Mollie sends for each payment names the
+        // payment's id and nothing else and is never signed, whatever the dashboard says, so it is
+        // accepted either way and authenticated by the fetch.
         'webhook_secret' => env('BILLING_MOLLIE_WEBHOOK_SECRET'),
 
         // Where each point-of-sale terminal stands, as an ISO 3166 country code. A sale at the counter is taxed
@@ -140,16 +141,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Webhook path
+    | Webhook path and middleware
     |--------------------------------------------------------------------------
     |
     | The path the provider posts webhooks to, handled by the WebhookReceiver.
     | The route carries no middleware group (no CSRF) — the driver's verifier
     | authenticates the request by signature instead.
     |
+    | webhook_middleware is added to both webhook routes, empty by default. The
+    | package reads no network address anywhere, so it ships no throttle per
+    | address: a host that wants one names it here, for instance
+    | 'throttle:billing-webhooks' with a limiter of its own. Stripe and Mollie
+    | answer a 429 by sending the delivery again later.
+    |
     */
 
     'webhook_path' => env('BILLING_WEBHOOK_PATH', 'billing/webhook'),
+
+    'webhook_middleware' => [],
 
     /*
     |--------------------------------------------------------------------------
@@ -218,7 +227,7 @@ return [
 
     'subscribe_return_url' => env('BILLING_SUBSCRIBE_RETURN_URL'),
 
-    'mandate_verification_minor' => env('BILLING_MANDATE_VERIFICATION_MINOR', 1),
+    'mandate_verification_minor' => (int) env('BILLING_MANDATE_VERIFICATION_MINOR', 1),
 
     'checkout' => [
         'success_url' => env('BILLING_CHECKOUT_SUCCESS_URL'),
@@ -229,11 +238,11 @@ return [
         // that an adopter could not discover by reading the published config was the one they were most
         // likely to need. Absent it still falls back to the payment-methods route, exactly as before.
         'payment_methods_return_url' => env('BILLING_PAYMENT_METHODS_RETURN_URL'),
-        'promotion_codes' => env('BILLING_CHECKOUT_PROMOTION_CODES', true),
+        'promotion_codes' => (bool) env('BILLING_CHECKOUT_PROMOTION_CODES', true),
         // Whether a provider-taxed checkout asks the buyer for a tax ID. Stripe reverse-charges on an ID's format
         // before it verifies the ID, so a platform that sells to consumers can leave the field out and charge every
         // buyer the tax of their country. Only read while the provider computes tax.
-        'tax_id_collection' => env('BILLING_CHECKOUT_TAX_ID_COLLECTION', true),
+        'tax_id_collection' => (bool) env('BILLING_CHECKOUT_TAX_ID_COLLECTION', true),
     ],
 
     /*
@@ -342,10 +351,14 @@ return [
     | tables that already exist -- that is a data migration, and `billing:doctor`
     | reports the mismatch rather than leaving you to find it at the next insert.
     |
+    | Not set, it follows the framework: `Schema::morphUsingUuids()` or
+    | `Schema::morphUsingUlids()` in your application makes it `uuid` or `ulid`,
+    | and without either it is `int`.
+    |
     */
 
     'schema' => [
-        'host_key_type' => env('BILLING_HOST_KEY_TYPE', 'int'),
+        'host_key_type' => env('BILLING_HOST_KEY_TYPE'),
     ],
 
     /*
@@ -556,12 +569,20 @@ return [
     | event) rather than a passing outage. Set it under your provider's back-dated
     | acceptance window — past that window the usage cannot be billed at all.
     |
+    | closed_period_grace_minutes is how long after a billing period ends its
+    | usage can still reach that period's invoice. Stripe keeps a cycle invoice
+    | as a draft for an hour by default, and an account can set up to 72 hours.
+    | Usage of an ended period that reaches the flush later than that would be
+    | counted in the provider's meter and billed on no invoice, so it is marked
+    | failed and logged as an error instead. Set it to your account's grace.
+    |
     */
 
     'metering' => [
-        'max_attempts' => is_numeric($maxAttempts = env('BILLING_METERING_MAX_ATTEMPTS')) ? (int) $maxAttempts : 8,
+        'max_attempts' => is_numeric($maxAttempts = env('BILLING_METERING_MAX_ATTEMPTS')) && (int) $maxAttempts >= 1 ? (int) $maxAttempts : 8,
         'backoff_seconds' => 60,
         'stall_hours' => 6,
+        'closed_period_grace_minutes' => 60,
     ],
 
     /*
@@ -612,8 +633,9 @@ return [
     |--------------------------------------------------------------------------
     |
     | `billing:erase {owner}` answers a right-to-erasure request. It purges the
-    | owner's operational rows and their stored provider API keys, and scrubs the
-    | personal data out of the webhook payloads the package kept.
+    | owner's operational rows, as a buyer and as a merchant, and scrubs the
+    | personal data out of the webhook payloads the package kept. The package
+    | stores no provider API keys; if your app does, erasing them is yours.
     |
     | It deliberately does NOT delete their invoices. A valid invoice has to carry
     | the buyer's name and address (§14 UStG) and has to be kept for years (§147 AO,
@@ -627,10 +649,18 @@ return [
     | default — turn it on deliberately. The provider keeps its own invoice and
     | charge records regardless.
     |
+    | merchant_subscriptions decides what happens to the subscriptions fans hold
+    | with a merchant whose account is deleted. `now` ends them immediately;
+    | `period_end` lets each run to the end of the period the fan paid for and
+    | renew no more. Any other value reads as `now`. Either way their rows go
+    | with the merchant, so the package no longer sees a subscription that runs
+    | on to the end of its period.
+    |
     */
 
     'erasure' => [
-        'forget_customer' => env('BILLING_ERASURE_FORGET_CUSTOMER', false),
+        'forget_customer' => (bool) env('BILLING_ERASURE_FORGET_CUSTOMER', false),
+        'merchant_subscriptions' => env('BILLING_ERASURE_MERCHANT_SUBSCRIPTIONS', 'now'),
     ],
 
     'retention' => [
@@ -648,7 +678,10 @@ return [
 
         // The BOOK/BATCH window for the audit ledger: ten years (§257 HGB / §147 AO) — longer than the
         // invoice window above ON PURPOSE. The two numbers (3650 vs 2920) are different windows for different
-        // record classes, not a value that got out of sync; do not "unify" them.
+        // record classes, not a value that got out of sync; do not "unify" them. The produced tax returns
+        // and seller-reporting records keep this window too, counted from the END of the year a record was
+        // produced in, and so do the filings of a reporting period, which go together once the youngest of
+        // them has had it.
         'audit_days' => (int) env('BILLING_RETENTION_AUDIT_DAYS', 3650),
 
         // How long the evidence for a sale's country is kept. Deliberately LONGER than the document window
@@ -704,8 +737,11 @@ return [
     | One-time purchasable add-ons, keyed by add-on key: {label, provider_price,
     | price_display}. Like tiers, the client submits the add-on KEY, never a price.
     |
-    | An add-on grants EITHER money credit (the default — it lands on the owner's
-    | balance and reduces their next invoice) OR usage UNITS of a meter:
+    | An add-on grants EITHER money credit (the default for an add-on with no
+    | `grants` and no `archetype`, or with the `voucher` archetype — it lands on the
+    | owner's balance and reduces their next invoice) OR usage UNITS of a meter.
+    | An add-on with any other archetype is a product and credits nothing, and so
+    | is a work the register of works maps it to:
     |
     |   'extra_emails' => [
     |       'label' => 'Extra emails',
@@ -844,7 +880,7 @@ return [
     */
 
     'realtime' => [
-        'enabled' => env('BILLING_REALTIME', false),
+        'enabled' => (bool) env('BILLING_REALTIME', false),
 
         /*
          * Whether this package renders somewhere for those toasts to LAND.
@@ -862,7 +898,7 @@ return [
          * The third option is neither: leave this off and write your own one-line listener on
          * `wirekit-toast`, reading `detail.message` and `detail.variant`.
          */
-        'render_toast_region' => env('BILLING_REALTIME_TOAST_REGION', false),
+        'render_toast_region' => (bool) env('BILLING_REALTIME_TOAST_REGION', false),
     ],
 
     /*
@@ -872,8 +908,9 @@ return [
     |
     | Package-owned discount codes, keyed by the exact code the customer enters.
     | Each is EITHER a percentage off (`percent`, 1..100) OR a fixed amount off
-    | (`amount` in minor units + `currency`), with an optional `expires_at` date
-    | after which the code stops resolving. The package RESOLVES a code to a
+    | (`amount` in minor units + `currency`), with an optional `expires_at`: a
+    | date the code still resolves on, through the end of that day, or a moment
+    | with a time of day at which it stops. The package RESOLVES a code to a
     | Discount (DiscountResolver) — the neutral model the local engine's invoice
     | math will apply.
     |
@@ -1255,7 +1292,7 @@ return [
         // (the charge lands automatically when the trial ends); false lets the owner trial without one
         // (Stripe collects the card only if the trial converts). Per-tier override:
         // tiers.<key>.trial.requires_payment_method.
-        'requires_payment_method' => env('BILLING_TRIAL_REQUIRES_PM', true),
+        'requires_payment_method' => (bool) env('BILLING_TRIAL_REQUIRES_PM', true),
 
         // How many days before a trial ends the app-shell banner starts nudging the owner to pick a plan.
         'ending_within_days' => 3,
@@ -1286,6 +1323,15 @@ return [
         // (EAS "9930"). Configure at least one of endpoint_id / email / vat_id, or the e-invoice is rejected.
         'endpoint_id' => env('BILLING_COMPANY_ENDPOINT_ID'),
         'endpoint_scheme' => env('BILLING_COMPANY_ENDPOINT_SCHEME', 'EM'),
+        // The seller contact (BT-41 to BT-43). XRechnung requires all three on every document: a contact point
+        // such as a department, a telephone number and an email address.
+        'contact_name' => env('BILLING_COMPANY_CONTACT_NAME'),
+        'contact_phone' => env('BILLING_COMPANY_CONTACT_PHONE'),
+        'contact_email' => env('BILLING_COMPANY_CONTACT_EMAIL'),
+        // The account a document asks to be paid on by SEPA credit transfer (BT-84, BT-86). XRechnung requires
+        // payment instructions on every document, and they are written only when an IBAN is set.
+        'iban' => env('BILLING_COMPANY_IBAN'),
+        'bic' => env('BILLING_COMPANY_BIC'),
     ],
 
     /*
@@ -1488,15 +1534,14 @@ return [
     // them: the threshold figure and the reporting figure must agree about WHERE a reversal belongs. They
     // still disagree about its size, which is why there are two of them.
     //
-    // Two tickets specified this and said opposite things. DECIDED (owner, 2026-07-29): 'original_period' —
-    // a reversal reduces the period of the document it corrects. What hangs on it: a creator just under the small-business limit
-    // whose December sale tips them over, refunded in February. On 'reversal_period' the crossing stands and
-    // the settlements issued in between stay correct, while the year's figure includes turnover that was
-    // undone. On 'original_period' the year is clean — and unless a crossing that has already happened is
-    // explicitly kept, the tax stated in between becomes retrospectively unlawful across every one of those
-    // documents at once.
+    // The default is 'original_period': a reversal reduces the period of the document it corrects. What hangs
+    // on it: a creator just under the small-business limit whose December sale tips them over, refunded in
+    // February. On 'reversal_period' the crossing stands and the settlements issued in between stay correct,
+    // while the year's figure includes turnover that was undone. On 'original_period' the year is clean — and
+    // unless a crossing that has already happened is explicitly kept, the tax stated in between becomes
+    // retrospectively unlawful across every one of those documents at once.
     //
-    // 'original_period' is only safe BECAUSE the other half of that decision also holds: a crossing that has
+    // 'original_period' is only safe BECAUSE the other half of this default also holds: a crossing that has
     // already happened is final. `SmallBusinessAutoFlip` only ever flips forward, and a test pins the two
     // figures disagreeing on purpose — the year reads clean while the breach keeps its date. Setting this
     // back to 'reversal_period' is supported and changes only which window a reversal reduces; what must
@@ -1525,7 +1570,7 @@ return [
         // its first useful figure after the first year that could have breached a threshold — which is the
         // year it exists for.
         'us_state_gmv' => [
-            'enabled' => env('BILLING_TAX_COUNTER_US_STATE_GMV', false),
+            'enabled' => (bool) env('BILLING_TAX_COUNTER_US_STATE_GMV', false),
         ],
 
         // The reporting counter, and whether this installation is in a regime that has one at all.
@@ -1654,6 +1699,9 @@ return [
         'consultant' => env('BILLING_DATEV_CONSULTANT'),
         'client' => env('BILLING_DATEV_CLIENT'),
         'account_length' => (int) env('BILLING_DATEV_ACCOUNT_LENGTH', 4),
+        // The first day of the business year, as MM-DD. The batch header names where the business year begins,
+        // and a business year that does not begin on 1 January needs it set, or the header names the wrong one.
+        'business_year_start' => env('BILLING_DATEV_BUSINESS_YEAR_START', '01-01'),
 
         // Single-seller accounts: the revenue account (Gegenkonto) and the customer/receivables account
         // (Konto) every invoice books to when no chart of accounts is selected below. This is the shipped
@@ -1804,6 +1852,10 @@ return [
     // single seller in Germany needs it just as much. Off by default (`profile` null): no extra checkout
     // step, no changed receipt, byte-identical. Set a profile and the gate becomes fail-closed — a work
     // whose right extinguishes on delivery is not provided until the buyer's double consent is recorded.
+    //
+    // Unset, empty and `false` all mean off. `de` selects the German reading the package ships; a name of
+    // your own needs readings of your own bound for `ConsumerWithdrawalPolicy` and `ConformityUpdatePolicy`.
+    // Any other value is refused with an `InvalidBillingConfig` at the first question the regime is asked.
     'consumer_rights' => [
         'profile' => env('BILLING_CONSUMER_RIGHTS_PROFILE'),
         // There is deliberately no withdrawal-window length here, and the reason is no longer that one
@@ -1832,7 +1884,7 @@ return [
         // number — so a package that shipped one would be inventing a legal answer and hiding it in a
         // library. Empty means no end has been established, and updates keep flowing: the direction that
         // cannot harm a buyer. Set it once you have taken advice for your product class.
-        'conformity_update_period_days' => env('BILLING_CONFORMITY_UPDATE_PERIOD_DAYS'),
+        'conformity_update_period_days' => is_numeric(env('BILLING_CONFORMITY_UPDATE_PERIOD_DAYS')) ? (int) env('BILLING_CONFORMITY_UPDATE_PERIOD_DAYS') : null,
 
         // Whether a buyer can validly agree to give up that obligation AT ALL in your jurisdiction.
         //
@@ -1844,7 +1896,7 @@ return [
         //
         // Off, because whether SECURITY fixes can be waived at all is genuinely disputed. Turning it on is
         // your decision, taken on your own advice.
-        'allow_conformity_waiver' => env('BILLING_ALLOW_CONFORMITY_WAIVER', false) === true,
+        'allow_conformity_waiver' => (bool) env('BILLING_ALLOW_CONFORMITY_WAIVER', false),
     ],
 
     'tax_evidence' => [
@@ -1866,7 +1918,7 @@ return [
         //
         // Turn it off where your reading of data minimization differs. The rest of the evidence is
         // untouched, and a state counter then runs honestly on `unknown` rather than quietly on a guess.
-        'collect_subdivision' => env('BILLING_TAX_EVIDENCE_SUBDIVISION', true),
+        'collect_subdivision' => (bool) env('BILLING_TAX_EVIDENCE_SUBDIVISION', true),
 
         // Which countries' subdivisions are worth recording at all.
         //
@@ -1895,13 +1947,11 @@ return [
     // So turning it on is what makes the register exist for an installation, and turning it off is a
     // guarantee about behavior rather than an absence of code.
     //
-    // NAMING — deliberate deviation, worth reading once. The ticket that specified this layer called the
-    // key `billing.entitlements.enabled`, while its own opening says the collision with the existing
-    // Entitlements/License contracts was "deliberately avoided". Both cannot hold: this file's header says
-    // "keep entitlements in license.php", and an arch guard enforces that billing never reads
-    // `config('license.*')`. So the key is named after what it actually gates. A key that re-imported the
-    // word would guarantee that somebody eventually reads a tier check as proof of ownership, which is the
-    // one confusion the whole separation exists to prevent.
+    // NAMING — worth reading once. The key is not `billing.entitlements.enabled`, because entitlements are not
+    // this package's: this file's header says "keep entitlements in license.php", and an arch guard enforces
+    // that billing never reads `config('license.*')`. So the key is named after what it actually gates. A key
+    // that re-imported the word would guarantee that somebody eventually reads a tier check as proof of
+    // ownership, which is the one confusion the whole separation exists to prevent.
     'content_ownership' => [
         'enabled' => (bool) env('BILLING_CONTENT_OWNERSHIP_ENABLED', false),
 
@@ -1923,7 +1973,7 @@ return [
         // materialized at purchase, so off costs nothing to enforce -- a work added next month simply has no
         // row for an earlier buyer, and there is nothing to remember to switch off. On, a repeat call for the
         // same buyer tops up what has since been added.
-        'bundle_additive_default' => env('BILLING_BUNDLE_ADDITIVE_DEFAULT', false) === true,
+        'bundle_additive_default' => (bool) env('BILLING_BUNDLE_ADDITIVE_DEFAULT', false),
 
         // Whether a refund also ends access to the work.
         //
@@ -1931,12 +1981,12 @@ return [
         // in place after a goodwill refund is common and often the point -- the work has already been read, so
         // taking it back costs nothing to skip and turns a recovered customer into an angry one. Ending it is
         // right where the refund was a return rather than a gesture.
-        'revoke_on_refund' => env('BILLING_REVOKE_ON_REFUND', true) !== false,
+        'revoke_on_refund' => (bool) env('BILLING_REVOKE_ON_REFUND', true),
 
         // The same question for a lost dispute, and a different situation: a chargeback is involuntary,
         // decided by somebody else, and the money is already gone. There is no version of it where the
         // platform chose to give the work away, which is why the shipped answer is to end access.
-        'revoke_on_chargeback' => env('BILLING_REVOKE_ON_CHARGEBACK', true) !== false,
+        'revoke_on_chargeback' => (bool) env('BILLING_REVOKE_ON_CHARGEBACK', true),
     ],
 
     // Multi-merchant: a buyer pays this platform, and the money is destined for somebody else.
@@ -2054,6 +2104,26 @@ return [
         'negative_balance' => [
             'offset_against_payouts' => (bool) env('BILLING_MARKETPLACE_OFFSET_DEBT', true),
             'claim_after_days' => (int) env('BILLING_MARKETPLACE_CLAIM_AFTER_DAYS', 90),
+        ],
+
+        /*
+        | The dispute rate at which a seller needs a look, as a share of payments:
+        | 0.01 is one dispute per hundred payments. A rate read through
+        | DisputeRates is compared with it by reachesWarningThreshold().
+        |
+        | The card networks judge a seller by the month. Mastercard monitors a
+        | seller above 1% with at least 100 chargebacks, and calls it excessive
+        | from 1.5% with at least 100 in each of two consecutive months. Visa
+        | counts disputes and fraud reports together and calls a seller
+        | excessive from 1.5% in the US, Canada, the EU and Asia-Pacific (since
+        | 1 April 2026), with at least 1,500 cases in the month.
+        |
+        | The default warns at Mastercard's monitoring line. It sits below both
+        | excessive lines on purpose: the package counts disputes and no fraud
+        | reports, so the rate it reads is lower than the one Visa measures.
+        */
+        'dispute_rate' => [
+            'warn_at' => (float) env('BILLING_MARKETPLACE_DISPUTE_RATE_WARN_AT', 0.01),
         ],
 
         'seller_of_record' => [
@@ -2344,7 +2414,7 @@ return [
             // measured directly: `: null` is absent from pcov's line map entirely, where `: 7` and
             // `: strlen('abc')` in the same position are both counted. Wrapped, this single line
             // takes the whole package below its 100 % floor and no test can lift it back.
-            'commission_bps' => env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS') !== null ? (int) env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS') : null,
+            'commission_bps' => is_numeric(env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS')) ? (int) env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS') : null,
 
             // What the tip line is called on the buyer's hosted checkout page — the ONE string this
             // package puts in front of a buyer on somebody else's site. Configurable because a package
@@ -2360,7 +2430,7 @@ return [
             // both entries. Set it to allow a voluntary payment lower than a purchase -- or to 0 to carry no
             // floor on tips at all, which is a different answer from saying nothing.
             // ONE LINE ON PURPOSE -- DO NOT WRAP THIS TERNARY. See the note above `commission_bps`.
-            'minimum_minor' => env('BILLING_MARKETPLACE_TIPS_MINIMUM_MINOR') !== null ? (int) env('BILLING_MARKETPLACE_TIPS_MINIMUM_MINOR') : null,
+            'minimum_minor' => is_numeric(env('BILLING_MARKETPLACE_TIPS_MINIMUM_MINOR')) ? (int) env('BILLING_MARKETPLACE_TIPS_MINIMUM_MINOR') : null,
         ],
         'pwyw' => [
             'minimum_minor' => (int) env('BILLING_MARKETPLACE_PWYW_MINIMUM_MINOR', 0),

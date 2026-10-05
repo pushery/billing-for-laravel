@@ -197,6 +197,8 @@ final readonly class SellerDataEscalationSweep
     {
         $episode->forceFill(['stage' => Stage::MeasureActive, 'measure' => $measure, 'measure_started_at' => $now])->save();
 
+        // On an account already suspended for another reason this changes nothing, because the first reason
+        // stays. A capability report that lifts its own suspension later passes it to this measure instead.
         if ($measure === SellerDataMeasure::SuspendSales) {
             $this->lifecycle->suspend($account, self::SUSPENSION_REASON);
         }

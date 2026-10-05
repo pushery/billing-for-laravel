@@ -6,6 +6,7 @@ namespace Pushery\Billing\Notifications;
 
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Enums\BillingAction;
 
 /**
  * Sent when a payment method that could be charged off-session was removed — a detached card, a revoked
@@ -25,7 +26,7 @@ final class PaymentMethodRemovedNotification extends BillingNotification
         return $this->withAction(
             $mail,
             Lang::get('billing::notifications.payment_method_removed.cta'),
-            $this->actionUrl('billing.account.payment-methods'),
+            $this->actionFor($notifiable, BillingAction::PaymentMethods),
         );
     }
 

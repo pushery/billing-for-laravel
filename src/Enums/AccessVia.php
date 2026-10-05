@@ -10,10 +10,9 @@ namespace Pushery\Billing\Enums;
  *
  * ## Why this is not GrantSource
  *
- * The ticket that specified this reader asked for `via: GrantSource` and, two acceptance criteria later, for
- * `via = SUBSCRIPTION`. Both cannot hold: `GrantSource` deliberately has no subscription case, because
- * persisting one would freeze a state as a fact and leave, at the first cancellation, a row saying somebody
- * owns what they only ever rented.
+ * `via` cannot be a `GrantSource` and also answer `SUBSCRIPTION`: `GrantSource` deliberately has no
+ * subscription case, because persisting one would freeze a state as a fact and leave, at the first
+ * cancellation, a row saying somebody owns what they only ever rented.
  *
  * The way out is that these are two different questions. `GrantSource` is a COLUMN — how a row came to
  * exist, written once and never recomputed. This is an ANSWER — computed per read, never stored, and one of

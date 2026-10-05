@@ -16,6 +16,7 @@ use Pushery\Billing\Enums\SettlementDocumentType;
 use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Enums\VoucherEvent;
+use Pushery\Billing\Exceptions\InvalidBillingConfig;
 use Pushery\Billing\Exceptions\InvalidDatevBatch;
 use Pushery\Billing\Marketplace\MerchantLiabilityAccounts;
 use Pushery\Billing\Marketplace\RegimeBookingGate;
@@ -473,7 +474,7 @@ final readonly class DatevExport
             '', $this->quote(''), $this->quote(''), $this->quote(''),
             $this->number('consultant'),
             $this->number('client'),
-            $from->copy()->startOfYear()->format('Ymd'),
+            $this->businessYearStart($from)->format('Ymd'),
             (string) $this->accountLength(),
             $from->format('Ymd'),
             $to->format('Ymd'),
@@ -907,8 +908,10 @@ final readonly class DatevExport
             return $this->accounts->resolve($crossBorder);
         }
 
+        // The statutory rate where the document records one. The stated rate of a gross-priced sale is the quotient
+        // of its rounded amounts, 6.96 % for a 9.99 ebook, and read alone it booked that sale at 19 %.
         return $this->accounts->resolve(
-            $invoice->tax_rate_bps === 700 ? DatevTransaction::FanRevenueReduced : DatevTransaction::FanRevenueStandard
+            ($invoice->supply_rate_bps ?? $invoice->tax_rate_bps) === 700 ? DatevTransaction::FanRevenueReduced : DatevTransaction::FanRevenueStandard
         );
     }
 
@@ -929,6 +932,9 @@ final readonly class DatevExport
      * a debit" with no qualifier, while `settlementChain()`'s own scoped the same statement correctly — the
      * direction of a booking is not a detail to be wrong about in prose.
      *
+     * The amount carries the decimal places of its currency, as every other row of the batch does: none for
+     * the yen, three for the Kuwaiti dinar.
+     *
      * @param  list<string>  $textParts
      * @param  array{0: int, 1: int}|null  $transactionKey
      * @return list<string>
@@ -936,7 +942,7 @@ final readonly class DatevExport
     private function chainRow(int $amountMinor, string $currency, DatevAccount $konto, string $gegenkonto, CarbonInterface $date, string $reference, array $textParts, ?array $transactionKey = null, string $marker = 'S'): array
     {
         return $this->row(
-            number_format(abs($amountMinor) / 100, 2, ',', ''),
+            str_replace('.', ',', Money::of(abs($amountMinor), $currency)->toDecimal()),
             $marker,
             $currency,
             $konto->number,
@@ -1025,16 +1031,11 @@ final readonly class DatevExport
         // The fourth place this exporter has to know the reduced rate, and the one that used to fall
         // through. `creator_input_de_reduced` ships unmapped, so this resolves to a refusal unless the
         // operator has confirmed an account — which is what the paragraph above always claimed happened.
-        return ($rate ?? $invoice->tax_rate_bps) === 700
+        return ($rate ?? $invoice->supply_rate_bps ?? $invoice->tax_rate_bps) === 700
             ? DatevTransaction::CreatorInputDeReduced
             : DatevTransaction::CreatorInputDeStandard;
     }
 
-    /**
-     * The gross total's UNSIGNED magnitude as a DATEV decimal (comma separator, no thousands), e.g.
-     * "119,00". The sign never appears here — direction is the Soll/Haben marker's job (see booking()) —
-     * so a negative-total invoice books its magnitude with "H", not a minus DATEV would reject.
-     */
     /**
      * The document's frozen rate, or null where the row needs none — and null now means exactly that.
      *
@@ -1096,6 +1097,11 @@ final readonly class DatevExport
         return str_replace('.', ',', number_format($rate->rateScaled / FrozenExchangeRate::SCALE, 8, '.', ''));
     }
 
+    /**
+     * The gross total's UNSIGNED magnitude as a DATEV decimal (comma separator, no thousands), e.g.
+     * "119,00". The sign never appears here — direction is the Soll/Haben marker's job (see booking()) —
+     * so a negative-total invoice books its magnitude with "H", not a minus DATEV would reject.
+     */
     private function amount(InvoiceRecord $invoice): string
     {
         return str_replace('.', ',', $invoice->total()->absolute()->toDecimal());
@@ -1107,6 +1113,26 @@ final readonly class DatevExport
         $value = $this->datev()[$key] ?? null;
 
         return is_scalar($value) ? (string) $value : '';
+    }
+
+    /**
+     * The first day of the business year $day falls in, from `billing.datev.business_year_start` as MM-DD.
+     *
+     * The header names where the batch's business year begins, and a business year need not begin on 1 January.
+     * A batch never spans posting periods, so it never spans two business years either.
+     */
+    private function businessYearStart(CarbonInterface $day): CarbonInterface
+    {
+        $configured = $this->datev()['business_year_start'] ?? '01-01';
+
+        if (! is_string($configured) || preg_match('/^(\d{2})-(\d{2})$/', $configured, $parts) !== 1
+            || ! checkdate((int) $parts[1], (int) $parts[2], 2001)) {
+            throw InvalidBillingConfig::forKey('billing.datev.business_year_start', 'must be a day of the year as MM-DD, such as 07-01');
+        }
+
+        $start = $day->copy()->setDate($day->year, (int) $parts[1], (int) $parts[2])->startOfDay();
+
+        return $start->greaterThan($day) ? $start->subYear() : $start;
     }
 
     private function accountLength(): int

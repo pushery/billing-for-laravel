@@ -149,7 +149,11 @@ final readonly class SubdivisionGrossSalesCounter
             // the buyer paid twice. The same predicate every aggregate in the package asks.
             ->whereNull('reissue_of_invoice_id')
             ->whereNull('credited_invoice_id')
-            ->whereBetween('issued_at', [$period->from, $period->until]);
+            // `[from, until)`, as the period is defined: one window ends where the next begins, and a receipt on
+            // that line, which is where a cycle receipt dated to its period's start sits, belongs to the later
+            // window only.
+            ->where('issued_at', '>=', $period->from)
+            ->where('issued_at', '<', $period->until);
     }
 
     /**

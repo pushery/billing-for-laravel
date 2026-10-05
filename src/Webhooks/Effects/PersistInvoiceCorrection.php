@@ -10,6 +10,7 @@ use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Events\InvoiceCorrected;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\Support\UniqueRow;
 use Pushery\Billing\ValueObjects\InvoiceCorrectionSnapshot;
 
 /**
@@ -44,7 +45,8 @@ final readonly class PersistInvoiceCorrection
 
         $original = $this->correctedInvoice($snapshot);
 
-        InvoiceRecord::model()::query()->updateOrCreate(
+        UniqueRow::updateOrCreate(
+            InvoiceRecord::model()::query(),
             ['provider' => $snapshot->provider, 'provider_id' => $snapshot->providerId],
             $this->attributes($owner, $snapshot, $original),
         );
@@ -110,6 +112,18 @@ final readonly class PersistInvoiceCorrection
      */
     private function buyer(InvoiceCorrectionSnapshot $snapshot, ?InvoiceRecord $original): array
     {
+        // A credit note stored with a buyer keeps it. It arrived before its invoice and was issued to whoever its own
+        // payload named, and an issued document's buyer does not change once it names somebody. Only an empty one
+        // takes the invoice's buyer when that arrives.
+        $stored = InvoiceRecord::model()::query()
+            ->where('provider', $snapshot->provider)
+            ->where('provider_id', $snapshot->providerId)
+            ->first()?->buyer;
+
+        if (is_array($stored) && $stored !== []) {
+            return $stored;
+        }
+
         $fromOriginal = $original?->buyer;
 
         if (is_array($fromOriginal) && $fromOriginal !== []) {

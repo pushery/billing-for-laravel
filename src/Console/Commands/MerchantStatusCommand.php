@@ -122,7 +122,9 @@ final class MerchantStatusCommand extends Command
      */
     private function accounts(): Collection
     {
-        $query = MerchantAccount::model()::query()->orderBy('merchant_type')->orderBy('merchant_id');
+        // With every account's merchant, which the requirements column reads per row: loaded one at a time it
+        // is a query per account, and a host running `Model::preventLazyLoading()` refuses it from the second.
+        $query = MerchantAccount::model()::query()->with('merchant')->orderBy('merchant_type')->orderBy('merchant_id');
 
         $type = $this->option('type');
         $id = $this->option('id');

@@ -54,7 +54,8 @@ final class RegimeNotPermitted extends RuntimeException
     }
 
     /**
-     * A goods leg the platform only arranged, about to be booked as the platform's own income.
+     * A goods leg the platform only arranged, about to be booked to an account that does not hold money passing
+     * through, most often the platform's own income.
      *
      * Worth its own message because the symptom is not a wrong classification: the accounts that hold
      * revenue commonly apply a tax rate by themselves, so the booking invents tax nobody charged and nobody
@@ -64,7 +65,8 @@ final class RegimeNotPermitted extends RuntimeException
     {
         return new self(
             "A goods leg cannot be booked as \"{$transaction}\" in an intermediated sale: the platform never "
-            .'owned the goods, so the money is passing through it rather than being earned by it. A revenue '
+            .'owned the goods, so the money is passing through it rather than being earned by it, and only an '
+            .'account for money passing through takes it. A revenue '
             .'account would make the whole sale the platform\'s turnover and, on an account that applies a '
             .'rate by itself, invent tax nobody charged. Book it as a transit item.'
         );

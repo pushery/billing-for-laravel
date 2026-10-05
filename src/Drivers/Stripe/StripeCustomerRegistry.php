@@ -39,6 +39,11 @@ final readonly class StripeCustomerRegistry implements CustomerRegistry
      * The billable's Stripe customer reference, creating the customer when there is none. A new customer
      * is stamped with the billable's email and name (so the invoice and the receipt are not anonymous)
      * and a back-reference to the owner, and its id is persisted on the reference column.
+     *
+     * Two first checkouts of one owner at once would each create a customer, and the second write would leave
+     * the first customer, and every webhook about it, without an owner. So a stored owner's row is read again
+     * under a lock before a customer is created: the second request waits for the first and takes the customer
+     * it made.
      */
     public function resolve(Model $billable): string
     {
@@ -48,6 +53,28 @@ final readonly class StripeCustomerRegistry implements CustomerRegistry
             return $existing;
         }
 
+        if (! $billable->exists) {
+            return $this->create($billable);
+        }
+
+        return $billable->getConnection()->transaction(function () use ($billable): string {
+            $stored = $billable->newQueryWithoutScopes()->whereKey($billable->getKey())->lockForUpdate()->value($this->column());
+            $existing = is_string($stored) && $stored !== '' ? $stored : null;
+
+            if ($existing === null) {
+                return $this->create($billable);
+            }
+
+            $billable->setAttribute($this->column(), $existing);
+            $billable->syncOriginalAttribute($this->column());
+
+            return $existing;
+        });
+    }
+
+    /** Create the billable's Stripe customer and persist its reference. */
+    private function create(Model $billable): string
+    {
         $key = $billable->getKey();
 
         $customer = $this->stripe->customers->create(array_filter([
