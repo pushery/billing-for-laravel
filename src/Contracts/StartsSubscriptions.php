@@ -39,10 +39,10 @@ use Pushery\Billing\ValueObjects\SubscriptionStart;
  *
  * ## A coupon CODE rides along, and `honorsCoupon()` is why it is not a silent loss
  *
- * The code is client input like the tier key, so it is a code and never a discount amount. The reason it
- * is on this contract at all is that the alternative was measured and rejected: a screen that asks this
- * interface while only the hosted-checkout one accepts a code has to drop it on the floor, and the
- * customer then types a code, sees it accepted, and is charged full price with nothing said.
+ * The code is client input like the tier key, so it is a code and never a discount amount. It is on this
+ * contract because the alternative loses it: a screen that asks this interface while only the
+ * hosted-checkout one accepts a code has to drop it on the floor, and the customer then types a code,
+ * sees it accepted, and is charged full price with nothing said.
  *
  * `honorsCoupon()` closes that at the only moment where closing it is worth anything -- BEFORE the
  * customer commits. It answers for the driver that is actually configured, because the two catalogs are

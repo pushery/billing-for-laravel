@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Marketplace;
 
+use Illuminate\Container\Container;
+use Illuminate\Support\Facades\DB;
+use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Exceptions\ReportingNotPlausible;
 use Pushery\Billing\Models\ReportingFindingAcknowledgement;
+use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\ValueObjects\PlausibilityFinding;
 use Pushery\Billing\ValueObjects\SellerPeriodReport;
 
@@ -124,6 +128,51 @@ final readonly class ReportingPlausibilityGate
             'acknowledged_by' => $by,
             'reason' => $reason,
         ]);
+    }
+
+    /**
+     * Take back an answer to one finding, for this period, on the record.
+     *
+     * The answer itself cannot be edited, so a judgment that changed is withdrawn and given again. The row goes,
+     * and an audit entry keeps what it said beside who withdrew it and why: a withdrawn answer that left no trace
+     * would read like one that was never given. The finding stands open again until somebody answers it.
+     *
+     * @return bool whether there was an answer to withdraw
+     */
+    public function withdraw(
+        int $year,
+        string $currency,
+        PlausibilityFinding $finding,
+        string $by,
+        string $reason,
+    ): bool {
+        $acknowledgement = ReportingFindingAcknowledgement::model()::query()
+            ->where('period_year', $year)
+            ->where('currency', strtoupper($currency))
+            ->where('finding_key', $finding->key())
+            ->first();
+
+        if (! $acknowledgement instanceof ReportingFindingAcknowledgement) {
+            return false;
+        }
+
+        $log = Container::getInstance()->make(BillingEventLog::class);
+
+        DB::transaction(static function () use ($acknowledgement, $log, $by, $reason): void {
+            $log->record('reporting.acknowledgement_withdrawn', null, [
+                'period_year' => $acknowledgement->period_year,
+                'currency' => $acknowledgement->currency,
+                'finding_key' => $acknowledgement->finding_key,
+                'acknowledged_by' => $acknowledgement->acknowledged_by,
+                'acknowledged_reason' => $acknowledgement->reason,
+                'withdrawn_by' => $by,
+                'reason' => $reason,
+            ], AuditSource::Admin);
+
+            ReportingFindingAcknowledgement::purging(static fn (): ?bool => $acknowledgement->delete());
+        });
+
+        return true;
     }
 
     /** @return list<string> */

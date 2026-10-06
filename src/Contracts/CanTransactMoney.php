@@ -11,8 +11,8 @@ use Illuminate\Database\Eloquent\Model;
  * `OneTimeCharge` and `SubscriptionActions::swap`. It answers whether the owner may transact (age / KYC),
  * and denies unless positively eligible — the default is deny.
  *
- * It is deliberately NOT run on `PaymentRails::charge()` or `offSessionCharge()`, and this docblock used to
- * list both. `PaymentRails` states the rule and the reason in full, and it is worth knowing here too: an
+ * It is deliberately NOT run on `PaymentRails::charge()` or `offSessionCharge()`. `PaymentRails` states the
+ * rule and the reason in full, and it is worth knowing here too: an
  * off-session charge is what a dunning retry uses, and a subscriber who was eligible when they subscribed
  * can later fail an age or KYC predicate. Gating there would refuse to collect money the customer already
  * owes — so a gate at the low layer looks more central and is wrong twice over.

@@ -13,8 +13,8 @@ use Pushery\Billing\Support\UniqueRow;
 /**
  * Keeps every dispute a provider opened, so the rate a card network measures can be read.
  *
- * The networks count a dispute when it is opened, not when it is decided, and the package used to keep only
- * the decided ones. Recorded once per dispute: the claim is on the provider's own reference for it, which is
+ * The networks count a dispute when it is opened, not when it is decided, so keeping only the decided ones
+ * would understate the rate. Recorded once per dispute: the claim is on the provider's own reference for it, which is
  * the one identifier a redelivery is guaranteed to repeat.
  *
  * The merchant is resolved from the reference the event names, and a reference no local merchant answers to

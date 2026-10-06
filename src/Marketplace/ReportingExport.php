@@ -58,9 +58,8 @@ final readonly class ReportingExport
      */
     public function produce(int $year, string $currency, ?CarbonInterface $at = null): ReportingExportRecord
     {
-        // Read once, and judged over exactly what is rendered. The gate used to read the whole period on its own
-        // and the export read it again, so every seller was computed twice, and two readings of a period that
-        // changed in between could disagree without anybody seeing it.
+        // Read once, and judged over exactly what is rendered: one reading, so the gate and the export cannot judge
+        // two different states of a period that changed in between, and no seller is computed twice.
         $reports = $this->period->reportsFor($year, $currency);
 
         $this->gate->assertClear($year, $currency, $reports);

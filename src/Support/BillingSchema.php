@@ -42,11 +42,11 @@ use Illuminate\Support\Facades\Config;
  *
  * An application keyed by UUIDs or ULIDs says so to the framework with `Schema::morphUsingUuids()` or
  * `morphUsingUlids()`, and every morph the framework declares follows that. Without a setting of its own this
- * package follows the same answer. It used to read `int` instead, while the morph columns it declared through
- * the framework followed the switch: a fresh installation got UUID morph columns beside integer host keys, in
- * some tables side by side, and on MySQL and PostgreSQL the migrations stopped part way. A setting that is given
- * wins, and on the integer path every morph is declared numeric, so the columns agree with the keys beside them
- * whatever the framework's default says.
+ * package follows the same answer. Reading `int` instead, while the morph columns it declares through the
+ * framework follow the switch, would give a fresh installation UUID morph columns beside integer host keys, in
+ * some tables side by side, and on MySQL and PostgreSQL the migrations would stop part way. A setting that is
+ * given wins, and on the integer path every morph is declared numeric, so the columns agree with the keys beside
+ * them whatever the framework's default says.
  *
  * ## Changing it later is a data migration, not a setting change
  *

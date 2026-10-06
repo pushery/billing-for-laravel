@@ -12,6 +12,7 @@ use Pushery\Billing\Contracts\SuppliesBuyerAudiences;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Enums\BuyerAudience;
 use Pushery\Billing\Enums\TaxArchetype;
+use Pushery\Billing\Support\KeyedConfig;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\UnitGrant;
 
@@ -49,15 +50,15 @@ final readonly class ConfigAddonCatalog implements AddonCatalog, ClassifiesMoney
 
     public function label(string $key): string
     {
-        $label = $this->config->get("billing.addons.{$key}.label");
+        $label = KeyedConfig::setting($this->config, 'billing.addons', $key, 'label');
 
         return is_string($label) ? $label : $key;
     }
 
     public function priceFor(string $key): ?Money
     {
-        $amount = $this->config->get("billing.addons.{$key}.price_display.amount");
-        $currency = $this->config->get("billing.addons.{$key}.price_display.currency");
+        $amount = KeyedConfig::setting($this->config, 'billing.addons', $key, 'price_display.amount');
+        $currency = KeyedConfig::setting($this->config, 'billing.addons', $key, 'price_display.currency');
 
         return is_int($amount) && is_string($currency) ? Money::of($amount, $currency) : null;
     }
@@ -97,7 +98,7 @@ final readonly class ConfigAddonCatalog implements AddonCatalog, ClassifiesMoney
      */
     public function grantsFor(string $key): ?UnitGrant
     {
-        $grant = $this->config->get("billing.addons.{$key}.grants");
+        $grant = KeyedConfig::setting($this->config, 'billing.addons', $key, 'grants');
 
         if ($grant === null) {
             return null;
@@ -116,7 +117,7 @@ final readonly class ConfigAddonCatalog implements AddonCatalog, ClassifiesMoney
     /** Who may buy the offer, from `billing.addons.<key>.buyers`: anyone unless it says `business`. */
     public function audienceFor(string $key): BuyerAudience
     {
-        return BuyerAudience::fromConfig($this->config->get("billing.addons.{$key}.buyers"), "billing.addons.{$key}");
+        return BuyerAudience::fromConfig(KeyedConfig::setting($this->config, 'billing.addons', $key, 'buyers'), "billing.addons.{$key}");
     }
 
     /**
@@ -129,7 +130,7 @@ final readonly class ConfigAddonCatalog implements AddonCatalog, ClassifiesMoney
      */
     public function archetypeFor(string $key): ?TaxArchetype
     {
-        $archetype = $this->config->get("billing.addons.{$key}.archetype");
+        $archetype = KeyedConfig::setting($this->config, 'billing.addons', $key, 'archetype');
 
         if ($archetype === null) {
             return null;

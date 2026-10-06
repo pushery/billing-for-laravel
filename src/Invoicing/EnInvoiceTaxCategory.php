@@ -16,34 +16,33 @@ use Pushery\Billing\Tax\UnionMembership;
  *
  * ## Why this is one class and not a ternary in each writer
  *
- * Both writers used to derive the category themselves, from the same chain of two booleans:
- * `$reverseCharge ? 'AE' : ($exempt ? 'E' : ($rate > 0 ? 'S' : 'Z'))`. Two copies of a rule are two places
- * it can drift, and the drift has no symptom — each document is internally consistent, and only a reader
+ * A category each writer derived itself would be two copies of one rule, and two copies are two places
+ * it can drift. The drift has no symptom — each document is internally consistent, and only a reader
  * comparing a UBL and a CII rendering of the SAME invoice would ever see them disagree.
  *
  * ## What the two booleans could not say
  *
- * They reach four categories, and the missing ones are not edge cases:
+ * A chain of two booleans, `$reverseCharge ? 'AE' : ($exempt ? 'E' : ($rate > 0 ? 'S' : 'Z'))`, reaches
+ * four categories, and the missing ones are not edge cases:
  *
- * - **`G`** — an export of goods to a third country used to render as `Z`. Those are different statements.
- *   `Z` says "the supplier taxed this at 0%"; `G` says "this was exported, no tax charged". Different
- *   exemption code, different treatment at the recipient, and the difference is not recoverable from the
- *   document afterwards.
- * - **`K`** — an exempt intra-community supply of GOODS used to render as `AE`. `AE` is the services term;
+ * - **`G`** — an export of goods to a third country, which the chain renders as `Z`. Those are different
+ *   statements. `Z` says "the supplier taxed this at 0%"; `G` says "this was exported, no tax charged".
+ *   Different exemption code, different treatment at the recipient, and the difference is not recoverable
+ *   from the document afterwards.
+ * - **`K`** — an exempt intra-community supply of GOODS, which the chain renders as `AE`. `AE` is the services term;
  *   goods take `K` with VATEX-EU-IC.
  *
  * The distinction both need is goods-versus-services, and that is a fact about the product, which the
  * document already freezes as `tax_archetype`. So the category is decided from the frozen exemption reason
  * AND the frozen archetype — never from the amount, which is the same zero in every one of these cases.
  *
- * - **`O`** — a SERVICE placed outside the union is outside the SCOPE of VAT, not taxed at zero. It used to
- *   render as `Z`, which says the tax reached the supply and the rate was nothing; `O` says it never
- *   reached it. Introducing it required enforcing BR-O-11 first, which is why it arrived later than the
- *   others: the category is **exclusive**, so an invoice carrying an O breakdown may carry no other, and
+ * - **`O`** — a SERVICE placed outside the union is outside the SCOPE of VAT, not taxed at zero. `Z` would
+ *   say the tax reached the supply and the rate was nothing; `O` says it never reached it. It rests on
+ *   BR-O-11: the category is **exclusive**, so an invoice carrying an O breakdown may carry no other, and
  *   the BR-O-* rules forbid it stating a tax amount or a rate at all. A taxed band on such a document is
  *   refused here rather than downgraded, because the business answer is two documents and a downgrade
  *   would file a supply frozen as outside the scope as though it had been taxed.
- * - **`E` with `VATEX-EU-F`** — a margin-taxed resale used to render as `Z`, and it is neither zero-rated nor
+ * - **`E` with `VATEX-EU-F`** — a margin-taxed resale is not `Z`, because it is neither zero-rated nor
  *   exempt: tax is due, contained in the margin, and the document may not state it. EN 16931 has a statement
  *   for exactly that, category `E` carrying the margin scheme's own exemption code. It is decided from the
  *   frozen `taxation_basis` before any exemption reason, because a margin document that also names one is a
@@ -139,11 +138,10 @@ final readonly class EnInvoiceTaxCategory
                 throw ContradictoryExemption::taxedMarginSupply($rate);
             }
 
-            // ONE CODE PER GOODS CLASS, and this used to answer `VATEX-EU-F` for all of them with a comment
-            // saying second-hand was the only wording the package shipped. The directive names three
-            // classes and gives each its own exemption code, so a work of art went out under the
-            // second-hand code -- a statement about WHICH scheme applied, wrong, in the field a receiving
-            // system reads to decide how to book it.
+            // ONE CODE PER GOODS CLASS. The directive names three classes and gives each its own exemption
+            // code, so one code for all of them would send a work of art out under the second-hand code --
+            // a statement about WHICH scheme applied, wrong, in the field a receiving system reads to decide
+            // how to book it.
             //
             // Read off the basis' own goods class rather than matched a second time here: the enum names
             // the three, and a second mapping is a second answer to one question.

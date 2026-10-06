@@ -367,11 +367,11 @@ final readonly class DatevExport
      * period batch reports the amount instead of letting it vanish — {@see CreditMovement::booksAgainstMoney()}
      * is the same fact where a caller can read it.
      *
-     * AND THE REDEMPTION OF SUCH A CREDIT IS NOT BOOKED EITHER, which is the correction of 2026-09-16.
-     * The balance is fungible, so an offset used to take the route above for its whole amount and debit the
-     * liability — including the part that was never credited to it, because the grant books nothing. The
-     * account therefore ran into debit by exactly the proration share on every offset that touched one: a
-     * liability slowly turning into an asset, in a file that stays valid and reconciles against itself.
+     * AND THE REDEMPTION OF SUCH A CREDIT IS NOT BOOKED EITHER. The balance is fungible, so an offset that
+     * took the route above for its whole amount would debit the liability — including the part that was never
+     * credited to it, because the grant books nothing. The account would run into debit by exactly the
+     * proration share on every offset that touched one: a liability slowly turning into an asset, in a file
+     * that stays valid and reconciles against itself.
      *
      * So an offset books only {@see CreditMovement::bookedAmount()}, the part with money behind it, and one
      * paid for entirely out of a proration credit emits no row at all. That is the decision this package
@@ -484,10 +484,10 @@ final readonly class DatevExport
             // as "0" stays alterable after import, which is what GoBD does not permit; the flag is a
             // property of the exported batch, not a preference, so it is not configurable.
             //
-            // Field 22 used to be a hard-coded 'EUR'. Every booking row already carries its document's own
-            // currency, so an installation invoicing in anything else exported rows in one currency under a
-            // header declaring another — internally contradictory, and the sort of thing an importer either
-            // rejects or, worse, silently believes.
+            // Field 22 is the batch's currency, never a fixed 'EUR'. Every booking row already carries its
+            // document's own currency, so a fixed header would export an installation invoicing in anything
+            // else as rows in one currency under a header declaring another — internally contradictory, and
+            // the sort of thing an importer either rejects or, worse, silently believes.
             '', '1', '0', '1', $this->quote($currency),
             '', '', '', '', '', '', '', '', '',
         ]);
@@ -928,9 +928,7 @@ final readonly class DatevExport
      *
      * A debit of the Konto **in the ordinary case** — `$marker` defaults to `'S'` and most callers take it.
      * It is not always: `settlementChain()` computes `$invoice->isCorrection() ? 'H' : 'S'` and passes it to
-     * all three legs, so every row of a correcting settlement is a CREDIT. This docblock used to say "always
-     * a debit" with no qualifier, while `settlementChain()`'s own scoped the same statement correctly — the
-     * direction of a booking is not a detail to be wrong about in prose.
+     * all three legs, so every row of a correcting settlement is a CREDIT.
      *
      * The amount carries the decimal places of its currency, as every other row of the batch does: none for
      * the yen, three for the Kuwaiti dinar.
@@ -1028,30 +1026,27 @@ final readonly class DatevExport
                 : DatevTransaction::CreatorInputThirdCountryReverseCharge;
         }
 
-        // The fourth place this exporter has to know the reduced rate, and the one that used to fall
-        // through. `creator_input_de_reduced` ships unmapped, so this resolves to a refusal unless the
-        // operator has confirmed an account — which is what the paragraph above always claimed happened.
+        // The fourth place this exporter has to know the reduced rate, and the one a fall-through would
+        // book to the standard account. `creator_input_de_reduced` ships unmapped, so this resolves to a
+        // refusal unless the operator has confirmed an account, as the paragraph above says.
         return ($rate ?? $invoice->supply_rate_bps ?? $invoice->tax_rate_bps) === 700
             ? DatevTransaction::CreatorInputDeReduced
             : DatevTransaction::CreatorInputDeStandard;
     }
 
     /**
-     * The document's frozen rate, or null where the row needs none — and null now means exactly that.
-     *
-     * It used to mean two things, and the second one shipped a wrong booking:
+     * The document's frozen rate, or null where the row needs none — and null means exactly that.
      *
      * - **The row is already in the base currency.** DATEV wants fields 4-6 EMPTY there, so filling them
-     *   would be the defect. This is also what keeps a single-currency install byte-identical: the branch
-     *   is never entered, and its export is the file it always was. This is the one remaining null.
-     * - **A foreign-currency document with no frozen rate** also answered null, and the docblock called it
-     *   correct. What such a row does is stated a few hundred lines up, in this same file: the import either
-     *   rejects it or books it at face value, overstating the revenue by the exchange rate. Two comments in
-     *   one file, one calling the output correct and the other describing it as a wrong booking.
+     *   would be the defect. A single-currency install never enters the branch, so its export carries no
+     *   rate at all. This is the one null.
+     * - **A foreign-currency document with no frozen rate** is not a null: it refuses the batch. Such a row,
+     *   exported, is the wrong booking stated a few hundred lines up in this same file: the import either
+     *   rejects it or books it at face value, overstating the revenue by the exchange rate.
      *
-     *   It refuses the batch now, which is the answer this file already gives to four other unexportable
-     *   states. **Refusing is not dropping** — the objection that dropping hides revenue is right, and it is
-     *   an objection to dropping. A refused batch exports nothing and says why.
+     *   Refusing is the answer this file already gives to four other unexportable states. **Refusing is not
+     *   dropping** — the objection that dropping hides revenue is right, and it is an objection to dropping.
+     *   A refused batch exports nothing and says why.
      *
      * Deriving a rate at export time stays off the table: that is the divergence the freeze exists to
      * prevent, and the books and the document would then disagree with only the books re-derivable.

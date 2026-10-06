@@ -58,19 +58,19 @@ final readonly class SubscriptionPeriodSchedule
             throw new InvalidArgumentException("A term is supplied in at least one period; got {$periods}.");
         }
 
-        // The cut itself lives in SubscriptionPeriods, which is the one implementation of it. There used to
-        // be two — this method walked the calendar with `addMonth()`, accumulating each boundary from the one
-        // before — and the second one was wrong in a way that reached a release:
+        // The cut itself lives in SubscriptionPeriods, which is the one implementation of it. A second one
+        // here, walking the calendar with `addMonth()` and accumulating each boundary from the one before,
+        // would be wrong in a way nothing shows:
         //
         // `addMonth()` OVERFLOWS. In Carbon, 31 January plus a month is 3 March, not the last day of the
-        // shorter month, so a term beginning on a 29th, 30th or 31st produced a first period that swallowed
-        // February whole and a start date that walked forward three days and never came back. Nothing about
-        // it looked wrong: the periods still touched, the shares still summed to the term, and the totals
-        // still reconciled — while the dates on the documents said something false. And they are not display
+        // shorter month, so a term beginning on a 29th, 30th or 31st would get a first period that swallows
+        // February whole and a start date that walks forward three days and never comes back. Nothing about
+        // it would look wrong: the periods would still touch, the shares still sum to the term, and the totals
+        // still reconcile — while the dates on the documents said something false. And they are not display
         // text: they are BT-73/BT-74 on an XRechnung, and they set the invoice date that decides which return
         // the supply falls into.
         //
-        // The fix is not `addMonthNoOverflow()` on the accumulation, which stops the swallowing and then
+        // `addMonthNoOverflow()` on the accumulation is no cure either: it stops the swallowing and then
         // walks the anchor day BACKWARDS forever from the first short month. Every boundary is measured from
         // the original start, which is what brings the 31st back the moment a month has one.
         return new SubscriptionPeriods()->split($start, $periods, $term);

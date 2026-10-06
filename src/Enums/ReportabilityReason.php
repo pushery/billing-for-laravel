@@ -33,7 +33,13 @@ enum ReportabilityReason: string
      */
     case Standardized = 'standardized';
 
-    /** No profile is deciding anything, so nothing is reportable. */
+    /**
+     * No reporting regime applies, so nothing is reportable.
+     *
+     * A classifier bound for a jurisdiction without a reporting duty answers this, and the verdict then says so
+     * as a ground of its own rather than looking like an ordinary exemption. The shipped binding is the German
+     * profile, which decides every seller and never answers it.
+     */
     case NoReportingRegime = 'no_reporting_regime';
 
     public function reportable(): bool

@@ -10,6 +10,7 @@ use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Entitlements\ConfigEntitlements;
 use Pushery\Billing\Entitlements\ConfigEntitlementsFactory;
 use Pushery\Billing\Support\CatalogLabel;
+use Pushery\Billing\Support\KeyedConfig;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PricingCard;
 
@@ -19,10 +20,12 @@ use Pushery\Billing\ValueObjects\PricingCard;
  * narrows to the tiers that actually have a display price (dropping the free tier), which is what a
  * plan-picker offers.
  *
- * {@see cards()} is the ONE source the in-app upgrade grid and the public /pricing page both render from,
- * so the two can never promise different things. The feature bullets live in config (`tiers.<key>.features`,
- * a list of translation keys) — never hard-coded in a view — which is what makes drift impossible: change
- * the config and both surfaces move together.
+ * {@see cards()} is the one source for the pricing surfaces an application builds, a public /pricing page and
+ * an upgrade grid of its own ({@see upgradeCards()}), so two such surfaces can never promise different things.
+ * The account hub's plan list reads label and price from the same tier catalog and shows no bullets, highlight
+ * or badge. The feature bullets live in config (`tiers.<key>.features`, a list of translation keys) — never
+ * hard-coded in a view — which is what makes drift impossible: change the config and every surface that renders
+ * them moves with it.
  */
 final readonly class PricingCatalog
 {
@@ -52,8 +55,9 @@ final readonly class PricingCatalog
     }
 
     /**
-     * One {@see PricingCard} per tier, in upgrade order — the shared source the in-app grid AND /pricing
-     * render. Label, price and BYOK come from the tier catalog; bullets, highlight and badge from config.
+     * One {@see PricingCard} per tier, in upgrade order: what a /pricing page renders, and the set
+     * {@see upgradeCards()} narrows. Label, price and BYOK come from the tier catalog; bullets, highlight and
+     * badge from config.
      *
      * @return list<PricingCard>
      */
@@ -66,7 +70,7 @@ final readonly class PricingCatalog
                 priceDisplay: $this->catalog->priceDisplay($key),
                 byok: $this->catalog->isByok($key),
                 bullets: $this->bulletsFor($key),
-                highlighted: $this->config->get("billing.tiers.{$key}.highlight") === true,
+                highlighted: KeyedConfig::setting($this->config, 'billing.tiers', $key, 'highlight') === true,
                 badge: $this->badgeFor($key),
             ),
             array_keys($this->catalog->all()),
@@ -75,8 +79,9 @@ final readonly class PricingCatalog
 
     /**
      * The cards a CURRENT-tier owner can upgrade to — the purchasable tiers ranked above their tier, in
-     * upgrade order. This is what the in-app upgrade grid renders, as opposed to {@see cards()} (the full
-     * set a /pricing page shows); both render from the SAME {@see PricingCard} model, so they cannot drift.
+     * upgrade order. This is what an upgrade grid the application builds renders, as opposed to {@see cards()}
+     * (the full set a /pricing page shows); both render from the SAME {@see PricingCard} model, so they cannot
+     * drift.
      *
      * @return list<PricingCard>
      */
@@ -100,7 +105,7 @@ final readonly class PricingCatalog
      */
     public function bulletsFor(string $tierKey): array
     {
-        $keys = $this->config->get("billing.tiers.{$tierKey}.features");
+        $keys = KeyedConfig::setting($this->config, 'billing.tiers', $tierKey, 'features');
 
         if (! is_array($keys)) {
             return [];
@@ -115,7 +120,7 @@ final readonly class PricingCatalog
     /** The tier's badge label (a translation key), resolved to the current locale, or null when unset. */
     private function badgeFor(string $tierKey): ?string
     {
-        $badge = $this->config->get("billing.tiers.{$tierKey}.badge");
+        $badge = KeyedConfig::setting($this->config, 'billing.tiers', $tierKey, 'badge');
 
         return is_string($badge) && $badge !== '' ? $this->resolve($badge) : null;
     }

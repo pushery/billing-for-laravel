@@ -21,11 +21,11 @@ use Pushery\Billing\Preflight\CheckpointRegistry;
  * classified in a way nobody looked at.
  *
  * An archetype may COMPEL a regime, overriding that default — and which archetypes do is a question for the
- * jurisdiction profile, not for this class. It used to be answered here: goods sold between private people
- * were forced to intermediation, because the platform cannot be reselling something it never owned when
- * neither party is in business. The fact is neutral; concluding a REGIME from it is a legal
- * characterization, and one sitting in a neutral core is one jurisdiction's answer wearing the costume of a
- * general one. {@see SuppliesArchetypeRegimes}, which is where it lives now, and why.
+ * jurisdiction profile, not for this class. Goods sold between private people, for instance, can be held to
+ * be intermediated, because the platform cannot be reselling something it never owned when neither party is
+ * in business. The fact is neutral; concluding a REGIME from it is a legal characterization, and one sitting
+ * in a neutral core would be one jurisdiction's answer wearing the costume of a general one. See
+ * {@see SuppliesArchetypeRegimes}, where that answer lives, and why.
  *
  * A platform that has not opted into a regime is still refused rather than quietly switched into it — that
  * guard is the reason the override cannot be dangerous wherever the answer comes from.

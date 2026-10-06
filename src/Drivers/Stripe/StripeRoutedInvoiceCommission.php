@@ -15,24 +15,15 @@ use Throwable;
 /**
  * Reads a routed cycle's commission back out of Stripe.
  *
- * ## The route, measured rather than assumed
- *
- * Measured 2026-08-07 against the pinned API `2025-08-27.basil`, on a real paid invoice, and the result
- * contradicted what the SDK reads like:
- *
- * ```
- * via retrieve+expand: pi_3U1bayFVuDh8cjjt0VJBQdE4
- * in webhook payload:  (none)
- * payload has `payments` key: no
- * ```
+ * ## The route
  *
  * **The delivered `invoice.payment_succeeded` payload carries no link to the payment at all** — no `charge`,
  * no `latest_charge`, no `payment_intent`, and not even the `payments` collection the link lives in. A
  * webhook payload is never expanded, so the invoice has to be fetched again asking for it.
  *
  * The SDK cannot answer this, and reading it as though it could is the trap: its `@param` blocks describe
- * what may be SENT when creating an invoice, not what comes back. An earlier draft of this lane was written
- * against a payload Stripe never sends, on exactly that misreading.
+ * what may be SENT when creating an invoice, not what comes back, and code written against them expects a
+ * payload Stripe never sends.
  *
  * So: **invoice (expanded) → payment intent → subscription**. Three calls, and each buys something the one
  * before it cannot:

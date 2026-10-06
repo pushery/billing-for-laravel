@@ -25,7 +25,7 @@ interface SuppliesMarginSchemeWording
      * A key rather than the words, because each language has its own prescribed form and the document is
      * read in the language it was issued in. What is never permitted is composing or paraphrasing them.
      *
-     * IT TAKES THE BASIS, AND IT USED TO TAKE NOTHING. Art. 226(14) prescribes ONE PHRASE PER GOODS
+     * IT TAKES THE BASIS. Art. 226(14) prescribes ONE PHRASE PER GOODS
      * CLASS — second-hand goods, works of art, collectors' items and antiques — and a profile answering
      * with one key for all three puts the second-hand phrase on an antique. That is not a missing
      * paragraph; it is the wrong mandatory statement, in the field an auditor reads first.

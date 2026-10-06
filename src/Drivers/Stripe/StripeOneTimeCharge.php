@@ -168,7 +168,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         $merchant = $this->context->routedMerchant();
 
         // Resolved ONCE, and that is what makes the ledger row and the payment describe the same sale. The
-        // amounts below used to be computed, handed to Stripe and thrown away; recomputing them after the
+        // amounts below are kept rather than handed to Stripe and thrown away; recomputing them after the
         // session exists would mean a second provider call and a second chance for the two to disagree.
         $routed = $merchant instanceof Model ? $this->routing($merchant, $price, $this->archetypeOf($addonKey)) : null;
 
@@ -321,7 +321,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         if (! $this->context->tipsEnabled()) {
             throw new InvalidArgumentException(
                 'Tipping is switched off for this installation, so no tip checkout can be opened. '
-                .'Turn it on under `billing.marketplace.fan_pricing` before offering one.'
+                .'Turn it on with `billing.marketplace.tips.enabled` (`BILLING_MARKETPLACE_TIPS`) before offering one.'
             );
         }
 
@@ -546,9 +546,8 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      * is evidenced and their rate exists. The rate is not merely un-plumbed at that moment: it is not yet a
      * fact.
      *
-     * This paragraph used to end "and this lane sets no `automatic_tax`, so the price IS the gross and the
-     * commission runs on it". That premise is gone: the lane now sets `automatic_tax` under a provider mode,
-     * because leaving it unset made the SAME installation-wide setting tax subscriptions and not add-ons.
+     * The lane sets `automatic_tax` under a provider mode, because leaving it unset would make the SAME
+     * installation-wide setting tax subscriptions and not add-ons.
      *
      * What the basis is now depends on the Stripe price's own `tax_behavior`, which this package does not
      * own. On an EXCLUSIVE price the buyer pays the unit amount plus tax, so the unit amount this fee is
@@ -644,9 +643,8 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      * call once `payment_intent.succeeded` confirms the payment, the same call a sale through `RoutedPayment`
      * makes.
      *
-     * The hosted lanes used to refuse a separate transfer outright, because nothing could make that second call
-     * a webhook away. The confirmation now makes it, so a platform whose seller-of-record posture allows only this
-     * lane can sell through a hosted checkout at all.
+     * The confirmation makes that second call a webhook away, so a platform whose seller-of-record posture allows
+     * only this lane can sell through a hosted checkout at all.
      *
      * @return array{application_fee_amount?: int, transfer_data?: array{destination: string}}
      */

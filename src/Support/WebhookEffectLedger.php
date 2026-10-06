@@ -18,8 +18,8 @@ use Pushery\Billing\Webhooks\RepeatableEffect;
  * THE ORDER IS THE DESIGN: claim → run → mark handled, all inside ONE transaction (see
  * HandleWebhookEffect). A claim that is never marked rolls back with the effect that failed, so the work
  * is re-claimable and the provider's retry (or a replay) does it again. Recording the claim as DONE
- * before running the effect — which is what the package used to do — is how a payment-failure notice
- * gets lost forever: the marker survives, the mail does not, and no retry will ever send it.
+ * before running the effect is how a payment-failure notice gets lost forever: the marker survives, the
+ * mail does not, and no retry will ever send it.
  *
  * A HANDLED run is never re-claimed. A FAILED or still-PENDING one is: pending means a worker died
  * mid-run without committing, which is indistinguishable from never having run.

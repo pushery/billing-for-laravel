@@ -129,7 +129,13 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         //
         // The column is checked directly rather than through `onGenericTrial()`, which answers "is one
         // running" and is false for exactly the lapsed case this has to catch.
-        if ($this->policy->mode($tierKey) === TrialMode::Generic && $billable->getAttribute('trial_ends_at') === null) {
+        //
+        // Nor for somebody who had a SUBSCRIPTION trial. That one stands on the subscription row and survives
+        // the row being reused, and where a tier's own mode is generic, a generic trial after it would be a
+        // second free trial under another name.
+        if ($this->policy->mode($tierKey) === TrialMode::Generic
+            && $billable->getAttribute('trial_ends_at') === null
+            && ! Subscription::ownerHasHadATrial($billable)) {
             $granted = $this->genericTrials->grant($billable);
 
             if ($granted instanceof CarbonInterface) {
@@ -267,7 +273,9 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         // day this lane learns about merchants.
         $coupon = CouponCodes::find(Coupon::model()::query()->issuedBy(MerchantScope::platform()), $code);
 
-        return $coupon instanceof Coupon && $coupon->isLive() ? $coupon : null;
+        // And a discount at all, by the rule the cycle applies: a row it bills at the full price is not a code that
+        // took, so the screen says so and nothing is redeemed for it.
+        return $coupon instanceof Coupon && $coupon->isLive() && $coupon->describesADiscount() ? $coupon : null;
     }
 
     /**
@@ -425,6 +433,12 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
                 'terminated_at' => null,
                 'scheduled_tier_key' => null,
                 'scheduled_swap_at' => null,
+                // The seat-days and the tier difference the ended subscription ran up were billed by its last
+                // cycle. This one's first cycle counts from its own start, and carrying them over would bill them
+                // a second time.
+                'seat_quantity_since' => $now,
+                'seat_days_accrued' => 0,
+                'tier_adjustment_accrued' => 0,
                 // This purchase's declarations, or none. A reused row is a new subscription, and the previous
                 // one's declarations do not cover it.
                 'declaration_reference' => $declarationReference,

@@ -34,8 +34,8 @@ final readonly class VoucherVolumeMonitor
      *
      * A voucher and a paid credit top-up are the same thing in two tables: prepaid value, held by the
      * issuer, redeemed later. The threshold asks for the total value of the payment transactions over the
-     * window, not for which table this package keeps them in — so an installation that sells credit and
-     * issues vouchers only incidentally used to cross the line while this counted calmly on.
+     * window, not for which table this package keeps them in. Counting vouchers alone, an installation that
+     * sells credit and issues vouchers only incidentally would cross the line while this counted calmly on.
      *
      * The two are added rather than reconciled: they are different rows about different sales, and nothing
      * can appear in both.

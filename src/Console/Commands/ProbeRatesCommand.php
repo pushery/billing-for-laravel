@@ -56,10 +56,8 @@ final class ProbeRatesCommand extends Command
         // rows, and the caller then reports "no drift" over a response it failed to read.
         //
         // SAY WHICH, on a failure. `unreachable: true` on its own is unfalsifiable: a refused connection, a
-        // 500 from the service and a malformed request all arrive here and all read the same in the report.
-        // Measured 2026-08-03 — three nightly runs reported unreachable while the endpoint answered in 0.2 s
-        // from a laptop (405 to GET, 500 to a POST it could not parse), and two separate diagnoses of
-        // "network problem" were wrong because nothing ever said otherwise.
+        // 500 from the service and a malformed request all arrive here and all read the same in the report,
+        // and a diagnosis of "network problem" is then a guess.
         $answer = TedbRateSource::on($on);
 
         if ($answer->failure !== null) {

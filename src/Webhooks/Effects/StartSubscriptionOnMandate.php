@@ -188,6 +188,12 @@ final readonly class StartSubscriptionOnMandate
                 'terminated_at' => null,
                 'scheduled_tier_key' => null,
                 'scheduled_swap_at' => null,
+                // The seat-days and the tier difference the ended subscription ran up were billed by its last
+                // cycle. This one's first cycle counts from its own start, and carrying them over would bill them
+                // a second time.
+                'seat_quantity_since' => $now,
+                'seat_days_accrued' => 0,
+                'tier_adjustment_accrued' => 0,
             ],
         );
 
@@ -230,7 +236,9 @@ final readonly class StartSubscriptionOnMandate
         $coupon = CouponCodes::find(Coupon::model()::query()->issuedBy(MerchantScope::platform()), $code);
         $owner = $this->ownerOf($intent);
 
-        if (! $coupon instanceof Coupon || ! $owner instanceof Model) {
+        // A row that describes no discount is billed at the full price by the cycle, so redeeming it would spend
+        // one of the coupon's redemptions on nothing.
+        if (! $coupon instanceof Coupon || ! $coupon->describesADiscount() || ! $owner instanceof Model) {
             return;
         }
 

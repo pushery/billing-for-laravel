@@ -24,11 +24,10 @@ use Pushery\Billing\ValueObjects\RefundResult;
  *
  * ## Why it does not correct the chain itself
  *
- * It used to, by calling the corrector directly, while the refund was left to the consumer. A consumer who refunded
- * through the package and then canceled the term got two correcting documents on each side for one refund, because
- * the refund verb corrects the chain on its own; one who only canceled got correcting documents for money that never
- * moved. The refund verb corrects after the provider confirms, with the attempt that moved the money, so the
- * documents and the money cannot part. A refund the provider refuses moves nothing and corrects nothing.
+ * The refund verb corrects the chain on its own, after the provider confirms, with the attempt that moved the money,
+ * so the documents and the money cannot part. A cancellation that corrected as well would give a consumer who refunds
+ * through the package two correcting documents on each side for one refund, and one who only cancels correcting
+ * documents for money that never moved. A refund the provider refuses moves nothing and corrects nothing.
  *
  * ## Why the caller supplies the term, and this class does not look it up
  *

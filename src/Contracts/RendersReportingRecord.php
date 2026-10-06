@@ -43,7 +43,7 @@ use Pushery\Billing\ValueObjects\SellerPeriodReport;
  */
 interface RendersReportingRecord
 {
-    /** A short, stable name for the format — stored beside the bytes and used to select runs. */
+    /** A short, stable name for the format — stored beside the bytes, and what runs are selected by. */
     public function format(): string;
 
     /** Which version of that format these bytes are built to. */

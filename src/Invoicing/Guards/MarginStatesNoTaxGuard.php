@@ -24,7 +24,7 @@ use RuntimeException;
  * moment it exists. A margin document stating a tax cannot be corrected into a right one afterwards; it can
  * only be canceled.
  *
- * It matters more than it used to, because the package issues no margin-taxed document itself. Every one is
+ * It matters all the more because the package issues no margin-taxed document itself. Every one is
  * written by consumer code, and the table is the one place each of them passes through. The renderer asks
  * this same guard, so the two refusals cannot drift apart.
  */

@@ -26,10 +26,10 @@ use Stripe\StripeClient;
  *
  * Stripe's own field documentation separates them, and this lane is exactly the case where they
  * diverge. `percentage` is the statutory rate and "includes the statutory tax rate of NON-TAXABLE
- * jurisdictions"; `effective_percentage` is, in Stripe's words, "the rate actually used to calculate
- * tax based on the product's taxability and whether the user is registered to collect taxes in the
- * corresponding jurisdiction" — and it is the one defined for `automatic_tax`, which is the only
- * setting that reaches this class.
+ * jurisdictions"; `effective_percentage` is the rate the tax was actually calculated at, given the
+ * product's taxability and whether the user is registered to collect taxes in the corresponding
+ * jurisdiction — and it is the one defined for `automatic_tax`, which is the only setting that reaches
+ * this class.
  *
  * On an exempt, zero-rated or reverse-charge supply the two disagree: the statutory field still names
  * the country's headline rate while nothing was charged. Reading it would put a rate on the document

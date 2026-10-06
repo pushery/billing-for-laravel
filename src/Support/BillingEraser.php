@@ -30,16 +30,14 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * customer's email, name, billing address and card last four, and a right to erasure that cannot reach the
  * data is not a right to erasure.
  *
- * ## What this does NOT reach, and it used to claim it did
+ * ## What this does NOT reach
  *
  * There are no provider API keys here to delete. This package stores no secret of any kind — the merchant
  * row carries an account REFERENCE (`acct_…`), which is an identifier and goes with the row; a credential
  * would be a different thing and there is no column for one. `NoStoredCredentialsTest` holds that, so the
  * sentence cannot quietly stop being true.
  *
- * This paragraph used to say the owner's provider API keys go "FIRST and unconditionally", which described a
- * purge of something that does not exist. Read by an operator answering an erasure request, that is the
- * expensive direction to be wrong in: **if YOUR app stores a merchant's API keys, erasing them is your job.**
+ * **If YOUR app stores a merchant's API keys, erasing them is your job.**
  * `BillableAccountDeleting` is the hook — dispatched first and outside the transaction, so a listener can
  * make a provider call — and it is where that deletion belongs.
  *

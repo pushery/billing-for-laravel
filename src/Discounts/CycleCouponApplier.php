@@ -90,12 +90,18 @@ final readonly class CycleCouponApplier
             return $drafts;
         }
 
-        $reduction = $gross->minus($this->discountFrom($coupon, $gross)->applyTo($gross));
+        $discount = $this->discountFrom($coupon, $gross);
 
-        // Reachable through exactly one route, and it is worth naming because the guard looks generic: a
-        // FIXED coupon denominated in another currency resolves to zero rather than being converted, since
-        // converting here would invent an exchange rate on an invoice. A percentage of zero cannot get
-        // this far — `Discount` refuses it — so this is not a rounding guard, it is the cross-currency one.
+        if (! $discount instanceof Discount) {
+            return $drafts;
+        }
+
+        $reduction = $gross->minus($discount->applyTo($gross));
+
+        // Not a rounding guard: any percentage of a positive gross takes at least one minor unit off, and a fixed
+        // coupon of zero describes no discount and stops in discountFrom(). It is reached by a FIXED coupon
+        // denominated in another currency, which resolves to zero rather than being converted, since converting
+        // here would invent an exchange rate on an invoice.
         if (! $reduction->isPositive()) {
             return $drafts;
         }
@@ -159,13 +165,23 @@ final readonly class CycleCouponApplier
     }
 
     /**
-     * The coupon as a discount.
+     * The coupon as a discount, or null when the row describes none.
      *
      * A fixed-amount coupon scoped to another currency is refused rather than converted: the package holds
      * no exchange rate, and applying "5 off" across currencies would invent one.
+     *
+     * Whether the row is a discount at all is {@see Coupon::describesADiscount()}, the rule the local driver's
+     * coupon question and the redemption of a carried code read too. The row is written by the application, so
+     * a percentage of 0 or 150, or a type of `percentage`, is a row this cycle can meet: it bills the full
+     * price, as the customer was told when the code was refused, rather than failing every time the
+     * subscription comes due.
      */
-    private function discountFrom(Coupon $coupon, Money $gross): Discount
+    private function discountFrom(Coupon $coupon, Money $gross): ?Discount
     {
+        if (! $coupon->describesADiscount()) {
+            return null;
+        }
+
         if ($coupon->type === 'fixed') {
             $currency = is_string($coupon->currency) && $coupon->currency !== '' ? $coupon->currency : $gross->currency;
 

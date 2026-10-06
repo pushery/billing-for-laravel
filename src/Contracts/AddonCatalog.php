@@ -19,7 +19,7 @@ use Pushery\Billing\ValueObjects\UnitGrant;
  * come from the platform's configuration, exactly as the per-merchant tier and plan catalogs stop at the
  * catalog.
  *
- * This used to say the money path was missing too, and that stopped being true. `StripeOneTimeCharge` builds
+ * The money path is not missing. `StripeOneTimeCharge` builds
  * `application_fee_amount` and `transfer_data.destination` and attaches them to the add-on checkout session
  * whenever a merchant resolves, so a platform-cataloged add-on is already routed to a creator's connected
  * account. What is open is whose CATALOG the item comes from, not whether the money can reach them.

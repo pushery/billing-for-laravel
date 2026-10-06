@@ -11,9 +11,9 @@ use Pushery\Billing\Support\BillingSchema;
  * One row per merchant whose tax standing was ever recorded, for the recordings to lock.
  *
  * Two recordings for one creator take turns, so that the second closes the interval the first opened instead
- * of opening one beside it. They used to take turns on the creator's status rows, which leaves a creator's
- * very first recording nothing to lock: two first recordings at once, with different start dates, each opened
- * an interval. This row exists before the first status does, because the recording creates it, so every
+ * of opening one beside it. Taking turns on the creator's status rows would leave a creator's very first
+ * recording nothing to lock: two first recordings at once, with different start dates, would each open an
+ * interval. This row exists before the first status does, because the recording creates it, so every
  * recording has the same thing to wait on. It holds nothing else, and goes with the merchant.
  *
  * Server-only, reversible.

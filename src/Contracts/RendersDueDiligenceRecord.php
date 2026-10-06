@@ -19,8 +19,8 @@ namespace Pushery\Billing\Contracts;
  * and nobody else's. A renderer that implements this contract receives every examined seller, and each
  * `SellerPeriodReport` still answers `reportable()`, so the verdict can be written beside the row.
  *
- * This used to be a paragraph in the documentation telling a renderer to filter. A consumer who writes a wire
- * format and misses that paragraph transmits sellers the duty does not cover, with their income, and nothing
- * downstream notices. Asking for the full list is a declaration in the type now, where it can't be missed.
+ * A paragraph in the documentation telling a renderer to filter would be easy to miss, and a consumer who
+ * writes a wire format and misses it transmits sellers the duty does not cover, with their income, and
+ * nothing downstream notices. Asking for the full list is a declaration in the type, where it can't be missed.
  */
 interface RendersDueDiligenceRecord extends RendersReportingRecord {}

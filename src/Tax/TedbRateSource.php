@@ -50,8 +50,8 @@ final readonly class TedbRateSource
     /**
      * The member states asked about, in the service's own spelling: `EL` is Greece.
      *
-     * Named rather than left empty. The request schema requires at least one code, and an empty list,
-     * which is what this client used to send, is refused as "The XSD validation failed".
+     * Named rather than left empty. The request schema requires at least one code, and an empty list is
+     * refused as "The XSD validation failed".
      */
     private const array MEMBER_STATES = [
         'AT', 'BE', 'BG', 'CY', 'CZ', 'DE', 'DK', 'EE', 'EL', 'ES', 'FI', 'FR', 'HR', 'HU',

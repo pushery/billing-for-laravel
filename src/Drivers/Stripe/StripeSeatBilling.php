@@ -53,7 +53,7 @@ final readonly class StripeSeatBilling implements SeatBilling
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException) {
-            return null; // the subscription is gone or already canceled
+            return null; // gone at Stripe. A canceled one is still retrievable, so subscriptionReference() leaves it out.
         }
 
         $base = $this->items->base($subscription);
@@ -88,7 +88,7 @@ final readonly class StripeSeatBilling implements SeatBilling
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException) {
-            return; // gone or canceled — nothing to update
+            return; // gone at Stripe, nothing to update
         }
 
         $base = $this->items->base($subscription);
@@ -130,6 +130,12 @@ final readonly class StripeSeatBilling implements SeatBilling
             ->latest('id')
             ->first();
 
-        return $subscription?->provider_id;
+        // A subscription in one of the two terminal states, the ones a new subscription may replace, bills no seats.
+        // Stripe still answers for a canceled one and then refuses the update, so it is not asked at all.
+        if (! $subscription instanceof Subscription || $subscription->isReplaceableByANewSubscription()) {
+            return null;
+        }
+
+        return $subscription->provider_id;
     }
 }

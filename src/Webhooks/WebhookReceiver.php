@@ -34,7 +34,9 @@ use Throwable;
  * once its own retry window closes.
  *
  * Effects are queued, not run here, so the provider gets its 200 immediately and a slow (or failing)
- * effect can neither hold the request open nor turn into a 500 the provider reads as our outage.
+ * effect can neither hold the request open nor turn into a 500 the provider reads as our outage. That
+ * holds on an asynchronous queue connection; on `sync` each effect runs inline, in this request, and
+ * `billing:doctor` warns about it.
  *
  * The success answer is `200 OK` with an empty body, never `204 No Content`. Mollie accepts exactly 200
  * and counts every other status as a failed delivery: it calls the webhook up to ten times in all, at
@@ -123,7 +125,7 @@ final readonly class WebhookReceiver
      * The default key is read from the REQUEST rather than only from the decoded body, because not every
      * provider posts JSON. A form-encoded ping (`id=tr_abc`) decodes to nothing, so a body-only read fell
      * through to the hash — leaving a delivery that is correct and unfindable: somebody investigating holds
-     * the provider's resource id and has no route from it to the row, and `billing:replay` cannot be aimed
+     * the provider's resource id and has no route from it to the row, and `billing:webhooks:replay` cannot be aimed
      * either.
      *
      * The hash fallback stays for a body that names nothing. Removing it would leave such a delivery with
@@ -150,7 +152,7 @@ final readonly class WebhookReceiver
      * Read from the REQUEST rather than only from the decoded body, because not every provider posts
      * JSON. A form-encoded ping (`id=tr_abc`) decodes to nothing, so a body-only read fell through to the
      * hash — leaving a delivery that is correct and unfindable: somebody investigating holds the
-     * provider's resource id and has no route from it to the row, and `billing:replay` cannot be aimed
+     * provider's resource id and has no route from it to the row, and `billing:webhooks:replay` cannot be aimed
      * either.
      *
      * The hash fallback stays for a body that names nothing. Removing it would leave such a delivery with

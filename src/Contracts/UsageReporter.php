@@ -46,6 +46,9 @@ interface UsageReporter
     /**
      * Withdraw a reported event. Only possible while the cycle it belongs to is still open — once the
      * provider has finalized the invoice, a correction is a credit note, not a meter adjustment.
+     *
+     * Nothing in the package calls it. It is for code of yours that takes back usage already reported, with
+     * the identifier the usage was reported under.
      */
     public function reverse(string $meterName, string $identifier): void;
 

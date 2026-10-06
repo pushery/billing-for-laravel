@@ -28,6 +28,10 @@ interface CollectsSellerTaxDeclarations
     /**
      * Which declarations this jurisdiction asks a seller for.
      *
+     * The package does not ask it: `UsTaxFormRegistry::covered()` accepts any usable declaration on record,
+     * whatever its type. Code of yours that asks a seller for a declaration reads this to know which forms to
+     * ask for, and compares the type of `UsTaxFormRegistry::currentFor()` with it.
+     *
      * @return list<UsTaxFormType>
      */
     public function sellerDeclarations(): array;

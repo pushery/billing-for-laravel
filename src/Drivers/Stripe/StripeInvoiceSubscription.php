@@ -12,9 +12,9 @@ namespace Pushery\Billing\Drivers\Stripe;
  * its own client fetches has that shape. A delivered webhook is rendered in the version of its ENDPOINT, though,
  * and an endpoint created before `basil` still sends the old field. Both are read, the pinned shape first.
  *
- * Three readers used to ask the old field on their own, and none of them could notice that it had gone. A cycle
- * whose invoice names no subscription looks exactly like a one-off invoice, and all three answer a one-off invoice
- * with silence: no cycle row, no taxed country, no terms.
+ * The three readers ask here rather than each reading a field on its own, because none of them could notice the
+ * field had gone. A cycle whose invoice names no subscription looks exactly like a one-off invoice, and all three
+ * answer a one-off invoice with silence: no cycle row, no taxed country, no terms.
  *
  * @internal
  */

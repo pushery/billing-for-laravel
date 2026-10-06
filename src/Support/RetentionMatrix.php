@@ -77,8 +77,10 @@ final class RetentionMatrix
             clock: RetentionClock::CreatedAt,
             days: $this->days('audit_days', 3650),
             basisKey: 'billing::retention.basis.books',
-            // Not the plain time pruner: a ledger row goes only when its owner was erased AND the window
-            // ran out, and either alone would delete books that are still owed.
+            // Not the plain time pruner, because the ledger has two ways out. `billing:prune` removes a row once
+            // the window has passed, whoever it names. An erasure removes the rows about the erased person at once
+            // and keeps the rows in which they only acted, with the actor cleared (BillingEraser). The row that
+            // records the erasure, with any credit the person was still owed, names nobody and keeps the window.
             executor: RetentionExecutor::DedicatedPruner,
         );
 
@@ -205,10 +207,9 @@ final class RetentionMatrix
     /**
      * Every issue-date column, shipped and declared.
      *
-     * This is the ONE map. It used to be two: the pruner carried a private copy of the same table-to-column
-     * list under a different name, in the very command that already had this object injected. Both held the
-     * same single entry, so no value was ever wrong — but a public accessor answering consumers from one map
-     * while the package pruned by the other is a disagreement waiting for a second dated table.
+     * This is the ONE map, and the pruner reads it too. A private copy of the same table-to-column list in the
+     * pruning command would leave a public accessor answering consumers from one map while the package prunes
+     * by the other: a disagreement waiting for a second dated table.
      *
      * @return array<string,literal-string>
      */

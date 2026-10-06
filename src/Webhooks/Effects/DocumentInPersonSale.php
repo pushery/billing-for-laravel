@@ -15,8 +15,9 @@ use Pushery\Billing\Models\InPersonSaleRecord;
  * Marks a sale at the counter as paid and issues its receipt, once the provider has confirmed the card payment.
  *
  * The sale is documented now and not when it went onto the reader, because until the card was presented nothing
- * had been sold. The receipt and the status change are written together, so a redelivered confirmation finds the
- * sale paid and issues nothing a second time.
+ * had been sold. The receipt and the status change are written together, on the sale's row read again under a lock,
+ * so a redelivered confirmation, or a second one running at the same moment, finds the sale paid and issues nothing a
+ * second time: two receipts for one sale would be two documents stating its tax.
  *
  * A confirmation for a payment the counter path has no row for is left alone: it is somebody else's payment.
  */
@@ -42,12 +43,18 @@ final readonly class DocumentInPersonSale
         $paidAt = Carbon::now();
 
         $sale->getConnection()->transaction(function () use ($sale, $paidAt): void {
-            $receipt = $this->receipts->issue($sale, $paidAt);
+            $locked = InPersonSaleRecord::model()::query()->whereKey($sale->getKey())->lockForUpdate()->first();
 
-            $sale->status = InPersonSaleStatus::Paid;
-            $sale->paid_at = $paidAt;
-            $sale->invoice_id = $receipt->id;
-            $sale->save();
+            if (! $locked instanceof InPersonSaleRecord || $locked->status === InPersonSaleStatus::Paid) {
+                return;
+            }
+
+            $receipt = $this->receipts->issue($locked, $paidAt);
+
+            $locked->status = InPersonSaleStatus::Paid;
+            $locked->paid_at = $paidAt;
+            $locked->invoice_id = $receipt->id;
+            $locked->save();
         });
     }
 }

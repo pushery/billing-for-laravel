@@ -36,39 +36,38 @@ use Throwable;
  *
  * ## One invoice per order, enforced by the database
  *
- * A cycle can be processed more than once. Invoice numbers are gapless and immutable, so a duplicate is
- * not a mess to tidy up later — it is a second numbered document asserting a charge that happened once,
- * and the number it consumed can never be reissued. The unique constraint on `order_id` is what makes the
- * second attempt lose rather than mint, and the insert is attempted rather than checked-then-inserted,
- * because between a check and an insert is exactly where a concurrent run fits.
+ * A cycle can be processed more than once. Invoice numbers are unique and immutable, so a duplicate is
+ * not a mess to tidy up later — it is a second numbered document asserting a charge that happened once.
+ * The unique constraint on `order_id` is what makes the second attempt lose, and the number it drew goes
+ * back with it, because {@see issue()} writes the document in a transaction of its own. The insert is
+ * attempted rather than checked-then-inserted, because between a check and an insert is exactly where a
+ * concurrent run fits.
  *
  * ## The tax AND the net are stated only where they were established
  *
- * `tax_minor` was left null on every document this ever raised, and that was honest rather than complete:
- * a driver whose provider does not determine tax (`supportsProviderTax: false`) has no result to copy, and
- * zero is not the absence of a claim — it is the claim that no tax was due.
+ * A driver whose provider does not determine tax (`supportsProviderTax: false`) has no result to copy, and
+ * zero is not the absence of a claim — it is the claim that no tax was due. So `tax_minor` is never
+ * defaulted to zero.
  *
- * {@see OrderTaxBasis} now determines it where the basis exists, and refuses where it does not. When it
+ * {@see OrderTaxBasis} determines it where the basis exists, and refuses where it does not. When it
  * answers, the document freezes the whole basis beside the figure — archetype, place of supply, rate band,
  * exemption, destination and the period supplied — which is what makes the figure defensible years later
  * and what {@see Guards\TaxWithoutBasisGuard} insists on.
  *
- * WHEN IT REFUSES, THE NET IS NOW NULL TOO, AND THAT IS THE HALF THIS USED TO GET WRONG. The sentence
- * here read "a null tax, a subtotal equal to the total, and no characteristics" — and a subtotal equal to
- * the total is the same kind of claim as a zero tax: it says the supply was untaxed. True under a
- * small-business regime or an exemption, false under a taxable supply, and nobody determined which. The
- * argument that made zero unacceptable makes this unacceptable for exactly the same reason, one column
- * over.
+ * WHEN IT REFUSES, THE NET IS NULL TOO, NOT EQUAL TO THE TOTAL. A subtotal equal to the total is the same
+ * kind of claim as a zero tax: it says the supply was untaxed. True under a small-business regime or an
+ * exemption, false under a taxable supply, and nobody determined which. The argument that makes zero
+ * unacceptable makes this unacceptable for exactly the same reason, one column over.
  *
- * Nothing a reader sees changes, and that was measured rather than hoped: `InvoiceDocumentRenderer` falls
+ * A reader sees no difference between the two: `InvoiceDocumentRenderer` falls
  * back to `total_minor - (tax_minor ?? 0)`, and the e-invoice path in {@see Concerns\NormalizesInvoiceModel}
  * sums the frozen lines whenever there are any — which this issuer always writes.
  *
  * ## The buyer is frozen like the lines
  *
- * Every document this raised used to name nobody, because nothing here asked who the customer was. For a
- * consumer that is often enough; for a business it is not, and a reverse-charged invoice without the buyer's
- * VAT ID states a zero rate it cannot support. So the buyer is snapshotted when the invoice is raised: the
+ * A document raised without asking who the customer is names nobody. For a consumer that is often enough;
+ * for a business it is not, and a reverse-charged invoice without the buyer's VAT ID states a zero rate it
+ * cannot support. So the buyer is snapshotted when the invoice is raised: the
  * name and address the application gives through {@see BuyerPartyResolver}, and the VAT ID and country the
  * tax was decided on. The rendered document and the e-invoice both read the snapshot, so they name the same
  * buyer.

@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Override;
+use Pushery\Billing\Marketplace\ReportingPlausibilityGate;
 use Pushery\Billing\Models\Concerns\AppendOnly;
 use Pushery\Billing\Models\Concerns\Replaceable;
 
@@ -32,8 +33,9 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * ## Immutable once written
  *
  * An acknowledgement is a record of what somebody decided, when. Editing it afterwards would let the reason
- * be rewritten to fit an outcome, which is the one thing a record of a judgment must not allow. Withdraw
- * it — delete the row — and answer again if the judgment changed.
+ * be rewritten to fit an outcome, which is the one thing a record of a judgment must not allow. A judgment
+ * that changed is withdrawn through {@see ReportingPlausibilityGate::withdraw()},
+ * which removes the row and records who withdrew it and why, and is then answered again.
  *
  * @property int $id
  * @property int $period_year
@@ -74,14 +76,15 @@ class ReportingFindingAcknowledgement extends Model
     protected static function appendOnlyUpdateRefusal(array $columns): string
     {
         return 'An acknowledgement records what somebody decided and when; it cannot be edited '
-            .'afterwards. Withdraw it and acknowledge again if the judgment changed.';
+            .'afterwards. Withdraw it through the withdraw method of ReportingPlausibilityGate and acknowledge again if the '
+            .'judgment changed.';
     }
 
     #[Override]
     protected static function appendOnlyDeleteRefusal(): string
     {
         return 'An acknowledgement is the record of what somebody decided, and a plain delete is refused. No '
-            .'retention rule removes it. To withdraw one, delete it inside purging() and answer the finding '
-            .'again.';
+            .'retention rule removes it. Withdraw one through the withdraw method of ReportingPlausibilityGate, which records '
+            .'who withdrew it and why, and answer the finding again.';
     }
 }

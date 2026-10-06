@@ -13,17 +13,13 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  * The point where a buyer's two declarations are taken, and the gate that will not let a purchase past
  * without them.
  *
- * ## What was missing, exactly
+ * ## Why the consent is written here
  *
- * Measured 2026-08-06: `WithdrawalConsentLedger::record()` had no caller anywhere in the package. Every
- * other part of this path was built — the two declarations as separate fields, the wording version frozen
- * onto the record, the fail-closed gate before provision, the profile that decides which jurisdiction's
- * rules apply. All of it read a consent that nothing ever wrote.
- *
- * The consequence was not a missing feature but an unusable one: with a profile active the gate saw `null`
- * for every purchase and refused every provision of a work whose right ends at delivery. Fail-closed, and
- * therefore safe — but it also meant the profile could not be turned on by anybody, because there was no
- * way to give the consent it demanded.
+ * This is the caller of `WithdrawalConsentLedger::record()`, and the rest of the path reads what it writes:
+ * the two declarations as separate fields, the wording version frozen onto the record, the fail-closed gate
+ * before provision, and the profile that decides which jurisdiction's rules apply. Without a recorded consent
+ * the gate sees `null` and refuses every provision of a work whose right ends at delivery: safe, and a
+ * profile nobody could turn on.
  *
  * ## Why the key is minted here rather than supplied
  *

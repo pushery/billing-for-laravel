@@ -35,9 +35,9 @@ final readonly class ConfigDunningLadder
                 continue;
             }
 
-            $afterDays = $rung['after_days'] ?? null;
+            $afterDays = self::wholeNumber($rung['after_days'] ?? null);
 
-            if (! is_int($afterDays)) {
+            if ($afterDays === null) {
                 continue;
             }
 
@@ -75,9 +75,25 @@ final readonly class ConfigDunningLadder
 
         $rawCurrency = $fee['currency'] ?? null;
         $currency = is_string($rawCurrency) ? $rawCurrency : $this->currency();
-        $amount = $fee['amount'] ?? null;
+        $amount = self::wholeNumber($fee['amount'] ?? null);
 
-        return is_int($amount) ? Money::of($amount, $currency) : Money::zero($currency);
+        return $amount !== null ? Money::of($amount, $currency) : Money::zero($currency);
+    }
+
+    /**
+     * A number of days or minor units as configured: an integer, or a string of digits, which is how env()
+     * delivers one. Read as anything else, a rung written as "3" would drop out of the ladder and a fee
+     * written as "500" would be zero.
+     *
+     * @internal shared with BillingConfigValidator, which checks the ladder's order the same way.
+     */
+    public static function wholeNumber(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+
+        return is_string($value) && preg_match('/^\s*\d+\s*$/', $value) === 1 ? (int) trim($value) : null;
     }
 
     private function currency(): string

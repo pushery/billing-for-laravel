@@ -50,15 +50,13 @@ final readonly class FanReceiptIssuer
     /**
      * The frozen characteristics a restatement does NOT carry over, and why each one differs.
      *
-     * Stated rather than achieved by omission. The restatement used to be assembled from a hand-written list
-     * of columns beside the one `issue()` writes, and the two drifted: eight columns were simply absent —
-     * three of them EN 16931 fields both e-invoice writers read. Nothing caught it, because a column nobody
-     * typed is not an error. The row was valid, the totals added up, and the document just no longer said
-     * when the supply happened or why it was exempt.
+     * Stated rather than achieved by omission. A restatement assembled from a hand-written list of columns
+     * beside the one `issue()` writes drifts from it, and a column nobody typed is not an error: the row is
+     * valid, the totals add up, and the document no longer says when the supply happened or why it was exempt.
      *
-     * So the carried set is now DERIVED from {@see InvoiceRecord::FROZEN_SCALARS} — the same list the
+     * So the carried set is DERIVED from {@see InvoiceRecord::FROZEN_SCALARS} — the same list the
      * immutability guard reads — and this is the exception list. A column that changes on a restatement is a
-     * decision somebody made; it belongs here with its reason, where the next reader can disagree with it.
+     * decision somebody made, and it belongs here with its reason.
      *
      * @var list<string>
      */
@@ -114,18 +112,14 @@ final readonly class FanReceiptIssuer
      * changed. They arrive from the caller rather than being looked up, because nothing in this class is
      * jurisdictional and the catalog is the consuming application's.
      *
-     * They travel as ONE argument, and they used to be eight. The three original ones were separate on a
-     * stated ground — they are independently known, and an object would have to rule on a partially-filled
-     * one — and the first half of that is still true, which is why every field of
-     * `SupplyTaxCharacteristics` is nullable. The second half did not survive the growth: there is no rule
-     * to invent, because an empty set is exactly as valid as a full one and means what the absent arguments
-     * meant. What broke the old form was the count. At eight characteristics inside a seventeen-parameter
-     * signature, two callers were filling it positionally, and a characteristic inserted in the middle
-     * would have shifted every argument after it past two type-compatible pairs — silently, since the
-     * statics cannot tell one `?CarbonImmutable` from another. A single argument cannot be mis-ordered.
+     * They travel as ONE argument. Each characteristic is known on its own, which is why every field of
+     * `SupplyTaxCharacteristics` is nullable, and an empty set is exactly as valid as a full one. As separate
+     * parameters of a long signature they would be filled positionally, and a characteristic inserted in the
+     * middle would shift every argument after it past type-compatible pairs, silently, since the statics
+     * cannot tell one `?CarbonImmutable` from another. A single argument cannot be mis-ordered.
      *
-     * Everything still defaults to null, so a call site that passes no characteristics writes the row it
-     * wrote before: the columns have been nullable since they were added.
+     * Everything defaults to null, so a call site that passes no characteristics writes a row without them:
+     * the columns are nullable.
      */
     public function issue(
         Model $buyerOwner,
@@ -401,11 +395,10 @@ final readonly class FanReceiptIssuer
      * plain refusal it was meant to soften, because it fails where somebody took care. The read above
      * removes the common repeat; the rare one is a retry, which providers already do.
      *
-     * A PERIODLESS document repeats on its charge reference instead, and that is not a nicety. This used to
-     * read "a document with no period is not a cycle and cannot repeat, so it goes straight to the write" —
-     * true only while the sole caller was the subscription cycle. A routed one-time sale has no period and
-     * IS redelivered: providers retry, and a webhook arriving twice would draw a second number from a
-     * gapless series. A gap there cannot be healed by repeating the operation.
+     * A PERIODLESS document repeats on its charge reference instead, and that is not a nicety. A document with
+     * no period is not a cycle, and it can still repeat: a routed one-time sale has no period and IS
+     * redelivered. Providers retry, and a webhook arriving twice would draw a second number for the same sale,
+     * a second document that cannot be taken back.
      *
      * Matched on `settled_charge_reference` because that is the value the sale itself states — the same
      * anchor the settlement side already uses, rather than a second notion of "the same sale".
@@ -675,8 +668,8 @@ final readonly class FanReceiptIssuer
      *
      * NOT routed through the repeat guard, and deliberately so — this is the one entry point that is SUPPOSED
      * to draw a fresh number. It restates a sale a buyer already has a document for, and a second document
-     * for one sale is the whole point of it. Stated here because the next reader counting direct writes will
-     * otherwise find three and file this as a third instance of the same defect.
+     * for one sale is the whole point of it. Of the direct writes to the number series, this is the one that
+     * draws a fresh number on purpose.
      *
      * It is a real document with its own number stating the same sale, and the receipt the buyer already
      * holds is left exactly as it was: reaching back to change an issued document is precisely what a

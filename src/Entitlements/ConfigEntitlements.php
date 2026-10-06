@@ -111,7 +111,7 @@ final readonly class ConfigEntitlements implements Entitlements
             key: is_string($specKey) ? $specKey : $key,
             label: is_string($label) ? $label : $key,
             used: 0,
-            limit: is_int($limit) ? $limit : null,
+            limit: ConfigLicense::ceiling($limit),
             unit: is_string($unit) ? $unit : '',
             period: is_string($period) ? $period : 'month',
             warnThreshold: is_int($warn) || is_float($warn) ? (float) $warn : 0.8,

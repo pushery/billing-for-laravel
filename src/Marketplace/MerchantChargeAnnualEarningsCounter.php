@@ -32,24 +32,23 @@ use Pushery\Billing\ValueObjects\Money;
  * 90.00 is what their supply was worth. The section-19 basis is the last — the taxable amount of the
  * merchant's own supply, received.
  *
- * It used to sum `net_minor`, the merchant's whole receipt, and call it the payout net in its own comment.
- * That is about a fifth too high, and the direction is the expensive one: the figure decides when a creator
+ * It does not sum `net_minor`, the merchant's whole receipt, which would be about a fifth too high, and
+ * the direction is the expensive one: the figure decides when a creator
  * stops being a small business, so counting high flips them out of the regime EARLY and has them owing a
  * tax they do not yet owe, on every settlement, until somebody recomputes it by hand.
  *
  * The tax reaches the merchant because it is theirs to remit. That is precisely why it is not turnover of
  * theirs, and why it has to come off before this counts.
  *
- * ## The withheld-fee figure used to live here, and its own reason for that is why it left
+ * ## Why the withheld-fee figure is not here
  *
- * It argued it belonged beside this one because the two shared a window and a replay, and that a second
- * class restating them would be two places for each. The premise was the sharing. A withheld fee is a
- * deduction from a particular consideration, so it is placed by the settlement DOCUMENT that credits the
- * seller — while this figure is placed by the money, because it answers what a seller actually received for
- * a small-business threshold. Two duties with two clocks is correct; one counter with two clocks is not.
+ * The two share a window and a replay, and still belong to two classes. A withheld fee is a deduction from a
+ * particular consideration, so it is placed by the settlement DOCUMENT that credits the seller, while this
+ * figure is placed by the money, because it answers what a seller actually received for a small-business
+ * threshold. Two duties with two clocks is correct; one counter with two clocks is not.
  *
- * It is {@see WithheldFeeCounter} now. What genuinely stayed shared was not copied: {@see ChargeReversals}
- * loads and groups the refunds for both.
+ * It is {@see WithheldFeeCounter}. What the two genuinely share is not copied: {@see ChargeReversals} loads
+ * and groups the refunds for both.
  *
  * ## Why this is a row walk and not two sums
  *
@@ -94,9 +93,8 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
         $code = strtoupper($currency);
         // WHICH WINDOW A REVERSAL REDUCES, from the one place that rule lives.
         //
-        // This counter used to answer it on its own and always the same way, while the reporting counter on
-        // the same seam read the setting. So `original_period` moved a reversal for one of them and not for
-        // the other — one key, two behaviors, and nothing in the key's name to say which it governed.
+        // Both counters on this seam read the same setting, so `original_period` moves a reversal for both or
+        // for neither: one key, one behavior.
         //
         // It matters more here than there. This is the figure that decides whether a creator is still a
         // small business: a December sale that tips them over, refunded in February, either leaves the

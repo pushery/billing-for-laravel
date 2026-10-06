@@ -64,9 +64,15 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
             return null;
         }
 
-        [$remaining, $length] = $this->clock($this->periods->forOwner($billable));
+        $period = $this->periods->forOwner($billable);
+        [$remaining, $length] = $this->clock($period);
 
-        return $this->calculator->netForSwap($current->amount, $newPlan->amount, $remaining, $length);
+        // The credit half is priced as applySwap() books it, from what this period's invoice took where
+        // one invoice answers, so the figure shown before a swap is the figure the ledger then holds.
+        $basis = $this->creditBasis($this->invoiceForPeriod($billable, $period, $current->amount->currency), $current);
+
+        return $this->calculator->proratedAmount($newPlan->amount, $remaining, $length)
+            ->minus($this->calculator->proratedAmount($basis, $remaining, $length));
     }
 
     public function applySwap(Model $billable, Plan $newPlan): void
@@ -87,11 +93,7 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
         // thing in the books and in the tax on them.
         $invoice = $this->invoiceForPeriod($billable, $period, $current->amount->currency);
 
-        $basis = $invoice instanceof InvoiceRecord
-            ? new Money((int) $invoice->total_minor, $current->amount->currency)
-            : $current->amount;
-
-        $unused = $this->calculator->proratedAmount($basis, $remaining, $length);
+        $unused = $this->calculator->proratedAmount($this->creditBasis($invoice, $current), $remaining, $length);
 
         // A swap at the very end of a period leaves nothing unused. Writing a zero movement would add a
         // ledger entry that says nothing happened, which is noise in the one place that has to stay
@@ -163,6 +165,18 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
             ->get();
 
         return $matches->count() === 1 ? $matches->first() : null;
+    }
+
+    /**
+     * What the unused time is a share of: the amount the one invoice of this period took, or the plan's
+     * list price when no one invoice answers. The preview and the booking both ask here, so they cannot
+     * name different credits for the same swap.
+     */
+    private function creditBasis(?InvoiceRecord $invoice, Plan $current): Money
+    {
+        return $invoice instanceof InvoiceRecord
+            ? new Money((int) $invoice->total_minor, $current->amount->currency)
+            : $current->amount;
     }
 
     private function currentPlan(Model $billable): ?Plan

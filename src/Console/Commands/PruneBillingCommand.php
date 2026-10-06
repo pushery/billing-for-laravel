@@ -15,6 +15,7 @@ use Pushery\Billing\Enums\RetentionExecutor;
 use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Exceptions\RetentionHoldUnavailable;
 use Pushery\Billing\Models\BillingEvent;
+use Pushery\Billing\Models\WebhookEffectRun;
 use Pushery\Billing\Support\OwnerScopedTables;
 use Pushery\Billing\Support\RetentionHoldGate;
 use Pushery\Billing\Support\RetentionMatrix;
@@ -73,10 +74,17 @@ final class PruneBillingCommand extends Command
         $payloads = DB::table(OwnerScopedTables::SCRUBBED)
             ->whereNotNull('payload')
             ->where('status', WebhookEventState::Handled->value)
-            ->where('created_at', '<=', $payloadCutoff);
+            ->where('created_at', '<=', $payloadCutoff)
+            ->whereNotIn('id', WebhookEffectRun::model()::query()
+                ->select('delivery_id')
+                ->whereNotNull('delivery_id')
+                ->where('status', '!=', WebhookEventState::Handled->value));
 
         // A delivery whose effects are still owed keeps its payload however old it is: dropping it would
-        // throw away the only copy of work the package knows it has not finished.
+        // throw away the only copy of work the package knows it has not finished. A handled delivery is one
+        // whose effects were queued, not one whose effects ran, so what it still owes is read from its effect
+        // runs: one that is pending or failed keeps the payload a replay needs. The subquery leaves out runs
+        // without a delivery, because a single NULL in a NOT IN list would keep every payload.
         //
         // And one the host holds keeps it too. Nulling a payload is a destruction like any other here — the
         // row survives, but the thing a preservation order was about does not.
@@ -107,10 +115,8 @@ final class PruneBillingCommand extends Command
         // remembers this loop exists.
         $financialCount = 0;
 
-        // Which column dates a record comes from the matrix, not from a copy here. This command used to
-        // carry its own — the same table-to-column list under a different name, in the method that already
-        // receives the matrix. Nothing was wrong while both held one identical entry; what was wrong is that
-        // a consumer asking `issueColumnFor()` and the package's own pruner could ever answer differently.
+        // Which column dates a record comes from the matrix, not from a copy here: with a copy, a consumer
+        // asking `issueColumnFor()` and the package's own pruner could answer differently.
         $issueColumns = $matrix->issueColumns();
 
         // A retained table whose own rule asks for longer keeps that window. Place evidence keeps ten years where an

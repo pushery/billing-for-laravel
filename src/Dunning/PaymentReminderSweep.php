@@ -41,8 +41,8 @@ use Pushery\Billing\Models\Subscription;
  * adopt the lockout and not the reminder. That is the half that helps the person: without it the window
  * runs out, access is gone, and nobody heard anything.
  *
- * {@see LocalArrearsRoster} is the shipped one and carries the query this class used to run inline,
- * including the reason it selects merchant-scoped rows rather than reading the marketplace flag.
+ * {@see LocalArrearsRoster} is the shipped one and carries the query, including the reason it selects
+ * merchant-scoped rows rather than reading the marketplace flag.
  *
  * ## The order of the two writes is deliberate
  *
@@ -68,7 +68,7 @@ final readonly class PaymentReminderSweep
         $window = $this->window->days();
         $today = Carbon::instance($now)->toDateString();
 
-        // Strictly AFTER the cutoff: a subscription whose clock started exactly `window` days ago has run out
+        // Strictly AFTER the cutoff: a subscription whose clock started on the day `window` days ago has run out
         // and belongs to the expiry path, not to this one. The expiry takes the other half of this same
         // comparison, from the same object, so the two can never overlap into two messages on one day nor
         // leave a silent gap between them.
@@ -97,10 +97,15 @@ final readonly class PaymentReminderSweep
      * Takes the interface the seam speaks in rather than Carbon's own: an application's roster hands over
      * whatever date type its storage produces, and narrowing here would push a conversion onto every
      * implementor for no gain — `Carbon::instance()` below accepts any of them.
+     *
+     * Both days are read in the zone of `$now`, the zone the cutoff counts its days in. A clock stored in UTC
+     * can fall on another calendar day there, and counted in its own zone it would announce a day the window
+     * does not have.
      */
     private function daysLeft(DateTimeInterface $since, CarbonImmutable $now, int $window): int
     {
-        $elapsed = (int) Carbon::instance($since)->startOfDay()->diffInDays(Carbon::instance($now)->startOfDay());
+        $start = Carbon::instance($since)->setTimezone($now->getTimezone())->startOfDay();
+        $elapsed = (int) $start->diffInDays(Carbon::instance($now)->startOfDay());
 
         return max(0, $window - $elapsed);
     }

@@ -50,9 +50,6 @@ use Pushery\Billing\Enums\ExchangeRateBasis;
  * So a caller asking for a direction nobody published gets a refusal, exactly as it would for a day nobody
  * published. Whoever needs the other direction converts deliberately, at a scale they have chosen, and owns
  * the rounding.
- *
- * This was undefined until 2026-07-27 — `rateScaled` had no consumer in the package at all, so no code was
- * wrong, but the first importer would have made whichever direction it happened to write permanent.
  */
 final readonly class FrozenExchangeRate
 {
@@ -88,7 +85,7 @@ final readonly class FrozenExchangeRate
      *
      * Compared numerically and never as text. The two channels of the same publisher format identical values
      * differently — `11.0550` against `11.055`, `143.00` against `143` — so a string or hash comparison
-     * raises a false alarm **between two genuine copies of the same official figure**. Measured, not assumed.
+     * raises a false alarm **between two genuine copies of the same official figure**.
      *
      * NO PRODUCTION CALLER YET, and that is a state rather than an oversight. The consumer it was written for
      * is the cross-check performed when a SECOND official source is imported beside the central bank's

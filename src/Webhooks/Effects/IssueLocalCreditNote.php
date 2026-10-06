@@ -224,10 +224,10 @@ final readonly class IssueLocalCreditNote implements DedupesOnReference
     }
 
     /**
-     * A credit note carries its own number from the same sequence, so the series stays gapless.
+     * A credit note carries its own number from the one credit-note series.
      *
-     * The prefix and the width moved to {@see CreditNoteNumber} when a second producer appeared. Two copies
-     * of a format string are the pair that stays identical until somebody changes one, and both halves
+     * The prefix and the width live in {@see CreditNoteNumber}, which the § 17 correction draws from as well. Two
+     * copies of a format string are the pair that stays identical until somebody changes one, and both halves
      * would go on producing perfectly valid numbers while the series quietly forked.
      */
     private function number(Carbon $issuedAt): string

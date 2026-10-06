@@ -21,10 +21,8 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  *
  * `provider_coupon_id` is the provider's own id for this coupon, and the Stripe checkout READS it:
  * `StripeCheckout::providerCouponFor()` prefers it over the global `billing.coupons.<code>.stripe_coupon`
- * map, after the code has passed the catalog check. It had no reader at all until 2026-08-19 — an adopter
- * who filled it, because this model and the migration offer it, got a discount that never applied and
- * nothing threw or warned. Leaving it null keeps the config answering, so a config-only installation
- * reads exactly as it did before.
+ * map, after the code has passed the catalog check. Leaving it null keeps the config answering, so a
+ * config-only installation reads its discounts from the config alone.
  *
  * This model is the persistence surface only (the redemption ledger and the discount math live with the
  * DiscountResolver / billing engine); it carries the columns, casts and the redemptions relation.
@@ -39,10 +37,10 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * ## Who a coupon belongs to
  *
  * `merchant_uid` is the issuer: the platform (`platform`) or one merchant (`m:<type>#<id>`). It exists
- * because `code` used to be globally unique, which meant two sellers could not both run a `SUMMER25` — the
- * namespace was shared, so it was effectively reserved for whoever claimed a name first. On a marketplace
- * the seller's own discount code is the acquisition tool, so that is not a limitation of the feature, it is
- * its absence.
+ * so `code` is unique per issuer, not globally: with one shared namespace two sellers could not both run a
+ * `SUMMER25`, and a name would be reserved for whoever claimed it first. On a marketplace the seller's own
+ * discount code is the acquisition tool, so that would not be a limitation of the feature, it would be its
+ * absence.
  *
  * Always read a coupon through {@see Coupon::scopeIssuedBy()}, and by its code through {@see CouponCodes::find()},
  * which matches a code the same way on every database. A bare `where('code', ...)` finds ANY issuer's coupon of
@@ -133,9 +131,9 @@ class Coupon extends Model
      * Whether this coupon can still be honored: switched on, and not past its expiry.
      *
      * ONE definition for every reader that answers yes or no: the resolver, the hosted checkout's provider mapping
-     * and the local driver's coupon question. Each used to spell it out on its own, and the hosted checkout's copy
-     * left it out entirely, so a withdrawn coupon's Stripe discount still reached the invoice wherever the config
-     * accepted the same code. `CouponRedeemer` keeps its own checks, because it has to say WHICH condition failed.
+     * and the local driver's coupon question. A copy in each would drift, and a copy that left it out would let a
+     * withdrawn coupon's Stripe discount reach the invoice wherever the config accepts the same code.
+     * `CouponRedeemer` keeps its own checks, because it has to say WHICH condition failed.
      *
      * The redemption cap is not part of it. That is a race by nature, and the only place it can be enforced
      * truthfully is the redeemer's locked transaction.
@@ -143,5 +141,22 @@ class Coupon extends Model
     public function isLive(): bool
     {
         return $this->active && (! $this->expires_at instanceof Carbon || ! $this->expires_at->isPast());
+    }
+
+    /**
+     * Whether this row describes a discount at all: a `percent` from 1 to 100, or a `fixed` amount above zero.
+     *
+     * The row is written by the application, so a percentage of 0 or 150 or a type of `percentage` is a row the
+     * package meets. ONE definition for the local driver's coupon question, the redemption of a carried code and
+     * the cycle that applies it: a screen that read such a row as a code that took, while the cycle read it as no
+     * discount, would show a customer a discount and charge them in full.
+     */
+    public function describesADiscount(): bool
+    {
+        return match ($this->type) {
+            'percent' => $this->value >= 1 && $this->value <= 100,
+            'fixed' => $this->value > 0,
+            default => false,
+        };
     }
 }

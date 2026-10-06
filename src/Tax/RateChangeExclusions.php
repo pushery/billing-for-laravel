@@ -36,12 +36,11 @@ namespace Pushery\Billing\Tax;
  * bulk rate-change command and deliberately does not: changing rates across a corpus is an operator act
  * with a signature behind it, not a package feature.
  *
- * This used to be stated as a method — `dryRunRequired()`, returning `true` unconditionally, called by
- * nobody. It read like an enforced protection and was none: there was no point at which the answer
- * prevented anything. A reader would reasonably conclude the package guarded the dry run, and shipped
- * prose that promises a protection the reader does not have is worse than silence. So it says what it is:
- * an instruction to the caller, in the one place the caller already reads to learn what the automation
- * must skip.
+ * It is stated here and not as a method: a `dryRunRequired()` returning `true` unconditionally, called by
+ * nobody, would read like an enforced protection and be none, because there would be no point at which the
+ * answer prevented anything. Shipped prose that promises a protection the reader does not have is worse
+ * than silence. So it says what it is: an instruction to the caller, in the one place the caller already
+ * reads to learn what the automation must skip.
  *
  * `mayTouch()` stays a method because it is the other kind of thing entirely — it ANSWERS a question,
  * about a specific record kind, and a caller cannot work out the answer without it.

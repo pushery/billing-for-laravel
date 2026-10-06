@@ -55,8 +55,9 @@ final readonly class MarketplacePreflight
         // The waivers are checked against every registered point, the ones this run leaves out included. A
         // waiver for a point only the console evaluates is valid; checked against the boot set alone it named
         // "no such checkpoint", a blocking failure, and the application refused to start over it.
-        $waived = $this->waivedKeys();
-        $integrity = $this->waiverIntegrityLine($registered, $waived);
+        $configured = $this->config->get('billing.marketplace.preflight.waived', []);
+        $waived = $this->waivedKeys($configured);
+        $integrity = $this->waiverIntegrityLine($registered, $waived, $this->malformedWaivers($configured));
 
         $lines = [];
         $empty = [];
@@ -166,8 +167,9 @@ final readonly class MarketplacePreflight
      *
      * @param  list<GoLiveCheckpoint>  $checkpoints
      * @param  list<string>  $waived
+     * @param  string|null  $malformed  What the configured value holds besides checkpoint keys, if anything.
      */
-    private function waiverIntegrityLine(array $checkpoints, array $waived): ?PreflightLine
+    private function waiverIntegrityLine(array $checkpoints, array $waived, ?string $malformed): ?PreflightLine
     {
         $waivable = [];
         $known = [];
@@ -183,11 +185,15 @@ final readonly class MarketplacePreflight
         $unknown = array_values(array_diff($waived, $known));
         $notWaivable = array_values(array_diff($waived, $waivable, $unknown));
 
-        if ($unknown === [] && $notWaivable === []) {
+        if ($malformed === null && $unknown === [] && $notWaivable === []) {
             return null;
         }
 
         $problems = [];
+
+        if ($malformed !== null) {
+            $problems[] = $malformed;
+        }
 
         if ($unknown !== []) {
             $problems[] = 'no checkpoint is registered under '.implode(', ', $unknown);
@@ -208,16 +214,50 @@ final readonly class MarketplacePreflight
         );
     }
 
-    /** @return list<string> */
-    private function waivedKeys(): array
+    /**
+     * The checkpoint keys the configured waiver list names: its string entries, and nothing from a value that
+     * is not a list.
+     *
+     * @return list<string>
+     */
+    private function waivedKeys(mixed $configured): array
     {
-        $waived = $this->config->get('billing.marketplace.preflight.waived', []);
-
-        if (! is_array($waived)) {
+        if (! is_array($configured)) {
             return [];
         }
 
-        return array_values(array_unique(array_filter($waived, is_string(...))));
+        return array_values(array_unique(array_filter($configured, is_string(...))));
+    }
+
+    /**
+     * What the configured waiver list holds besides checkpoint keys, as a sentence, or null when it holds
+     * nothing else.
+     *
+     * Such a value waives nothing, and an entry that is not a string waives nothing either: that is the safe
+     * reading. It must not stay silent, for the reason waiverIntegrityLine() gives. Null and an empty string
+     * read as an empty list, because nothing was written there.
+     */
+    private function malformedWaivers(mixed $configured): ?string
+    {
+        if ($configured === null || $configured === '') {
+            return null;
+        }
+
+        if (! is_array($configured)) {
+            return 'the value is '.get_debug_type($configured).', not a list of checkpoint keys';
+        }
+
+        $others = array_values(array_filter($configured, static fn (mixed $entry): bool => ! is_string($entry)));
+
+        if ($others === []) {
+            return null;
+        }
+
+        $types = implode(', ', array_unique(array_map(get_debug_type(...), $others)));
+
+        return count($others) === 1
+            ? "it holds one entry that is not a checkpoint key ({$types})"
+            : 'it holds '.count($others)." entries that are not checkpoint keys ({$types})";
     }
 
     /** @param  list<PreflightLine>  $lines */

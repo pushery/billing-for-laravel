@@ -15,10 +15,10 @@ use Pushery\Billing\ValueObjects\Money;
  * suspension ladder. Localized via the publishable billing::notifications namespace and non-suppressible —
  * a suspension notice the customer must not be able to opt out of.
  *
- * It carries the late fee the rung added, and names it as a fee only when there is one. It used to print
- * that figure as the overdue amount, between "an overdue balance" and "settle the amount below", so every
- * rung without a fee asked the customer to settle 0.00 and a rung with one named the fee as the debt. The
- * amount that failed was named by the payment-failed notice that opened the arrears; this one leads to the
+ * It carries the late fee the rung added, and names it as a fee only when there is one. Printed as the
+ * overdue amount, between "an overdue balance" and "settle the amount below", that figure would ask the
+ * customer to settle 0.00 on every rung without a fee and name the fee as the debt on a rung with one. The
+ * amount that failed is named by the payment-failed notice that opened the arrears; this one leads to the
  * recovery screen, where the owner fixes the payment method the provider retries.
  */
 final class SuspensionWarningNotification extends BillingNotification

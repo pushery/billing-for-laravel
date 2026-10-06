@@ -44,8 +44,8 @@ use Pushery\Billing\ValueObjects\RoutedInvoiceCommission;
  *
  * ## The local row decides whether to ask at all
  *
- * The paid-invoice payload says nothing about routing (measured on the pinned version: no `transfer_data`,
- * no account, not even a link to the payment). So this asks the SUBSCRIPTION this package already recorded.
+ * The paid-invoice payload says nothing about routing: no `transfer_data`, no account, not even a link to
+ * the payment. So this asks the SUBSCRIPTION this package already recorded.
  * An unrouted one stops here, and stopping here is what keeps three provider calls off every payment on
  * every install that routes nothing.
  *

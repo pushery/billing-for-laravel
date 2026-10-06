@@ -11,6 +11,7 @@ use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Enums\BuyerAudience;
 use Pushery\Billing\Enums\TaxArchetype;
+use Pushery\Billing\Support\KeyedConfig;
 use Pushery\Billing\Support\UntouchableTiers;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\TierIdentity;
@@ -26,7 +27,7 @@ final readonly class ConfigTierCatalog implements SuppliesBuyerAudiences, Suppli
     /** Who may buy the offer, from `billing.tiers.<key>.buyers`: anyone unless it says `business`. */
     public function audienceFor(string $key): BuyerAudience
     {
-        return BuyerAudience::fromConfig($this->config->get("billing.tiers.{$key}.buyers"), "billing.tiers.{$key}");
+        return BuyerAudience::fromConfig(KeyedConfig::setting($this->config, 'billing.tiers', $key, 'buyers'), "billing.tiers.{$key}");
     }
 
     /**
@@ -38,7 +39,7 @@ final readonly class ConfigTierCatalog implements SuppliesBuyerAudiences, Suppli
      */
     public function archetypeFor(string $key): ?TaxArchetype
     {
-        $archetype = $this->config->get("billing.tiers.{$key}.archetype");
+        $archetype = KeyedConfig::setting($this->config, 'billing.tiers', $key, 'archetype');
 
         if ($archetype === null) {
             return null;
@@ -90,14 +91,14 @@ final readonly class ConfigTierCatalog implements SuppliesBuyerAudiences, Suppli
 
     public function label(string $key): string
     {
-        $label = $this->config->get("billing.tiers.{$key}.label");
+        $label = KeyedConfig::setting($this->config, 'billing.tiers', $key, 'label');
 
         return is_string($label) ? $label : $key;
     }
 
     public function isByok(string $key): bool
     {
-        return $this->config->get("billing.tiers.{$key}.byok") === true;
+        return KeyedConfig::setting($this->config, 'billing.tiers', $key, 'byok') === true;
     }
 
     public function isUntouchable(string $key): bool
@@ -107,8 +108,8 @@ final readonly class ConfigTierCatalog implements SuppliesBuyerAudiences, Suppli
 
     public function priceDisplay(string $key): ?Money
     {
-        $amount = $this->config->get("billing.tiers.{$key}.price_display.amount");
-        $currency = $this->config->get("billing.tiers.{$key}.price_display.currency");
+        $amount = KeyedConfig::setting($this->config, 'billing.tiers', $key, 'price_display.amount');
+        $currency = KeyedConfig::setting($this->config, 'billing.tiers', $key, 'price_display.currency');
 
         return is_int($amount) && is_string($currency) ? Money::of($amount, $currency) : null;
     }

@@ -272,7 +272,7 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
      * leaves arranging the sale as the only description the facts support, whatever the platform configured
      * for everything else.
      *
-     * This lived in the neutral resolver until 2026-07-28. The FACT it rests on is jurisdiction-neutral;
+     * The FACT it rests on is jurisdiction-neutral;
      * concluding a REGIME from it is not, which is why it is stated here by a profile that answers for one
      * jurisdiction rather than there by a class that answers for all of them.
      *

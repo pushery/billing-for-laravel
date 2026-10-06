@@ -31,7 +31,10 @@ use Pushery\Billing\ValueObjects\Money;
 /**
  * The default notification delivery for the package: the dunning, receipt, suspension, mandate, trial and
  * cancellation notices, all through Laravel's notification stack. It goes via the Notification facade rather
- * than $owner->notify() so any billing owner works, whether or not it uses the Notifiable trait. The
+ * than $owner->notify(), so the owner needs no notify() of its own. The channels still ask the owner where a
+ * notice goes: mail through routeNotificationFor(), the database channel through notifications(), both of
+ * which Laravel's Notifiable provides. On an owner model without them each queued notice fails, and
+ * `billing:doctor` names such an owner type. The
  * once-per-failure / once-per-payment / once-per-rung / once-per-trial-end / once-per-cancellation
  * guarantees live in the callers (the webhook effects and the dunning-advance command); this simply delivers.
  */

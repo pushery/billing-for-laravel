@@ -182,11 +182,11 @@ trait NormalizesInvoiceModel
     }
 
     /**
-     * How this document is taxed — the derivation that used to stand byte-identically in both writers.
+     * How this document is taxed — one derivation, which both writers call.
      *
-     * Eight places read these same five lines. Correct the rule in one renderer and the other keeps the old
-     * reading, and the defect is then format-specific: it shows up in whichever of the two nobody is looking
-     * at. One derivation cannot disagree with itself.
+     * Eight places read these same five lines. A copy in each renderer would let a correction reach one and
+     * not the other, and the defect would then be format-specific: it would show up in whichever of the two
+     * nobody is looking at. One derivation cannot disagree with itself.
      */
     private function taxTreatmentFor(InvoiceRecord $invoice): EnInvoiceTaxTreatment
     {

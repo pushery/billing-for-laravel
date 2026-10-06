@@ -276,8 +276,8 @@ final readonly class UsageRecorder
 
         if (! $hold instanceof UsageHold) {
             // The same sum the reservation just refused — the same method, so the message cannot quote a
-            // remainder measured differently from the refusal it explains. It used to compute its own, and
-            // once the free allowance was gone it told the customer they had units that were already held.
+            // remainder measured differently from the refusal it explains. A sum of its own would, once the
+            // free allowance is gone, tell the customer they have units that are already held.
             $included = $component instanceof MeteredComponent ? $component->included : null;
             $remaining = $this->counters->remaining($owner, $meterKey, $period->key, $included);
 

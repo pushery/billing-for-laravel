@@ -85,9 +85,8 @@ final readonly class XRechnungInvoice implements EInvoice
         // once in the shared concern so UBL and CII never disagree. The code, not a negative amount, carries
         // the correcting meaning, so the amounts below stay positive.
         //
-        // All FOUR are named on purpose. This sentence used to list three and leave out 384, which reads as
-        // the complete table and is the one omission that matters here: a cancellation and an amendment are
-        // two different documents that a tax authority tells apart by this code alone.
+        // All FOUR are named on purpose: a cancellation and an amendment are two different documents that a
+        // tax authority tells apart by this code alone.
         $this->el($doc, $root, 'cbc:InvoiceTypeCode', $this->typeCode($invoice));
         $this->el($doc, $root, 'cbc:DocumentCurrencyCode', $currency);
         // BT-10 Buyer reference (the Leitweg-ID for B2G); defaults to the invoice reference for B2B.
@@ -148,9 +147,8 @@ final readonly class XRechnungInvoice implements EInvoice
         // VAT category AE at 0% with an exemption reason on the document band — not the zero-rated Z a 0%
         // rate would otherwise get, which a conformant EN 16931 validator rejects here.
         //
-        // These five lines used to stand here and, byte for byte, in the CII writer as well. Two readings of
-        // one rule drift, and the drift is format-specific: it appears in whichever of the two nobody is
-        // looking at.
+        // The same call the CII writer makes. Two readings of one rule drift, and the drift is
+        // format-specific: it appears in whichever of the two nobody is looking at.
         $treatment = $this->taxTreatmentFor($invoice);
 
         $root->appendChild($this->taxTotal($doc, $currency, $treatment));
@@ -323,10 +321,9 @@ final readonly class XRechnungInvoice implements EInvoice
     {
         $category = $doc->createElement($name);
 
-        // Decided by the shared authority rather than here. Both writers used to carry their own copy of this
-        // rule, and two copies of a rule are two places it can drift — with no symptom, because each document
-        // stays internally consistent and only a reader comparing a UBL and a CII rendering of the SAME
-        // invoice would ever see them disagree.
+        // Decided by the shared authority rather than here. A copy of this rule in each writer would be two
+        // places it can drift — with no symptom, because each document stays internally consistent and only
+        // a reader comparing a UBL and a CII rendering of the SAME invoice would ever see them disagree.
         $resolved = EnInvoiceTaxCategory::forDocument($treatment->invoice, $rate);
 
         $this->el($doc, $category, 'cbc:ID', $resolved->code);

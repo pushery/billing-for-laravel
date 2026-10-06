@@ -222,10 +222,9 @@ final class ManageSubscription extends AccountScreen
         Container::getInstance()->make(PurchaseDeclarations::class)
             ->assertMaySubscribe($this->owner(), $tierKey, $declarationReference);
 
-        // `StartsSubscriptions`, not `Checkout`. Only the hosted-checkout driver binds `Checkout`, so this
-        // line used to resolve an unbound interface under every other driver and the button ended in a
-        // `BindingResolutionException` -- the package's own screen could not reach the package's own
-        // subscribe flow. This contract is what every driver answers, each in its own shape.
+        // `StartsSubscriptions`, not `Checkout`. Only the hosted-checkout driver binds `Checkout`, so asking
+        // for it here would resolve an unbound interface under every other driver and end the button in a
+        // `BindingResolutionException`. This contract is what every driver answers, each in its own shape.
         $start = Container::getInstance()->make(StartsSubscriptions::class)->start($this->owner(), $tierKey, $coupon, $declarationReference);
         $url = SafeExternalUrl::orNull($start->checkoutUrl);
 
@@ -297,11 +296,11 @@ final class ManageSubscription extends AccountScreen
      * configured driver would actually apply it, 'invalid' otherwise — so the visitor sees the code take
      * before they commit to anything.
      *
-     * ASKED OF THE DRIVER, not of the catalog, and the difference is money. This used to ask the
-     * `DiscountResolver` — the config-defined coupon map — and its own docblock admitted the hole: "a code
-     * with no provider mapping resolves here but simply discounts nothing at the provider." A driver that
-     * bills locally widened the same hole, because it reads a different catalog entirely. Either way the
-     * visitor was told their code took and was then charged in full, with nothing anywhere saying so.
+     * ASKED OF THE DRIVER, not of the catalog, and the difference is money. The `DiscountResolver` — the
+     * config-defined coupon map — resolves a code with no provider mapping that then discounts nothing at the
+     * provider, and a driver that bills locally reads a different catalog entirely. Either way, asking the
+     * catalog would tell the visitor their code took and then charge them in full, with nothing anywhere
+     * saying so.
      */
     private function couponStatus(): ?string
     {

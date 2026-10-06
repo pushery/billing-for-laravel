@@ -14,8 +14,9 @@ use Pushery\Billing\Support\TrialCallouts;
 
 /**
  * The reminder sent as a free trial nears its end. Localized via the publishable
- * billing::notifications namespace and non-suppressible. The trial-end date is carried as a plain
- * ISO date — rich locale formatting is a presentation concern, not the notification's.
+ * billing::notifications namespace and non-suppressible. The mail names the trial-end date in the
+ * application's language (`LocalizedDate::long()`), the database entry carries it as an ISO date, and both
+ * read the day in the zone of the moment passed in, so the two never name different days.
  *
  * Queued AFTER COMMIT, like every notification the package sends: the run that sends it claims, mails and
  * marks itself handled in one transaction, so a run that rolled back can never have mailed the customer.

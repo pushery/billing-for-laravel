@@ -85,8 +85,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * `@partially-mapped:` `payment_intent.succeeded`, `payment_intent.payment_failed` and
  * `payment_intent.canceled` ARE answered — but only for a ROUTED marketplace charge, and every one of them
- * returns nothing for a payment that carries an invoice. The sentence below used to say the family was not
- * mapped at all, which stopped being true when the routed lane landed.
+ * returns nothing for a payment that carries an invoice.
  *
  * `payment_intent.*` is mapped for NOTHING INVOICE-DRIVEN, which is every customer-facing payment. Those are
  * already covered: a subscription charge fires `invoice.payment_*` (which carries the invoice reference the
@@ -474,7 +473,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
      * The cycle behind a paid invoice, when there is one.
      *
      * Emitted for EVERY paid subscription invoice, routed or not — because the delivered payload cannot say
-     * which. It carries no `transfer_data` and no account (measured 2026-08-07 on the pinned version), so
+     * which. It carries no `transfer_data` and no account on the pinned version, so
      * the discrimination has to happen where this package already knows the answer: on the local
      * subscription row. Deciding here would mean fetching from the provider inside a mapper, which is the
      * one thing a mapper must never do.
@@ -640,11 +639,9 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
                 $this->string($object, 'payment_intent'),
                 $soldAlongside,
                 $tipMerchant,
-                // Three answers, not two, and the third is the one this used to swallow. The key said
-                // absent reads as NOT domestic — a safe reading of a missing value, except that the session
-                // opener never wrote the key at all, so EVERY real tip took that branch and every listener
-                // was handed a fact about the buyer nobody had established. The opener writes it now, and
-                // absent has gone back to meaning what it says.
+                // Three answers, not two, and the third is null. Absent is not read as NOT domestic: that
+                // would hand every listener a fact about the buyer nobody established. The session opener
+                // writes the key, so a session without it is one nobody answered for, and null says so.
                 match ($this->string($metadata, 'tip_buyer_domestic')) {
                     '1' => true,
                     '0' => false,

@@ -15,8 +15,8 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Lang;
 use Override;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\DocumentSeries;
@@ -354,10 +354,10 @@ class InvoiceRecord extends Model
     #[Override]
     protected static function booted(): void
     {
-        // Seven delegations, and that shape is the point. Every rule below used to live here as a closure —
-        // a third of this class in one static method — which meant each of them could only be exercised by
-        // saving a real row against a real database. A rule that expensive to reach is a rule whose edge
-        // cases do not get written, and the ungiven edge cases are the ones that come back as defects.
+        // Seven delegations, and that shape is the point. A rule written here as a closure could only be
+        // exercised by saving a real row against a real database. A rule that expensive to reach is a rule
+        // whose edge cases do not get written, and the ungiven edge cases are the ones that come back as
+        // defects.
         //
         // Registered HERE rather than in an observer so no second caller — a job, a console command,
         // consumer code writing its own document — can route around them. What moved is where the rules
@@ -646,7 +646,7 @@ class InvoiceRecord extends Model
         $owner = $prefers ? $invoice->owner()->first() : null;
         $preferred = $owner instanceof HasLocalePreference ? $owner->preferredLocale() : null;
 
-        return is_string($preferred) && $preferred !== '' ? $preferred : App::getLocale();
+        return is_string($preferred) && $preferred !== '' ? $preferred : Lang::getLocale();
     }
 
     /**
@@ -704,10 +704,10 @@ class InvoiceRecord extends Model
      *
      * ## Why this is a scope and not a private method
      *
-     * Two queries need it, and they used to have one and a half. The counter carried the full rule; the
-     * reporting run's roster filtered on `issued_at` alone — so under the shipped attribution a seller whose
-     * only activity in a year was a correction of an older settlement entered the roster and then received a
-     * row of ZEROS, because the counters placed that correction in the previous year.
+     * Two queries need it: the counter and the reporting run's roster. A roster filtering on `issued_at` alone
+     * would, under the shipped attribution, enter a seller whose only activity in a year was a correction of
+     * an older settlement and then give them a row of ZEROS, because the counters place that correction in the
+     * previous year.
      *
      * A row of zeros is not an empty answer. It states that a seller received nothing, which is a claim
      * about their year, and it is exactly what `SellerReportingPeriod` documents itself as avoiding. The

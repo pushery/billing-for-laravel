@@ -77,8 +77,10 @@ final readonly class DatabaseUsageHistory implements UsageHistoryProvider
                 amount: Money::of($row->amount_minor, $row->currency),
                 // created_at is set on insert; fall back to now only for the degenerate untimestamped row.
                 purchasedAt: $row->created_at ?? Carbon::now(),
-                // Fully clawed back: explicitly revoked, or the reversed amount reached the purchase.
-                reversed: $row->revoked_at !== null || $row->reversed_minor >= $row->amount_minor,
+                // Fully clawed back: explicitly revoked, or the reversed amount reached the purchase. A purchase that
+                // cost nothing, such as a fully discounted checkout, has no amount to reach, so only a revocation
+                // reverses it.
+                reversed: $row->revoked_at !== null || ($row->amount_minor > 0 && $row->reversed_minor >= $row->amount_minor),
             ))
             ->all());
     }

@@ -99,9 +99,8 @@ final readonly class ScheduledSwapRunner
         // it was deferred to begins: nothing when the cycle has already opened that period, and the whole of the
         // period before when that one is still being collected.
         //
-        // This runner used to book the proration itself and then call the swap. That was one credit only
-        // because the local driver scheduled the due downgrade again instead of applying it, so the tier never
-        // moved; with the swap applying, it would be two.
+        // This runner books no proration of its own before calling the swap: the swap applies, so a credit
+        // booked here as well would be a second one.
         //
         // Only the default contract is prorated. The local strategy prices the owner, not a row: it reads the
         // tier and period the owner resolves to, which are the default contract's, so for any other type it

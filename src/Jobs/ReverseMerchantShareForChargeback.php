@@ -87,20 +87,12 @@ final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
         // all -- a destination-charge install, where the provider unwinds the transfer with the refund --
         // legitimately has nothing here.
         //
-        // THE REVERSAL CONTRACT IS ASKED FOR FIRST, AND UNTIL 2026-09-19 IT WAS NEVER ASKED AT ALL. This
-        // block resolved the OUTBOUND verb and settled the question with an `instanceof` -- so a consumer
-        // who followed the contract's own docblock, implemented the reversal in its own class and bound it
-        // here, was never reached. Measured across the package on 2026-09-19: one consumer of the contract
-        // (this job), ZERO `make()` calls for it, ZERO bindings. The shipped driver satisfies the unwritten
-        // condition by accident, because `StripeMerchantTransfers` carries both verbs on one class.
-        //
-        // What it cost, reported from a consumer: their outbound driver is a wallet of their own, so every
-        // lost dispute landed in `failRefund` and the creator kept the share of a sale the network had
-        // already clawed back. No throw, no red line, nothing that looks like a defect -- and the message
-        // below read as "this driver cannot", when the truth was "yours was never asked".
-        //
-        // The fallback keeps every existing install unchanged: where nothing is bound under the reversal
-        // contract, the outbound object answers exactly as before.
+        // The reversal contract is asked for first, so a consumer who implements the reversal in its own class
+        // and binds it under `ReversesMerchantShare` is reached even when its outbound driver is something
+        // else, a wallet of its own for instance. Asking only the outbound object would leave such an install
+        // failing every lost dispute into `failRefund` while the creator kept a share the network had already
+        // clawed back. Where nothing is bound under the reversal contract, the outbound object answers: the
+        // shipped `StripeMerchantTransfers` carries both verbs on one class.
         // THE MESSAGE BELOW ASKS THE CONTAINER, NOT THE RESOLVED OBJECT, AND THAT IS NOT A DETAIL. A
         // `$outbound === null` there reads naturally and the analyzer rejects it as always-true: this
         // package ships ONE implementation of the outbound contract and it happens to carry both verbs, so

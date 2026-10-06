@@ -25,6 +25,8 @@ use Pushery\Billing\ValueObjects\TierIdentity;
  * generic trial only applies in the ABSENCE of a subscription: once a subscription exists its state
  * governs, so a past-due/incomplete subscriber whose owner trial clock still happens to be in the future
  * is NOT rescued back to the paid tier — that would defeat this resolver's own hard-dunning contract.
+ * A row in one of the two terminal states is absent in that sense: it is the row a new subscription takes
+ * over, and a returning customer the starter gave a generic trial is entitled to it.
  */
 final readonly class SubscriptionTierResolver implements TierResolver
 {
@@ -44,7 +46,7 @@ final readonly class SubscriptionTierResolver implements TierResolver
             ->latest('id')
             ->first();
 
-        if ($subscription instanceof Subscription) {
+        if ($subscription instanceof Subscription && ! $subscription->isReplaceableByANewSubscription()) {
             $tierKey = $subscription->tier_key;
 
             if ($this->presenter->present($subscription->toSnapshot())->grantsAccess() && is_string($tierKey)) {
@@ -61,8 +63,8 @@ final readonly class SubscriptionTierResolver implements TierResolver
             return $this->zeroTier();
         }
 
-        // No subscription at all: a generic trial (the owner's own trial clock) unlocks its configured
-        // tier while it runs.
+        // No subscription at all, or only one that ended: a generic trial (the owner's own trial clock) unlocks
+        // its configured tier while it runs.
         $genericTier = $this->trials->genericTier();
 
         if ($genericTier !== null && $this->trials->onGenericTrial($billable)) {

@@ -12,14 +12,15 @@ use Pushery\Billing\Support\InvoiceNumberSequence;
  * The number an invoice the package raises itself carries.
  *
  * One series for every such invoice: an order's invoice and a receipt from the counter are the seller's invoices
- * alike, and an accountant checks a series for gaps only as a whole. This was a private method on the order
- * issuer until the counter receipt became the second producer, and two copies of a prefix and a padding width
- * stay identical only until somebody changes one of them. See {@see CreditNoteNumber} for the same move.
+ * alike, and an accountant checks a series for gaps only as a whole. Both producers draw through this class,
+ * because two copies of a prefix and a padding width stay identical only until somebody changes one of them. See
+ * {@see CreditNoteNumber} for the same move.
  *
  * The shape is the one a real document carries: prefix, year, running part. The scope is keyed by prefix and
- * year, so the running part restarts every January and a changed prefix starts a series of its own. Gaps are
- * harmless, since a sequence that skipped a number is not a defect, but a number issued twice cannot be taken
- * back, which is why the sequence locks rather than counts rows.
+ * year, so the running part restarts every January and a changed prefix starts a series of its own. A gap does
+ * not make an invoice invalid, a repeated number does, and a number issued twice cannot be taken back, which is
+ * why the sequence locks rather than counts rows. The order issuer still avoids a gap from a failed document by
+ * drawing the number in the transaction that writes it.
  */
 final readonly class InvoiceNumber
 {

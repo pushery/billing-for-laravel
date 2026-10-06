@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Pushery\Billing\ValueObjects;
 
 /**
- * One tier's card on a pricing surface — the config-authoritative shape the in-app upgrade grid AND the
- * public /pricing page both render from, so the two can never drift into showing different promises.
+ * One tier's card on a pricing surface — the config-authoritative shape a public /pricing page and an upgrade
+ * grid the application builds both render from, so the two can never drift into showing different promises.
  *
  * Everything here is derived from the tier's config (its label, display price, BYOK flag, ordered feature
  * bullets, and an optional highlight / badge); nothing is hard-coded in a view. The bullets arrive already

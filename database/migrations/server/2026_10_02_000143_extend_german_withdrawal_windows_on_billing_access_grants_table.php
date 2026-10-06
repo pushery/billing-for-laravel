@@ -14,12 +14,12 @@ use Pushery\Billing\Contracts\ConsumerWithdrawalPolicy;
 /**
  * Extends the withdrawal windows the German reading froze before it counted whole days.
  *
- * The German reading used to end a window fourteen days after provision at the time of day the work was provided,
- * so a withdrawal on the evening of the last day was refused as late, and a last day on a weekend or a public holiday
- * did not move to the next working day. A window it froze that way lies exactly fourteen days after the grant's
- * `acquired_at`, and only such a window is rewritten, to the end {@see GermanWithdrawalPeriod} states for it. A
- * window another reading wrote, or one set by hand, stays as it is, and so does every window while a reading other
- * than the German one is bound.
+ * Before 0.43.0 the German reading ended a window fourteen days after provision at the time of day the work was
+ * provided, so a withdrawal on the evening of the last day was refused as late, and a last day on a weekend or a
+ * public holiday did not move to the next working day. A window it froze that way lies exactly fourteen days after
+ * the grant's `acquired_at`, and only such a window is rewritten, to the end {@see GermanWithdrawalPeriod} states
+ * for it. A window another reading wrote, or one set by hand, stays as it is, and so does every window while a
+ * reading other than the German one is bound.
  *
  * Nothing is shortened. Fourteen days counted across a change to summer time can end later on the German clock than
  * the German calendar day does, and then the old end stays.

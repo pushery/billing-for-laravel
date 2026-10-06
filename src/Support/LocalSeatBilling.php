@@ -20,7 +20,8 @@ use Pushery\Billing\Models\Subscription;
  * quantity starts with the next period and the running one is billed at the old quantity throughout.
  *
  * It reads the owner's own subscription of the default type that this engine bills, the one the seat service
- * keeps in step. A subscription that has never had a seat change bills one seat, and reads as one.
+ * keeps in step. A subscription that has never had a seat change bills one seat, and reads as one. One that has
+ * ended bills nothing and reads as none, so a membership change after it ended changes nothing on it.
  */
 final readonly class LocalSeatBilling implements SeatBilling
 {
@@ -69,6 +70,8 @@ final readonly class LocalSeatBilling implements SeatBilling
             ->latest('id')
             ->first();
 
-        return $subscription instanceof Subscription ? $subscription : null;
+        // The two terminal states, the ones a new subscription may replace. A seat change written onto such a row
+        // would count seat-days from the start of a period its last cycle already billed.
+        return $subscription instanceof Subscription && ! $subscription->isReplaceableByANewSubscription() ? $subscription : null;
     }
 }

@@ -400,11 +400,9 @@ final readonly class SettlementCorrectionIssuer
             //
             // `RoutedRefundCorrector::frozenCommission()` reads exactly these three columns and treats an
             // empty set as a zero commission, documented there as the honest read for a settlement written
-            // BEFORE the terms were frozen. It does not reach a correction today (`settlementFor()` narrows
-            // to the settlement series), so nothing computes a wrong figure from this — which is why it is a
-            // completeness gap and not a live defect. It is worth closing anyway: the next reader of these
-            // columns will not know that "empty" here means "never written" rather than "taken at zero", and
-            // the fallback that absorbs it was written about a different situation.
+            // BEFORE the terms were frozen. That read does not reach a correction (`settlementFor()` narrows
+            // to the settlement series), but a reader of these columns cannot tell "never written" from
+            // "taken at zero", so the correction carries the terms itself.
             'commission_bps' => $original->commission_bps,
             'commission_flat_minor' => $original->commission_flat_minor,
             'commission_residual' => $original->commission_residual,

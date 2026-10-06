@@ -28,7 +28,9 @@ final class FlushUsageCommand extends Command
     {
         // Reclaim first, and reclaim even when billing is switched off. A hold is allowance a request took
         // and never gave back — a worker killed mid-request — and while it stands, the owner is refused
-        // requests they never spent. That has to be swept whether or not anyone is being billed.
+        // requests they never spent. Usage is still metered for the application's quotas while billing is
+        // off, so its holds are swept as well. The package schedules nothing while billing is off, so there
+        // this command runs where the application schedules it.
         $reclaimed = $counters->expire();
 
         if ($reclaimed > 0) {

@@ -31,9 +31,9 @@ use Pushery\Billing\ValueObjects\PlausibilityFinding;
  *
  * The quarters read two kinds of sale: the settlement documents of a commission chain, and the sales the
  * platform arranged as an intermediary. So the year reads both, and the fee reads only the second, because
- * a chain charges the seller no fee and the quarters report none for it. The fee used to be compared with
- * what the platform KEPT, which under a chain is its margin: every chain seller whose sales carried one
- * was told their quarters did not add up to their year, when the quarters were right.
+ * a chain charges the seller no fee and the quarters report none for it. Compared with what the platform
+ * KEPT, which under a chain is its margin, every chain seller whose sales carried one would be told their
+ * quarters did not add up to their year, when the quarters were right.
  *
  * ## Why the currency comparison is not just an amount comparison
  *

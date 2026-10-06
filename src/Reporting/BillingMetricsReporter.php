@@ -17,8 +17,10 @@ use Pushery\Billing\ValueObjects\Plan;
 /**
  * Computes {@see BillingMetrics} from the local subscription rows — no provider round-trip.
  *
- * MRR is the monthly-normalized DECLARED list price: each active tier's declared price, a yearly plan
- * divided by twelve, a weekly one times 52/12, summed in the configured billing currency. It is what
+ * MRR is the monthly-normalized DECLARED list price: each active tier's declared price, times the seats a
+ * row carries, a yearly plan divided by twelve, a weekly one times 52/12, summed in the configured billing
+ * currency. Only a subscription the local engine bills carries a seat count; a provider-billed one counts
+ * once, because its quantity lives at the provider and this reporter never asks it. It is what
  * your CATALOG says you charge, not what the provider actually collected after a coupon or a mid-cycle
  * proration — a deliberately provider-independent, plan-level number. A tier with no `price_display`
  * (the free tier) contributes nothing, and MRR assumes a single billing currency: prices declared in a
@@ -93,7 +95,9 @@ final readonly class BillingMetricsReporter
             $plan = $this->catalogOf($sub, $catalogs)->planFor($sub->tier_key);
 
             if ($plan instanceof Plan) {
-                $mrrMinor += (int) round($plan->amount->minorUnits * $plan->interval->perYear() / 12);
+                // Once per seat where the row carries a seat count, as the local engine bills it. A row without one is a
+                // single unit, which is also how a provider-billed row reads: its quantity lives at the provider.
+                $mrrMinor += (int) round($plan->amount->minorUnits * ($sub->seat_quantity ?? 1) * $plan->interval->perYear() / 12);
             }
         });
 

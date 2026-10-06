@@ -167,8 +167,7 @@ final readonly class WithheldFeeCounter
      *
      * The second is the fallback above. The third is a refund that completed inside the window, dropped
      * under `original_period` because a reversal is then placed by the sale it corrects, so a charge placed
-     * elsewhere cannot move this window at all and loading it would only invite a later reader to subtract
-     * it.
+     * elsewhere cannot move this window at all, and loading it would only invite subtracting it.
      *
      * @return Collection<int, MerchantCharge>
      */

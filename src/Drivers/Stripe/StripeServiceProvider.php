@@ -128,20 +128,16 @@ final class StripeServiceProvider extends ServiceProvider
      * objects the webhook mappers read, bump it, run the live-Stripe suite against the new version, point
      * each webhook endpoint at it and let `billing:doctor` confirm, and ship.
      *
-     * ## Why it must equal Cashier's, and why that was not true until 2026-08-18
+     * ## Why it must equal Cashier's
      *
      * Cashier builds its own client with `Cashier::STRIPE_VERSION`, which is `StripeApiVersion::CURRENT`
      * — the SDK's constant. So Cashier's version moves with every SDK update while this one, correctly,
-     * does not. The two drifted a whole generation apart: ours on `basil`, Cashier's on `dahlia`, both
-     * talking to the same Stripe account about the same objects, in two different response shapes.
+     * does not. Apart, the two talk to the same Stripe account about the same objects in two different
+     * response shapes. The rule above guards the half that does not move on its own, and the package's own
+     * tests compare the two, so a drift fails there instead of waiting to be noticed.
      *
-     * The rule above was written to prevent exactly that and could not: it guards the half that does not
-     * move on its own. `StripeWiringTest` now compares the two, so the drift fails a test instead of
-     * waiting to be noticed.
-     *
-     * Raising it to Cashier's value is therefore an ALIGNMENT, not a departure. It also happens to be the
-     * floor the Accounts v2 API requires — under `basil` that API is not addressable at all, measured
-     * against the real test API rather than read from the docs.
+     * Matching Cashier's value is an ALIGNMENT, not a departure. It is also the floor the Accounts v2 API
+     * requires: under `basil` that API is not addressable at all on the real test API.
      */
     public const string STRIPE_API_VERSION = '2026-08-26.dahlia';
 

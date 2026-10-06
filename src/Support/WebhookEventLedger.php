@@ -17,7 +17,7 @@ use Pushery\Billing\Models\BillingWebhookEvent;
  * Recording is idempotent on (provider, ACCOUNT REFERENCE, event_id) — all three, which is what
  * `record()` keys its `firstOrCreate` on: a redelivery of the same event from the same account returns the
  * existing row rather than a second one. The account is empty for the platform's own deliveries, so a
- * single-seller install behaves exactly as if the key were the pair it used to be.
+ * single-seller install behaves exactly as if the key were the pair (provider, event_id).
  */
 final class WebhookEventLedger
 {

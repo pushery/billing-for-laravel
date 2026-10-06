@@ -9,11 +9,11 @@ use Pushery\Billing\Enums\OrderItemType;
 /**
  * A line an order is about to carry, before any of it is written down.
  *
- * The engine used to create its items straight onto the order as it went, which is why nothing could sit
- * between deciding a line and persisting it. Anything that wants to ADD a line — metered usage an
- * application prices itself, a coupon, a fee — needs a moment where the lines exist and the order does
- * not, because the order's total is the sum of them: a line added after the row is written leaves a
- * total that disagrees with what it totals, and that disagreement is only visible to whoever adds the
+ * An engine that created its items straight onto the order as it went would leave nothing between deciding
+ * a line and persisting it. Anything that wants to ADD a line — metered usage an application prices itself,
+ * a coupon, a fee — needs a moment where the lines exist and the order does not, because the order's total
+ * is the sum of them: a line added after the row is written leaves a total that disagrees with what it
+ * totals, and that disagreement is only visible to whoever adds the
  * numbers up by hand.
  *
  * So the cycle is assembled as drafts, handed through the preprocessor chain, and only then written —

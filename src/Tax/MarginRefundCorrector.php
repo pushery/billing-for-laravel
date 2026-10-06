@@ -93,11 +93,10 @@ final readonly class MarginRefundCorrector
     /**
      * The margin frozen onto the sale, refused where there is none to read.
      *
-     * Two refusals, and both used to be answers. A sale taxed on its price has no margin, and correcting it
+     * Two refusals, where an answer would be wrong. A sale taxed on its price has no margin, and correcting it
      * here would give back a fraction of the tax it really stated. A margin-taxed sale with no margin frozen
-     * onto it was read as a margin of zero, so its refund gave no tax back at all, with a figure that added
-     * up. Neither can be repaired from in here: what the seller paid for the goods is a fact this system
-     * never held.
+     * onto it, read as a margin of zero, would refund no tax at all, with a figure that adds up. Neither can be
+     * repaired from in here: what the seller paid for the goods is a fact this system never held.
      *
      * The second refusal has an ordinary cause, and the message names it. A reseller who works out the margin
      * over a whole period rather than item by item has no margin per sale to freeze. Their refund lowers the

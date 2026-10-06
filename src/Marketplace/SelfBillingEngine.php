@@ -241,15 +241,15 @@ final readonly class SelfBillingEngine
             return SettlementOutcome::hold();
         }
 
-        // THE RATE CHECK BELONGS TO THE CURRENCY, NOT TO THE DOCUMENT TYPE, and it used to sit inside the
+        // THE RATE CHECK BELONGS TO THE CURRENCY, NOT TO THE DOCUMENT TYPE, so it does not sit inside the
         // self-billed branch below. A settlement note in SEK converts exactly as a self-billed invoice in SEK
-        // does -- `converts()` asks only `billing.currency` against the amount's -- so the note reached
-        // `issue()`, drew a number, wrote the row, and only then failed on the freeze.
+        // does -- `converts()` asks only `billing.currency` against the amount's -- so a check inside the
+        // branch would let the note reach `issue()`, draw a number, write the row, and only then fail on the
+        // freeze.
         //
-        // Which is the precise state this guard exists to prevent. The comment above `freezeExchangeRate()`
-        // says as much -- "failing after the number is exactly the case the guard exists to prevent" -- and
-        // for a settlement note it was describing what happened rather than what was avoided. A burnt number
-        // in a series that has to be gapless is not recoverable by retrying.
+        // Which is the precise state this guard exists to prevent, as the comment above `freezeExchangeRate()`
+        // says: "failing after the number is exactly the case the guard exists to prevent". A burnt number in
+        // a series that has to be gapless is not recoverable by retrying.
         //
         // It runs BEFORE the branch, so no future document type can be added past it by accident.
         $this->assertExchangeRateObtainable($transactionNet, $supplyDate);

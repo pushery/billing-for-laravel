@@ -16,19 +16,16 @@ use Pushery\Billing\Exceptions\TaxRateSnapshotTampered;
  * country. The shipped documentation says so in as many words — *"pricing stops rather than falling back to
  * whatever is in the file"*, *"the file is the source every invoice is priced from"*.
  *
- * None of it was true. The file was published, the digest guard was written and tested, and the calculator
- * went on pricing from a `private const array` beside it. Nothing loaded the snapshot outside its own test.
- * Measured rather than reasoned: with the shipped file's `DE` set to 1000 bps and its digest correctly
- * re-pulled, `calculate()` charged 1900 on 100.00.
- *
- * So a reader had a protection promise they did not have, against the one edit that leaves no trace but the
- * money. This class is the missing half.
+ * That promise holds only if the money path prices from the file. A calculator pricing from a copy of the
+ * rates beside it would leave the digest guard real, tested and unreached: a tampered snapshot would reprice
+ * nothing and stop nothing, and the reader would hold a protection promise they did not have, against the
+ * one edit that leaves no trace but the money. This class is the half that makes the promise true.
  *
  * ## Two copies of regulated numbers is the deeper problem
  *
- * A lockstep test held the constant and the file equal, which proves today's agreement and nothing about
+ * A lockstep test holding a constant and the file equal proves today's agreement and nothing about
  * tomorrow's. Two copies of the same regulated figures drift; the only question is when, and the symptom is
- * an invoice priced from whichever one the reader was not looking at. There is now one copy.
+ * an invoice priced from whichever one the reader was not looking at. There is one copy.
  *
  * ## Loading
  *

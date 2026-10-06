@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Support;
 
-use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Lang;
 use NumberFormatter;
 
 /**
@@ -26,13 +26,13 @@ final class LocalizedNumber
     /** A number with a fixed count of decimals. */
     public static function format(int|float $number, int $decimals = 0, ?string $locale = null): string
     {
-        return self::render($number, $decimals, $locale ?? App::getLocale(), extension_loaded('intl'));
+        return self::render($number, $decimals, $locale ?? Lang::getLocale(), extension_loaded('intl'));
     }
 
     /** A rate given in percent, with at most two decimals. */
     public static function percent(int|float $percent, ?string $locale = null): string
     {
-        return self::renderPercent($percent, $locale ?? App::getLocale(), extension_loaded('intl'));
+        return self::renderPercent($percent, $locale ?? Lang::getLocale(), extension_loaded('intl'));
     }
 
     /**

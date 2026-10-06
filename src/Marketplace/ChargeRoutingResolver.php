@@ -19,12 +19,11 @@ use Pushery\Billing\ValueObjects\Money;
 /**
  * Assembles a routed payment's routing and checks the pairing while doing it.
  *
- * ## What this does NOT claim, and used to
+ * ## What this does NOT claim
  *
- * It said it was "the one place a routed payment is assembled — and therefore the one place the pairing is
- * checked", and that a routing "is not constructible on the ordinary path except through here". Neither
- * holds, and the sentences mattered more than most: they described where a MONEY-FLOW guard is enforced,
- * and they described it in the wrong place.
+ * It is not the one place a routed payment is assembled, and not the one place the pairing is checked: a
+ * routing can be constructed without it. That limit matters more than most, because it says where a
+ * MONEY-FLOW guard is enforced.
  *
  *  - {@see ChargeRouting}'s constructor is public and validates only that the fee is not negative. It knows
  *    nothing of {@see ChargeType} or the seller posture.
@@ -39,8 +38,8 @@ use Pushery\Billing\ValueObjects\Money;
  * {@see StripeCheckout} and
  * {@see StripeOneTimeCharge} — each calling
  * {@see ChargeRoutingConsistencyGuard::assertCompatible()} before anything is sent. That placement is the
- * real property worth having, and it is the one this docblock should have been describing: the refusal
- * lands before a charge is made, not after, when only the transfer is left to fail.
+ * property worth having: the refusal lands before a charge is made, not after, when only the transfer is
+ * left to fail.
  *
  * The charge type is configuration because it is a money-flow decision an installation makes with its
  * provider, and the posture is resolved rather than passed, so a caller cannot quietly hand in the one that

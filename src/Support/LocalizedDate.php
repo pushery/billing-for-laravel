@@ -6,19 +6,19 @@ namespace Pushery\Billing\Support;
 
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
-use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Lang;
 
 /**
  * The one place this package turns a moment into text a person reads.
  *
  * ## Why this exists at all
  *
- * Every view used to write `format('d.m.Y')`. The package ships seven locales, so six of them got a
- * German date — and for `en` that is not merely unidiomatic but ambiguous: `03.09.2026` is the 3rd of
- * September or the 9th of March depending on the reader, and both readings are reasonable. On an
- * INVOICE and on an access-expiry date, guessing wrong is not a cosmetic problem.
+ * A view that writes `format('d.m.Y')` hands a German date to every locale. The package ships seven, and
+ * for `en` that is not merely unidiomatic but ambiguous: `03.09.2026` is the 3rd of September or the 9th
+ * of March depending on the reader, and both readings are reasonable. On an INVOICE and on an
+ * access-expiry date, guessing wrong is not a cosmetic problem.
  *
- * ## The trap this class exists to close, measured rather than assumed
+ * ## The trap this class exists to close
  *
  * The obvious fix — `->isoFormat('L')` and let Carbon use "the locale" — leans on something this
  * package does not control. `Application::setLocale()` sets the translator and fires `LocaleUpdated`,
@@ -94,7 +94,7 @@ final class LocalizedDate
         // forever. `settings()` returns `static` unconditionally and produces the identical output,
         // verified across all seven shipped locales.
         return CarbonImmutable::instance($moment)
-            ->settings(['locale' => App::getLocale()])
+            ->settings(['locale' => Lang::getLocale()])
             ->isoFormat($format);
     }
 }

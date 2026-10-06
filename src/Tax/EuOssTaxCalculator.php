@@ -24,22 +24,18 @@ use Pushery\Billing\ValueObjects\TaxContext;
 final readonly class EuOssTaxCalculator implements TaxCalculator
 {
     /*
-     * THE RATES USED TO LIVE HERE, AS A `private const array`, BESIDE A FILE THAT SAID IT WAS THE SOURCE.
+     * THE RATES LIVE IN ONE PLACE: the shipped snapshot, loaded through {@see ShippedTaxRates} once per boot.
      *
-     * Both were shipped. The file carries a header and a digest whose stated purpose is the edit nobody
-     * sees — a digit changed inside `vendor/`, invisible in every diff, repricing every invoice to a
-     * country — and the published documentation told the reader that pricing STOPS when that digest
-     * disagrees.
+     * The file carries a header and a digest whose stated purpose is the edit nobody sees — a digit changed
+     * inside `vendor/`, invisible in every diff, repricing every invoice to a country — and the published
+     * documentation tells the reader that pricing STOPS when that digest disagrees. A copy of the rates held
+     * here as a `private const array` would be a money path that never goes near that guard: the guard real,
+     * its test green, and every price taken from the copy.
      *
-     * Nothing loaded the file. Measured, not reasoned: with the shipped snapshot's `DE` set to 1000 bps and
-     * its digest correctly re-pulled, `calculate()` charged 1900 on 100.00. The guard was real, its test was
-     * green, and the money path never went near either.
-     *
-     * Two copies of the same regulated numbers is the deeper half of that. A lockstep test held them equal,
-     * which proves today's agreement and nothing about tomorrow's. There is one copy now: the rates come
-     * from {@see ShippedTaxRates}, loaded once per boot, and the date they were checked on is the file's own
-     * `situation_on` rather than a constant beside them — a date held apart from its numbers is the half
-     * that goes quietly wrong.
+     * Two copies of the same regulated numbers would be the deeper half of that. A lockstep test holding them
+     * equal proves today's agreement and nothing about tomorrow's. The date the rates were checked on is the
+     * file's own `situation_on` rather than a constant beside them — a date held apart from its numbers is the
+     * half that goes quietly wrong.
      */
 
     /**

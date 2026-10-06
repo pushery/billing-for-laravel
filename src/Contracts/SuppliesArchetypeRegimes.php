@@ -14,12 +14,12 @@ use Pushery\Billing\Marketplace\ConfigSupplyRegimeResolver;
  *
  * ## Why this is asked for rather than known
  *
- * The shipped resolver used to carry one such rule itself: goods sold between private people were forced to
- * intermediation, on the reasoning that the platform cannot be reselling something it never owned when
- * neither party is in business. The reasoning is sound and the placement was not. The FACT — that the
- * platform owned nothing — is jurisdiction-neutral; the conclusion drawn from it, that this makes the sale
- * an arranged one rather than a resold one, is a legal characterization, and a legal characterization
- * sitting in a neutral core is one jurisdiction's answer wearing the costume of a general one.
+ * Take goods sold between private people, which can be held to be intermediated on the reasoning that the
+ * platform cannot be reselling something it never owned when neither party is in business. The reasoning is
+ * sound; the shipped resolver is the wrong place for it. The FACT — that the platform owned nothing — is
+ * jurisdiction-neutral; the conclusion drawn from it, that this makes the sale an arranged one rather than a
+ * resold one, is a legal characterization, and a legal characterization sitting in a neutral core is one
+ * jurisdiction's answer wearing the costume of a general one.
  *
  * That is the same mistake the reporting-rate seam was built to avoid, in the same package, and stated in
  * almost these words there: a rule that happens to be uniform across one union is still that union's rule.
