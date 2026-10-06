@@ -33,13 +33,12 @@ use Pushery\Billing\ValueObjects\WithdrawalSettlement;
 /**
  * A buyer exercises their right of withdrawal, and the money is settled the way the law says.
  *
- * ## The caller the formula never had
+ * ## Why the formula is asked here
  *
- * `ConsumerWithdrawalPolicy::valueForUse()` has been implemented and tested since the withdrawal profile
- * landed, and nothing in the package asked it. Measured 2026-08-06: no caller outside `src/Consumer/` and
- * `src/Contracts/`. A subscription withdrawal therefore refunded the full amount or nothing at all,
- * depending on what an operator typed into an admin form — and both of those are wrong in opposite
- * directions.
+ * `ConsumerWithdrawalPolicy::valueForUse()` states what the buyer owes for the days already provided, and
+ * this is where a withdrawal asks it. Without it a subscription withdrawal would refund the full amount or
+ * nothing at all, depending on what an operator typed into an admin form, and both of those are wrong in
+ * opposite directions.
  *
  * Refunding everything makes the platform pay for days it provided. Refunding nothing keeps money for days
  * it did not, and that is the direction where the buyer is in the right.
@@ -185,11 +184,10 @@ final readonly class ConsumerWithdrawal
             $refundMoved = $result->successful;
 
             if ($result->successful) {
-                // The chain correction used to happen HERE, right after `admin->refund()`. It now happens
-                // inside that call, because the support-refund verb had no correction at all and three of
-                // the four refund paths did — so a routed sale refunded by support kept documents claiming
-                // the full amount. Correcting in both places would write a second document per leg out of a
-                // gapless series, for one event.
+                // The chain correction happens inside `admin->refund()`, not here, so every refund path
+                // corrects, the support-refund verb included; a routed sale refunded by support would otherwise
+                // keep documents claiming the full amount. Correcting here as well would write a second document
+                // per leg out of a gapless series, for one event.
             }
         }
 

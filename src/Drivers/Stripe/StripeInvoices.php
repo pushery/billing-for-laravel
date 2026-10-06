@@ -47,16 +47,14 @@ final readonly class StripeInvoices implements InvoicesContract
             //
             // `Stripe\Invoice::$id` is a docblock `@property string $id` on every major -- there is no
             // declared property, and `StripeObject::&__get()` answers null for a key the payload does
-            // not carry. Measured on the installed v20.3.1: a fresh Invoice with no id key returns null
-            // and emits "Stripe Notice: Undefined property".
+            // not carry, and emits "Stripe Notice: Undefined property" while it does.
             //
-            // So the value CAN be null here, and a guard against it is not dead code. PHPStan thought it
-            // was, because it believes the docblock -- and this line used to carry no guard for exactly
-            // that reason. Array access hands back the same value without the overstated type, which
-            // lets the check be written as what it is.
+            // So the value CAN be null here, and a guard against it is not dead code, though PHPStan, which
+            // believes the docblock, would call it that. Array access hands back the same value without the
+            // overstated type, which lets the check be written as what it is.
             //
-            // A floor on the installed major used to stand in for this and could not deliver it: 18.0
-            // narrowed the docblock, not the behavior.
+            // A floor on the installed major cannot stand in for this: 18.0 narrowed the docblock, not the
+            // behavior.
             $id = $invoice['id'] ?? null;
 
             if (! is_string($id)) {

@@ -187,10 +187,10 @@ final readonly class LocalBillingEngine implements BillingEngine
     /**
      * End the subscriptions an earlier cancellation left running, without billing the period it left open.
      *
-     * Canceling used to clear the schedule outright. No cycle ever closed the period, and nothing ended the
-     * row either: it stayed `active` past its end, read as a live subscription, and was never billed again.
-     * A cancellation now keeps its last cycle on the schedule, and the rows canceled before that are ended
-     * here, once, when the run meets them.
+     * A cancellation keeps its last cycle on the schedule. A row canceled under a release before 0.38.0 had
+     * its schedule cleared outright, so no cycle closes its period and nothing ends it: it stays `active` past
+     * its end, reads as a live subscription, and is never billed again. Those rows are ended here, once, when
+     * the run meets them.
      *
      * Without collecting their last period, and deliberately. That money is late by weeks or months, the
      * customer was never told it would come, and a debit nobody announced is the worse of the two outcomes.
@@ -326,12 +326,12 @@ final readonly class LocalBillingEngine implements BillingEngine
             // `incomplete_expired`, not `incomplete`, and the difference is the whole exit. Both clear the
             // schedule, so the sweep stops selecting a row nothing can be done about — but `incomplete` is
             // one of the states `LocalSubscriptionStarter::alreadySubscribed()` PROTECTS, and nothing in
-            // the package re-arms a cleared schedule. The comment that used to stand here said the customer
-            // adding a payment method moves it on; nothing does. Adding a card writes a mandate with no
-            // matching intent, which the mandate effect deliberately ignores, so the row sat there forever:
-            // no access, never charged, and the Subscribe button refusing them by name. `incomplete_expired`
-            // means exactly what happened — the first payment was abandoned — and the starter already reads
-            // it as not-a-subscription, so pressing Subscribe again works and goes through a real checkout.
+            // the package re-arms a cleared schedule. A customer adding a payment method does not move it on
+            // either: adding a card writes a mandate with no matching intent, which the mandate effect
+            // deliberately ignores, so an `incomplete` row would sit there forever: no access, never charged,
+            // and the Subscribe button refusing them by name. `incomplete_expired` means exactly what happened
+            // — the first payment was abandoned — and the starter already reads it as not-a-subscription, so
+            // pressing Subscribe again works and goes through a real checkout.
             //
             // That exit is only safe because a subscription trial is now once per owner; without it, coming
             // back would hand out another free trial, and again after that.
@@ -513,9 +513,9 @@ final readonly class LocalBillingEngine implements BillingEngine
      * Turn a cycle whose in-flight charge came back refused into a real failure.
      *
      * A bank debit can bounce days after it was accepted, and THAT is the moment dunning belongs to — not
-     * the moment the payment was created, which is when it used to fire. The credit goes back here for the
-     * same reason it does on a synchronous refusal: the retry reassembles the cycle from scratch and must
-     * find the balance where the customer left it.
+     * the moment the payment was created. The credit goes back here for the same reason it does on a
+     * synchronous refusal: the retry reassembles the cycle from scratch and must find the balance where the
+     * customer left it.
      */
     public function fail(string $paymentReference, string $reason = 'charge_refused'): void
     {
@@ -968,7 +968,7 @@ final readonly class LocalBillingEngine implements BillingEngine
      * HTTP call, seconds on a good day and a full timeout on the day it matters, and the balance was read
      * without a lock at one end and applied without a re-check at the other.
      *
-     * Two cycles for the same owner — two local drivers, or one `billing:cycle` run overlapping itself,
+     * Two cycles for the same owner — two local drivers, or one `billing:run` overlapping itself,
      * which this engine's own docblock calls ordinary — then both read the same balance while the other was
      * inside its charge, and both spent it. The balance goes NEGATIVE, and negative is a one-way street:
      * every later cycle reads a non-positive figure and skips the offset, so nothing ever collects it back.
@@ -995,7 +995,7 @@ final readonly class LocalBillingEngine implements BillingEngine
      *
      * {@see self::releaseAbandonedClaim()} returns the credit and puts the cycle back on the billing path,
      * and `billing:release-claim` is where an operator invokes it. It is NOT a sweep, and the reason is the
-     * question this paragraph used to leave open — what a recovered order does about a charge that may yet
+     * question of what a recovered order does about a charge that may yet
      * land. Nothing in this process can answer it: the payment reference is written the moment the provider
      * replies, so its absence covers every case except a worker killed mid-call, which may have created a
      * payment and recorded nothing. A prompt retry would collapse onto that payment through the idempotency
@@ -1487,7 +1487,7 @@ final readonly class LocalBillingEngine implements BillingEngine
     private function serviceName(Subscription $subscription): string
     {
         $tier = $subscription->tier_key;
-        $label = $tier === null ? null : $this->config->get("billing.tiers.{$tier}.label");
+        $label = $tier === null ? null : KeyedConfig::setting($this->config, 'billing.tiers', $tier, 'label');
 
         foreach ([$label, $tier] as $candidate) {
             if (is_string($candidate) && trim($candidate) !== '') {
@@ -1507,7 +1507,7 @@ final readonly class LocalBillingEngine implements BillingEngine
             return null;
         }
 
-        $price = $this->config->get("billing.tiers.{$tier}.price_display");
+        $price = KeyedConfig::setting($this->config, 'billing.tiers', $tier, 'price_display');
 
         if (! is_array($price) || ! is_int($price['amount'] ?? null) || ! is_string($price['currency'] ?? null)) {
             return null;

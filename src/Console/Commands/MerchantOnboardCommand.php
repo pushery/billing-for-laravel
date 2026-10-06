@@ -64,9 +64,9 @@ final class MerchantOnboardCommand extends Command
         try {
             $intent = $rails->onboarding()->onboardingLink($merchant, $refresh, $return);
         } catch (MerchantRelationshipEnded $exception) {
-            // The state the old behavior hid. Onboarding a merchant whose relationship has ended used to
-            // print a link to an account the provider no longer releases funds through, and exit 0 — the
-            // operator did what the code told them to and got a success they could not act on.
+            // Said out loud and failed. A link printed for a merchant whose relationship has ended would
+            // point at an account the provider no longer releases funds through, and an exit 0 would hand
+            // the operator a success they could not act on.
             $this->components->error($exception->getMessage());
 
             return self::FAILURE;

@@ -16,10 +16,12 @@ use Pushery\Billing\Models\BillingWebhookEvent;
  * SubscriptionStateChanged, …), never on provider strings, so the same effect works for every driver.
  *
  * Effects are registered by CLASS NAME, not as closures, and that is what makes the rest possible: each
- * one is dispatched as its OWN queued job. So an effect that throws no longer takes the ones after it
- * down with it (the old bus ran them in a loop, in the webhook's own HTTP request — one bad effect
- * aborted every later one and 500'd the provider), each retries on its own, and each leaves a record of
- * what it did or still owes.
+ * one is dispatched as its OWN queued job. So an effect that throws does not take the ones after it down
+ * with it, each retries on its own, and each leaves a record of what it did or still owes.
+ *
+ * That isolation needs an asynchronous connection. On `sync` the jobs run inline, in the webhook's own
+ * request, so one that throws stops the effects after it and the host event, and the provider reads a 500.
+ * `billing:doctor` warns about such a connection.
  *
  * Each event is ALSO fired through Laravel's own dispatcher, so a consuming app can Event::listen for a
  * domain event or Event::fake it in a test — the package's own effects run either way. The dispatcher is

@@ -46,6 +46,10 @@ use Pushery\Billing\ValueObjects\Money;
  * everything there was, and the remainder belongs to no credit at all: it is reported as consumed
  * from nothing rather than invented onto the oldest lot, because booking a correction against an
  * invoice for money that was never in the balance is the failure this whole split exists to prevent.
+ *
+ * That remainder is a debt, and the credits after it pay the debt before anything can be spent from
+ * them, as the balance does. A later spend therefore reaches only what is left of a credit once the
+ * debt is settled; a spend made while the balance still stands below zero consumes nothing.
  */
 final readonly class CreditConsumption
 {
@@ -65,6 +69,7 @@ final readonly class CreditConsumption
 
         $remaining = -$spend->amount_minor;
         $lots = [];
+        $owed = 0;
 
         foreach ($entries as $entry) {
             if ($entry->id >= $spend->id) {
@@ -75,7 +80,10 @@ final readonly class CreditConsumption
             }
 
             if ($entry->amount_minor > 0) {
-                $lots[] = ['entry' => $entry, 'left' => $entry->amount_minor];
+                // What an earlier spend took beyond every credit before it is paid out of this credit first.
+                $settled = min($entry->amount_minor, $owed);
+                $owed -= $settled;
+                $lots[] = ['entry' => $entry, 'left' => $entry->amount_minor - $settled];
 
                 continue;
             }
@@ -94,6 +102,9 @@ final readonly class CreditConsumption
                 $lots[$index]['left'] -= $taken;
                 $earlier -= $taken;
             }
+
+            // What no credit before it covered is a debt, and it stays one until later credits pay it.
+            $owed += $earlier;
         }
 
         $consumed = [];

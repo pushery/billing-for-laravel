@@ -21,6 +21,6 @@ final class UntouchableTiers
         $listed = $config->get('billing.untouchable_tiers', []);
 
         return (is_array($listed) && in_array($tier, $listed, true))
-            || $config->get("billing.tiers.{$tier}.untouchable") === true;
+            || KeyedConfig::setting($config, 'billing.tiers', $tier, 'untouchable') === true;
     }
 }

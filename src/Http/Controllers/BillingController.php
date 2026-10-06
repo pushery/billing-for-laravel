@@ -73,10 +73,10 @@ final class BillingController
 
         // ASKED FIRST, because there is nothing to reconcile against under a driver whose cycle this package
         // runs itself. `SubscriptionSync` is bound only by the Stripe provider, and both driver providers
-        // register unconditionally — so on a Mollie install this used to ask STRIPE about a customer whose
-        // reference Mollie wrote. An outbound call to the wrong provider on the page a customer lands on
-        // straight after paying, and the catch below then reported the resulting error: one entry in the
-        // install's error tracker per completed sale, looking exactly like a real failure. An error stream
+        // register unconditionally — so on a Mollie install, asked second, this would ask STRIPE about a
+        // customer whose reference Mollie wrote. An outbound call to the wrong provider on the page a customer
+        // lands on straight after paying, and the catch below would report the resulting error: one entry in
+        // the install's error tracker per completed sale, looking exactly like a real failure. An error stream
         // that fires on every sale gets muted, and after that the real one is gone too.
         //
         // Decided on the ENGINE rather than a driver name: a local engine holds the cycle here, so there is

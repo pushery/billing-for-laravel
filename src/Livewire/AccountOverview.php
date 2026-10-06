@@ -29,11 +29,10 @@ final class AccountOverview extends AccountScreen
 
     public function render(): View
     {
-        // ONE reader of the navigation configuration, and it is the layout's. This method used to walk the
-        // config through a second parser and re-implement two of its three gates by hand — route registered,
-        // route resolvable without arguments — while leaving out the third. The one it left out was
-        // `web_only`, so an operator who suppressed the account-deletion flow on a native runtime saw it
-        // vanish from the sidebar and stay on this page, one click from a working deletion.
+        // ONE reader of the navigation configuration, and it is the layout's. A second parser here would have
+        // to re-implement all three gates by hand — route registered, route resolvable without arguments, and
+        // `web_only` — and missing the last would leave the account-deletion flow an operator suppressed on a
+        // native runtime gone from the sidebar and still on this page, one click from a working deletion.
         return $this->view('billing::livewire.account-overview', [
             'items' => Container::getInstance()->make(Navigation::class)->visibleItems(),
             'tierLabel' => CatalogLabel::translate(Container::getInstance()->make(TierCatalog::class)->label($this->currentTierKey())),

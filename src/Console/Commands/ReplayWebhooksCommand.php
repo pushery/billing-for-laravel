@@ -116,7 +116,7 @@ final class ReplayWebhooksCommand extends Command
             ));
 
             // A delivery that produced nothing is REPORTED, because "replayed … → 0 effect(s)" reads as
-            // success and is exactly how a merchant delivery used to disappear from a bulk replay. Not a
+            // success and is exactly how a merchant delivery would disappear from a bulk replay. Not a
             // non-zero exit, though: one unhandled event type in two hundred deliveries would turn the whole
             // run red, and an operator who learns to ignore a red replay has lost the signal again.
             if ($effects === 0) {

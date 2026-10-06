@@ -358,7 +358,7 @@ final readonly class BillingAdmin
         // would have been the plausible line to write and would have taken the money from the creator.
         //
         // Written as three arguments because the fourth defaults to null and the formatter strips an
-        // explicit one; the sentence above is what carries the intent that the argument used to.
+        // explicit one; the sentence above carries the intent an explicit null argument would.
         $result = $this->manager->driver()->rails()->refund($chargeReference, $amount, $key);
 
         $this->log->record('admin.refund', $owner, [
@@ -443,9 +443,9 @@ final readonly class BillingAdmin
      * The reversal a refund on a routed sale is made under: the one the caller's own key already opened, or a new one.
      *
      * A caller that names its refund with a key of its own retries under that key, and the retry has to find the
-     * row the first try wrote. It used to open a second row, keyed from that row's id, so the provider took the
-     * retry for a different refund: a partial one was paid out twice, and a full one came back refused and was
-     * booked as a failure. Without a key of the caller's, every call is a refund of its own, as before.
+     * row the first try wrote. A second row, keyed from that row's id, would make the provider take the retry for
+     * a different refund: a partial one would be paid out twice, and a full one would come back refused and be
+     * booked as a failure. Without a key of the caller's, every call is a refund of its own.
      *
      * The latest row the key opened on this charge answers. One still pending is asked again under its key, and the
      * provider collapses the repeat; one that succeeded is the refund already made. Only a refusal opens another,
@@ -514,10 +514,8 @@ final readonly class BillingAdmin
      * nobody can say which reversal this sale needs, and inventing one is how a merchant either keeps a
      * refunded share or receives a flag that does nothing.
      *
-     * It used to look the row up itself, from a reference, while `refund()` had just looked up the same row
-     * — and `refund()` carried a comment saying the charge was resolved once. The comment described the
-     * intent and the code did something else, which is the worse of the two ways to be wrong: a reader
-     * checking that invariant found it asserted rather than held.
+     * It takes the charge `refund()` resolved rather than looking it up again from a reference, so the charge
+     * is resolved once, as `refund()` says.
      *
      * Two reads are two answers. A concurrent reversal landing between them prices this refund against one
      * state and routes it by another, and both figures look entirely reasonable afterwards. Nothing this

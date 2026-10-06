@@ -548,9 +548,10 @@ final class BillingServiceProvider extends ServiceProvider
         // wrong and a privacy problem — they would be collecting data no law asks them for.
         $this->app->bind(ReportingProfile::class, GermanReportingProfile::class);
 
-        // Who falls under that regime's reporting duty, answered by the same profile. It was left unbound, so
-        // everything that asks it (the reporting run, and the escalation over missing seller data) could not
-        // even be built on an installation that had not bound its own rule.
+        // Who falls under that regime's reporting duty, answered by the same profile. Bound by default so that
+        // everything that asks it (the reporting run, and the escalation over missing seller data) can be built
+        // on an installation that binds no rule of its own; such an installation classifies by the German rule.
+        // A classifier for a jurisdiction without a reporting duty answers ReportabilityReason::NoReportingRegime.
         $this->app->bind(ClassifiesReportability::class, GermanReportingProfile::class);
 
         // What a seller's standing means for the buyer of a sale the platform arranges: their rights and the
@@ -570,10 +571,7 @@ final class BillingServiceProvider extends ServiceProvider
         // ComposedReceiveGate with ProviderCapabilityCheck and its own predicates — the fail-closed shape.
         //
         // The go-live checklist now ASKS whether they did: `ReceivingGateCheckpoint` fails when a live
-        // marketplace still resolves this binding to AlwaysReceivable. This comment used to say the
-        // checklist expected the composed shape, and it did not — it never asked, so the run came back green
-        // over a marketplace routing money to accounts nobody had looked at. A comment that describes a
-        // guarantee no code provides is worse than none: it is the reason nobody goes looking.
+        // marketplace still resolves this binding to AlwaysReceivable.
         // Bound to a REFUSAL rather than left unbound, and the difference shows at the moment it fires: an
         // unbound contract produces a container error naming an interface, which reads as a wiring mistake
         // in the consumer's app. This produces a sentence saying the package ships no rates, why it ships
@@ -893,10 +891,9 @@ final class BillingServiceProvider extends ServiceProvider
         // exception in the middle of a subscription screen.
         $this->app->bind(ProrationStrategy::class, DelegatedProrationStrategy::class);
 
-        // WHO publishes the rates this installation imports. Shipped bound to the central bank, which is
-        // where the importer's URL and its 'ECB' literal used to live — so an installation that never
-        // thinks about publishers keeps exactly the series it had, and one filing under another
-        // jurisdiction's rule can replace the identity without touching the command.
+        // WHO publishes the rates this installation imports. Shipped bound to the central bank, so an
+        // installation that never thinks about publishers imports the ECB series, and one filing under
+        // another jurisdiction's rule can replace the identity without touching the command.
         $this->app->bind(PublishesExchangeRates::class, EcbRatePublisher::class);
 
         // The shipped default driver registers its own bindings (the Stripe SDK
@@ -993,10 +990,9 @@ final class BillingServiceProvider extends ServiceProvider
         // installation that switches billing off for a week should not have to re-register with its
         // provider afterwards.
         //
-        // Said explicitly because the sentence above used to claim it for every route, and a consumer read
-        // that literally: these two endpoints carry no CSRF middleware (the verifier authenticates by
-        // signature instead), so "the routes do not exist" is exactly the kind of promise somebody stops
-        // checking. `MasterSwitchLeavesOnlyTheWebhooksTest` holds the real answer.
+        // Said explicitly because a consumer reads "the routes do not exist" literally: these two endpoints
+        // carry no CSRF middleware (the verifier authenticates by signature instead), so that is exactly the
+        // kind of promise somebody stops checking. `MasterSwitchLeavesOnlyTheWebhooksTest` holds the answer.
         if ((bool) $this->app->make(Repository::class)->get('billing.enabled', true)) {
             // A tier that bills for usage on a driver that cannot report it would count every unit and
             // invoice none of them. Refuse to boot instead.
@@ -1200,6 +1196,10 @@ final class BillingServiceProvider extends ServiceProvider
         $this->callAfterResolving(Schedule::class, static function (Schedule $schedule) use ($scheduleConfig, $withHeartbeat): void {
             // A SWITCHED-OFF BILLING SCHEDULES NOTHING, and this is the whole guard for every entry below.
             //
+            // That includes billing:usage:flush and with it the reclaim of expired usage holds. An application that
+            // meters usage for its quotas while billing is off schedules that command itself; with billing off it
+            // hands back expired holds and reports nothing.
+            //
             // A package running fully dormant -- BILLING_ENABLED=false, migrations ignored, not one `billing_*`
             // table in the database -- would otherwise run every entry against tables that do not exist, and
             // most of them throw on every execution. `billing:usage:flush` is on `everyMinute`, so that alone
@@ -1229,62 +1229,67 @@ final class BillingServiceProvider extends ServiceProvider
             //
             // withoutOverlapping like the others: a local-engine cycle advance that runs long must not have
             // a second copy start on top of it and double-advance the same due subscriptions.
+            //
+            // And every entry carries the heartbeat. The scheduler discards a command's output, so the line a sweep
+            // prints to say it ran and found nothing reaches nobody there; the heartbeat is the signal a monitor
+            // outside the process can watch for, and its absence is the one that matters.
             $withHeartbeat($schedule->command('billing:run')->hourly()->withoutOverlapping(self::LOCK_HOURLY)->onOneServer(), 'billing:run');
-            $schedule->command('billing:usage:flush')->everyMinute()->withoutOverlapping(self::LOCK_MINUTELY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:usage:flush')->everyMinute()->withoutOverlapping(self::LOCK_MINUTELY)->onOneServer(), 'billing:usage:flush');
             // A daily proactive nudge before a card expires — the biggest preventable cause of churn.
-            $schedule->command('billing:cards:warn')->dailyAt('09:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:cards:warn')->dailyAt('09:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:cards:warn');
             // The same nudge for the trial that has no provider to send one. A subscription trial ends with a
             // provider event; the GENERIC trial is a date on the owner's own row and nothing could ever
             // announce it — which made the mode WITHOUT a card, the one where the customer has no other
             // signal, the one that ended in silence.
-            $schedule->command('billing:trials:warn')->dailyAt('09:05')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:trials:warn')->dailyAt('09:05')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:trials:warn');
             // The tax-standing deadline, announced BEFORE it bites. Daily and early, because the value of
             // this message is entirely in how much time it leaves: a merchant needs longer to produce a
             // declaration than a checkout takes to fail. It is silent until an operator sets the date.
-            $schedule->command('billing:tax-holds:warn')->dailyAt('09:15')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:tax-holds:warn')->dailyAt('09:15')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:tax-holds:warn');
             // A daily walk up the dunning ladder — escalating warnings + fees for delinquent owners.
-            $schedule->command('billing:dunning:advance')->dailyAt('09:15')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:dunning:advance')->dailyAt('09:15')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:dunning:advance');
             // The cure-window half of that ladder, and the half that ENDS things. A payment failing writes a
             // row somebody can watch; a day passing inside the window writes nothing at all, so without these
             // two the customer hears once — when the payment failed — and then again only when the
-            // subscription is gone. The reminder runs first and the expiry after it, so a window that ends
-            // today produces the final notice rather than a countdown that stops at zero. Both select
-            // merchant-scoped rows only, so a single-seller install pays two empty queries a day.
-            $schedule->command('billing:dunning:remind')->dailyAt('09:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
-            $schedule->command('billing:dunning:expire')->dailyAt('09:45')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            // subscription is gone. The window ends on a calendar day that both read alike, so a window that
+            // ends today produces the final notice rather than a countdown that stops at zero, at whatever
+            // time each of the two runs. Both select merchant-scoped rows only, so a single-seller install
+            // pays two empty queries a day.
+            $withHeartbeat($schedule->command('billing:dunning:remind')->dailyAt('09:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:dunning:remind');
+            $withHeartbeat($schedule->command('billing:dunning:expire')->dailyAt('09:45')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:dunning:expire');
             // The retention clock. Personal data the package no longer needs is not data it may keep.
-            $schedule->command('billing:prune')->dailyAt('03:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:prune')->dailyAt('03:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:prune');
             // The drift guard: read the provider's own totals back and compare, and alarm on a backlog held
             // past the point it can still be billed. The flush is quiet about both by design — this is the
             // daily check that surfaces revenue quietly going uncollected.
-            $schedule->command('billing:usage:reconcile')->dailyAt('04:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:usage:reconcile')->dailyAt('04:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:usage:reconcile');
             // The notice before the hold below: when an attestation's renewal falls due at the year boundary,
             // and again shortly before it runs out. Safe unconditionally: with nothing due it touches nothing
             // and exits zero.
-            $schedule->command('billing:tax-holds:remind')->dailyAt('05:55')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:tax-holds:remind')->dailyAt('05:55')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:tax-holds:remind');
             // The one hold nothing else can notice. A merchant whose attestation expires is stopped from
             // selling and from being paid WITHOUT a row changing anywhere — the date simply passed. Without
             // this sweep they find out by trying to sell. Early, so the notice lands before their day does.
-            $schedule->command('billing:tax-holds:announce')->dailyAt('06:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:tax-holds:announce')->dailyAt('06:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:tax-holds:announce');
             // The settlements a corrected creator standing has made wrong, issued again. Safe to schedule
             // unconditionally: with nothing queued it touches nothing and exits zero.
-            $schedule->command('billing:settlements:restate')->dailyAt('06:05')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:settlements:restate')->dailyAt('06:05')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:settlements:restate');
             // Sellers whose record is incomplete: one step of the escalation a day, then the release of what
             // may move again. Gated at registration like the voucher entry below, because a single-seller
             // install has no sellers, and an entry that always no-ops is not what `schedule:list` should show.
             if ((bool) $scheduleConfig->get('billing.marketplace.enabled', false)) {
-                $schedule->command('billing:seller-data:escalate')->dailyAt('06:10')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+                $withHeartbeat($schedule->command('billing:seller-data:escalate')->dailyAt('06:10')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:seller-data:escalate');
             }
             // The filing obligations, announced before their day. Daily, because the notice window is
             // measured in days and a weekly sweep would land inside it by chance rather than by design.
-            $schedule->command('billing:filings:announce')->dailyAt('06:15')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:filings:announce')->dailyAt('06:15')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:filings:announce');
             // The voucher-volume levels, the second entry here registered CONDITIONALLY. Vouchers
             // are off by default and the whole feature waits on a legal question; a schedule entry that ran
             // anyway would query an empty table every morning on every install that never issued a voucher.
             // Gated at registration rather than skipped inside the command, so an operator reading
             // `schedule:list` sees what actually runs for them instead of a line that always no-ops.
             if ((bool) $scheduleConfig->get('billing.marketplace.vouchers.enabled', false)) {
-                $schedule->command('billing:vouchers:volume')->dailyAt('06:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+                $withHeartbeat($schedule->command('billing:vouchers:volume')->dailyAt('06:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:vouchers:volume');
             }
             // The other event nothing can observe, and this one DECIDES rather than announces. A creator
             // crossing a turnover limit writes no row: enough sales accumulate and a threshold is simply
@@ -1292,14 +1297,14 @@ final class BillingServiceProvider extends ServiceProvider
             // unrun, a creator who has outgrown their relief keeps issuing tax-free documents, which is
             // knowingly wrong from the breaking sale onward. Just after the announcement, so a standing
             // written here is in place before the next day's selling rather than mid-morning.
-            $schedule->command('billing:tax-status:reconcile')->dailyAt('06:15')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:tax-status:reconcile')->dailyAt('06:15')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:tax-status:reconcile');
             // The central bank publishes its daily reference rates around 16:00 CET, so the run follows at
             // 17:30 on Frankfurt's clock rather than the application's: in a timezone far enough east, 17:30
             // local comes before the publication, finds no rate for the day, and the day waits for the next
             // run's lookback. Off unless the local rate store is switched on AND currencies are listed — the
             // command itself checks both and says which one stopped it, rather than contacting anybody by
             // default.
-            $schedule->command('billing:exchange-rates:import')->dailyAt('17:30')->timezone('Europe/Berlin')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:exchange-rates:import')->dailyAt('17:30')->timezone('Europe/Berlin')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:exchange-rates:import');
             // The buyer-protection clock. Its two deadlines -- the buyer's silence turning into consent, and
             // the absolute decision date -- are DATES, and a date only means something if something reads it.
             // Unscheduled, the hold simply waits until the provider stops waiting and pays out anyway: the
@@ -1308,7 +1313,7 @@ final class BillingServiceProvider extends ServiceProvider
             //
             // Safe to schedule unconditionally: with no holds it moves nothing and exits zero, so an install
             // that never enables buyer protection pays one empty query a day.
-            $schedule->command('billing:protection:advance')->dailyAt('05:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer();
+            $withHeartbeat($schedule->command('billing:protection:advance')->dailyAt('05:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:protection:advance');
         });
     }
 
@@ -1530,9 +1535,8 @@ final class BillingServiceProvider extends ServiceProvider
      *
      * RECURSING IS NOT ENOUGH ON ITS OWN -- a LIST is a value, never a structure.
      * `array_merge_recursive()` concatenates lists and `array_replace_recursive()` merges them
-     * by index. Measured rather than recalled: a host narrowing a shipped ['web', 'auth'] to
-     * ['admin'] gets ['web', 'auth', 'admin'] back from the first and ['admin', 'auth'] from
-     * the second. Both hand back an entry the host deliberately removed, and on the account
+     * by index: a host narrowing a shipped ['web', 'auth'] to ['admin'] gets
+     * ['web', 'auth', 'admin'] back from the first and ['admin', 'auth'] from the second. Both hand back an entry the host deliberately removed, and on the account
      * middleware that is an access regression rather than a merge. So recursion stops at any
      * list on either side, and the published value stands exactly as written.
      *

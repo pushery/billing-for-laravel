@@ -18,9 +18,8 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  *
  * There is deliberately no `owner()` relation. The morph columns are here so an erasure can find the row
  * and so an operator can read who asked; nothing in the package resolves them to a model, because the one
- * thing that acts on this row — the mandate webhook — copies them straight onto the subscription. A
- * relation nobody calls is a method the next reader has to decide about, and this one would only ever be
- * decided the way it is written here.
+ * thing that acts on this row — the mandate webhook — copies them straight onto the subscription, and a
+ * relation nobody calls would be public surface with no caller.
  *
  * @property int $id
  * @property string $owner_type

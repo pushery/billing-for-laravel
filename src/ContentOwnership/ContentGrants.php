@@ -57,7 +57,8 @@ final readonly class ContentGrants
      * two revocation targets and revoking one leaves the other granting.
      *
      * A later purchase of the same work, after the earlier one was refunded or ran out, renews that row for
-     * itself: the buyer paid again and holds the work again, and a refund of the new purchase finds it.
+     * itself: the buyer paid again and holds the work again, and a refund of the new purchase finds it. So does a
+     * purchase during a rental that grants longer than the rental runs, an extension or the work bought outright.
      */
     public function grantPurchase(
         Model $owner,
@@ -234,10 +235,14 @@ final readonly class ContentGrants
      */
     public function expireLapsedGrants(?CarbonInterface $at = null): int
     {
+        // The term is a UTC moment, so the moment compared with it is bound in UTC as well. Bound in the application's
+        // zone, the comparison is off by that zone's offset, and east of Greenwich it marks a grant before its term ends.
+        $moment = Carbon::parse($at ?? Carbon::now())->utc();
+
         return AccessGrant::model()::query()
             ->where('status', GrantStatus::Active->value)
             ->whereNotNull('expires_at')
-            ->where('expires_at', '<=', $at ?? Carbon::now())
+            ->where('expires_at', '<=', $moment)
             ->update(['status' => GrantStatus::Expired->value]);
     }
 
@@ -296,7 +301,7 @@ final readonly class ContentGrants
     ): AccessGrant {
         $existing = $this->existingGrant($owner, $content, $merchant);
 
-        if ($existing instanceof AccessGrant && $this->answers($existing, $sourceReference)) {
+        if ($existing instanceof AccessGrant && $this->answers($existing, $sourceReference, $expiresAt)) {
             return $existing;
         }
 
@@ -328,9 +333,8 @@ final readonly class ContentGrants
             'conformity_update_until' => $this->conformity->updatesUntil($acquired),
             'withdrawal_type' => $withdrawalType,
             // Frozen from `$acquired` — the moment provision happened, which is the line above this one and
-            // is why this column can exist at all. The configuration used to state that a window was not
-            // computable because nothing recorded that moment; this row has recorded it since the grant
-            // register landed, and the paragraph outlived its own truth.
+            // is why this column can exist at all: the window is computable because this row records that
+            // moment.
             //
             // Frozen rather than derived on read, like every other fact the sale was made under: an
             // operator who changes profile tomorrow changes it for future sales, not for a right somebody
@@ -364,20 +368,36 @@ final readonly class ContentGrants
     }
 
     /**
-     * Whether the row already there is the answer to this grant: the one this sale wrote, or one that still stands.
+     * Whether the row already there is the answer to this grant: the one this sale wrote, or one that still stands
+     * and covers it.
      *
      * A row that ended, revoked by a refund or past its term, is no answer to ANOTHER sale. Handed back, a buyer
      * who paid again stayed locked out, a second rental extended nothing, and a refund of the second purchase found
      * no row. A grant without a reference, a comp, is no sale to recognize, so only a standing row answers it.
+     *
+     * A standing row answers only a sale it covers. Without an end of its own it covers every sale; with one, a sale
+     * that ends no later. A rental renewed while it runs, or a work bought outright during its rental, grants more
+     * than the row holds, so the row is renewed for that sale and carries its reference from then on. A refund of
+     * the earlier sale then finds no row and leaves the access the later sale paid for. The row is one per owner,
+     * work and merchant, so a refund of the later sale ends the access the earlier one paid for as well.
      */
-    private function answers(AccessGrant $existing, ?string $sourceReference): bool
+    private function answers(AccessGrant $existing, ?string $sourceReference, ?CarbonInterface $expiresAt = null): bool
     {
         if ($sourceReference !== null && $existing->source_reference === $sourceReference) {
             return true;
         }
 
-        return $existing->status === GrantStatus::Active
-            && (! $existing->expires_at instanceof Carbon || $existing->expires_at->isFuture());
+        if ($existing->status !== GrantStatus::Active) {
+            return false;
+        }
+
+        if (! $existing->expires_at instanceof Carbon) {
+            return true;
+        }
+
+        return $existing->expires_at->isFuture()
+            && $expiresAt instanceof CarbonInterface
+            && $existing->expires_at->greaterThanOrEqualTo($expiresAt);
     }
 
     /**

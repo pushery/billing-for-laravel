@@ -11,11 +11,10 @@ namespace Pushery\Billing\Enums;
  * and the package's own retention and erasure delete by query, which raises no model event. What they
  * remove, and when, is for the retention matrix to say, not for this enum.
  *
- * This enum exists because the answer used to be given by ABSENCE. Ten models spelled out the same
- * append-only rule by hand; three had a deletion arm and seven simply had none, and a missing hook throws no
- * error and reads exactly like a considered decision. `ReportingExportRecord` had no arm while its sibling
- * archive `TaxReturnExportRecord` did, with the retention matrix holding both under one rule — a divergence
- * nobody noticed, because there was no place where the question was ever asked.
+ * This enum exists so the answer is never given by ABSENCE. A model that spells out the append-only rule by
+ * hand can simply lack a deletion arm, and a missing hook throws no error and reads exactly like a considered
+ * decision: one archive could refuse deletion while its sibling under the same retention rule did not, and
+ * nobody would notice, because there would be no place where the question is asked.
  *
  * Naming the answer makes it a line in the model rather than a gap in it.
  */

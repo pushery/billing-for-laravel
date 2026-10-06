@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Pushery\Billing\Invoicing;
 
 use Illuminate\Contracts\View\Factory as ViewFactory;
-use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Traits\Localizable;
 use Pushery\Billing\Contracts\PdfRenderer;
@@ -85,7 +84,7 @@ final readonly class InvoiceDocumentRenderer
         $currency = $invoice->currency;
         // The language the document is written in, which html() has made the current one. Its labels and its
         // `lang` attribute come from the same locale, so every amount and rate on it is written in that language too.
-        $locale = App::getLocale();
+        $locale = Lang::getLocale();
         $lines = $this->lines($invoice, $currency, $locale);
 
         // An amount collected on behalf of another party is part of what was paid and none of the issuer's supply, so
@@ -212,17 +211,17 @@ final readonly class InvoiceDocumentRenderer
     /**
      * The seller named on this document, resolved the way the XML writers resolve it.
      *
-     * This used to be `config('billing.company')` outright, and the two halves of a hybrid ZUGFeRD document
-     * therefore disagreed: `ZugferdPdfInvoice` embeds `ZugferdCiiInvoice`'s XML -- which reads the frozen
-     * per-document `seller` snapshot -- into the PDF this class renders, which named the platform whatever
-     * the row said. On a self-billed settlement the visible page named the platform while the machine-readable
+     * Not `config('billing.company')` outright, because the two halves of a hybrid ZUGFeRD document would then
+     * disagree: `ZugferdPdfInvoice` embeds `ZugferdCiiInvoice`'s XML -- which reads the frozen per-document
+     * `seller` snapshot -- into the PDF this class renders, which would name the platform whatever the row
+     * said. On a self-billed settlement the visible page would name the platform while the machine-readable
      * half named the creator, in one file, about the one fact the document exists to state.
      *
      * A hybrid format exists so that a person and a machine read the SAME invoice. Two answers to "who
      * supplied this" is not an imprecision; which one counts depends on which software opens the file.
      *
-     * Unchanged for a document with no snapshot: the resolver's default is the platform company, so every
-     * single-seller invoice renders byte-for-byte what it did before.
+     * For a document with no snapshot the resolver's default is the platform company, so a single-seller
+     * invoice names the company configured in `billing.company`.
      */
     private function seller(InvoiceRecord $invoice): Party
     {

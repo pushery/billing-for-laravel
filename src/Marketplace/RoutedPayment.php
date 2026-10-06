@@ -242,12 +242,11 @@ final readonly class RoutedPayment
         // all, and a voluntary payment that never said what it was paid on. A SALE OF NOTHING IS NOT A SALE,
         // and this is the first thing asked because everything after it assumes there is money.
         //
-        // What comes back is now KEPT, and the reason is worth stating because this comment used to say the
-        // opposite. The classification already works out where the supply is taxed and which rate band it
-        // falls in; discarding that answer meant the receipt below either went without those characteristics
-        // or had to derive them a second time, from a second source, at a later moment. Two derivations of
-        // one fact is the divergence this package keeps paying for — and the second one would run after the
-        // sale, when the configuration it reads may already have moved.
+        // What comes back is KEPT. The classification already works out where the supply is taxed and which
+        // rate band it falls in; discarding that answer would leave the receipt below without those
+        // characteristics, or deriving them a second time, from a second source, at a later moment. Two
+        // derivations of one fact diverge, and the second one would run after the sale, when the
+        // configuration it reads may already have moved.
         //
         // Kept on the DOCUMENT rather than on the charge row: `billing_merchant_charges` has no column for
         // any of it, and the document is what a buyer and an authority are shown.
@@ -443,9 +442,9 @@ final readonly class RoutedPayment
         }
 
         // A share that failed to move is KEPT, not thrown. The buyer's payment has gone through, so an exception
-        // here reaches a caller holding a charged buyer, and a caller that retries charge() without an
-        // idempotency key charges them a second time. It used to do exactly that, and the row it left behind
-        // was `pending`, indistinguishable from a payment still clearing, with nothing that would ever move it.
+        // here would reach a caller holding a charged buyer, and a caller that retries charge() without an
+        // idempotency key would charge them a second time, while the row left behind would read `pending` with
+        // no failure on it, indistinguishable from a payment still clearing, and nothing would ever move it.
         //
         // So the failure is reported to the host's handler, written to the row and announced, and the row stays
         // `pending` until `billing:marketplace:retry-transfers` moves the share under the same idempotency key.
@@ -514,10 +513,10 @@ final readonly class RoutedPayment
      *   behind. Wiring it before that is answered would ship exactly the defect this method closes, one
      *   posture over.
      *
-     *   The second reason is gone: `issueIntermediated()` used to write directly rather than through
-     *   `issueOnce()`, so a redelivery drew a second number from a gapless series — the one failure a repeat
-     *   cannot heal. It now goes through the repeat guard, and the guard's lookup takes the series rather
-     *   than assuming the buyer receipt, which is what makes it find a commission document at all.
+     *   The repeat guard is not the obstacle: `issueIntermediated()` goes through `issueOnce()`, so a
+     *   redelivery cannot draw a second number from a gapless series, the one failure a repeat cannot heal.
+     *   The guard's lookup takes the series rather than assuming the buyer receipt, which is what makes it
+     *   find a commission document at all.
      */
     private function issueBuyerDocument(
         Model $buyerOwner,
@@ -631,22 +630,20 @@ final readonly class RoutedPayment
      * On a destination charge the transfer is part of the payment. On a separate transfer it is a second
      * call, and if nobody makes it the merchant is simply never paid while every signal looks healthy -- a
      * successful result, no exception, and a null transfer reference indistinguishable from one still
-     * settling. That was this package's actual behavior until now, on the DEFAULT charge type.
+     * settling. And the separate transfer is the DEFAULT charge type, so this is the common path.
      *
      * The idempotency key is the charge ROW's id, not the amount. A retry that recomputed the share even
      * slightly differently would produce a second key and a second transfer; the row id cannot move.
      *
-     * The AMOUNT comes off the row for the same reason the key does. It used to be split a second time from
-     * the gross here, which was the same arithmetic in a second place — and the day the basis changed, the
-     * two places would have had to change together or the merchant would have been transferred a share the
-     * ledger says they were not paid. Reading what was written down cannot drift from what was written down.
+     * The AMOUNT comes off the row for the same reason the key does. Splitting the gross a second time here
+     * would be the same arithmetic in a second place, and the day the basis changed, the two places would
+     * have to change together or the merchant would be transferred a share the ledger says they were not
+     * paid. Reading what was written down cannot drift from what was written down.
      *
      * It returns the provider's whole answer rather than the reference alone, because the amount that
      * actually moved is the one number the provider contributes that the package cannot derive. A journal that
      * records its own request cannot disagree with the provider, and the reconciliation would have nothing to
      * compare.
-     *
-     * This used to be two docblocks stacked on one method, and PHP reads only the second.
      */
     private function moveMerchantShare(MovesMerchantShare $transfers, MerchantCharge $charge, ChargeRouting $routing): TransferResult
     {

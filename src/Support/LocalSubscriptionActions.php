@@ -331,8 +331,8 @@ final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, 
      * for more capacity wants it now, and making them wait for the period end is the one answer nobody
      * asked for.
      *
-     * Asked of {@see PlanSwapPlanner}, the reading the account hub prices the swap by. This used to compare the
-     * prices of the two tiers while the planner read their rank, so a tier ranked higher and priced lower was an
+     * Asked of {@see PlanSwapPlanner}, the reading the account hub prices the swap by. Comparing the prices of the
+     * two tiers here while the planner reads their rank would make a tier ranked higher and priced lower an
      * immediate upgrade on the screen, credited there at once, and a downgrade here, scheduled for the period end.
      */
     private function landsAtPeriodEnd(Subscription $subscription, string $tierKey): bool

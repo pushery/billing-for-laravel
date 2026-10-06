@@ -51,10 +51,10 @@ final readonly class UsageGate
         }
 
         $period = $this->periods->forOwner($owner)->key;
-        // Measured the same way the reservation measures it — which is now literally true, because it is
-        // the same method. This line used to carry that claim and its own arithmetic, and the two parted
-        // company exactly where it matters: with no free allowance the hold reduced nothing, so the gate let
-        // through requests the lock then refused, and handed out bought units twice.
+        // Measured the same way the reservation measures it, by the same method. Arithmetic of its own here
+        // would part company with the reservation exactly where it matters: with no free allowance the hold
+        // would reduce nothing, so the gate would let through requests the lock then refuses, and hand out
+        // bought units twice.
         $remaining = $this->counters->remaining($owner, $meterKey, $period, $component->included);
         $withinAllowance = $quantity <= $remaining;
 

@@ -29,8 +29,9 @@ final class RemindDelinquentSubscriptionsCommand extends Command
     {
         $sent = $sweep->remind(CarbonImmutable::now());
 
-        // "Ran and found nothing" has to be distinguishable from "never ran". A silent success reads as an
-        // absent scheduler, and an absent scheduler is exactly the failure this command exists to prevent.
+        // The line tells whoever runs this by hand that it ran and found nothing. Under the scheduler the output
+        // is discarded and "it ran" reaches the bound ScheduleHeartbeat instead, because an absent scheduler is
+        // exactly the failure this command exists to prevent.
         $this->components->info($sent === 0
             ? 'No subscription is inside its cure window today.'
             : "Reminded {$sent} subscription(s) in arrears.");

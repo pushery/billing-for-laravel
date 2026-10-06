@@ -206,19 +206,16 @@ final readonly class RoutedChargeLedger
      */
     public function settle(MerchantCharge $charge, ?string $transferReference = null, ?Money $actuallyMoved = null): bool
     {
-        // UNDER THE LOCK, like every other advance of this column — which this one was not.
+        // UNDER THE LOCK, like every other advance of this column.
         //
-        // The check and the write used to sit outside any transaction, so two deliveries arriving together
-        // both read `pending` and both wrote. Both then returned true, and a caller that treats that as
-        // "I made this transition" fires whatever it fires twice.
+        // With the check and the write outside a transaction, two deliveries arriving together would both
+        // read `pending` and both write. Both would return true, and a caller that treats that as "I made
+        // this transition" would fire whatever it fires twice.
         //
         // The dangerous pair is not two settlements: it is a settlement racing a failure. Whichever writes
         // last wins, and if that is the failure, a charge whose money really did move is recorded as one
         // that never completed — which every reader of this table then believes, including the ones that
         // decide what a merchant may be refunded.
-        //
-        // The class docblock has claimed a row lock covers every advance since it was written. It covered
-        // exactly one of them.
         return $this->changeWhilePending($charge, fn (MerchantCharge $locked): array => [
             'settlement_state' => SettlementState::Settled,
             'transfer_reference' => $transferReference ?? $locked->transfer_reference,

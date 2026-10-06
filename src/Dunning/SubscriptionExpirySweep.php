@@ -21,10 +21,11 @@ use Pushery\Billing\Models\Subscription;
  *
  * ## The boundary is shared with the reminder, not merely similar to it
  *
- * The reminder sweep takes `delinquent_since > now - window`; this one takes `<=`. The two are complementary
- * halves of one comparison, so on the day a window runs out the customer receives the final message and NOT
- * a reminder as well. Writing the boundary twice with the same operator is how "exactly one message" quietly
- * becomes two, so the operators are opposite by construction rather than by care.
+ * The reminder sweep takes `delinquent_since > cutoff`, the end of the day `window` days back; this one takes
+ * `<=`. The two are complementary halves of one comparison, so on the day a window runs out the customer
+ * receives the final message and NOT a reminder as well. Writing the boundary twice with the same operator is
+ * how "exactly one message" quietly becomes two, so the operators are opposite by construction rather than by
+ * care.
  *
  * ## A period already paid for is not clawed back
  *

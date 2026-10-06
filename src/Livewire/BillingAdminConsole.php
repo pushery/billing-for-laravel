@@ -290,10 +290,10 @@ final class BillingAdminConsole extends Component
             // or a specific period boundary, and an operator who is told which one can fix it; one who is
             // told "export failed" reruns it and gets the same nothing.
             //
-            // THE SECOND TYPE IS A REFUSAL TOO, and it used to leave through this method uncaught: a
+            // THE SECOND TYPE IS A REFUSAL TOO, and it must not leave through this method uncaught: a
             // transaction the active chart has no account for raises it, and out of a Livewire action
             // that is an error page. The command that writes the same file catches Throwable and answers
-            // with a line, so one misconfiguration was a sentence on one route and a 500 on the other.
+            // with a line, so one misconfiguration would be a sentence on one route and a 500 on the other.
             //
             // It joins `refused` rather than becoming a fifth direction because it IS one — no file, and
             // here is why. Its message already names the transaction, the country where one applies and
@@ -327,8 +327,8 @@ final class BillingAdminConsole extends Component
             // the two point at opposite defects.
             $this->datevResult = 'unbalanced';
             // The Translator through the container, not the `__()` helper. That helper lives in Foundation,
-            // which this package deliberately does not require — `LeanDependencyContractTest` fails on it,
-            // and it is right to: a consumer who installs the split components would get a fatal here.
+            // which this package's PHP code does not require, so a consumer who installs the split components
+            // would get a fatal here. The Blade views render in a full Laravel application and use it freely.
             $this->datevImbalance = Container::getInstance()->make(Translator::class)->get('billing::admin.datev.imbalance_figures', [
                 'subledger' => $reconciliation->subLedgerTotal->toDecimal().' '.$reconciliation->subLedgerTotal->currency,
                 'batch' => $reconciliation->collectiveAccountBalance->toDecimal().' '.$reconciliation->collectiveAccountBalance->currency,
@@ -338,7 +338,7 @@ final class BillingAdminConsole extends Component
             return null;
         }
 
-        // THE STATE SURVIVES THE DOWNLOAD, and that is measured rather than assumed. Livewire does not
+        // THE STATE SURVIVES THE DOWNLOAD. Livewire does not
         // hand a returned StreamedResponse to the browser raw: `SupportFileDownloads` captures its
         // content into a `download` EFFECT and the request dehydrates normally, so the response the
         // client gets carries both the file and this property. The warning above — never depend on

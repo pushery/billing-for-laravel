@@ -239,14 +239,14 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
             merchantReference: $account,
             feeAmount: $fee,
             cause: ReversalCause::DisputeLost,
-            // Read rather than assumed, and an unknown code is not dropped. Dropping it here was the whole
-            // defect: every lost dispute arrived looking alike, so the correction could only ever take one
-            // branch, and it took the one that also corrects a merchant who delivered.
+            // Read rather than assumed, and an unknown code is not dropped. Dropped here, every lost dispute
+            // would arrive looking alike, so the correction could only ever take one branch, and it would take
+            // the one that also corrects a merchant who delivered.
             reason: DisputeReason::fromProvider(is_string($object['reason'] ?? null) ? $object['reason'] : null),
-            // The dispute's OWN id, which this mapper used to drop. Everything else here is about the
-            // charge, correctly — the correcting documents and the clawback act on the sale. The fee does
-            // not: it is charged per dispute, and a charge can carry more than one, so claiming it on the
-            // charge reference silently lost the second one.
+            // The dispute's OWN id. Everything else here is about the charge, correctly — the correcting
+            // documents and the clawback act on the sale. The fee does not: it is charged per dispute, and a
+            // charge can carry more than one, so claiming it on the charge reference would silently lose the
+            // second one.
             disputeReference: is_string($object['id'] ?? null) ? $object['id'] : null,
         )];
     }

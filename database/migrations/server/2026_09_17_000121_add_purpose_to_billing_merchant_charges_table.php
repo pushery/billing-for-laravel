@@ -20,9 +20,8 @@ use Illuminate\Support\Facades\Schema;
  * The obvious fix is to hand the purpose to `MovesMerchantShare::transferShare()`, and it cannot be done.
  * That interface is implemented OUTSIDE this package — a consumer registers its own driver, which is the
  * whole reason the seam exists — and in PHP an implementation that declares fewer parameters than its
- * interface is a fatal error at class load, not a runtime failure. Measured on this machine rather than
- * assumed: adding one trailing optional parameter makes every existing driver fatal on `composer update`,
- * with no graceful path. The same argument the `MovesMerchantShare` docblock makes for why it is a separate
+ * interface is a fatal error at class load, not a runtime failure: adding one trailing optional parameter
+ * makes every existing driver fatal on `composer update`, with no graceful path. The same argument the `MovesMerchantShare` docblock makes for why it is a separate
  * interface at all applies here one level down.
  *
  * So the fact goes where every other frozen fact about this sale already goes: onto the row, which any

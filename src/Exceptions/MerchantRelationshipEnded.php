@@ -13,14 +13,14 @@ use RuntimeException;
  *
  * A merchant who disconnects their provider account — by accident, while tidying up app connections, or
  * because a collaboration ended — is terminated here and cannot receive money. Asking to onboard them again
- * used to hand back the OLD reference: no second provider account, no exception, no change to the row, and
- * exit 0. The operator did exactly what the code told them to do, got output that looked like a successful
- * onboarding, and had a link to an account the provider no longer releases funds through.
+ * throws this rather than handing back the OLD reference with exit 0, which would give the operator output
+ * that looks like a successful onboarding and a link to an account the provider no longer releases funds
+ * through.
  *
- * That is the worse half of two defects. Missing a way back is a gap; promising one and answering "fine" is
- * a false statement made at the moment somebody is trying to fix something.
+ * Missing a way back would be a gap; promising one and answering "fine" is a false statement made at the
+ * moment somebody is trying to fix something.
  *
- * The way back exists now — `MerchantLifecycle::reopen()`, driven by `billing:merchant:reopen` — and it is
+ * The way back is `MerchantLifecycle::reopen()`, driven by `billing:merchant:reopen` — and it is
  * deliberately an operator's act rather than something an onboarding call performs on its own. Reopening
  * decides that a relationship somebody ended should begin again, and that is not a decision to make as a
  * side effect of a retry.

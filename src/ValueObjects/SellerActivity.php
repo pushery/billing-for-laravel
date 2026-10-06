@@ -15,14 +15,10 @@ use Pushery\Billing\Enums\TaxArchetype;
  * The counts and the amount come from elsewhere — this only carries them, so the rule that reads them stays
  * a pure function of its inputs and can be replayed for any period with the same answer.
  *
- * ## Where the archetype comes from — and this paragraph used to say the opposite
+ * ## Where the archetype comes from
  *
- * It said the package records no archetype, that looking for a column to read one from was time wasted, and
- * that adding one would reverse a decision. That was true of the design it was written for and is not true
- * of the code: the settlement document freezes `tax_archetype`, and {@see SettlementGrossInflowCounter}
- * selects it off exactly those rows to split a period by it. The sibling counter's docblock had already been
- * corrected for the same overstatement; this one had not, so a reader of the published package was being
- * sent to their own catalog for a fact the package hands them.
+ * The settlement document freezes `tax_archetype`, and {@see SettlementGrossInflowCounter} selects it off
+ * exactly those rows to split a period by it, so a caller does not need their own catalog for it.
  *
  * What is genuinely the CONSUMER's is the product catalog itself — which product carries which archetype.
  * What the package holds is what a settled document FROZE, which is a different and narrower thing: the
@@ -106,14 +102,13 @@ final readonly class SellerActivity
      *
      * DERIVED from the archetype, which already says it, with one flag that can only ever widen the answer.
      *
-     * It used to be an ordinary boolean sitting BESIDE the archetype — one fact written twice, statable in
-     * contradiction, with nothing to catch it. The direction that contradiction fell is what made it worth
-     * removing rather than validating: the reporting rule asks this FIRST and returns on it, so an activity
-     * carrying `CustomOneToOne` with the boolean left at its default classified as standardized, and a
-     * seller who had to be reported was not. A default that decides a reporting duty is the wrong kind of
-     * default.
+     * An ordinary boolean sitting BESIDE the archetype would be one fact written twice, statable in
+     * contradiction, with nothing to catch it, and the direction that contradiction falls is the costly one:
+     * the reporting rule asks this FIRST and returns on it, so an activity carrying `CustomOneToOne` with the
+     * boolean left at its default would classify as standardized, and a seller who has to be reported would
+     * not be. A default that decides a reporting duty is the wrong kind of default.
      *
-     * The flag survives because deleting it would have taken a real case with it: a commission the catalog
+     * The flag stays because deleting it would take a real case with it: a commission the catalog
      * never classified is still a commission, and the duty turns on the commission rather than on the
      * classification. What it cannot do is the other direction — an explicit `false` beside `CustomOneToOne`
      * would be the exact failure this change exists to end, so the flag ORs rather than overrides. Saying

@@ -19,9 +19,8 @@ use Pushery\Billing\Enums\SubscriptionState;
  * Arrears are per merchant — a fan behind with one creator keeps the others. Asking that question needs a
  * merchant, and this method has nowhere to put one.
  *
- * Appending an optional parameter here was tried and rejected on evidence: every existing implementation,
- * including the ones this package's own suite declares inline, fatals at load time on the changed
- * declaration. That is a MAJOR break, and the marketplace work ships as MINOR.
+ * An optional parameter appended here would fatal every existing implementation at load time, on the
+ * changed declaration. That is a MAJOR break, and the marketplace work ships as MINOR.
  *
  * So the scoped question lives on a SEPARATE, optional interface — {@see MerchantScopedDunningGuard} — which
  * an implementation may add without any consumer noticing. A caller that needs the scope checks for it;

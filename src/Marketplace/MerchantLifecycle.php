@@ -26,10 +26,6 @@ use Pushery\Billing\Models\MerchantAccount;
  * longer exists. Termination is therefore one-way from any WEBHOOK — what undoes it is `reopen()` below,
  * an explicit act of an operator, and that separation is the whole point: a provider that keeps reporting
  * healthy capabilities must never be able to resume a relationship a person ended.
- *
- * That sentence used to say termination "is undone by onboarding again", and no such path existed. Onboarding
- * handed the old, unreceivable row straight back with exit 0, so the documented repair was a statement about
- * a mechanism nobody had built.
  */
 final readonly class MerchantLifecycle
 {

@@ -31,13 +31,12 @@ use Pushery\Billing\ValueObjects\Money;
  * sells in but forgot to add is a currency nobody is counting, and it looks exactly like a currency under
  * the threshold. Asking which currencies actually carry sales cannot drift.
  *
- * IT USED TO ASK THE VOUCHERS ALONE, AND THAT IS THE SAME SILENCE ONE TABLE OVER. The figure counts two
- * instruments — vouchers and paid money-credit top-ups — but the loop only ever visited a currency some
- * voucher had been issued in. An installation that sells credit and issues no vouchers therefore had an
- * EMPTY list: the monitor would have answered correctly for `EUR`, and nothing asked it. The threshold could
- * be passed by a wide margin with the sweep running green every morning over nothing, which is precisely the
- * state this class was written against. Both instruments are asked now, and a currency carried by either is
- * visited once.
+ * BOTH INSTRUMENTS ARE ASKED, BECAUSE ASKING THE VOUCHERS ALONE IS THE SAME SILENCE ONE TABLE OVER. The
+ * figure counts two instruments — vouchers and paid money-credit top-ups. A loop over the currencies some
+ * voucher was issued in would give an installation that sells credit and issues no vouchers an EMPTY list:
+ * the monitor would answer correctly for `EUR`, and nothing would ask it. The threshold could be passed by a
+ * wide margin with the sweep running green every morning over nothing, which is precisely the state this
+ * class is written against. A currency carried by either instrument is visited once.
  *
  * ## Once per level, per currency, per year
  *

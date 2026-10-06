@@ -61,11 +61,8 @@ enum ReversalAttribution: string
      * Defaulted to `OriginalPeriod` when no configuration is reachable, so a counter constructed by hand in
      * a test or a script answers the same way the container-resolved one does.
      *
-     * That default is a DECISION, not continuity: this sentence used to say "what the package has always
-     * done", and the inline comment on the branch below already contradicted it in as many words — the
-     * historic behavior was `reversal_period`, and the change was deliberate. Worth stating here rather
-     * than only there, because a reader who takes the default for inherited behavior will not think to
-     * question it, and it moves a reported figure between quarters.
+     * That default is a DECISION, not inherited behavior, and it moves a reported figure between quarters:
+     * an installation that wants a reversal reported in the quarter it happened sets `reversal_period`.
      *
      * An unreadable value is REFUSED rather than defaulted. Both answers are defensible, so neither is a
      * safe reading of a value somebody mistyped — and the difference is invisible in every figure it

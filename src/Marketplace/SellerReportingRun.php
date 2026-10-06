@@ -113,9 +113,9 @@ final readonly class SellerReportingRun
      * edges, split into two lines that are each under them, comes back exempt twice and is never filed.
      * Under-reporting: the direction the statute sanctions.
      *
-     * Measured rather than reasoned about: 28 goods settlements at 190,008 plus five tips on goods at
-     * 15,000 is 33 sales and 205,008 — over both shipped edges (30 / 200,000). Split, both fragments read
-     * as within the relief and the seller disappears from the return.
+     * For example: 28 goods settlements at 190,008 plus five tips on goods at 15,000 is 33 sales and
+     * 205,008 — over both shipped edges (30 / 200,000). Split, both fragments read as within the relief
+     * and the seller disappears from the return.
      *
      * So the merge happens HERE and not in the counter. The counter would need to know which archetypes
      * delegate, which is a jurisdiction's answer living in the taxonomy — and putting it there would make

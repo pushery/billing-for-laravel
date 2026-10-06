@@ -13,18 +13,16 @@ use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
  * It fires when EITHER measure is reached and it is meant to be early: asking somebody a question a little
  * sooner than strictly necessary costs nothing, so the operator is free to move it wherever they like.
  *
- * ## What deliberately does NOT live here, and why it used to
+ * ## What deliberately does NOT live here
  *
  * Whether a seller's data is exempt from the REPORTING DUTY is a different question with a different
  * authority behind it — set by law, not by preference — and it is answered in one place only, the
  * jurisdiction's reporting profile ({@see GermanReportingProfile}).
  *
- * This class used to answer it too, in an `isExemptFromReporting()` that nothing called. The duplication
- * was the visible half of the problem; the coupling was the dangerous half. That method read the SAME two
- * config keys as the declaration below — so a platform asking for declarations earlier would have moved the
- * statutory exemption with the same switch. In the over-reporting direction, silently, from a class whose
- * own docblock warned against exactly that. Reporting data that need not be reported is an incorrect report
- * in its own right and a data protection breach besides, so that direction is not the cautious one.
+ * Answered here, it would read the SAME two config keys as the declaration below, so a platform asking for
+ * declarations earlier would move the statutory exemption with the same switch: in the over-reporting
+ * direction, and silently. Reporting data that need not be reported is an incorrect report in its own right
+ * and a data protection breach besides, so that direction is not the cautious one.
  *
  * With the shipped defaults the two questions agree at the money figure: the declaration fires at it, and
  * the statutory exemption, which only covers LESS than the figure, no longer holds there. That agreement is

@@ -91,11 +91,10 @@ final class InboundTaxMatrix
             // Exempt on their own supply: a self-billed invoice with no tax, and exempt is marked so the
             // document renders EN 16931 category E (with a reason) rather than zero-rated.
             //
-            // The two standings shared ONE row while `exempt` was the whole answer — tax-free is tax-free, as
-            // the comment here used to say, and for the amount that is still true. It stopped being true for
-            // the DOCUMENT: the relief has to be named, and these two are relieved under different law. A
-            // creator in another member state is not relieved by the recipient state's own statute, and a
-            // platform-issued credit note asserting that would state a foreign creator's position for them.
+            // The two standings have rows of their own. For the amount, tax-free is tax-free; for the DOCUMENT
+            // the relief has to be named, and these two are relieved under different law. A creator in another
+            // member state is not relieved by the recipient state's own statute, and a platform-issued credit
+            // note asserting that would state a foreign creator's position for them.
             //
             // Which law, in words, is still not decided here — this names the ground, the profile and the
             // locale supply the sentence. The matrix reads no statute, and that line is the reason it can be

@@ -27,9 +27,24 @@ final readonly class ConfigLicense implements License
     public function limit(string $tierKey, string $key): ?int
     {
         $limits = $this->section($tierKey, 'limits');
-        $limit = $limits[$key] ?? null;
 
-        return is_int($limit) ? $limit : null;
+        return self::ceiling($limits[$key] ?? null);
+    }
+
+    /**
+     * A ceiling as configured: an integer, or a string of digits, which is how env() delivers a number.
+     * Read as anything else, a ceiling written as "10" would lift the very limit it was written to set.
+     * Every other value is uncapped, as an unlisted key is.
+     *
+     * @internal shared with ConfigEntitlements, which reads a dimension's ceiling the same way.
+     */
+    public static function ceiling(mixed $value): ?int
+    {
+        if (is_int($value)) {
+            return $value;
+        }
+
+        return is_string($value) && preg_match('/^\s*\d+\s*$/', $value) === 1 ? (int) trim($value) : null;
     }
 
     /**

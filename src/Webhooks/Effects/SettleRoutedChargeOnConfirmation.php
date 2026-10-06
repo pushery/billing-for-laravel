@@ -77,12 +77,11 @@ final readonly class SettleRoutedChargeOnConfirmation
 
             // WITH the transfer the provider named, when it named one — and nothing when it did not.
             //
-            // This used to settle without a reference, on the reasoning that the provider has not named one
-            // yet. That is true of the separate-transfer lane, where the share moves in a later call the
-            // platform makes itself. It is NOT true of a destination charge: the provider creates the
-            // transfer as the payment settles and names it in the same payload. The synchronous path has
-            // always carried it; this one dropped it, so a hosted checkout produced a settled row that says
-            // the money moved and cannot say where to.
+            // "The provider has not named one yet" is true of the separate-transfer lane, where the share
+            // moves in a later call the platform makes itself. It is NOT true of a destination charge: the
+            // provider creates the transfer as the payment settles and names it in the same payload, and the
+            // synchronous path carries it too. Settled without it, a hosted checkout would produce a row that
+            // says the money moved and cannot say where to.
             //
             // That column exists to be checkable against the provider, so a placeholder would be worse than
             // null. Null still says nothing; a made-up string says something false.

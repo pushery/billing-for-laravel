@@ -6,6 +6,7 @@ namespace Pushery\Billing\Support;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Dunning\ConfigDunningLadder;
 use Pushery\Billing\Enums\BuyerAudience;
 use Pushery\Billing\Exceptions\InvalidBillingConfig;
 use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
@@ -30,6 +31,7 @@ final readonly class BillingConfigValidator
     {
         $this->validateOwner();
         $this->validateTiers();
+        $this->validateAddons();
         $this->validateDimensionWarnThresholds();
         $this->validateDunningAscending();
         $this->validateThresholdBinding();
@@ -100,7 +102,14 @@ final readonly class BillingConfigValidator
             $this->assertCurrency('tiers.'.$key.'.price_display', $tier['price_display'] ?? null);
             $this->assertAudience('billing.tiers.'.$key.'.buyers', $tier['buyers'] ?? null);
         }
+    }
 
+    /**
+     * The add-ons, checked whether or not any tier is configured: an install that sells only add-ons has no
+     * tiers, and its add-ons are what a customer pays for.
+     */
+    private function validateAddons(): void
+    {
         foreach ((array) $this->config->get('billing.addons', []) as $key => $addon) {
             if (is_array($addon)) {
                 $this->assertCurrency('addons.'.$key.'.price_display', $addon['price_display'] ?? null);
@@ -114,8 +123,8 @@ final readonly class BillingConfigValidator
      * An add-on's unit grant reads as a non-empty meter and a positive whole number of units, or is absent.
      *
      * Checked here because every reader of it runs after the customer has paid. A grant the catalog cannot read
-     * fails the webhook that should hand the units over, and a scalar in its place used to be taken for no grant,
-     * which credits money instead. A value read through `env()` arrives as a string, the ordinary way to get there.
+     * fails the webhook that should hand the units over, and a scalar in its place, taken for no grant, would
+     * credit money instead. A value read through `env()` arrives as a string, the ordinary way to get there.
      */
     private function assertGrant(string $key, mixed $grant): void
     {
@@ -193,13 +202,12 @@ final readonly class BillingConfigValidator
             if (! is_array($rung)) {
                 continue;
             }
-            if (! isset($rung['after_days'])) {
+            // Read the way the ladder reads it, so a rung written as a string of digits is checked rather than
+            // passed over, and a rung the ladder drops is not checked either.
+            $after = ConfigDunningLadder::wholeNumber($rung['after_days'] ?? null);
+            if ($after === null) {
                 continue;
             }
-            if (! is_int($rung['after_days'])) {
-                continue;
-            }
-            $after = $rung['after_days'];
 
             if ($previous !== null && $after <= $previous) {
                 throw InvalidBillingConfig::dunningNotAscending($after, $previous);

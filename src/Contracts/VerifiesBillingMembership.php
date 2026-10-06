@@ -21,10 +21,10 @@ use Illuminate\Database\Eloquent\Model;
  * that implements this is asked before it is billed; one that does not is trusted, which is the
  * behavior every consumer has today.
  *
- * Measured in a consuming application on 2026-09-19: its own resolver re-verified membership and
- * carried the reason in its docblock -- "a stale current_team_id can never bill a team the user is
- * not part of" -- while the package it was about to adopt did not ask. Adopting without this seam
- * would have deleted the check along with the code that held it, and no test would have gone red.
+ * An application that verifies membership in its own resolver -- so that "a stale current_team_id can
+ * never bill a team the user is not part of" -- keeps that check through this seam when it adopts the
+ * package. Without the seam, adopting would delete the check along with the code that held it, and no
+ * test would go red.
  */
 interface VerifiesBillingMembership
 {

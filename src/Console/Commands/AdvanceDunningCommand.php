@@ -105,7 +105,7 @@ final class AdvanceDunningCommand extends Command
     private function advance(Subscription $subscription, Model $owner, DunningLevel $next, SuspensionNotifier $notifier, LateFees $fees, BillingEventLog $log): void
     {
         if ($next->hasFee()) {
-            $fees->apply($owner, $next->fee, "dunning:{$subscription->id}:{$next->position}", "Late fee ({$next->label})", $subscription);
+            $fees->apply($owner, $next->fee, $this->feeReference($subscription, $next), "Late fee ({$next->label})", $subscription);
         }
 
         $notifier->suspensionWarning($owner, $next->fee);
@@ -117,6 +117,19 @@ final class AdvanceDunningCommand extends Command
             'label' => $next->label,
             'fee' => $next->fee->minorUnits,
         ], source: AuditSource::System);
+    }
+
+    /**
+     * The fee's idempotency key: the subscription, the delinquency the rung belongs to, and the rung.
+     *
+     * The delinquency is in it because a returning customer can be given the same subscription row again. Without it
+     * the first rung of a second delinquency carries the key of the first one's, and a driver takes the fee for a
+     * retry and raises nothing, while the warning still names it. Within one delinquency the key stays the same from
+     * run to run, which is what keeps a retry from charging the fee twice.
+     */
+    private function feeReference(Subscription $subscription, DunningLevel $rung): string
+    {
+        return "dunning:{$subscription->id}:{$subscription->delinquent_since?->getTimestamp()}:{$rung->position}";
     }
 
     /**

@@ -12,10 +12,10 @@ use Illuminate\Support\Facades\Schema;
  * ## Why the purchase has to hold them
  *
  * A refund of an add-on that granted units takes back the units that are left, in proportion to the money
- * refunded. It used to look the grant up in the add-on catalog as it stood at the time of the refund. An add-on
- * renamed or taken out of sale then took back nothing, so the buyer kept the units and the money; one that now
- * grants a different number took back a share of the wrong figure; one that moved to another meter took the units
- * from the wrong balance. The purchase knows what it granted, so it keeps it.
+ * refunded. Looked up in the add-on catalog as it stands at the time of the refund, an add-on renamed or taken
+ * out of sale would take back nothing, so the buyer kept the units and the money; one that now grants a
+ * different number would take back a share of the wrong figure; one that moved to another meter would take the
+ * units from the wrong balance. The purchase knows what it granted, so it keeps it.
  *
  * ## Why both are nullable, and stay nullable
  *

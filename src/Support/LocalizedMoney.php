@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Support;
 
-use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Lang;
 use NumberFormatter;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -27,7 +27,7 @@ final class LocalizedMoney
 {
     public static function format(Money $money, ?string $locale = null): string
     {
-        return self::render($money, $locale ?? App::getLocale(), extension_loaded('intl'));
+        return self::render($money, $locale ?? Lang::getLocale(), extension_loaded('intl'));
     }
 
     /**

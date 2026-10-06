@@ -238,18 +238,15 @@ final class WarnEndingTrialsCommand extends Command
     /**
      * Whether this owner's GENERIC trial reminder would be wrong or redundant.
      *
-     * TWO independent reasons, and collapsing them into one is a mistake this method has now made in both
-     * directions.
+     * TWO independent reasons, and collapsing them into one is wrong in either direction.
      *
-     * It began as "any subscription at all", reasoned as "a provider exists that could send the
-     * trial-will-end event". That reasoning stopped being true when a local-engine driver arrived: nothing
-     * at such a provider knows a trial is running, so it announces nothing.
+     * "Any subscription at all" assumes a provider that sends the trial-will-end event. A local-engine driver
+     * sends none: nothing at such a provider knows a trial is running, so it announces nothing.
      *
-     * Replacing it with the capability question ALONE was worse, because it threw away the other reason.
-     * An owner's `trial_ends_at` is written by `Trials::grant()` and cleared by nothing — not by
-     * subscribing — so somebody who converts DURING their generic trial keeps a future date on their own
-     * row. Asking only about the provider, they stopped being skipped and were mailed "add a payment
-     * method before it ends" while already paying, with a mandate on file.
+     * The capability question ALONE is not enough either. An owner's `trial_ends_at` is written by
+     * `Trials::grant()` and cleared by nothing — not by subscribing — so somebody who converts DURING their
+     * generic trial keeps a future date on their own row. Asked only about the provider, they would be mailed
+     * "add a payment method before it ends" while already paying, with a mandate on file.
      *
      * So: a LIVE subscription skips them because they converted, whatever the provider; and a subscription
      * under a provider that announces skips them because the webhook is about to say it. A TERMINAL row

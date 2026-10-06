@@ -12,11 +12,11 @@ use Illuminate\Support\Facades\Schema;
  * ## Why the purchase has to hold it
  *
  * Two things read that answer long after the sale: the prepaid volume a supervisory threshold is measured
- * against, and the refund that takes the credit back off the balance. Both used to work it out again from the
- * add-on catalog as it stood at the time of reading. A credit add-on renamed, taken out of sale or changed to
- * grant units then turned every earlier purchase of it into something it never was: its volume dropped out of
- * the supervisory figure, and its refund left the credit on the balance. The purchase knows what it did, so it
- * keeps the answer.
+ * against, and the refund that takes the credit back off the balance. Worked out again from the add-on catalog
+ * as it stands at the time of reading, a credit add-on renamed, taken out of sale or changed to grant units
+ * would turn every earlier purchase of it into something it never was: its volume would drop out of the
+ * supervisory figure, and its refund would leave the credit on the balance. The purchase knows what it did, so
+ * it keeps the answer.
  *
  * ## Why it is nullable, and stays nullable
  *

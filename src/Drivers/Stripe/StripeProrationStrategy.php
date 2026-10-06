@@ -84,11 +84,11 @@ final readonly class StripeProrationStrategy implements ProrationStrategy
                 ],
             ]);
         } catch (ApiErrorException $e) {
-            // EVERY Stripe read failure, which is what the class docblock has always promised and what only
-            // `InvalidRequestException` used to deliver. A timeout, a rotated key, a 403 and a 5xx do not
-            // descend from it -- they walked past this line and out of the method, and the caller is a
-            // Livewire action behind a button. One button took the whole screen down while the text written
-            // for exactly this case sat next to it, never shown.
+            // EVERY Stripe read failure, as the class docblock promises, not only `InvalidRequestException`.
+            // A timeout, a rotated key, a 403 and a 5xx do not descend from it -- caught by that alone, they
+            // would walk past this line and out of the method, and the caller is a Livewire action behind a
+            // button. One button would take the whole screen down while the text written for exactly this
+            // case sat next to it, never shown.
             //
             // Logged rather than swallowed, and that is the half that keeps this honest. A 401 is not
             // transient: it stays until somebody notices. Degrading silently would trade a broken screen for
@@ -100,10 +100,6 @@ final readonly class StripeProrationStrategy implements ProrationStrategy
             // second, and the "no estimate" state is already built and translated. Nothing is written and
             // nothing is marked done, so the retry is the customer pressing the button again -- and unlike
             // every other catch in this driver that meets a 429, it is logged rather than silent.
-            //
-            // The number that used to be here said eight; there were ten, and the sentence was written after
-            // the tenth existed. A count of code in prose is a fact with a clock on it -- the shape says
-            // what it means and cannot go stale.
             $this->logger()->warning('Could not preview a subscription swap; showing no estimate.', [
                 'exception' => $e::class,
                 'message' => $e->getMessage(),

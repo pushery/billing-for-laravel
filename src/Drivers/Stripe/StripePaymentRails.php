@@ -272,11 +272,9 @@ final readonly class StripePaymentRails implements PaymentRails
         // amount. That much is right. What these rails cannot do is the SECOND half: the later call that
         // actually moves the share.
         //
-        // That call now EXISTS — `MovesMerchantShare`, implemented by `StripeMerchantTransfers`, which binds
-        // the transfer to the funding charge via `source_transaction`. This comment used to say it did not,
-        // which stopped being true the day it was built and would have sent the next reader to build it a
-        // second time. What has not changed is WHERE it can be made: only after the payment has actually
-        // succeeded, which is after this method has returned. So the rails still refuse — not because the
+        // That call EXISTS — `MovesMerchantShare`, implemented by `StripeMerchantTransfers`, which binds the
+        // transfer to the funding charge via `source_transaction`. It can be made only after the payment has
+        // actually succeeded, which is after this method has returned. So the rails refuse — not because the
         // capability is missing, but because it is not theirs to reach.
         //
         // So the routing is REFUSED rather than half-served. Accepting it would settle the entire payment

@@ -21,14 +21,14 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  *
  * ## THE CLOCK ARRIVES THROUGH A SEAM, AND THAT IS WHAT MAKES THE LADDER REUSABLE
  *
- * This class used to read `billing_subscriptions` itself, which chained the whole ladder to this package's
- * schema. Everything else in the ladder was already free of it — the rungs are configuration, the policy is
- * configuration, the cure window is a division — so one column read was the only thing standing between a
- * consumer and several-rung dunning with per-surface withdrawal. They wrote their own single deadline
- * instead, which is the poorer mechanism, and did it because they could not reach this one.
+ * Reading `billing_subscriptions` here would chain the whole ladder to this package's schema. Everything
+ * else in the ladder is free of it — the rungs are configuration, the policy is configuration, the cure
+ * window is a division — so one column read would be the only thing standing between a consumer and
+ * several-rung dunning with per-surface withdrawal, and a consumer who cannot reach this ladder writes a
+ * single deadline of their own instead, which is the poorer mechanism.
  *
- * The reading that used to be here now lives in {@see LocalArrearsClock}, bound by
- * default, so nothing changes for an install that keeps the package's schema.
+ * The reading lives in {@see LocalArrearsClock}, bound by default, so an install that keeps the package's
+ * schema needs nothing.
  *
  * ## THE SUSPENSION IS PER MERCHANT — DECIDED, NOT ASSUMED
  *

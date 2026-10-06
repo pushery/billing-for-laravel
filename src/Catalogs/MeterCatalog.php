@@ -7,6 +7,7 @@ namespace Pushery\Billing\Catalogs;
 use Illuminate\Contracts\Config\Repository;
 use InvalidArgumentException;
 use Pushery\Billing\Enums\MeteringPolicy;
+use Pushery\Billing\Support\KeyedConfig;
 use Pushery\Billing\ValueObjects\MeteredComponent;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -26,7 +27,7 @@ final readonly class MeterCatalog
     /** @return list<MeteredComponent> the tier's usage-billed components, in configured order. */
     public function forTier(string $tierKey): array
     {
-        $metered = $this->config->get("billing.tiers.{$tierKey}.metered");
+        $metered = KeyedConfig::setting($this->config, 'billing.tiers', $tierKey, 'metered');
 
         if (! is_array($metered)) {
             return [];
@@ -44,7 +45,9 @@ final readonly class MeterCatalog
     /** One component of a tier by its meter key, or null when the tier does not meter it. */
     public function component(string $tierKey, string $meterKey): ?MeteredComponent
     {
-        $definition = $this->config->get("billing.tiers.{$tierKey}.metered.{$meterKey}");
+        // The meter key is read literally too: one that holds a dot names its own entry, not a nested one.
+        $metered = KeyedConfig::setting($this->config, 'billing.tiers', $tierKey, 'metered');
+        $definition = is_array($metered) ? ($metered[$meterKey] ?? null) : null;
 
         return $definition === null ? null : $this->make($tierKey, $meterKey, $definition);
     }

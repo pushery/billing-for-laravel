@@ -50,8 +50,8 @@ enum ChargeType: string
      *
      * ## Verified against the API, and the answer is NOT a property of this enum
      *
-     * Measured on 2026-08-06 against the live API on the pinned version `2025-08-27.basil`. The evidence is
-     * not a `balance_transaction` — it is better than one. Both facts are STATED on the connected account
+     * On the pinned version `2025-08-27.basil` the evidence is not a `balance_transaction` — it is better
+     * than one. Both facts are STATED on the connected account
      * itself, in `account.controller`, so they can be read before a payment rather than inferred from one:
      *
      * | account type | `controller.fees.payer` | `controller.losses.payments` |

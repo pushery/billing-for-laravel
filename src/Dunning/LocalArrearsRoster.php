@@ -16,9 +16,8 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 /**
  * The roster as this package keeps it: the merchant-scoped subscription rows whose clock is running.
  *
- * This is the whole of what {@see PaymentReminderSweep} used to do inline, moved out so the sweep can be
- * pointed at somebody else's storage without being rewritten. The query is unchanged, and the two paragraphs
- * it carried about WHY it selects that way moved with it rather than being summarized.
+ * It sits outside {@see PaymentReminderSweep} so the sweep can be pointed at somebody else's storage without
+ * being rewritten. The sections below say WHY the query selects the way it does.
  *
  * ## Merchant rows only, and that is not the same as reading the marketplace flag
  *

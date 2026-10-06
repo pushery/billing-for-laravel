@@ -171,6 +171,11 @@ return [
     | with it. Point them at a dedicated queue to keep billing work off the queue
     | your app's other jobs share; leave it null to use the default queue.
     |
+    | That isolation needs an asynchronous connection. On a connection whose
+    | driver is `sync` every effect runs inside the provider's request: one that
+    | throws stops the effects after it and the provider reads a 500.
+    | `billing:doctor` warns about such a connection.
+    |
     | "tries" is how often a failing effect is retried before the job is marked
     | failed. It stays re-driveable after that: the delivery's raw payload is
     | stored, so `php artisan billing:webhooks:replay --failed` can run it again
@@ -504,9 +509,10 @@ return [
     | and the invoice drift apart. Usage is reported RAW: netting the allowance
     | locally as well would hand the customer twice the free units.
     |
-    | For a PRICING SURFACE — the in-app upgrade grid AND a public /pricing page —
-    | a tier may carry presentation-only metadata that the shared PricingCatalog
-    | reads (never a view, so the two surfaces cannot drift):
+    | For a PRICING SURFACE your application builds — a public /pricing page, or
+    | an upgrade grid of its own — a tier may carry presentation-only metadata
+    | that the shared PricingCatalog reads (never a view, so two surfaces cannot
+    | drift). The account hub's plan list shows each plan's label and price only:
     |
     | 'pro' => [
     |     'label' => 'Pro',
@@ -666,7 +672,7 @@ return [
     'retention' => [
         // Long past the provider's own redelivery window (Stripe gives up after ~3 days), which is the
         // only reason the payload is kept at all.
-        'webhook_payload_days' => (int) env('BILLING_RETENTION_WEBHOOK_PAYLOAD_DAYS', 90),
+        'webhook_payload_days' => is_numeric($webhookPayloadDays = env('BILLING_RETENTION_WEBHOOK_PAYLOAD_DAYS')) && (int) $webhookPayloadDays >= 1 ? (int) $webhookPayloadDays : 90,
 
         // The INVOICE window: an erased owner's retained invoices are kept eight years (2920 days) — §14b
         // Abs. 1 UStG n. F. The clock is counted from the END of the year the invoice was issued (§147 Abs. 4
@@ -674,7 +680,7 @@ return [
         // default: set your own for another jurisdiction. Deliberately NOT the same as audit_days below —
         // over-retaining an invoice to the ten-year book window keeps personal data two years past its
         // obligation, in breach of storage limitation (Art. 5(1)(e)).
-        'erased_financial_days' => (int) env('BILLING_RETENTION_ERASED_FINANCIAL_DAYS', 2920),
+        'erased_financial_days' => is_numeric($erasedFinancialDays = env('BILLING_RETENTION_ERASED_FINANCIAL_DAYS')) && (int) $erasedFinancialDays >= 1 ? (int) $erasedFinancialDays : 2920,
 
         // The BOOK/BATCH window for the audit ledger: ten years (§257 HGB / §147 AO) — longer than the
         // invoice window above ON PURPOSE. The two numbers (3650 vs 2920) are different windows for different
@@ -682,13 +688,13 @@ return [
         // and seller-reporting records keep this window too, counted from the END of the year a record was
         // produced in, and so do the filings of a reporting period, which go together once the youngest of
         // them has had it.
-        'audit_days' => (int) env('BILLING_RETENTION_AUDIT_DAYS', 3650),
+        'audit_days' => is_numeric($auditDays = env('BILLING_RETENTION_AUDIT_DAYS')) && (int) $auditDays >= 1 ? (int) $auditDays : 3650,
 
         // How long the evidence for a sale's country is kept. Deliberately LONGER than the document window
         // and deliberately its own key: the two come from different obligations, and merging them would
         // prune the evidence years before the return it justifies stops being examinable — leaving a filed
         // figure with nothing behind it.
-        'place_evidence_days' => (int) env('BILLING_RETENTION_PLACE_EVIDENCE_DAYS', 3650),
+        'place_evidence_days' => is_numeric($placeEvidenceDays = env('BILLING_RETENTION_PLACE_EVIDENCE_DAYS')) && (int) $placeEvidenceDays >= 1 ? (int) $placeEvidenceDays : 3650,
 
         // The escape hatch for a jurisdiction whose invoice minimum genuinely is SHORTER than the German
         // floor above. Left false, a shorter erased_financial_days refuses to boot rather than prune tax
@@ -830,7 +836,7 @@ return [
     |
     */
 
-    'dunning_cure_window_days' => (int) env('BILLING_DUNNING_CURE_WINDOW_DAYS', 7),
+    'dunning_cure_window_days' => max(1, (int) env('BILLING_DUNNING_CURE_WINDOW_DAYS', 7)),
 
     /*
     |--------------------------------------------------------------------------
@@ -1179,7 +1185,7 @@ return [
         // period end — those are a month apart, and measuring from the wrong one lets through a correction
         // that is already out of time. Past the window the export REFUSES rather than dropping the line: a
         // correction that vanishes is indistinguishable from one that was never owed.
-        'correction_window_years' => (int) env('BILLING_TAX_OSS_CORRECTION_WINDOW_YEARS', 3),
+        'correction_window_years' => is_numeric($correctionWindowYears = env('BILLING_TAX_OSS_CORRECTION_WINDOW_YEARS')) && (int) $correctionWindowYears >= 1 ? (int) $correctionWindowYears : 3,
 
         // Where a produced return file is put. Null writes nowhere — the record of what was produced is kept
         // either way. The package files nothing with anybody and knows no portal credentials; it hands the
@@ -1246,7 +1252,7 @@ return [
         // How long a confirmed small-business registration stands before it is asked again. A registration
         // confirmed once is not confirmed forever — registers change, and a standing resting on a
         // two-year-old lookup rests on nothing.
-        'eu_revalidate_after_days' => (int) env('BILLING_TAX_EU_REVALIDATE_AFTER_DAYS', 365),
+        'eu_revalidate_after_days' => is_numeric($euRevalidateAfterDays = env('BILLING_TAX_EU_REVALIDATE_AFTER_DAYS')) && (int) $euRevalidateAfterDays >= 1 ? (int) $euRevalidateAfterDays : 365,
 
         // There is deliberately no switch for whether a declaration expires at the year boundary. One used
         // to be here, read by nobody, and wiring it would have meant offering to turn off the thing that
@@ -1254,7 +1260,7 @@ return [
         // outlive that year, and an installation that could disable the expiry would carry standings that
         // read as current and are not. The grace period is the only part that is a choice.
         'reattestation' => [
-            'grace_days' => (int) env('BILLING_TAX_REATTEST_GRACE_DAYS', 30),
+            'grace_days' => is_numeric($reattestationGraceDays = env('BILLING_TAX_REATTEST_GRACE_DAYS')) && (int) $reattestationGraceDays >= 0 ? (int) $reattestationGraceDays : 30,
             // How many days before a declaration runs out its creator is reminded, on top of the notice
             // they get when the year turns and the renewal falls due. Long enough to answer, short enough
             // that the reminder is still about something close.
@@ -1386,7 +1392,7 @@ return [
         // Each obligation is announced ONCE for its date. Two of them share the end-of-January deadline and
         // are announced separately on purpose: different law, different data, and whoever handles the one
         // they thought of must not be able to consider the day dealt with.
-        'filing_notice_days' => (int) env('BILLING_FILING_NOTICE_DAYS', 14),
+        'filing_notice_days' => is_numeric($filingNoticeDays = env('BILLING_FILING_NOTICE_DAYS')) && (int) $filingNoticeDays >= 1 ? (int) $filingNoticeDays : 14,
 
         'goods_de_minimis' => [
             'max_sales' => is_numeric($maxGoodsSales = env('BILLING_REPORTING_MAX_GOODS_SALES')) ? (int) $maxGoodsSales : 30,
@@ -1692,7 +1698,7 @@ return [
         // run gets missed, a machine sleeps through a night. Re-importing is idempotent, so the only cost of
         // an overlap is a few rows rewritten with the same figures — while a window of exactly one day turns
         // any missed run into a permanent hole in the series.
-        'lookback_days' => (int) env('BILLING_EXCHANGE_RATES_LOOKBACK_DAYS', 10),
+        'lookback_days' => is_numeric($rateLookbackDays = env('BILLING_EXCHANGE_RATES_LOOKBACK_DAYS')) && (int) $rateLookbackDays >= 1 ? (int) $rateLookbackDays : 10,
     ],
 
     'datev' => [
@@ -1867,12 +1873,6 @@ return [
         // `billing_access_grants.withdrawal_window_ends_at`. Provision, not purchase and not payment: for a
         // pre-ordered work those are three different days, and a window anchored to the sale would have
         // expired before the buyer could open anything.
-        //
-        // (This paragraph used to say the package could not compute a window because nothing recorded the
-        // moment a work was provided. That was true when it was written and stopped being true when the
-        // grant register landed — `acquired_at` is written immediately after the fail-closed withdrawal
-        // gate, which IS that moment. It is recorded here because a reason does not age visibly: for weeks
-        // it went on reading as a decision rather than as a gap, and the gap survived because of it.)
 
         // How long a seller owes CONFORMITY updates on a sale — defect fixes, security fixes, staying
         // compatible. A different axis from what the creator sells: `content_ownership.default_update_policy`
@@ -2048,9 +2048,7 @@ return [
         // checked before a routed payment is assembled rather than after one has been sent.
         // Defaults to separate transfers because the shipped posture whitelist holds only
         // `platform_deemed_supplier`, and `charge_type_by_posture` below does not permit that posture on a
-        // destination charge. It shipped as `destination` and was therefore self-contradictory: the one
-        // pairing the table forbids was the one an untouched installation produced. Nothing caught it,
-        // because the guard that checks the pair had no call site until 2026-07-25.
+        // destination charge: a `destination` default would be the one pairing the table forbids.
         //
         // HEADS UP — which ENTRY POINT you use matters on this shape, and one of the two refuses on purpose.
         //
@@ -2084,10 +2082,10 @@ return [
             */
             'enabled' => (bool) env('BILLING_BUYER_PROTECTION', false),
             'account_type' => env('BILLING_BUYER_PROTECTION_ACCOUNT_TYPE', 'express'),
-            'confirm_after_days' => (int) env('BILLING_BUYER_PROTECTION_CONFIRM_AFTER_DAYS', 14),
-            'decide_after_days' => (int) env('BILLING_BUYER_PROTECTION_DECIDE_AFTER_DAYS', 60),
+            'confirm_after_days' => is_numeric($confirmAfterDays = env('BILLING_BUYER_PROTECTION_CONFIRM_AFTER_DAYS')) && (int) $confirmAfterDays >= 1 ? (int) $confirmAfterDays : 14,
+            'decide_after_days' => is_numeric($decideAfterDays = env('BILLING_BUYER_PROTECTION_DECIDE_AFTER_DAYS')) && (int) $decideAfterDays >= 1 ? (int) $decideAfterDays : 60,
             'provider_limit_days' => is_numeric($providerLimitDays = env('BILLING_BUYER_PROTECTION_PROVIDER_LIMIT_DAYS')) ? (int) $providerLimitDays : 90,
-            'margin_days' => (int) env('BILLING_BUYER_PROTECTION_MARGIN_DAYS', 20),
+            'margin_days' => is_numeric($marginDays = env('BILLING_BUYER_PROTECTION_MARGIN_DAYS')) && (int) $marginDays >= 1 ? (int) $marginDays : 20,
         ],
 
         /*
@@ -2103,7 +2101,7 @@ return [
         */
         'negative_balance' => [
             'offset_against_payouts' => (bool) env('BILLING_MARKETPLACE_OFFSET_DEBT', true),
-            'claim_after_days' => (int) env('BILLING_MARKETPLACE_CLAIM_AFTER_DAYS', 90),
+            'claim_after_days' => is_numeric($claimAfterDays = env('BILLING_MARKETPLACE_CLAIM_AFTER_DAYS')) && (int) $claimAfterDays >= 1 ? (int) $claimAfterDays : 90,
         ],
 
         /*
@@ -2201,10 +2199,10 @@ return [
         // seller paid exactly that much is asked to declare and is reportable as well. That is where the
         // German statute draws its line, not a reason to merge the two.
         //
-        // They used to be coupled: a second copy of the exemption read THESE keys, so moving the
-        // declaration trigger moved the statutory boundary with it, in the over-reporting direction.
-        // Reporting data that need not be reported is itself an incorrect report and a data protection
-        // breach at the same time, so that direction is not the cautious one. The copy is gone.
+        // They must not be coupled: a second copy of the exemption reading THESE keys would move the
+        // statutory boundary with the declaration trigger, in the over-reporting direction. Reporting data
+        // that need not be reported is itself an incorrect report and a data protection breach at the same
+        // time, so that direction is not the cautious one.
         //
         // The test is activity, never intent. Somebody who sells regularly is trading whether or not they
         // make anything on it.
@@ -2230,17 +2228,17 @@ return [
         // open-ended and the rail is not; a hold that outran it would not be stricter, it would be a
         // payment nobody can complete.
         'seller_data_escalation' => [
-            'first_reminder_after_days' => (int) env('BILLING_MARKETPLACE_FIRST_REMINDER_DAYS', 7),
-            'second_reminder_after_days' => (int) env('BILLING_MARKETPLACE_SECOND_REMINDER_DAYS', 30),
-            'measure_after_days' => (int) env('BILLING_MARKETPLACE_MEASURE_AFTER_DAYS', 60),
+            'first_reminder_after_days' => is_numeric($firstReminderAfterDays = env('BILLING_MARKETPLACE_FIRST_REMINDER_DAYS')) && (int) $firstReminderAfterDays >= 1 ? (int) $firstReminderAfterDays : 7,
+            'second_reminder_after_days' => is_numeric($secondReminderAfterDays = env('BILLING_MARKETPLACE_SECOND_REMINDER_DAYS')) && (int) $secondReminderAfterDays >= 1 ? (int) $secondReminderAfterDays : 30,
+            'measure_after_days' => is_numeric($measureAfterDays = env('BILLING_MARKETPLACE_MEASURE_AFTER_DAYS')) && (int) $measureAfterDays >= 1 ? (int) $measureAfterDays : 60,
             // suspend_sales | withhold_payout — two very different impositions, and neither is obviously
             // the gentler one: stopping somebody selling ends their income, holding their money leaves them
             // selling and unpaid.
             'measure' => env('BILLING_MARKETPLACE_DATA_MEASURE', 'withhold_payout'),
             'measure_precautionary_gaps' => (bool) env('BILLING_MARKETPLACE_MEASURE_PRECAUTIONARY', false),
-            'withhold_up_to_days' => (int) env('BILLING_MARKETPLACE_WITHHOLD_UP_TO_DAYS', 90),
+            'withhold_up_to_days' => is_numeric($withholdUpToDays = env('BILLING_MARKETPLACE_WITHHOLD_UP_TO_DAYS')) && (int) $withholdUpToDays >= 1 ? (int) $withholdUpToDays : 90,
             // The rail's own limit. Read here, defined by the payout schedule — this never sets it.
-            'payout_deadline_days' => (int) env('BILLING_MARKETPLACE_PAYOUT_DEADLINE_DAYS', 90),
+            'payout_deadline_days' => is_numeric($payoutDeadlineDays = env('BILLING_MARKETPLACE_PAYOUT_DEADLINE_DAYS')) && (int) $payoutDeadlineDays >= 1 ? (int) $payoutDeadlineDays : 90,
             // What follows when a withholding has run as long as it may without the data arriving. The money
             // moves either way, because the rail's limit is not negotiable; the question is whether the seller
             // stays held to the duty. suspend_sales converts the withholding into a suspension, release ends
@@ -2286,7 +2284,7 @@ return [
             //
             // Nobody is warned while `enforce_from` is unset: with no date there is no deadline to warn
             // about, and inventing one to have something to say is worse than silence.
-            'warn_days_before' => (int) env('BILLING_MARKETPLACE_HOLD_WARN_DAYS_BEFORE', 30),
+            'warn_days_before' => is_numeric($holdWarnDaysBefore = env('BILLING_MARKETPLACE_HOLD_WARN_DAYS_BEFORE')) && (int) $holdWarnDaysBefore >= 1 ? (int) $holdWarnDaysBefore : 30,
         ],
 
         // Which shape a routed sale has: the platform reselling in its own name (`commission_chain`), or
@@ -2576,8 +2574,8 @@ return [
         'vouchers' => [
             'enabled' => (bool) env('BILLING_VOUCHERS_ENABLED', false),
             'instrument_type' => env('BILLING_VOUCHER_INSTRUMENT_TYPE', 'multi_purpose'),
-            'expire_after_days' => (int) env('BILLING_VOUCHER_EXPIRE_AFTER_DAYS', 1095),
-            'volume_window_months' => (int) env('BILLING_VOUCHER_VOLUME_WINDOW_MONTHS', 12),
+            'expire_after_days' => is_numeric($voucherExpireAfterDays = env('BILLING_VOUCHER_EXPIRE_AFTER_DAYS')) && (int) $voucherExpireAfterDays >= 1 ? (int) $voucherExpireAfterDays : 1095,
+            'volume_window_months' => is_numeric($voucherVolumeWindowMonths = env('BILLING_VOUCHER_VOLUME_WINDOW_MONTHS')) && (int) $voucherVolumeWindowMonths >= 1 ? (int) $voucherVolumeWindowMonths : 12,
             'volume_threshold_minor' => (int) env('BILLING_VOUCHER_VOLUME_THRESHOLD_MINOR', 100_000_000),
             'volume_warn_at_percent' => (int) env('BILLING_VOUCHER_VOLUME_WARN_AT_PERCENT', 80),
         ],

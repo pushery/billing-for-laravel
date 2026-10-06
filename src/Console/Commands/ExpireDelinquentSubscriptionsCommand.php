@@ -27,8 +27,9 @@ final class ExpireDelinquentSubscriptionsCommand extends Command
     {
         $expired = $sweep->expire(CarbonImmutable::now());
 
-        // "Ran and found nothing" must be distinguishable from "never ran" — a silent success reads as an
-        // absent scheduler, and this command cancels things, so an absent one is not noticed until a customer
+        // The line tells whoever runs this by hand that it ran and found nothing, rather than nothing at all.
+        // Under the scheduler the output is discarded and "it ran" reaches the bound ScheduleHeartbeat instead:
+        // this command cancels things, so a scheduler that stopped is otherwise not noticed until a customer
         // asks why they are still being charged for what they stopped paying.
         $this->components->info($expired === 0
             ? 'No subscription has run out its cure window today.'

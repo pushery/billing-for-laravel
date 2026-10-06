@@ -43,9 +43,7 @@ final class MarketplaceUnsupported extends RuntimeException
      * reference that reads exactly like a transfer still settling.
      *
      * The call itself ships: `StripeMerchantTransfers` implements `MovesMerchantShare` and `RoutedPayment`
-     * makes it. This paragraph used to say it did not exist yet, which the rename note below already
-     * contradicted in the same file — the factory was renamed off "not implemented" precisely because the
-     * gap had closed, and the sentence above it was left saying otherwise.
+     * makes it.
      *
      * Refused rather than completed, which is what this package tells driver authors to do in the same
      * situation: "a driver that cannot serve a routing must THROW, never no-op." A loud failure costs one
@@ -55,12 +53,9 @@ final class MarketplaceUnsupported extends RuntimeException
      * lane: the transfer can only be made once the payment has actually succeeded, which is after charge()
      * has already returned. RoutedPayment is where the two halves meet, and it is the supported path.
      *
-     * Named for what the caller should DO, not for a gap that no longer exists.
-     *
-     * It used to be `separateTransferNotImplemented`, and by the time the transfer was built that name was
-     * telling consumers to wait for a later version while the capability sat in the same release. A factory
-     * name is the first thing in a stack trace and the string people grep for; "not implemented" sends them
-     * away, and the message right below it was already pointing them at RoutedPayment.
+     * Named for what the caller should DO, not for a gap. A factory name is the first thing in a stack trace
+     * and the string people grep for; a name saying "not implemented" would send them away from a capability
+     * that exists, while the message right below it points them at RoutedPayment.
      */
     public static function separateTransferNeedsRoutedPayment(): self
     {

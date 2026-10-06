@@ -34,8 +34,8 @@ final readonly class ChargebackReceived implements BillingDomainEvent, Identifie
          * The transfer that moved it, which is what a reversal acts on.
          *
          * ALWAYS NULL ON A DISPUTE, and that is the provider's shape rather than an omission here: a dispute
-         * object carries no transfer field at all. The mapper used to read one, so this arrived null on every
-         * real webhook while the code read as though it were populated — absent-always, not absent-sometimes.
+         * object carries no transfer field at all, so a mapper reading one would leave this null on every real
+         * webhook while the code read as though it were populated — absent-always, not absent-sometimes.
          *
          * The reference is knowable, just not from a payload: the routed charge row holds it against the
          * charge reference this event already carries. Resolving it belongs to the path that applies the

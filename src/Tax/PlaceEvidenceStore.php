@@ -116,19 +116,16 @@ final readonly class PlaceEvidenceStore
      */
     public function requiredSignals(): int
     {
-        // THE SAME KEY THE POLICY GATES ON, and that is the whole point of this method. It used to read
-        // `billing.tax_oss.required_signals` while `PaymentCountryLeadsPolicy` decided on
-        // `billing.tax_evidence.required_signals` -- two keys for one idea, with no alias between them.
-        //
-        // Both default to 2, so a default install was accidentally consistent and nothing was ever red. The
-        // divergence only appeared once an operator configured, which is exactly when this record starts
-        // being worth something: a one-signal sale, correctly settled under a one-signal standard, was
-        // stamped "two required" and kept that way forever -- the row is immutable and outlives the
-        // documents built on it.
+        // THE SAME KEY THE POLICY GATES ON, and that is the whole point of this method: the record states the
+        // standard `PaymentCountryLeadsPolicy` decided under. A second key for the same idea would agree on a
+        // default install, where both are 2, and part the moment an operator configures one, which is exactly
+        // when this record starts being worth something: a one-signal sale, correctly settled under a
+        // one-signal standard, would be stamped "two required" and kept that way forever -- the row is
+        // immutable and outlives the documents built on it.
         //
         // Read through the policy rather than re-derived, so the record cannot state a standard the decision
-        // was not made under. There is no expression here that could round it either: the old
-        // `=== 1 ? 1 : 2` had no branch for 3, a valid standard, and wrote 2 for it.
+        // was not made under, and no expression here can round it: a mapping such as `=== 1 ? 1 : 2` has no
+        // branch for 3, a valid standard, and would write 2 for it.
         return new RequiredCountrySignals($this->config)->count();
     }
 }

@@ -21,11 +21,10 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * Every movement writes a {@see CreditLedgerEntry} in the SAME transaction as the balance it moves, so the
  * running total can always be taken apart into what produced it. That is why the reason is a required
- * argument rather than an optional one: an unexplained movement is the state this ledger used to be able to
- * reach, and a default would let it reach it again while looking deliberate. Before the entries existed the
- * "why" lived only in the audit log, written by a separate call after the balance transaction had already
- * committed — so an interruption in between left a balance nobody could account for, and `billing:prune`
- * ages audit rows out on a clock while a balance is a holding and is never pruned.
+ * argument rather than an optional one: a default would let an unexplained movement in while looking
+ * deliberate. The audit log cannot stand in for the entries. A separate call after the balance transaction
+ * has committed can be interrupted in between, leaving a balance nobody could account for, and
+ * `billing:prune` ages audit rows out on a clock while a balance is a holding and is never pruned.
  *
  * The balance is deliberately allowed to go NEGATIVE — a customer who is refunded credit they already
  * spent owes it back, and clamping at zero would silently forgive that debt. Both directions are just a

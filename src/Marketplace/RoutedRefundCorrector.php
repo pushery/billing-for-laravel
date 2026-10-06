@@ -240,11 +240,11 @@ final readonly class RoutedRefundCorrector
      * it recomputes the remainder as if the platform took nothing, which understates the clawback rather
      * than inventing a rate the sale may never have had.
      *
-     * The rounding direction is read from the document too, for the same reason the rate is. It used to be
-     * assumed, and on an installation that hands the odd minor unit the other way the correction came back a
-     * cent off the sale it was correcting — on every uneven split, with both documents adding up. An older
-     * settlement that never recorded it falls back to what this installation does today, which is the
-     * closest thing to the truth still available.
+     * The rounding direction is read from the document too, for the same reason the rate is. Assumed, it
+     * would bring the correction back a cent off the sale it corrects on an installation that hands the odd
+     * minor unit the other way, on every uneven split, with both documents adding up. An older settlement
+     * that never recorded it falls back to what this installation does today, which is the closest thing to
+     * the truth still available.
      *
      * @param  array<array-key, mixed>|null  $line  the settlement line this charge is, where one names it
      */

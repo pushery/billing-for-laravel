@@ -66,9 +66,6 @@ final readonly class FreezeExchangeRateOnDocument
      * Idempotent by the store's own unique key: a document already carrying a rate for this layer keeps the
      * one it has. That is deliberate rather than convenient — re-freezing would silently replace a figure a
      * document has already been issued with, which is the thing this whole class exists to prevent.
-     *
-     * (This docblock sat above `assertObtainable` until 2026-07-28, one of two stacked there. PHP gives the
-     * symbol the LAST block, so it documented nothing and `freeze` documented nothing either.)
      */
     public function freeze(
         InvoiceRecord $invoice,

@@ -21,10 +21,9 @@ use Carbon\CarbonImmutable;
  *
  * - **Grouping naively puts Spain at 7.0%.** A Canary Islands row wins a `keyBy(memberState)` because it
  *   arrives last. The territory is outside the EU VAT area entirely, so the figure is not merely the wrong
- *   band — it is a different tax regime's number wearing Spain's country code. The service used to mark
- *   that row with its own rate type; today it reports it as `STANDARD`/`DEFAULT` like Spain's own, with the
- *   territory named in `comment`, so the row is recognized by the territory it names (see
- *   TERRITORIES_OUTSIDE_THE_VAT_AREA).
+ *   band — it is a different tax regime's number wearing Spain's country code. The service reports that row
+ *   as `STANDARD`/`DEFAULT` like Spain's own, with the territory named in `comment`, so the row is recognized
+ *   by the territory it names (see TERRITORIES_OUTSIDE_THE_VAT_AREA).
  * - **Discarding rows that carry a comment throws away six correct standard rates.** BE, CZ, FR, IE, LV and
  *   LU state their legal basis in `comment`. "Has a comment" looks like a tidy proxy for "is a footnote" and
  *   is nothing of the kind.

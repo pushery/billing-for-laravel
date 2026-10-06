@@ -413,9 +413,9 @@ final readonly class StripeCheckout implements Checkout
     {
         $chargeType = $this->context->chargeType();
 
-        // The charge type and the seller-of-record posture are independent axes that must agree, and this
-        // lane used to assemble the payment without ever asking. The check happens BEFORE anything is
-        // assembled, which is the only point at which refusing is still free.
+        // The charge type and the seller-of-record posture are independent axes that must agree, so this
+        // lane asks before it assembles the payment. The check happens BEFORE anything is assembled, which
+        // is the only point at which refusing is still free.
         $this->context->assertRoutingCompatible($chargeType);
 
         if (! $this->receiving->check($merchant)) {
@@ -434,17 +434,15 @@ final readonly class StripeCheckout implements Checkout
 
         $fee = $this->fees->feeFor($merchant);
 
-        // THE CONFIGURED LANE AND THE EMITTED ONE ARE THE SAME STATEMENT, which is the seam this method once got
-        // wrong. It used to emit `transfer_data.destination` whatever was configured, so on the shipped defaults a
-        // separate transfer passed the posture guard and then went out as the destination charge the table forbids
-        // for that posture: the money went straight to the merchant while the documents named the platform as
-        // seller. The lane then refused separate transfers outright, because the share moves in a second call a
-        // webhook away and nothing made it.
+        // THE CONFIGURED LANE AND THE EMITTED ONE ARE THE SAME STATEMENT. Emitting `transfer_data.destination`
+        // whatever was configured would let a separate transfer pass the posture guard on the shipped defaults
+        // and then go out as the destination charge the table forbids for that posture: the money would go
+        // straight to the merchant while the documents named the platform as seller.
         //
-        // Something makes it now. A separate-transfer subscription carries no routing at all: the platform takes
-        // each cycle's payment, the merchant's account and the frozen terms ride in the subscription's metadata,
-        // and every paid invoice writes its row and moves the share from the charge behind it. A flat fee is fine
-        // here, because the package computes each cycle's split itself.
+        // A separate-transfer subscription carries no routing at all, and its share still moves: the platform
+        // takes each cycle's payment, the merchant's account and the frozen terms ride in the subscription's
+        // metadata, and every paid invoice writes its row and moves the share from the charge behind it. A flat
+        // fee is fine here, because the package computes each cycle's split itself.
         if ($chargeType === ChargeType::SeparateTransfer) {
             return ['metadata' => StripeSubscriptionRouting::metadata($account, $fee)];
         }

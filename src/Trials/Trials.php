@@ -47,8 +47,9 @@ final readonly class Trials
             return $existing; // idempotent — keep the running trial's end
         }
 
-        // The policy computes the end; a disabled policy (trial_days 0) returns null and grants nothing.
-        $policyEnd = $this->policy->endsAt(CarbonImmutable::now());
+        // The policy computes the end for the tier this trial unlocks: that tier's own length where it sets
+        // one, the global length otherwise. A length of 0 returns null and grants nothing.
+        $policyEnd = $this->policy->endsAt(CarbonImmutable::now(), $this->genericTier());
 
         if (! $policyEnd instanceof DateTimeImmutable) {
             return null;

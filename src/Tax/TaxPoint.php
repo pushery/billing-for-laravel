@@ -25,8 +25,7 @@ use Pushery\Billing\ValueObjects\ServicePeriod;
  * it is what the package has always done and a silent change of tax period is the last thing an upgrade
  * should do.
  *
- * WHICH ONE APPLIES IS NOT A PROPERTY OF A COUNTRY, AND THIS PARAGRAPH USED TO SAY IT WAS -- "a
- * jurisdiction's rule, read from its profile". In Germany the two are Soll-Versteuerung (supply) and
+ * Which one applies is not a property of a country. In Germany the two are Soll-Versteuerung (supply) and
  * Ist-Versteuerung (receipt), and the second exists only on application and approval by the tax office
  * (§ 20 UStG). Two operators in the same jurisdiction therefore differ, and one of them cannot be
  * derived from a locale, a currency or a tax profile. It is DECLARED, once, by the operator who holds

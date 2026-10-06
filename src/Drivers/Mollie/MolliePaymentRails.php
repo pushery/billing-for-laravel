@@ -230,13 +230,12 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
     /**
      * The caller's reference, for the payment's metadata rather than for its description.
      *
-     * The description used to carry it, and that was two mistakes in one field. It is the text Mollie shows
-     * the CUSTOMER — so a subscriber saw a bare internal number where the name of the thing they bought
-     * belonged — and it is not a place anything can search, so a charge still could not be traced back to
-     * the cycle that made it.
+     * The description is the wrong field for it, twice over. It is the text Mollie shows the CUSTOMER — so a
+     * subscriber would see a bare internal number where the name of the thing they bought belongs — and it is
+     * not a place anything can search, so a charge could not be traced back to the cycle that made it.
      *
-     * Metadata fixes both halves at once: the number moves to a machine field, and the description becomes
-     * a word a person can read. That word is now the SERVICE and the period where the caller knows them
+     * Metadata answers both halves at once: the number goes into a machine field, and the description is
+     * a word a person can read. That word is the SERVICE and the period where the caller knows them
      * ({@see describe()}); this method stays about the machine field, and the two must never swap.
      *
      * @return ?array<string, string>

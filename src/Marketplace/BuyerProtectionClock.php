@@ -126,11 +126,11 @@ final readonly class BuyerProtectionClock
             'charge_minor' => $charge->minorUnits,
             // The commission, taken off at the moment the hold OPENS rather than only when it is released.
             //
-            // It used to default to zero here, which had two consequences and both were quiet. A release
-            // pays out `charge_minor - platform_fee_minor`, so every released hold handed the merchant the
-            // buyer's full price, commission included. And the balance reader subtracted the buyer's price
-            // from the merchant's net, which is two different bases against each other — enough to drive a
-            // merchant's available balance below zero while nothing looked wrong.
+            // There is no default of zero here, because a zero would be quiet twice over. A release pays out
+            // `charge_minor - platform_fee_minor`, so every released hold would hand the merchant the buyer's
+            // full price, commission included. And the balance reader would subtract the buyer's price from
+            // the merchant's net, two different bases against each other, enough to drive a merchant's
+            // available balance below zero while nothing looked wrong.
             'platform_fee_minor' => $this->commissionOn($chargeReference),
             'state' => BuyerProtectionState::AwaitingConfirmation,
             'confirm_by' => $paidAt->copy()->addDays($this->confirmAfterDays()),
@@ -239,6 +239,20 @@ final readonly class BuyerProtectionClock
 
         // A hold somebody decided while the sweep was on its way is not one the sweep moved.
         return array_values(array_filter($moved, static fn (?BuyerProtectionHold $hold): bool => $hold instanceof BuyerProtectionHold));
+    }
+
+    /**
+     * The holds advance() would move at $now, read from its own two selections and moved nowhere.
+     *
+     * What a dry run counts. The two selections cannot share a hold, because one asks for a decision deadline still
+     * ahead and the other for one already passed. A disputed hold between its two deadlines is in neither: its
+     * confirmation clock stopped when the buyer objected, and nothing decides it before the second deadline.
+     *
+     * @return list<BuyerProtectionHold>
+     */
+    public function due(CarbonInterface $now): array
+    {
+        return [...$this->dueForAutoRelease($now), ...$this->dueForDecision($now)];
     }
 
     /**

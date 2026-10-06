@@ -42,14 +42,20 @@ final readonly class CureWindow
     }
 
     /**
-     * The instant that separates "still inside the window" from "run out".
+     * The instant that separates "still inside the window" from "run out": the end of the day `days()` back.
      *
-     * A clock that started strictly after this is inside; one that started exactly on it, or earlier, has
-     * run out. The boundary belongs to the expiry — sending "you can still fix this" on the day it stops
-     * being true is worse than sending nothing.
+     * A clock that started strictly after this is inside; one that started on it, or earlier, has run out. The
+     * boundary belongs to the expiry — sending "you can still fix this" on the day it stops being true is worse
+     * than sending nothing.
+     *
+     * A calendar day in the zone of `$now`, not an instant `days()` earlier, because the two sweeps run at
+     * different times of the day. Counted from the moment each of them runs, the halves would overlap by the time
+     * between the runs, and a clock that started in that stretch would be reminded with no day left and expired on
+     * the same day. Counted in days, every run on one day reads the same boundary, and a window that started on a
+     * given day ends `days()` days later, whatever time the payment failed.
      */
     public function cutoff(CarbonImmutable $now): Carbon
     {
-        return Carbon::instance($now)->subDays($this->days());
+        return Carbon::instance($now)->subDays($this->days())->endOfDay();
     }
 }

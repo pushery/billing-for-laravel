@@ -88,7 +88,7 @@ final readonly class MarketplaceSaleContext
     /**
      * Refuse a sale into a country the operator has not opened, where the caller already knows the country.
      *
-     * One of the answers a lane used to be about to derive for itself, so it is asked here once. A null country
+     * One of the answers each lane would otherwise derive for itself, so it is asked here once. A null country
      * checks nothing: a hosted checkout learns the buyer's address only on the provider's page, and what the buyer
      * enters there is checked once the provider reports where it taxed the sale.
      *

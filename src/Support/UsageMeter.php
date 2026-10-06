@@ -129,10 +129,10 @@ final class UsageMeter
     /**
      * Record used units with no hold — the path an app takes when it meters AFTER the fact.
      *
-     * It deliberately does NOT touch `reserved`. It used to, and that was a defect: a record that never
-     * reserved anything would eat an unrelated request's in-flight hold, which meant the two ways of
-     * metering could not be used in the same application. It draws on prepaid exactly as a settle does, so
-     * both ways of metering spend the same allowance in the same order.
+     * It deliberately does NOT touch `reserved`: a record that never reserved anything would eat an
+     * unrelated request's in-flight hold, and the two ways of metering could not be used in the same
+     * application. It draws on prepaid exactly as a settle does, so both ways of metering spend the same
+     * allowance in the same order.
      *
      * @return int the units this record drew from the prepaid balance
      */

@@ -90,8 +90,8 @@ final readonly class SaleTaxDecision
         // Asked through the CLASSIFIER rather than the taxonomy directly, so that an archetype which
         // delegates gets its answer from what it was sold alongside. The merge belongs there and only there:
         // a second copy of "take the delegated cells from the reference" is the one quantity, two derivations
-        // that this package keeps paying for. The classifier also raises the same refusal this method used to
-        // raise itself when a delegating archetype arrives without its reference.
+        // that this package keeps paying for. The classifier also raises the refusal for a delegating
+        // archetype that arrives without its reference.
         $classification = $this->classifier->classify($archetype, $soldAlongside);
         $placeCell = $classification->placeOfSupply;
 

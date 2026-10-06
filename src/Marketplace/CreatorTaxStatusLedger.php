@@ -23,7 +23,7 @@ use Pushery\Billing\Support\LockedRow;
  * The creator tax-status time series: the only place a status is RECORDED, and the only place the series is
  * interpreted — which interval governs a given date.
  *
- * It is not the only code that touches the table, and the sentence here used to say it was. Two sweeps go to
+ * It is not the only code that touches the table. Two sweeps go to
  * `CreatorTaxStatusRecord` directly: `SmallBusinessFlipSweep::governingRecords()` reads the series (its own
  * docblock says so on purpose — "read from the series rather than from a current-status column"), and
  * `LapsedAttestationSweep` both reads it and writes `hold_announced_at` on it.

@@ -53,7 +53,7 @@ use Pushery\Billing\Tax\FrozenExchangeRate;
  * produce a document that looks defensible and states a figure nobody published. Implementations throw
  * {@see ExchangeRateUnavailable}.
  *
- * There is a specific trap behind the date argument, measured rather than imagined: fetched on a Saturday,
+ * There is a specific trap behind the date argument: fetched on a Saturday,
  * a central bank's daily file answers HTTP 200 carrying FRIDAY's data. No error, no 404 — the real date is
  * inside the document. An implementation therefore stamps the publisher's date, never the clock, and a
  * rule that has no rate on a given day (a weekend, a holiday) resolves forward to the next publication day

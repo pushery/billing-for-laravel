@@ -62,17 +62,11 @@ use Pushery\Billing\ValueObjects\SellerActivity;
  * ## What this deliberately does NOT count
  *
  * The fees withheld. They are their own figure and they belong in the same report, and they are counted by
- * {@see WithheldFeeCounter}, not here. This paragraph used to say they were waiting to be counted at all,
- * and that stopped being true when that figure shipped; the file SHIPS, so a reader of the published package
- * was being told a figure did not exist while their installation produced it.
+ * {@see WithheldFeeCounter}, not here. Both are placed by the same settlement document: a withheld fee is a
+ * deduction from a particular consideration, so it falls in the quarter of the document this counter reads,
+ * while the section-19 counter keeps the money clock for its own duty.
  *
- * It then said the two run on DIFFERENT CLOCKS — this one placing a transaction by its settlement document
- * and the fee by the money — and that they part company when a document and its money fall in different
- * quarters. True when written, and the divergence is gone: a withheld fee is a deduction from a particular
- * consideration, so it is placed by the same document this counter reads. That is why the figure moved out
- * of the section-19 counter, which keeps the money clock for its own duty.
- *
- * One limit survives and is worth knowing before reconciling a quarter: a charge NO document claims has no
+ * One limit is worth knowing before reconciling a quarter: a charge NO document claims has no
  * consideration whose date could place it, so it keeps the money clock. {@see
  * WithheldFeeCounter::chargesPlacedByTheirMoneyIn()} names those rows rather than leaving a reader to find
  * them.
@@ -84,11 +78,8 @@ use Pushery\Billing\ValueObjects\SellerActivity;
  * ({@see SellerActivity} for why). A caller assembling a return takes the figures from here and that
  * classification from their own catalog.
  *
- * This paragraph used to say the archetype was "not derivable from these rows", and that overstated it in a
- * way that contradicted the class's own code: `countedInByArchetype()` selects `tax_archetype` off exactly
- * these documents and splits the period by it. What is genuinely absent is the reportability DECISION, not
- * the archetype — those are different things, and blurring them made the class look like it was reading a
- * column it had just declared unavailable.
+ * The archetype itself is on these documents: `countedInByArchetype()` selects `tax_archetype` off them and
+ * splits the period by it. What is absent is the reportability DECISION, and that is a different thing.
  *
  * Worth saying out loud because the two feel like one job: a counter that produced both would look tidier
  * and would be quietly guessing at half of it, in a direction where over-reporting is its own violation.
@@ -110,17 +101,10 @@ final readonly class SettlementGrossInflowCounter implements CountsEarnings
         // than is owed is itself a wrong return, and it hands a tax authority personal data with no basis.
         // A creator paid 107.10 who then had 45.00 clawed back would be reported at 152.10.
         //
-        // WHERE a correction lands is a CONFIGURED question, and this comment used to answer it with the
-        // wrong half. It said a correction is dated the month it happened and therefore lands in the quarter
-        // of the reversal, "which is why nothing here reaches back into the original period" -- and that
-        // describes `reversal_period`, which is not the default. The shipped default is `original_period`,
-        // and `documentsIn()` reaches back through the credited row to place the correction in the quarter
-        // whose figure it undoes.
-        //
-        // Worth correcting rather than tidying, because this file SHIPS: a reader of the published package
-        // was being told the counter never reaches back while their installation did it on every correction.
-        // Prose is the one part of a package no test can contradict, which is exactly why it has to be
-        // measured against the code rather than remembered from the design it was written for.
+        // WHERE a correction lands is a CONFIGURED question. Under the shipped default, `original_period`,
+        // `documentsIn()` reaches back through the credited row to place the correction in the quarter whose
+        // figure it undoes. Under `reversal_period` a correction is dated the month it happened and lands in
+        // the quarter of the reversal.
         //
         // The sign rule in figuresIn() is the part that holds either way, and it is the part that matters here.
         return $this->figuresIn($party, $currency, $period)['gross'];
@@ -262,8 +246,8 @@ final readonly class SettlementGrossInflowCounter implements CountsEarnings
             ->where('owner_id', $party->getKey())
             ->where('currency', strtoupper($currency))
             ->whereNotNull('settlement_document_type')
-            // WHICH documents the period contains -- the rule lives on the model now, because the reporting
-            // roster needs the same answer and used to compute a different one. See InvoiceRecord::scopePlacedIn().
+            // WHICH documents the period contains -- the rule lives on the model, because the reporting roster
+            // needs the same answer, and one rule cannot give two. See InvoiceRecord::scopePlacedIn().
             ->placedIn($period, $this->attribution());
     }
 

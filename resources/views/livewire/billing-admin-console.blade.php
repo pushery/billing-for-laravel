@@ -124,9 +124,9 @@
             @endif
         </div>
 
-        {{-- Stacked at full width on a phone and one row from `sm` up, like the two forms around it. The date
-             fields used to take the width their engine gave them, 155px in Blink and 113px in WebKit, so on a
-             320px phone this form broke into three rows in one engine and two in the other. --}}
+        {{-- Stacked at full width on a phone and one row from `sm` up, like the two forms around it. Left to
+             the width their engine gives them, 155px in Blink and 113px in WebKit, the date fields would break
+             this form into three rows in one engine and two in the other on a 320px phone. --}}
         <form wire:submit="exportDatev" class="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div class="space-y-1 sm:w-44">
                 <label for="datev-from" class="block text-xs font-medium text-gray-600 dark:text-gray-300">{{ __('billing::admin.datev.from') }}</label>

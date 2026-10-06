@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Catalogs;
 
 use Illuminate\Contracts\Config\Repository;
+use Pushery\Billing\Support\KeyedConfig;
 
 /**
  * Resolves a configured `provider_price` to the id for the active (or a named) provider — the anti-price-
@@ -24,12 +25,12 @@ final readonly class ProviderPriceResolver
 
     public function forTier(string $tierKey, ?string $provider = null): ?string
     {
-        return $this->resolve($this->config->get("billing.tiers.{$tierKey}.provider_price"), $provider);
+        return $this->resolve(KeyedConfig::setting($this->config, 'billing.tiers', $tierKey, 'provider_price'), $provider);
     }
 
     public function forAddon(string $addonKey, ?string $provider = null): ?string
     {
-        return $this->resolve($this->config->get("billing.addons.{$addonKey}.provider_price"), $provider);
+        return $this->resolve(KeyedConfig::setting($this->config, 'billing.addons', $addonKey, 'provider_price'), $provider);
     }
 
     private function resolve(mixed $price, ?string $provider): ?string

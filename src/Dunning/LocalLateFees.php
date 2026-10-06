@@ -28,9 +28,9 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * ## Idempotent on the reference, in the database
  *
- * The advance passes `dunning:<subscription>:<rung>`, and the order carries it in its unique `reference` column. A
- * second run for the same rung loses the insert and is told nothing, which is the answer it needs: the fee is
- * already open. A lookup before the insert would leave the two runs a moment to both find nothing.
+ * The advance passes `dunning:<subscription>:<delinquency>:<rung>`, and the order carries it in its unique `reference`
+ * column. A second run for the same rung loses the insert and is told nothing, which is the answer it needs: the fee
+ * is already open. A lookup before the insert would leave the two runs a moment to both find nothing.
  *
  * ## Owned by the owner, not by the subscription
  *

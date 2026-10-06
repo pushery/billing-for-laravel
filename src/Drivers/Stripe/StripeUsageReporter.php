@@ -103,15 +103,15 @@ final readonly class StripeUsageReporter implements UsageReporter
 
         // Stripe requires the window to align to minute boundaries and rejects a second-precise timestamp
         // outright. A subscription cycle's start and end are second-precise, so one of them has to move --
-        // and BOTH ENDS MOVE THE SAME WAY, which is the part that used to be wrong.
+        // and BOTH ENDS MOVE THE SAME WAY.
         //
-        // It floored the start and ceiled the end, justified as "it can only widen by under a minute, which
-        // cannot pull in usage from an adjacent cycle". That is an argument about the SIZE of the widening,
-        // not about where it reaches. Cycles touch -- `current_period_end` IS the next `current_period_start`
-        // -- so the widening reaches into the neighbor by definition. Stripe's start_time is inclusive and
-        // its end_time exclusive, so consecutive windows overlapped by exactly the minute containing the
-        // boundary, and every meter event in it was aggregated into both. The reconcile compares each against
-        // a ledger that splits the cycles cleanly, so it reported a drift that was never there.
+        // Flooring the start and ceiling the end would widen the window by under a minute, and "under a
+        // minute" is an argument about the SIZE of the widening, not about where it reaches. Cycles touch --
+        // `current_period_end` IS the next `current_period_start` -- so the widening reaches into the neighbor
+        // by definition. Stripe's start_time is inclusive and its end_time exclusive, so consecutive windows
+        // would overlap by exactly the minute containing the boundary, and every meter event in it would be
+        // aggregated into both. The reconcile compares each against a ledger that splits the cycles cleanly,
+        // so it would report a drift that was never there.
         //
         // Ceiling both ends makes the windows tile: this cycle's end_time is the next one's start_time,
         // exactly. One minute of boundary usage is still attributed to the neighboring cycle -- that is

@@ -15,14 +15,18 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * ## Why this is its own interface rather than a parameter on {@see DunningGuard}
  *
  * Because appending the parameter breaks every existing implementation at load time — not at the call, at
- * the DECLARATION. That was measured rather than assumed: this package's own suite declares a `DunningGuard`
- * inline, and the changed signature fataled it before a single test ran. A consumer who bound their own
- * guard would meet the same fatal on a MINOR upgrade.
+ * the DECLARATION. A consumer who bound their own guard would meet that fatal on a MINOR upgrade, before a
+ * single request ran.
  *
- * An optional sibling interface costs a consumer nothing. One that never implements it is untouched; one
- * that wants per-merchant dunning implements it and the scoped path becomes reachable. It is the same shape
- * the money path uses to keep the marketplace unreachable until a driver opts in, and it has the property
- * that matters here: the marketplace behavior cannot half-exist.
+ * An optional sibling interface costs a consumer nothing: one that never implements it is untouched.
+ *
+ * ## Who asks it
+ *
+ * Not the package. The route middleware asks the unscoped {@see DunningGuard}, which answers for the
+ * platform's own subscription, and a merchant's content is withdrawn through the state of the subscription
+ * with that merchant. This is the question for code of yours that knows the merchant, such as a merchant's
+ * own pages. Ask the bound guard, and check that it implements this interface first: the shipped
+ * `LocalDunningGuard` does, and a guard of your own may not.
  *
  * ## What the scope means
  *

@@ -387,10 +387,10 @@ class MerchantCharge extends Model
      * The rounding residual is NOT part of what is frozen: it decides who absorbs a sub-cent remainder on a
      * split that has already happened, and re-splitting a completed sale is not something this reconstruction
      * does. It is used to recompute what a SMALLER sale would have paid out, where the residual rule of the
-     * day applies — and that rule is READ, which it used to only claim to be. The third argument was left
-     * off, so the constructor's default decided it, and an installation that hands the odd minor unit to the
-     * creator reconstructed every uneven sale a minor unit off the one it was correcting. Nothing was red:
-     * the arms above this one all divide exactly, and on an even split all three directions agree.
+     * day applies — and that rule is READ, passed as the third argument. Left to the constructor's default,
+     * an installation that hands the odd minor unit to the creator would reconstruct every uneven sale a
+     * minor unit off the one it corrects, and nothing would be red: the arms above this one all divide
+     * exactly, and on an even split all three directions agree.
      */
     public function frozenFee(): ?PlatformFee
     {

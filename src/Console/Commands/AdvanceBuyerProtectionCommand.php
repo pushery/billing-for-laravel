@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace Pushery\Billing\Console\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Marketplace\BuyerProtectionClock;
-use Pushery\Billing\Models\BuyerProtectionHold;
 
 /**
  * Moves every waiting payout whose time has come.
@@ -32,12 +30,8 @@ final class AdvanceBuyerProtectionCommand extends Command
         $now = Carbon::now();
 
         if ($this->option('dry-run') === true) {
-            $due = BuyerProtectionHold::model()::query()
-                ->whereIn('state', ['awaiting_confirmation', 'disputed'])
-                ->where(function (Builder $query) use ($now): void {
-                    $query->where('confirm_by', '<=', $now)->orWhere('decide_by', '<=', $now);
-                })
-                ->count();
+            // Counted from the clock's own selections, so the preview cannot name a hold the run would leave.
+            $due = count($clock->due($now));
 
             $this->components->info("{$due} hold(s) would move.");
 

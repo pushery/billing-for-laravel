@@ -80,10 +80,10 @@ final readonly class ExchangeRateImport
     {
         foreach ($bases as $basis) {
             // Matched with `whereDate`, exactly as the reader matches. `updateOrCreate` on a plain
-            // equality was the obvious first version and it never found an existing row: `rate_date`
-            // casts to a date, which round-trips through the model's datetime format, so the value in
-            // the column and the value in the where-clause disagreed by a midnight. Every second import
-            // then hit the unique constraint instead of updating — measured, not theorized.
+            // equality never finds an existing row: `rate_date` casts to a date, which round-trips
+            // through the model's datetime format, so the value in the column and the value in the
+            // where-clause disagree by a midnight, and every second import would hit the unique
+            // constraint instead of updating.
             //
             // Sharing the reader's lookup shape is the point rather than a workaround: a writer that
             // matched differently from the reader would be a slow way to discover the same thing again

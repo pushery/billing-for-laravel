@@ -12,8 +12,8 @@ use RuntimeException;
 /**
  * The URLs a hosted checkout (and the hosted portal) return the customer to. A consumer may pin them in
  * config('billing.checkout.*'); when they do not, they fall back to the account hub's own routes — so a
- * fresh install can open checkout without any URL configuration, instead of hitting the RuntimeException
- * the driver used to throw on the null default.
+ * fresh install can open checkout without any URL configuration, rather than handing the driver a null
+ * default it would have to refuse.
  */
 final readonly class CheckoutUrls
 {

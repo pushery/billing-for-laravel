@@ -32,7 +32,7 @@ final readonly class TierInterval
 
     public function for(?string $tierKey): BillingInterval
     {
-        $configured = $this->config->get("billing.tiers.{$tierKey}.interval");
+        $configured = $tierKey === null ? null : KeyedConfig::setting($this->config, 'billing.tiers', $tierKey, 'interval');
 
         return (is_string($configured) ? BillingInterval::tryFrom($configured) : null) ?? BillingInterval::Month;
     }

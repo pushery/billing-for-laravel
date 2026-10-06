@@ -44,10 +44,10 @@ use Stripe\Transfer;
  *
  * The reference a caller passes is the one the payment lane recorded: the PaymentIntent a payment created
  * (`pi_…`), or the invoice a routed subscription cycle is keyed on (`in_…`). Stripe's `source_transaction` takes
- * the id of a charge. This class used to send the reference as it stood, so every separate transfer named a
- * PaymentIntent where a charge belongs, while the tests fed it `ch_1` and stayed green. The reference is now
- * resolved here, at the one boundary that knows what a Stripe id is: an invoice to the payment behind it, a
- * payment to its `latest_charge`. A charge id (`ch_…`, `py_…`) is already what the field wants.
+ * the id of a charge, so the reference sent as it stands would name a PaymentIntent where a charge belongs, and a
+ * test feeding it `ch_1` would stay green. The reference is resolved here, at the one boundary that knows what a
+ * Stripe id is: an invoice to the payment behind it, a payment to its `latest_charge`. A charge id (`ch_…`,
+ * `py_…`) is already what the field wants.
  *
  * ## The idempotency key is the caller's, and deliberately so
  *

@@ -9,6 +9,7 @@ use DateTimeInterface;
 use Illuminate\Console\Command;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Consumer\GermanWithdrawalPolicy;
@@ -21,15 +22,23 @@ use Pushery\Billing\Contracts\ClassifiesReportability;
 use Pushery\Billing\Contracts\ConsumerWithdrawalPolicy;
 use Pushery\Billing\Contracts\DefinesUnionMembership;
 use Pushery\Billing\Contracts\DescribesSellerStanding;
+use Pushery\Billing\Contracts\DunningNotifier;
 use Pushery\Billing\Contracts\EInvoice;
 use Pushery\Billing\Contracts\IdentifiesBusinessBuyers;
 use Pushery\Billing\Contracts\JurisdictionProfile;
+use Pushery\Billing\Contracts\MandateNotifier;
+use Pushery\Billing\Contracts\PaymentActionNotifier;
 use Pushery\Billing\Contracts\ProductTaxonomy;
+use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\ReportingProfile;
+use Pushery\Billing\Contracts\SubscriptionNotifier;
 use Pushery\Billing\Contracts\SuppliesBuyerAudiences;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Contracts\SuppliesTaxRates;
+use Pushery\Billing\Contracts\SuspensionNotifier;
 use Pushery\Billing\Contracts\TaxDisclosurePolicy;
+use Pushery\Billing\Contracts\TrialNotifier;
+use Pushery\Billing\Contracts\UsageNotifier;
 use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
 use Pushery\Billing\Enums\BuyerAudience;
 use Pushery\Billing\Enums\OrderStatus;
@@ -43,6 +52,8 @@ use Pushery\Billing\Marketplace\UnmovedMerchantShares;
 use Pushery\Billing\Models\ExchangeRateRecord;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\Order;
+use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\Notifiers\LaravelDunningNotifier;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
 use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
@@ -119,6 +130,22 @@ final class DoctorCommand extends Command
     private const int HELD_ORDER_DAYS = 10;
 
     /**
+     * The notifier contracts the shipped notifier answers by default, each a kind of notice to a billing owner.
+     *
+     * @var list<class-string>
+     */
+    private const array SHIPPED_NOTIFIER_CONTRACTS = [
+        DunningNotifier::class,
+        MandateNotifier::class,
+        PaymentActionNotifier::class,
+        ReceiptNotifier::class,
+        SubscriptionNotifier::class,
+        SuspensionNotifier::class,
+        TrialNotifier::class,
+        UsageNotifier::class,
+    ];
+
+    /**
      * The contracts a jurisdiction answers, mapped to the implementation that ships as the default.
      *
      * Listed rather than discovered because the point is the DEFAULT, and a default is a decision somebody
@@ -143,10 +170,10 @@ final class DoctorCommand extends Command
             return self::SUCCESS;
         }
 
-        // One running verdict rather than a code recomposed at each exit. It used to be the latter, and the
-        // Stripe-unreachable exit was assembled from a SUBSET of the findings — so an aged rate table failed
-        // the command while Stripe answered and passed it while Stripe was down. That is the direction that
-        // hides: a green doctor during an outage reads as "the tax data is fine".
+        // One running verdict rather than a code recomposed at each exit. An exit assembled from a SUBSET of
+        // the findings — the Stripe-unreachable one, say — would fail the command on an aged rate table while
+        // Stripe answers and pass it while Stripe is down. That is the direction that hides: a green doctor
+        // during an outage reads as "the tax data is fine".
         //
         // A finding does not stop being true because a later check could not run, so nothing here ever
         // subtracts from $failing.
@@ -173,6 +200,10 @@ final class DoctorCommand extends Command
 
         $this->reportCredentialEnvironment($config);
 
+        $this->reportForeignKeysInThePackageConfig($config);
+
+        $this->reportSynchronousWebhookEffects($config);
+
         $this->reportUnnamedBuyers($drivers, $buyers);
 
         $failing = $this->reportWorksTheProfileDoesNotCover($config, $addons, $works, $withdrawals) || $failing;
@@ -190,6 +221,8 @@ final class DoctorCommand extends Command
             $failing = $this->reportStrandedOrders() || $failing;
 
             $failing = $this->reportUnmovedMerchantShares($unmoved) || $failing;
+
+            $failing = $this->reportOwnersNoNoticeReaches($config) || $failing;
         }
 
         $failing = $this->reportHostKeyTypeMismatch() || $failing;
@@ -197,6 +230,17 @@ final class DoctorCommand extends Command
         $pinned = $this->pinnedVersion($config);
 
         $this->components->info("The package is pinned to Stripe API version {$pinned}.");
+
+        // The endpoints deliver to an install that bills through Stripe and to no other. A package configured for
+        // another driver routinely carries a stale Stripe key, and the account behind it is not one this install can
+        // be asked to fix, as with the key check above.
+        $driver = $config->get('billing.default', 'stripe');
+
+        if ($driver !== 'stripe') {
+            $this->components->info('The Stripe webhook endpoints are not checked: the active driver is '.(is_string($driver) ? $driver : 'not named').'.');
+
+            return $this->verdict($failing);
+        }
 
         try {
             $endpoints = $stripe->webhookEndpoints->all(['limit' => 100]);
@@ -320,6 +364,63 @@ final class DoctorCommand extends Command
     }
 
     /**
+     * Keys in the `account` and `license` config that this package does not ship.
+     *
+     * Both names are this package's settings in the application's config: the hub's prefix, middleware, layout and
+     * CSP, and what each tier unlocks. An application file of its own under either name merges with them, and its
+     * values then change what the package does, the hub's middleware included. A key the package does not ship is
+     * the sign of such a file. Warned, not failed: the hub still answers, and the fix is a rename in the application.
+     */
+    private function reportForeignKeysInThePackageConfig(Repository $config): void
+    {
+        foreach (['account', 'license'] as $name) {
+            $shipped = require dirname(__DIR__, 3)."/config/{$name}.php";
+            $present = $config->get($name);
+
+            if (! is_array($shipped) || ! is_array($present)) {
+                continue;
+            }
+
+            $foreign = array_values(array_diff(
+                array_map(strval(...), array_keys($present)),
+                array_map(strval(...), array_keys($shipped)),
+            ));
+
+            if ($foreign !== []) {
+                $this->components->warn("Keys the package does not ship in config('{$name}'): ".implode(', ', $foreign)
+                    .". The package reads `{$name}.*` as its own settings, so an application file of that name mixes"
+                    .' with them and changes what the package does. Give the application\'s settings another name.');
+            }
+        }
+    }
+
+    /**
+     * Webhook effects that would run inside the provider's request.
+     *
+     * Each effect is its own queued job, and that is what isolates it: an effect that throws fails its own
+     * job and retries on its own. On a connection whose driver is `sync` the job runs inline instead, in the
+     * webhook's own request, so a throwing effect stops the effects registered after it and the host event,
+     * the provider reads a 500, and `billing.webhooks.tries` does nothing. The connection is
+     * `billing.webhooks.connection`, or the application's default when that is null.
+     *
+     * WARNED, NOT FAILED: a local or test environment runs `sync` on purpose, and only its operator knows
+     * which environment this is.
+     */
+    private function reportSynchronousWebhookEffects(Repository $config): void
+    {
+        $connection = $config->get('billing.webhooks.connection') ?? $config->get('queue.default');
+
+        if (! is_string($connection) || $config->get("queue.connections.{$connection}.driver") !== 'sync') {
+            return;
+        }
+
+        $this->components->warn("Webhook effects run on the queue connection '{$connection}', whose driver is sync. "
+            ."Each effect then runs inside the provider's request: one that throws stops the effects after it, the "
+            .'provider reads a 500, and billing.webhooks.tries does nothing. Point BILLING_WEBHOOK_QUEUE_CONNECTION, '
+            .'or the default queue connection, at an asynchronous driver.');
+    }
+
+    /**
      * An installation that raises its own invoices and names no customer on them.
      *
      * The local engine asks {@see BuyerPartyResolver} for the customer's name and address when it raises an
@@ -356,6 +457,76 @@ final class DoctorCommand extends Command
             .'customer is named only by a VAT id a register confirmed. Bind a resolver that returns the '
             .'customer\'s name and address if you invoice businesses.',
         );
+    }
+
+    /**
+     * Report every owner type in the billing records that a billing notice cannot reach.
+     *
+     * The shipped notifier sends through Laravel's notification stack. Its mail channel asks the recipient for an
+     * address with `routeNotificationFor()` before anything else, and the database channel asks it for its
+     * `notifications()`: both come with the `Notifiable` trait. On a model without them every notice fails in its
+     * queued job, so a failed payment, a suspension warning or a receipt never arrives, and only the failed jobs say
+     * so. A team model often carries no such trait. Where the application has bound notifiers of its own for every
+     * kind of notice, delivery is its own decision and this check stays silent.
+     *
+     * @return bool whether an owner type no notice reaches was found
+     */
+    private function reportOwnersNoNoticeReaches(Repository $config): bool
+    {
+        // Asked through get(), which answers what the application has bound at run time. Static analysis types make()
+        // from the bindings the package registers, and those are the shipped notifier by definition.
+        $container = Container::getInstance();
+        $shipped = array_any(
+            self::SHIPPED_NOTIFIER_CONTRACTS,
+            static fn (string $contract): bool => $container->get($contract) instanceof LaravelDunningNotifier,
+        );
+
+        if (! $shipped) {
+            return false;
+        }
+
+        $channels = $config->get('billing.notifications.channels');
+        $database = is_array($channels) && in_array('database', $channels, true);
+        $types = [];
+
+        // Both tables are among those the missing-tables check asks for, so the run only gets here with them.
+        foreach ([Subscription::resolve(), Order::resolve()] as $model) {
+            foreach ($model->newQuery()->distinct()->pluck('owner_type') as $type) {
+                if (is_string($type) && $type !== '') {
+                    $types[$type] = true;
+                }
+            }
+        }
+
+        $unreachable = [];
+
+        foreach (array_keys($types) as $type) {
+            $class = Relation::getMorphedModel($type) ?? $type;
+
+            // A type that names no class is another finding than this one: there is no model to change.
+            if (! class_exists($class)) {
+                continue;
+            }
+
+            if (! method_exists($class, 'routeNotificationFor') || ($database && ! method_exists($class, 'notifications'))) {
+                $unreachable[] = $class;
+            }
+        }
+
+        if ($unreachable === []) {
+            return false;
+        }
+
+        sort($unreachable);
+
+        $this->components->error(
+            'No billing notice reaches '.implode(', ', $unreachable).': the model has no routeNotificationFor()'
+            .($database ? ' or no notifications() relation' : '').', so every failed payment, suspension warning '
+            .'and receipt fails in its queued job. Use Laravel\'s Notifiable on it, or bind notifiers of your '
+            .'own that send these notices elsewhere.',
+        );
+
+        return true;
     }
 
     /**
@@ -656,7 +827,7 @@ final class DoctorCommand extends Command
     {
         $missing = [];
 
-        foreach ([Order::resolve(), MerchantCharge::resolve(), ExchangeRateRecord::resolve()] as $model) {
+        foreach ([Order::resolve(), MerchantCharge::resolve(), ExchangeRateRecord::resolve(), Subscription::resolve()] as $model) {
             if (! $model->getConnection()->getSchemaBuilder()->hasTable($model->getTable())) {
                 $missing[] = $model->getTable();
             }
@@ -898,10 +1069,10 @@ final class DoctorCommand extends Command
     /**
      * Which rate table would actually answer a sale, and the day it was last known good.
      *
-     * The point of asking it this way: this check used to read only the CONFIGURED table and return in
-     * silence when there was none — which is the default. So the one installation that runs entirely on the
-     * package's own shipped rates was the one installation the age check never spoke about, and two of those
-     * rates drifted by two points for a year before anybody noticed.
+     * The point of asking it this way: a check that read only the CONFIGURED table would return in silence
+     * when there is none — which is the default. The one installation that runs entirely on the package's own
+     * shipped rates would be the one installation the age check never spoke about, and a shipped rate can
+     * drift by two points for a year before anybody notices.
      *
      * Silence about age is the failure. There is always a table answering, so there is always an age to
      * report, and this returns the age of the table that would really be used rather than of the one a

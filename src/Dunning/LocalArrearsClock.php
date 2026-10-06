@@ -13,9 +13,8 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 /**
  * The clock as this package keeps it: one column on the owner's subscription row for that merchant.
  *
- * This is the whole of what the suspension ladder used to do inline, moved out so the ladder can be pointed
- * at somebody else's storage without being rewritten. The reading itself is unchanged, and the paragraph
- * below is the reason it looks the way it does rather than the obvious way.
+ * It sits outside the suspension ladder so the ladder can be pointed at somebody else's storage without being
+ * rewritten. The section below is the reason the reading looks the way it does rather than the obvious way.
  *
  * ## ONE row's clock — this merchant's — and no ordering, because there is nothing to order
  *

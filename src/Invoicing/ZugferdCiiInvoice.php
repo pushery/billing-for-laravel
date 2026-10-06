@@ -65,9 +65,8 @@ final readonly class ZugferdCiiInvoice implements EInvoice
 
         $currency = $invoice->currency;
         $reference = $invoice->number ?? (string) $invoice->id;
-        // How this document is taxed, derived ONCE — the same call the UBL writer makes. These five lines
-        // used to stand here and, byte for byte, over there; two readings of one rule drift, and the drift
-        // shows up in whichever of the two formats nobody is looking at.
+        // How this document is taxed, derived ONCE — the same call the UBL writer makes. Two readings of
+        // one rule drift, and the drift shows up in whichever of the two formats nobody is looking at.
         $treatment = $this->taxTreatmentFor($invoice);
 
         $root->appendChild($this->documentContext($doc));

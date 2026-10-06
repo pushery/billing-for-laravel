@@ -9,12 +9,10 @@ use Illuminate\Support\Facades\Schema;
 /**
  * When the buyer's right to withdraw runs out, frozen onto the grant.
  *
- * ## Why it can exist now, and why it was said it could not
+ * ## Why the window is computable
  *
- * The configuration stated plainly that no withdrawal window was computable because "nothing records the
- * moment a work was provided". That was true when it was written. `acquired_at` on this table has recorded
- * exactly that moment since the grant register landed — written immediately after the fail-closed
- * withdrawal gate, which IS the moment of provision.
+ * `acquired_at` on this table records the moment a work is provided — written immediately after the
+ * fail-closed withdrawal gate, which IS the moment of provision.
  *
  * A reason does not age visibly. That paragraph went on excusing the same absence long after the tree had
  * removed its cause, which is how it stayed unnoticed while the surrounding work shipped.
