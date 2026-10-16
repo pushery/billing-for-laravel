@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Contracts;
 
 use Pushery\Billing\Exceptions\ReaderUnavailable;
+use Pushery\Billing\Exceptions\SaleNotCancelable;
 use Pushery\Billing\ValueObjects\InPersonCollection;
 use Pushery\Billing\ValueObjects\InPersonSale;
 use Pushery\Billing\ValueObjects\TerminalReader;
@@ -41,6 +42,10 @@ interface CardPresentPayments
      */
     public function collect(string $reader, InPersonSale $sale): InPersonCollection;
 
-    /** Takes a sale off a reader before the buyer has paid it. */
+    /**
+     * Takes a sale off a reader before the buyer has paid it. Without a sale on the reader it does nothing.
+     *
+     * @throws SaleNotCancelable when the provider takes the sale off only at the reader itself, as Mollie does
+     */
     public function cancel(string $reader): void;
 }

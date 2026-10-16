@@ -6,6 +6,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\TableLookup;
 
 /**
  * The cause of a credit movement names a row of this package, keyed by an integer, on every installation.
@@ -26,7 +27,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (str_contains(strtolower(Schema::getColumnType('billing_credit_ledger_entries', 'source_id')), 'int')) {
+        if (str_contains(strtolower(Schema::getColumnType(TableLookup::qualified('billing_credit_ledger_entries'), 'source_id')), 'int')) {
             return;
         }
 

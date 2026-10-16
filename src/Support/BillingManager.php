@@ -6,13 +6,17 @@ namespace Pushery\Billing\Support;
 
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\BillingDriver;
+use Pushery\Billing\Contracts\EnabledPaymentMethods;
 use Pushery\Billing\Contracts\MarketplaceRails;
+use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\RoutesMoney;
 use Pushery\Billing\Drivers\NullDriver;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\UnsupportedDriver;
 use Pushery\Billing\ValueObjects\DriverCapabilities;
 use Pushery\Billing\ValueObjects\MerchantScope;
+use Pushery\Billing\ValueObjects\PaymentAccount;
+use Pushery\Billing\Webhooks\AccountWebhooks;
 
 /**
  * Resolves the active payment driver by name and honors the master switch: when billing.enabled is
@@ -24,12 +28,64 @@ final class BillingManager
     /** @var array<string, callable(): BillingDriver> */
     private array $factories = [];
 
+    /** @var array<string, callable(PaymentAccount): BillingDriver> */
+    private array $accountFactories = [];
+
+    /** @var array<string, callable(PaymentAccount): AccountWebhooks> */
+    private array $accountWebhookFactories = [];
+
+    /** @var array<string, callable(PaymentAccount): PaymentCsp> */
+    private array $accountCspFactories = [];
+
+    /** @var array<string, callable(PaymentAccount): EnabledPaymentMethods> */
+    private array $accountPaymentMethodFactories = [];
+
     public function __construct(private readonly Repository $config) {}
 
     /** Register a driver factory under a name (e.g. "stripe"). */
     public function extend(string $name, callable $factory): void
     {
         $this->factories[$name] = $factory;
+    }
+
+    /**
+     * Register how a driver builds itself for one payment account (the driver service providers do).
+     *
+     * @param  callable(PaymentAccount): BillingDriver  $factory
+     */
+    public function extendAccounts(string $name, callable $factory): void
+    {
+        $this->accountFactories[$name] = $factory;
+    }
+
+    /**
+     * Register how a driver verifies and reads the webhooks of one payment account.
+     *
+     * @param  callable(PaymentAccount): AccountWebhooks  $factory
+     */
+    public function extendAccountWebhooks(string $name, callable $factory): void
+    {
+        $this->accountWebhookFactories[$name] = $factory;
+    }
+
+    /**
+     * Register the Content-Security-Policy sources a page needs for the front end of one payment account's provider.
+     *
+     * @param  callable(PaymentAccount): PaymentCsp  $factory
+     */
+    public function extendAccountCsp(string $name, callable $factory): void
+    {
+        $this->accountCspFactories[$name] = $factory;
+    }
+
+    /**
+     * Register how a driver lists the payment methods one payment account has turned on.
+     *
+     * @param  callable(PaymentAccount): EnabledPaymentMethods  $factory
+     */
+    public function extendAccountPaymentMethods(string $name, callable $factory): void
+    {
+        $this->accountPaymentMethodFactories[$name] = $factory;
     }
 
     /**
@@ -48,6 +104,15 @@ final class BillingManager
         sort($names);
 
         return $names;
+    }
+
+    /**
+     * Whether the package runs in payments-only mode: payment accounts take payments, and the SaaS surface (the
+     * account hub, the scheduled runs and the default effects) stays off.
+     */
+    public function paymentsOnly(): bool
+    {
+        return $this->config->get('billing.mode') === 'payments';
     }
 
     /** Whether billing is enabled (the master switch). */
@@ -81,6 +146,10 @@ final class BillingManager
      * CAPABILITIES — the three things this manager owns — and the boot-bound seams stay as they are.
      * Anything else would be half a mechanism, and half a mechanism here means a subscriber silently
      * charged through the wrong provider.
+     *
+     * An application that takes payments for many shops, each with its own account at Mollie or Stripe, does
+     * not resolve those through this method either. It hands the account to {@see self::forAccount()}, which
+     * builds a driver whose client carries that account's credential, and never a driver for anyone else.
      */
     public function driver(?string $name = null): BillingDriver
     {
@@ -93,6 +162,81 @@ final class BillingManager
         $factory = $this->factories[$name] ?? throw new UnsupportedDriver($name);
 
         return $factory();
+    }
+
+    /**
+     * The driver for one payment account the application supplies: rails whose client carries the account's
+     * credential and test mode, and the capabilities of its provider.
+     *
+     * The account is passed, never looked up from something global, so a request or a job charges the shop it
+     * names and no other, also in a worker that serves many shops one after another. Its engine is the null
+     * engine: an account charges what it is handed, and the subscriptions of the install keep running on
+     * {@see self::driver()}. The seams bound at boot stay those of the install's driver.
+     *
+     * With billing switched off this is the NullDriver, as {@see self::driver()} is.
+     *
+     * @throws UnsupportedDriver when no driver builds itself for the account's provider
+     */
+    public function forAccount(PaymentAccount $account): BillingDriver
+    {
+        if (! $this->enabled()) {
+            return new NullDriver;
+        }
+
+        $factory = $this->accountFactories[$account->provider] ?? throw new UnsupportedDriver($account->provider, 'extendAccounts');
+
+        return $factory($account);
+    }
+
+    /**
+     * The verifier and the mapper for the webhooks of one payment account.
+     *
+     * @throws UnsupportedDriver when no driver reads webhooks for the account's provider
+     */
+    public function accountWebhooks(PaymentAccount $account): AccountWebhooks
+    {
+        $factory = $this->accountWebhookFactories[$account->provider] ?? throw new UnsupportedDriver($account->provider, 'extendAccountWebhooks');
+
+        return $factory($account);
+    }
+
+    /**
+     * The Content-Security-Policy sources a page needs for the front end of one payment account's provider: its
+     * script and frames where the page mounts the provider's element, and its checkout where the page redirects.
+     *
+     * The account hub keeps scoping the sources of the install's own driver to its routes, through the
+     * {@see PaymentCsp} bound at boot. A shop page that takes payments into an account adds that account's sources
+     * to its own policy, on the pages that take payments and nowhere else.
+     *
+     * @throws UnsupportedDriver when no driver declares sources for the account's provider
+     */
+    public function accountCsp(PaymentAccount $account): PaymentCsp
+    {
+        $factory = $this->accountCspFactories[$account->provider] ?? throw new UnsupportedDriver($account->provider, 'extendAccountCsp');
+
+        return $factory($account);
+    }
+
+    /**
+     * The CSP sources a page needs for the front ends of several payment accounts, each source once: a shop page that
+     * takes payments into a Mollie and a Stripe account allows the sources of both.
+     */
+    public function accountsCsp(PaymentAccount ...$accounts): PaymentCsp
+    {
+        return new MergedPaymentCsp(...array_map($this->accountCsp(...), array_values($accounts)));
+    }
+
+    /**
+     * The payment methods one payment account has turned on at its provider, read with the account's own credential,
+     * for a settings screen that shows them and a checkout that offers them.
+     *
+     * @throws UnsupportedDriver when no driver lists the payment methods of the account's provider
+     */
+    public function accountPaymentMethods(PaymentAccount $account): EnabledPaymentMethods
+    {
+        $factory = $this->accountPaymentMethodFactories[$account->provider] ?? throw new UnsupportedDriver($account->provider, 'extendAccountPaymentMethods');
+
+        return $factory($account);
     }
 
     public function capabilities(?string $name = null): DriverCapabilities

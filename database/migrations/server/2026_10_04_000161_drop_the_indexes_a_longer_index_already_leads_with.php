@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\TableLookup;
 
 /**
  * Drop the indexes whose columns another index on the same table already leads with.
@@ -94,13 +95,13 @@ return new class extends Migration
     public function up(): void
     {
         foreach (self::REDUNDANT as $table => $indexes) {
-            if (! Schema::hasTable($table)) {
+            if (! TableLookup::exists($table)) {
                 continue;
             }
 
             $drop = array_keys(array_filter(
                 $indexes,
-                static fn (array $index, string $name): bool => Schema::hasIndex($table, $name) && Schema::hasIndex($table, $index['coveredBy']),
+                static fn (array $index, string $name): bool => Schema::hasIndex(TableLookup::qualified($table), $name) && Schema::hasIndex(TableLookup::qualified($table), $index['coveredBy']),
                 ARRAY_FILTER_USE_BOTH,
             ));
 
@@ -119,11 +120,11 @@ return new class extends Migration
     public function down(): void
     {
         foreach (self::REDUNDANT as $table => $indexes) {
-            if (! Schema::hasTable($table)) {
+            if (! TableLookup::exists($table)) {
                 continue;
             }
 
-            $restore = array_filter($indexes, static fn (array $index, string $name): bool => ! Schema::hasIndex($table, $name), ARRAY_FILTER_USE_BOTH);
+            $restore = array_filter($indexes, static fn (array $index, string $name): bool => ! Schema::hasIndex(TableLookup::qualified($table), $name), ARRAY_FILTER_USE_BOTH);
 
             if ($restore === []) {
                 continue;

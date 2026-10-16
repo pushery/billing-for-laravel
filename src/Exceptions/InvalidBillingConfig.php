@@ -84,6 +84,11 @@ final class InvalidBillingConfig extends RuntimeException
         );
     }
 
+    public static function mode(string $mode): self
+    {
+        return new self("billing.mode must be 'full' or 'payments', got '{$mode}'.");
+    }
+
     public static function ownerMode(string $owner): self
     {
         return new self("billing.owner must be 'user' or 'team', got '{$owner}'.");

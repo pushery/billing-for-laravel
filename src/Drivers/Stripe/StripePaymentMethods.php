@@ -10,6 +10,7 @@ use InvalidArgumentException;
 use Pushery\Billing\Contracts\AdoptsCollectedPaymentMethod;
 use Pushery\Billing\Contracts\PaymentMethods as PaymentMethodsContract;
 use Pushery\Billing\Support\CheckoutUrls;
+use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\PaymentMethod as PaymentMethodValue;
 use Stripe\Customer;
@@ -87,7 +88,7 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
             'metadata' => [self::PURPOSE_KEY => self::PURPOSE_ADOPT],
         ]);
 
-        return is_string($session->url) ? $session->url : null;
+        return SafeExternalUrl::onHosts($session->url, StripeHostedPages::HOSTS);
     }
 
     public function setupIntent(Model $billable): ClientIntent

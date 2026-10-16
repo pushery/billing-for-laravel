@@ -8,6 +8,7 @@ use Composer\InstalledVersions;
 use Illuminate\Support\Facades\Config;
 use Mollie\Api\MollieApiClient;
 use Pushery\Billing\Exceptions\MollieNotConfigured;
+use Pushery\Billing\ValueObjects\PaymentAccount;
 use Throwable;
 
 /**
@@ -36,9 +37,7 @@ final readonly class MollieClientFactory
 
     public function make(): MollieApiClient
     {
-        if (! class_exists($this->clientClass)) {
-            throw MollieNotConfigured::missingPackage($this->clientClass);
-        }
+        $this->requirePackage();
 
         $key = Config::get('billing.mollie.api_key');
 
@@ -61,6 +60,53 @@ final readonly class MollieClientFactory
             throw MollieNotConfigured::malformedApiKey($rejected->getMessage());
         }
 
+        return $this->announced($client);
+    }
+
+    /**
+     * A client for one payment account: its API key or its OAuth access token, in the account's test mode.
+     *
+     * An API key picks its mode by its prefix, `test_` or `live_`, and the SDK sends no test flag with it. An
+     * account whose `testmode` disagrees with its key is refused, because the key would win and the account
+     * would charge in the mode nobody asked for. An access token carries no mode, so the client is told the
+     * account's.
+     *
+     * @throws MollieNotConfigured when the SDK is missing, the credential is no key or token, or its mode disagrees with the account
+     */
+    public function forAccount(PaymentAccount $account): MollieApiClient
+    {
+        $this->requirePackage();
+
+        $credential = trim($account->credential);
+        $client = new MollieApiClient(new LaravelHttpMollieAdapter);
+
+        // The SDK's own message is left out here: it may quote the credential, and this exception reaches logs.
+        try {
+            $client->setToken($credential);
+        } catch (Throwable) {
+            throw MollieNotConfigured::malformedAccountCredential($account->key);
+        }
+
+        if (! str_starts_with($credential, 'access_') && str_starts_with($credential, 'test_') !== $account->testmode) {
+            throw MollieNotConfigured::accountModeDisagrees($account->key, $account->testmode);
+        }
+
+        $client->test($account->testmode);
+
+        return $this->announced($client);
+    }
+
+    /** @throws MollieNotConfigured when the SDK is not installed */
+    private function requirePackage(): void
+    {
+        if (! class_exists($this->clientClass)) {
+            throw MollieNotConfigured::missingPackage($this->clientClass);
+        }
+    }
+
+    /** The client with this package's version string, where Composer can tell it. */
+    private function announced(MollieApiClient $client): MollieApiClient
+    {
         if (($version = $this->versionString()) !== null) {
             $client->addVersionString($version);
         }

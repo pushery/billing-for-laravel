@@ -88,6 +88,7 @@ the command reference at <https://docs.pushery.com/billing-for-laravel/reference
 | `billing:cards:warn` | Daily: warns owners whose card is about to expire |
 | `billing:trials:warn` | Daily: warns owners whose generic trial is about to end |
 | `billing:usage:reconcile` | Daily: reads the provider's usage totals back and alarms on drift; `--redrive` retries the rollups a flush gave up on |
+| `billing:money-back:reconcile` | Daily where the driver reads them back: records refunds that failed or were canceled and chargebacks the bank reversed, which no webhook reports |
 | `billing:prune` | Daily: ages out stored webhook payloads and expired financial records |
 | `billing:sync` | Reconciles subscriptions from the provider onto the local rows |
 | `billing:webhooks:replay` | Re-drives webhook effects that failed (`--failed`), or runs an effect that can repeat again (`--rerun`) |

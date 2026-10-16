@@ -52,6 +52,23 @@ final class MollieNotConfigured extends RuntimeException
         );
     }
 
+    /** The credential of a payment account is neither an API key nor an OAuth access token. */
+    public static function malformedAccountCredential(string $account): self
+    {
+        return new self(
+            "The credential of the Mollie payment account `{$account}` was rejected by the Mollie client. An API key begins ".
+            '`test_` or `live_`, an OAuth access token `access_`. The value is set, it is simply neither.'
+        );
+    }
+
+    /** A payment account asks for one mode while its API key belongs to the other. */
+    public static function accountModeDisagrees(string $account, bool $testmode): self
+    {
+        return $testmode
+            ? new self("The Mollie payment account `{$account}` asks for test mode, and its API key is a live key. Mollie decides the mode by the key, so the account would charge real money: give it a `test_` key, or set its testmode to false.")
+            : new self("The Mollie payment account `{$account}` asks for live mode, and its API key is a test key. Mollie decides the mode by the key, so no payment would ever be real: give it a `live_` key, or set its testmode to true.");
+    }
+
     public static function missingPackage(string $client): self
     {
         return new self(

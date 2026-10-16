@@ -16,6 +16,7 @@ use Pushery\Billing\Enums\MerchantStatus;
 use Pushery\Billing\Exceptions\InvalidBillingConfig;
 use Pushery\Billing\Exceptions\MerchantRelationshipEnded;
 use Pushery\Billing\Models\MerchantAccount;
+use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use ReflectionClass;
@@ -210,7 +211,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
         ]);
 
         return new ClientIntent('stripe', [
-            'url' => (string) $link->url,
+            'url' => SafeExternalUrl::onHosts($link->url, StripeHostedPages::HOSTS) ?? '',
             'account' => $account->accountId,
             // Stripe's links are single-use and short-lived. Handing the expiry across the boundary lets a
             // consumer show "this link has expired, start again" instead of a provider error page.

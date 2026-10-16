@@ -30,6 +30,7 @@ use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Marketplace\SellerSaleGate;
 use Pushery\Billing\Support\CheckoutUrls;
+use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
@@ -299,11 +300,11 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             $this->recordPendingSale($routed, $session->payment_intent ?? null, $saleReference, $buyerFee, MerchantChargePurpose::AddonPurchase);
         }
 
-        $url = $session->url ?? null;
+        $url = SafeExternalUrl::onHosts($session->url ?? null, StripeHostedPages::HOSTS);
 
         return new ClientIntent(
             driver: 'stripe',
-            payload: ['checkout_url' => is_string($url) ? $url : '', 'session_id' => $session->id],
+            payload: ['checkout_url' => $url ?? '', 'session_id' => $session->id],
             offSessionCapable: false,
         );
     }
@@ -417,11 +418,11 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
 
         $this->recordPendingSale($routed, $session->payment_intent ?? null, $saleReference, null, MerchantChargePurpose::Tip);
 
-        $url = $session->url ?? null;
+        $url = SafeExternalUrl::onHosts($session->url ?? null, StripeHostedPages::HOSTS);
 
         return new ClientIntent(
             driver: 'stripe',
-            payload: ['checkout_url' => is_string($url) ? $url : '', 'session_id' => $session->id],
+            payload: ['checkout_url' => $url ?? '', 'session_id' => $session->id],
             offSessionCapable: false,
         );
     }

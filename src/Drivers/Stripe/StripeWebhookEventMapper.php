@@ -13,6 +13,7 @@ use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Enums\DisputeReason;
 use Pushery\Billing\Enums\InvoiceStatus;
+use Pushery\Billing\Enums\RefundFailure;
 use Pushery\Billing\Enums\ReversalCause;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxIdVerificationStatus;
@@ -33,6 +34,7 @@ use Pushery\Billing\Events\PaymentActionRequired;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentMethodCollected;
 use Pushery\Billing\Events\PaymentSucceeded;
+use Pushery\Billing\Events\RefundFailed;
 use Pushery\Billing\Events\RoutedChargeAbandoned;
 use Pushery\Billing\Events\RoutedChargeConfirmed;
 use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
@@ -196,6 +198,8 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             'payment_intent.payment_failed' => $this->inPersonSaleEvents($object, paid: null) ?? $this->routedChargeEvents($object, confirmed: false),
             'payment_intent.canceled' => $this->inPersonSaleEvents($object, paid: false) ?? $this->routedChargeEvents($object, confirmed: false),
             'charge.refunded' => $this->refundEvents($object),
+            // A refund Stripe accepted and could not carry out, or that was canceled before it went out.
+            'refund.failed', 'refund.updated', 'charge.refund.updated' => $this->failedRefundEvents($object),
             'charge.dispute.created' => $this->disputeOpenedEvents($object),
             'charge.dispute.closed' => $this->disputeClosedEvents($object),
             // A transfer the provider reversed on its own. The transfer is the platform's object, made with its keys for
@@ -267,6 +271,41 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         return [new AddonRefunded(
             $paymentReference,
             StripeAmount::toMoney($this->int($object, 'amount_refunded') ?? 0, strtoupper($currency)),
+        )];
+    }
+
+    /**
+     * A refund Stripe accepted and could not carry out, or that was canceled before it went out.
+     *
+     * Stripe announces it as `refund.failed`, and as `refund.updated` or `charge.refund.updated` with the new status,
+     * so all three are read and only a failed or canceled refund reports anything. The reason is Stripe's
+     * `failure_reason`. A refund names no customer, so the event carries none.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function failedRefundEvents(array $object): array
+    {
+        $failure = match ($this->string($object, 'status')) {
+            'failed' => RefundFailure::Failed,
+            'canceled' => RefundFailure::Canceled,
+            default => null,
+        };
+        $id = $this->string($object, 'id');
+        $payment = $this->string($object, 'payment_intent') ?? $this->string($object, 'charge');
+        $currency = $this->string($object, 'currency');
+
+        if (! $failure instanceof RefundFailure || $id === null || $payment === null || $currency === null) {
+            return [];
+        }
+
+        return [new RefundFailed(
+            '',
+            $payment,
+            $id,
+            StripeAmount::toMoney($this->int($object, 'amount') ?? 0, strtoupper($currency)),
+            $failure,
+            $this->string($object, 'failure_reason'),
         )];
     }
 

@@ -197,8 +197,14 @@ final class PruneBillingCommand extends Command
                 // documents of an erased person above: a return produced in January is kept as long as
                 // one produced that December, and neither goes before its year's window has closed.
                 $issueColumn = $issueColumns[$rule->object] ?? 'created_at';
+                $cutoff = $this->yearEndCutoff($rule->days)->toDateTimeString();
 
-                $expired->whereRaw("COALESCE({$issueColumn}, created_at) < ?", [$this->yearEndCutoff($rule->days)->toDateTimeString()]);
+                // The issue date where the row has one and its creation where it has none, through the builder,
+                // which quotes the column: a name `datesBy()` declared in mixed case, or a reserved word, reaches
+                // the column it names on every engine.
+                $expired->where(static fn (Builder $dated): Builder => $dated
+                    ->where($issueColumn, '<', $cutoff)
+                    ->orWhere(static fn (Builder $undated): Builder => $undated->whereNull($issueColumn)->where('created_at', '<', $cutoff)));
             } else {
                 $expired->where('created_at', '<=', Carbon::now()->subDays($rule->days));
             }

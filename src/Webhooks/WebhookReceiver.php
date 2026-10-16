@@ -52,6 +52,14 @@ final readonly class WebhookReceiver
         private WebhookEffectRegistry $registry,
         private WebhookEventLedger $deliveries,
         private CustomerDirectory $customers,
+        /**
+         * The provider a delivery is recorded under, or null for the install's driver. The receiver of a payment
+         * account passes the account's provider, with the account's key as the reference and `account` as the
+         * surface, so its deliveries deduplicate and replay per account.
+         */
+        private ?string $provider = null,
+        private string $accountReference = '',
+        private string $surface = 'platform',
     ) {}
 
     public function __invoke(Request $request): Response
@@ -74,10 +82,11 @@ final readonly class WebhookReceiver
         $type = $payload['type'] ?? null;
 
         $delivery = $this->deliveries->record(
-            $this->manager->driver()->name(),
+            $this->providerName(),
             $this->deliveryKey($payload, $request),
             is_string($type) ? $type : 'unknown',
             $payload,
+            $this->accountReference,
         );
 
         foreach ($this->mapper->map($request) as $event) {
@@ -193,8 +202,8 @@ final readonly class WebhookReceiver
     {
         try {
             Event::dispatch(new WebhookDeliveryRefused(
-                $this->manager->driver()->name(),
-                'platform',
+                $this->providerName(),
+                $this->surface,
                 $request->path(),
                 $request->userAgent(),
             ));
@@ -205,9 +214,15 @@ final readonly class WebhookReceiver
         }
 
         Log::warning('billing: a webhook delivery was refused by its verifier', [
-            'provider' => $this->manager->driver()->name(),
-            'surface' => 'platform',
+            'provider' => $this->providerName(),
+            'surface' => $this->surface,
             'path' => $request->path(),
         ]);
+    }
+
+    /** The provider a delivery is recorded and announced under. */
+    private function providerName(): string
+    {
+        return $this->provider ?? $this->manager->driver()->name();
     }
 }

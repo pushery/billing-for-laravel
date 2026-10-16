@@ -20,6 +20,7 @@ use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\OrderItem;
 use Pushery\Billing\Support\CheckoutUrls;
+use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\Money;
 use Throwable;
@@ -111,7 +112,7 @@ final readonly class MollieOneTimeCharge implements OneTimeCharge
 
         return new ClientIntent(
             driver: self::PROVIDER,
-            payload: ['checkout_url' => $payment->getCheckoutUrl() ?? '', 'payment_id' => (string) $payment->id],
+            payload: ['checkout_url' => SafeExternalUrl::onHosts($payment->getCheckoutUrl(), MollieHostedPages::HOSTS) ?? '', 'payment_id' => (string) $payment->id],
             offSessionCapable: false,
         );
     }

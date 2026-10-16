@@ -17,8 +17,20 @@ use InvalidArgumentException;
  */
 final class UnsupportedDriver extends InvalidArgumentException
 {
-    public function __construct(string $name)
+    /**
+     * A driver registers its install driver and each piece of a payment account separately, so the message names the
+     * registration that is missing.
+     *
+     * @param  'extend'|'extendAccounts'|'extendAccountWebhooks'|'extendAccountCsp'|'extendAccountPaymentMethods'  $registration  the BillingManager method that registers what was asked for
+     */
+    public function __construct(string $name, public readonly string $registration = 'extend')
     {
-        parent::__construct("Unsupported billing driver: '{$name}'. Register it via BillingManager::extend().");
+        parent::__construct(match ($registration) {
+            'extendAccounts' => "No billing driver builds itself for a payment account of '{$name}'. Register it via BillingManager::extendAccounts().",
+            'extendAccountWebhooks' => "No billing driver reads the webhooks of a payment account of '{$name}'. Register them via BillingManager::extendAccountWebhooks().",
+            'extendAccountCsp' => "No billing driver declares the CSP sources for a payment account of '{$name}'. Register them via BillingManager::extendAccountCsp().",
+            'extendAccountPaymentMethods' => "No billing driver lists the payment methods of a payment account of '{$name}'. Register it via BillingManager::extendAccountPaymentMethods().",
+            default => "Unsupported billing driver: '{$name}'. Register it via BillingManager::extend().",
+        });
     }
 }

@@ -191,7 +191,7 @@ final readonly class BillingAdmin
                         : $result->transferReversed,
                     reversalRequested: $result->reversedTransferReference !== null,
                 )
-                : $this->routed->failRefund($attempt, 'The provider refused an admin-initiated refund.');
+                : $this->routed->failRefund($attempt, 'The provider refused an admin-initiated refund'.($result->failureMessage !== null ? ': '.$result->failureMessage : '.'));
         }
 
         if ($result->successful) {
@@ -211,6 +211,9 @@ final readonly class BillingAdmin
             // case; the kind says which of them this was, and only one of the two can be counted.
             'kind' => $kind->value,
             'successful' => $result->successful,
+            // Why the provider refused, in its own terms, so the entry answers the question support is asked.
+            'failure_code' => $result->failureCode,
+            'failure_message' => $result->failureMessage,
         ], AuditSource::Admin, $actor);
 
         return $result;
@@ -370,6 +373,9 @@ final readonly class BillingAdmin
             'reason' => $reason,
             'kind' => $kind->value,
             'successful' => $result->successful,
+            // Why the provider refused, in its own terms, so the entry answers the question support is asked.
+            'failure_code' => $result->failureCode,
+            'failure_message' => $result->failureMessage,
         ], AuditSource::Admin, $actor);
 
         return $result;

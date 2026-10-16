@@ -6,6 +6,7 @@ namespace Pushery\Billing\Marketplace;
 
 use Carbon\CarbonInterface;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\VoucherEvent;
@@ -85,6 +86,32 @@ final readonly class VoucherLedger
         $this->record(new VoucherMovement(VoucherEvent::Issued, $faceValue, $code, $issuedAt));
 
         return $voucher;
+    }
+
+    /**
+     * The voucher a code names, when the holder may spend it: sold to that holder, or sold to nobody in
+     * particular. Null for a code nobody issued and for a voucher sold to somebody else, so a code alone
+     * does not reach another customer's value.
+     *
+     * The code is what a buyer presents, and whoever presents it spends what is left. Looking vouchers up
+     * through this method rather than by code on the model is what binds one sold to a customer to them.
+     */
+    public function findFor(string $code, Model $holder): ?Voucher
+    {
+        $this->assertEnabled();
+
+        // The holder is compared in the query, as everywhere the package matches an owner: the column follows the
+        // host's key type, and a driver hands an integer key back as an integer or as a string.
+        $voucher = Voucher::model()::query()
+            ->where('code', $code)
+            ->where(static fn (Builder $spendable): Builder => $spendable
+                ->where(static fn (Builder $unowned): Builder => $unowned->whereNull('owner_type')->whereNull('owner_id'))
+                ->orWhere(static fn (Builder $theirs): Builder => $theirs
+                    ->where('owner_type', $holder->getMorphClass())
+                    ->where('owner_id', $holder->getKey())))
+            ->first();
+
+        return $voucher instanceof Voucher ? $voucher : null;
     }
 
     /**

@@ -57,6 +57,7 @@ use Pushery\Billing\Console\Commands\ProbeRatesCommand;
 use Pushery\Billing\Console\Commands\PruneBillingCommand;
 use Pushery\Billing\Console\Commands\RecapitulativeStatementExportCommand;
 use Pushery\Billing\Console\Commands\ReconcileMerchantJournalCommand;
+use Pushery\Billing\Console\Commands\ReconcileMoneyBackCommand;
 use Pushery\Billing\Console\Commands\ReconcileTaxStatusCommand;
 use Pushery\Billing\Console\Commands\ReconcileUsageCommand;
 use Pushery\Billing\Console\Commands\RecordMarketAccessCommand;
@@ -133,6 +134,7 @@ use Pushery\Billing\Contracts\MerchantResolver;
 use Pushery\Billing\Contracts\MerchantScopedCustomerDirectory;
 use Pushery\Billing\Contracts\MeterInspector;
 use Pushery\Billing\Contracts\MovesMerchantShare;
+use Pushery\Billing\Contracts\PaymentAccounts;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
 use Pushery\Billing\Contracts\PdfRenderer;
 use Pushery\Billing\Contracts\PlanCatalog;
@@ -145,6 +147,7 @@ use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\ReconfirmsIdentity;
 use Pushery\Billing\Contracts\RendersReportingRecord;
 use Pushery\Billing\Contracts\ReportingProfile;
+use Pushery\Billing\Contracts\ReportsMoneyBackOutcomes;
 use Pushery\Billing\Contracts\RetentionHold;
 use Pushery\Billing\Contracts\ScheduleHeartbeat;
 use Pushery\Billing\Contracts\SeatBilling;
@@ -274,6 +277,7 @@ use Pushery\Billing\Support\LocalSubscriptionStateReader;
 use Pushery\Billing\Support\MarketplaceSupportGuard;
 use Pushery\Billing\Support\MeteringSupportGuard;
 use Pushery\Billing\Support\NoBusinessBuyers;
+use Pushery\Billing\Support\NoPaymentAccounts;
 use Pushery\Billing\Support\NoRetentionHolds;
 use Pushery\Billing\Support\NullScheduleHeartbeat;
 use Pushery\Billing\Support\PasswordOrEmailReconfirmation;
@@ -330,8 +334,11 @@ final class BillingServiceProvider extends ServiceProvider
         $this->mergeConfigRecursivelyFrom(__DIR__.'/../config/license.php', 'license');
 
         // Master switch off → the whole billing surface disappears, including Cashier's own routes
-        // (webhook + payment confirmation). Set before Cashier boots so they are never registered.
-        if (! (bool) $this->app->make(Repository::class)->get('billing.enabled', true)) {
+        // (webhook + payment confirmation). Set before Cashier boots so they are never registered. Payments-only
+        // mode leaves them out as well: its payments go through payment accounts, never through Cashier.
+        $config = $this->app->make(Repository::class);
+
+        if (! (bool) $config->get('billing.enabled', true) || $config->get('billing.mode') === 'payments') {
             Cashier::ignoreRoutes();
         }
 
@@ -681,6 +688,9 @@ final class BillingServiceProvider extends ServiceProvider
         // Which owners buy as a business. Nobody, until the application says: an offer only businesses may buy is
         // then shown to no one rather than to everyone.
         $this->app->bind(IdentifiesBusinessBuyers::class, NoBusinessBuyers::class);
+        // Which payment accounts the application knows, by provider and key. None, until it binds its own: an
+        // install that runs one provider from its configuration has no account a webhook could name.
+        $this->app->bind(PaymentAccounts::class, NoPaymentAccounts::class);
         // What the acting user proves before the danger zone ends a subscription at once: a password, or the account
         // email of an account without one, until the application binds a factor of its own.
         $this->app->bind(ReconfirmsIdentity::class, PasswordOrEmailReconfirmation::class);
@@ -982,15 +992,16 @@ final class BillingServiceProvider extends ServiceProvider
         // The account hub is part of the master switch: when billing is off, the SCREENS and their routes do
         // not exist at all (a clean no-op clone).
         //
-        // The two WEBHOOK routes are the exception, and it is deliberate rather than an oversight in the
-        // ordering above. `loadRoutesFrom()` runs unconditionally, so `billing/webhook` and
-        // `billing/webhook/marketplace` stay MOUNTED with billing off — and both receivers answer 404 in
-        // that state, which is where the switch is actually honored. A provider whose endpoint 404s backs
-        // off and retries; one whose endpoint stops resolving is a delivery that fails differently, and an
-        // installation that switches billing off for a week should not have to re-register with its
-        // provider afterwards.
+        // The three WEBHOOK routes are the exception, and it is deliberate rather than an oversight in the
+        // ordering above. `loadRoutesFrom()` runs unconditionally, so `billing/webhook`,
+        // `billing/webhook/marketplace` and the address of each payment account,
+        // `billing/webhook/{provider}/{account}`, stay MOUNTED with billing off — and
+        // all three receivers answer 404 in that state, which is where the switch is actually honored. A
+        // provider whose endpoint 404s backs off and retries; one whose endpoint stops resolving is a delivery
+        // that fails differently, and an installation that switches billing off for a week should not have to
+        // re-register with its provider afterwards.
         //
-        // Said explicitly because a consumer reads "the routes do not exist" literally: these two endpoints
+        // Said explicitly because a consumer reads "the routes do not exist" literally: these three endpoints
         // carry no CSRF middleware (the verifier authenticates by signature instead), so that is exactly the
         // kind of promise somebody stops checking. `MasterSwitchLeavesOnlyTheWebhooksTest` holds the answer.
         if ((bool) $this->app->make(Repository::class)->get('billing.enabled', true)) {
@@ -1038,7 +1049,10 @@ final class BillingServiceProvider extends ServiceProvider
             // hard dependency. Register the nine screens and their routes only when Livewire is installed —
             // the billing core (models, webhooks, invoicing, tax, contracts) never needs it, and CheckoutUrls
             // falls back to configured URLs when the hub's own routes are absent.
-            if (class_exists(Livewire::class)) {
+            //
+            // Payments-only mode mounts neither: a shop's buyers have no account to manage here, and the screens
+            // would be reachable on every domain the application serves.
+            if (class_exists(Livewire::class) && ! $this->app->make(BillingManager::class)->paymentsOnly()) {
                 $this->registerAccountHub();
                 // The optional admin console — a separate, admin-gated route, NOT one of the account-hub
                 // screens. Same Livewire-only condition; the billing core never needs it.
@@ -1151,6 +1165,7 @@ final class BillingServiceProvider extends ServiceProvider
                 CheckMetersCommand::class,
                 ReconcileMerchantJournalCommand::class,
                 ReconcileUsageCommand::class,
+                ReconcileMoneyBackCommand::class,
                 DatevExportCommand::class,
                 CancelSubscriptionCommand::class,
                 GrantTierCommand::class,
@@ -1178,6 +1193,9 @@ final class BillingServiceProvider extends ServiceProvider
 
         $heartbeat = $this->app;
 
+        // Asked when the scheduler resolves, after every driver provider has bound what its driver can do.
+        $container = $this->app;
+
         /**
          * Attach the heartbeat to a scheduled entry.
          *
@@ -1193,7 +1211,7 @@ final class BillingServiceProvider extends ServiceProvider
             ->onSuccess(static fn () => $heartbeat->make(ScheduleHeartbeat::class)->finished($command, true))
             ->onFailure(static fn () => $heartbeat->make(ScheduleHeartbeat::class)->finished($command, false)));
 
-        $this->callAfterResolving(Schedule::class, static function (Schedule $schedule) use ($scheduleConfig, $withHeartbeat): void {
+        $this->callAfterResolving(Schedule::class, static function (Schedule $schedule) use ($scheduleConfig, $withHeartbeat, $container): void {
             // A SWITCHED-OFF BILLING SCHEDULES NOTHING, and this is the whole guard for every entry below.
             //
             // That includes billing:usage:flush and with it the reclaim of expired usage holds. An application that
@@ -1218,6 +1236,15 @@ final class BillingServiceProvider extends ServiceProvider
             // Read here rather than at boot on purpose: `$scheduleConfig` is the live repository, so an
             // install that sets the switch after this provider booted still gets the answer it configured.
             if (! (bool) $scheduleConfig->get('billing.enabled', true)) {
+                return;
+            }
+
+            // Payments-only mode schedules the pruning alone. The webhook records of its payment accounts carry
+            // personal data and fall under the same retention as every other delivery; the other runs belong to
+            // the billing of a SaaS application, which this mode leaves off.
+            if ($scheduleConfig->get('billing.mode') === 'payments') {
+                $withHeartbeat($schedule->command('billing:prune')->dailyAt('03:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:prune');
+
                 return;
             }
 
@@ -1263,6 +1290,12 @@ final class BillingServiceProvider extends ServiceProvider
             // past the point it can still be billed. The flush is quiet about both by design — this is the
             // daily check that surfaces revenue quietly going uncollected.
             $withHeartbeat($schedule->command('billing:usage:reconcile')->dailyAt('04:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:usage:reconcile');
+            // What became of the refunds and chargebacks the provider's webhook does not report: a refund that failed or
+            // was canceled, a chargeback the bank reversed. Registered only where the active driver binds a reader for
+            // them, so `schedule:list` shows it where it does something.
+            if ($container->bound(ReportsMoneyBackOutcomes::class)) {
+                $withHeartbeat($schedule->command('billing:money-back:reconcile')->dailyAt('04:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:money-back:reconcile');
+            }
             // The notice before the hold below: when an attestation's renewal falls due at the year boundary,
             // and again shortly before it runs out. Safe unconditionally: with nothing due it touches nothing
             // and exits zero.

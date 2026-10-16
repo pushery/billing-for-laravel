@@ -28,11 +28,13 @@ final readonly class StripeWebhookVerifier implements WebhookVerifier
     public function __construct(
         private Repository $config,
         private string $secretConfigKey = 'cashier.webhook.secret',
+        /** The signing secret of a payment account, which replaces the one the configuration key names. */
+        private ?string $secret = null,
     ) {}
 
     public function verify(Request $request): bool
     {
-        $secret = $this->config->get($this->secretConfigKey);
+        $secret = $this->secret ?? $this->config->get($this->secretConfigKey);
 
         if (! is_string($secret) || $secret === '') {
             return false;

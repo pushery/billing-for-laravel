@@ -35,6 +35,12 @@ final readonly class StripeDriver implements BillingDriver, RoutesMoney
          * boot with a different one.
          */
         private ?MarketplaceRails $marketplace = null,
+        /**
+         * The engine this driver bills with, or null for Cashier's, which keeps the install's subscriptions at
+         * Stripe. A payment account passes the null engine: it charges what it is handed and keeps no
+         * subscriptions of its own.
+         */
+        private ?BillingEngine $engine = null,
     ) {}
 
     /**
@@ -61,7 +67,7 @@ final readonly class StripeDriver implements BillingDriver, RoutesMoney
 
     public function engine(): BillingEngine
     {
-        return new CashierBillingEngine;
+        return $this->engine ?? new CashierBillingEngine;
     }
 
     public function capabilities(): DriverCapabilities

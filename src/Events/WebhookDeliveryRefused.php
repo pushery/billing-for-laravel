@@ -58,7 +58,7 @@ final readonly class WebhookDeliveryRefused
     public function __construct(
         /** The driver the endpoint is running, so a multi-driver install can tell the two apart. */
         public string $provider,
-        /** `platform` or `marketplace` — the two endpoints answer for different money and different secrets. */
+        /** `platform`, `marketplace` or `account`: the endpoints answer for different money and different secrets. */
         public string $surface,
         public string $path,
         public ?string $userAgent,

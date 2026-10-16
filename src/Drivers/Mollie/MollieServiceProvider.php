@@ -18,6 +18,7 @@ use Pushery\Billing\Contracts\CardPresentPayments;
 use Pushery\Billing\Contracts\CreditSync;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Contracts\CustomerRegistry;
+use Pushery\Billing\Contracts\EnabledPaymentMethods;
 use Pushery\Billing\Contracts\EnsuresProviderCustomer;
 use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
 use Pushery\Billing\Contracts\HostedPortal;
@@ -32,6 +33,7 @@ use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
+use Pushery\Billing\Contracts\ReportsMoneyBackOutcomes;
 use Pushery\Billing\Contracts\SeatBilling;
 use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubmitsDisputeEvidence;
@@ -43,6 +45,7 @@ use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Contracts\WebhookVerifier;
 use Pushery\Billing\Discounts\CouponRedeemer;
 use Pushery\Billing\Discounts\CycleCouponApplier;
+use Pushery\Billing\Drivers\NullBillingEngine;
 use Pushery\Billing\Drivers\NullCreditSync;
 use Pushery\Billing\Drivers\NullCustomerRegistry;
 use Pushery\Billing\Drivers\NullHostedPortal;
@@ -75,6 +78,8 @@ use Pushery\Billing\Tax\SaleTaxDecision;
 use Pushery\Billing\Trials\TrialPolicy;
 use Pushery\Billing\Trials\Trials;
 use Pushery\Billing\Usage\NullUsageReporter;
+use Pushery\Billing\ValueObjects\PaymentAccount;
+use Pushery\Billing\Webhooks\AccountWebhooks;
 use Pushery\Billing\Webhooks\Effects\FailCycleOnPayment;
 use Pushery\Billing\Webhooks\Effects\SettleCycleOnPayment;
 use Pushery\Billing\Webhooks\Effects\StartSubscriptionOnMandate;
@@ -128,6 +133,39 @@ final class MollieServiceProvider extends ServiceProvider
         // Unconditional: a driver that exists by name can be asked for by name.
         $manager->extend('mollie', fn (): BillingDriver => $this->app->make(MollieDriver::class));
 
+        // A payment account builds a driver of its own: a client with the account's credential and test mode, its
+        // profile on every payment it creates, a webhook address that names the account, and the null engine.
+        // Unconditional as well: an install that runs Stripe for itself may still take payments into Mollie
+        // accounts of its shops.
+        $manager->extendAccounts('mollie', fn (PaymentAccount $account): BillingDriver => new MollieDriver(
+            new MolliePaymentRails(
+                new MollieClientFactory()->forAccount($account),
+                $this->accountWebhookUrl($this->app->make(Repository::class), $account),
+                $this->app->make(CheckoutUrls::class),
+                $account->profileId,
+            ),
+            new NullBillingEngine,
+        ));
+
+        // Its webhooks arrive on the account's own address. The verifier checks the account's signing secret, and the
+        // mapper reads a classic ping back with the account's client, which is also what proves the payment is the
+        // account's: another account's payment id is not found with this credential. It reports AccountPaymentChanged
+        // and nothing the install's own effects would read as theirs.
+        $manager->extendAccountWebhooks('mollie', static fn (PaymentAccount $account): AccountWebhooks => new AccountWebhooks(
+            new MollieWebhookVerifier($account->webhookSecret === null ? [] : [$account->webhookSecret]),
+            new MollieAccountWebhookEventMapper(new MollieClientFactory()->forAccount($account), $account->key),
+        ));
+
+        // A shop page that mounts the card fields or redirects to the checkout for an account adds these sources to
+        // its own policy. They are the same for every account.
+        $manager->extendAccountCsp('mollie', static fn (): PaymentCsp => new MolliePaymentCsp);
+
+        // The payment methods an account has turned on, read with its client and on its profile.
+        $manager->extendAccountPaymentMethods('mollie', static fn (PaymentAccount $account): EnabledPaymentMethods => new MollieEnabledPaymentMethods(
+            new MollieClientFactory()->forAccount($account),
+            $account->profileId,
+        ));
+
         if (! $this->isActive()) {
             return;
         }
@@ -161,6 +199,9 @@ final class MollieServiceProvider extends ServiceProvider
         $this->app->offsetUnset(SubmitsDisputeEvidence::class);
         // Nor does a Mollie customer carry tax ids, so there is nowhere to attach a proven VAT number.
         $this->app->offsetUnset(AttachesVerifiedVatIds::class);
+        // What became of a refund or a chargeback where Mollie's webhook does not say: a refund canceled before it was
+        // paid out, one that failed, a chargeback the bank reversed. `billing:money-back:reconcile` reads them back daily.
+        $this->app->bind(ReportsMoneyBackOutcomes::class, MollieMoneyBackOutcomes::class);
         // The paths that reach the provider on Stripe, answered for this engine. The Stripe provider binds its own
         // unconditionally, and each would ask Stripe about a customer whose reference Mollie issued. Credit stays in
         // the package's ledger, which this engine spends at the cycle; usage is rated from the package's own
@@ -227,11 +268,15 @@ final class MollieServiceProvider extends ServiceProvider
         // — so the cycle is held open and closed from here, in whichever direction the money went. Both are
         // registered for the same reason as the one above: they mean something only where the package runs
         // the billing cycle itself, and a provider that runs its own answers through its own events.
-        $registry = $this->app->make(WebhookEffectRegistry::class);
+        //
+        // Payments-only mode runs no billing cycle, so it registers none of the three.
+        if (! $manager->paymentsOnly()) {
+            $registry = $this->app->make(WebhookEffectRegistry::class);
 
-        $registry->on(MandateEstablished::class, StartSubscriptionOnMandate::class);
-        $registry->on(PaymentSucceeded::class, SettleCycleOnPayment::class);
-        $registry->on(PaymentFailed::class, FailCycleOnPayment::class);
+            $registry->on(MandateEstablished::class, StartSubscriptionOnMandate::class);
+            $registry->on(PaymentSucceeded::class, SettleCycleOnPayment::class);
+            $registry->on(PaymentFailed::class, FailCycleOnPayment::class);
+        }
 
         $this->guardCredentials();
     }
@@ -256,6 +301,12 @@ final class MollieServiceProvider extends ServiceProvider
         $path = $config->get('billing.webhook_path', 'billing/webhook');
 
         return rtrim(is_string($base) ? $base : '', '/').'/'.ltrim(is_string($path) ? $path : 'billing/webhook', '/');
+    }
+
+    /** The webhook address of one payment account: the install's address, followed by the provider and the key. */
+    private function accountWebhookUrl(Repository $config, PaymentAccount $account): string
+    {
+        return rtrim(self::webhookUrl($config), '/').'/'.$account->provider.'/'.$account->key;
     }
 
     /**

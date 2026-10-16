@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Pushery\Billing\Drivers\Mollie;
 
 use InvalidArgumentException;
+use Mollie\Api\Exceptions\ApiException;
+use Mollie\Api\Exceptions\RequestException;
 use Mollie\Api\Http\Requests\CreatePaymentRefundRequest;
 use Mollie\Api\Http\Requests\CreatePaymentRequest;
 use Mollie\Api\MollieApiClient;
@@ -15,7 +17,9 @@ use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
 use Pushery\Billing\Contracts\PaymentRails;
 use Pushery\Billing\Exceptions\MandateNeedsRedirect;
 use Pushery\Billing\Support\CheckoutUrls;
+use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\ChargeNarrative;
+use Pushery\Billing\ValueObjects\ChargeOptions;
 use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\MandateHandshake;
@@ -74,6 +78,11 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
         private string $webhookUrl,
         /** Where a customer is sent back after a checkout. Never the webhook, which a browser cannot open. */
         private CheckoutUrls $urls,
+        /**
+         * The profile payments are created on, which Mollie requires with an OAuth access token and ignores with
+         * an API key. A payment account supplies it; the install's own driver has none.
+         */
+        private ?string $profileId = null,
     ) {}
 
     /**
@@ -82,7 +91,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
      *
      * @param  string  $token  The Mollie METHOD to offer (`ideal`, `creditcard`, …). See the class docblock.
      */
-    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null): ChargeResult
+    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null, ?ChargeOptions $options = null): ChargeResult
     {
         // THE KEY GOES ON THE REQUEST, not only into the description. `PaymentRails` states what it is
         // for in as many words -- "pass the invoice/charge id so a re-run collapses onto the first charge
@@ -97,21 +106,28 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
         // Set immediately before the call because the SDK resets it after every request -- setting it any
         // earlier would arm whichever request happened to go first.
         //
-        // The return URL is resolved before the key is armed: an install with nowhere to send the customer
-        // back to is refused here, before anything reaches Mollie.
-        $returnUrl = $this->urls->purchaseReturnUrl();
-
-        $payment = $this->keyed($idempotencyKey, fn (): mixed => $this->client->send(new CreatePaymentRequest(
+        // The request is built before the key is armed: an install with nowhere to send the customer back to, or
+        // options Mollie would refuse, are refused here, before anything reaches Mollie. A return address in the
+        // options is the shop's own page of the order, and with one the install needs none.
+        $request = new CreatePaymentRequest(
             description: $this->describe($narrative, 'Payment'),
             amount: MollieAmount::toMollie($amount),
-            redirectUrl: $returnUrl,
-            webhookUrl: $this->webhookUrl,
-            method: $token,
-            metadata: $this->traceOf($idempotencyKey),
+            redirectUrl: $options->returnUrl ?? $this->urls->purchaseReturnUrl(),
+            cancelUrl: $options?->cancelUrl,
+            webhookUrl: $options->webhookUrl ?? $this->webhookUrl,
+            lines: MollieChargeOptions::lines($options instanceof ChargeOptions ? $options->lines : [], $amount),
+            billingAddress: MollieChargeOptions::address($options?->billingAddress),
+            shippingAddress: MollieChargeOptions::address($options?->shippingAddress),
+            locale: $options?->locale,
+            method: MollieChargeOptions::method($token, $options),
+            metadata: MollieChargeOptions::metadata($options, $this->traceOf($idempotencyKey)),
+            captureMode: $options?->captureMode,
             sequenceType: MollieValue::SEQUENCE_ONEOFF,
-        )));
+            profileId: $this->profileId,
+            additional: MollieChargeOptions::additional($options),
+        );
 
-        return $this->settle($payment, $amount);
+        return $this->settle($this->keyed($idempotencyKey, fn (): mixed => $this->client->send($request)), $amount);
     }
 
     /**
@@ -150,6 +166,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
             webhookUrl: $this->webhookUrl,
             sequenceType: MollieValue::SEQUENCE_FIRST,
             customerId: $customerReference,
+            profileId: $this->profileId,
         )), Payment::class);
 
         // Narrowed as its own step rather than inside the expression below: version 3 of the SDK declares
@@ -158,7 +175,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
             throw MandateNeedsRedirect::noCheckoutReturned('Mollie', 'unknown');
         }
 
-        $checkout = $payment->getCheckoutUrl();
+        $checkout = SafeExternalUrl::onHosts($payment->getCheckoutUrl(), MollieHostedPages::HOSTS);
 
         if ($checkout === null) {
             throw MandateNeedsRedirect::noCheckoutReturned('Mollie', MollieValue::id($payment->id));
@@ -192,6 +209,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
             sequenceType: MollieValue::SEQUENCE_RECURRING,
             mandateId: $mandate->id,
             customerId: $mandate->customerReference,
+            profileId: $this->profileId,
         )));
 
         return $this->settle($payment, $amount);
@@ -207,21 +225,49 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
      */
     public function refund(string $chargeReference, Money $amount, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): RefundResult
     {
-        $refund = $this->keyed($idempotencyKey, fn (): mixed => $this->client->send(new CreatePaymentRefundRequest(
-            paymentId: $chargeReference,
-            // 'Refund', not the reference. Mollie shows a refund's description to the CUSTOMER, the same
-            // way it shows a payment's — so this field leaked an internal id onto the statement of somebody
-            // getting their money back, which is the worst moment to look disorganized. The two money calls
-            // were corrected when the reference moved to metadata; this one was missed because a refund is
-            // not a charge, and the sentence that scoped it out ("charges carry the reference") was true of
-            // the metadata and silent about the leak.
-            description: 'Refund',
-            amount: MollieAmount::toMollie($amount),
-            metadata: $this->traceOf($idempotencyKey),
-        )));
+        try {
+            $refund = $this->keyed($idempotencyKey, fn (): mixed => $this->client->send(new CreatePaymentRefundRequest(
+                paymentId: $chargeReference,
+                // 'Refund', not the reference. Mollie shows a refund's description to the CUSTOMER, the same
+                // way it shows a payment's — so this field leaked an internal id onto the statement of somebody
+                // getting their money back, which is the worst moment to look disorganized. The two money calls
+                // were corrected when the reference moved to metadata; this one was missed because a refund is
+                // not a charge, and the sentence that scoped it out ("charges carry the reference") was true of
+                // the metadata and silent about the leak.
+                description: 'Refund',
+                amount: MollieAmount::toMollie($amount),
+                metadata: $this->traceOf($idempotencyKey),
+            )));
+        } catch (RequestException $refusal) {
+            // Mollie refused THIS refund: more than is left to refund, a payment that cannot be refunded, an id it
+            // does not know. That is an answer, and it comes back as one with Mollie's own words. A refusal that
+            // says nothing about the refund (credentials, a rate limit, an outage) travels, so it is retried.
+            $status = $refusal->getStatusCode();
+
+            if ($status < 400 || $status >= 500 || in_array($status, [401, 403, 429], true)) {
+                throw $refusal;
+            }
+
+            return new RefundResult(
+                successful: false,
+                reference: '',
+                amount: $amount,
+                failureCode: (string) $status,
+                failureMessage: $refusal instanceof ApiException ? $refusal->getPlainMessage() : $refusal->getMessage(),
+            );
+        }
+
+        if ($refund instanceof Refund && ($refund->isFailed() || $refund->isCanceled())) {
+            return new RefundResult(
+                successful: false,
+                reference: MollieValue::id($refund->id),
+                amount: $amount,
+                failureCode: MollieValue::of($refund->status),
+            );
+        }
 
         return new RefundResult(
-            successful: ! $refund instanceof Refund || ! $refund->isFailed() && ! $refund->isCanceled(),
+            successful: true,
             reference: $refund instanceof Refund ? MollieValue::id($refund->id) : '',
             amount: $amount,
         );
@@ -318,11 +364,12 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
             return new ChargeResult(false, $reference, $amount, $this->reasonFor($payment));
         }
 
-        $checkout = $payment->getCheckoutUrl();
+        $checkout = SafeExternalUrl::onHosts($payment->getCheckoutUrl(), MollieHostedPages::HOSTS);
 
         // A checkout URL means the customer still has to act; without one the payment is simply in flight
         // (a bank debit settling over days). Both are "not yet", and neither is a decline — but only one
-        // of them has somewhere to send the customer.
+        // of them has somewhere to send the customer. A checkout on a host Mollie serves none from counts as
+        // none, so the payment waits for the provider rather than sending anybody there.
         return new ChargeResult(
             successful: false,
             reference: $reference,

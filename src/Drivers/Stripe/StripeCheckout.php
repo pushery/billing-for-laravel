@@ -26,6 +26,7 @@ use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Marketplace\SellerSaleGate;
 use Pushery\Billing\Models\Coupon;
 use Pushery\Billing\Support\CheckoutUrls;
+use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\Trials\TrialPolicy;
 use Pushery\Billing\Trials\Trials;
 use Pushery\Billing\ValueObjects\ClientIntent;
@@ -118,11 +119,11 @@ final readonly class StripeCheckout implements Checkout
         // @phpstan-ignore argument.type (the SDK's generated shape cannot express a payload assembled at run time)
         $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant, $declarationReference, $collectTaxId, $type, $callerReference));
 
-        $url = $session->url ?? null;
+        $url = SafeExternalUrl::onHosts($session->url ?? null, StripeHostedPages::HOSTS);
 
         return new ClientIntent(
             driver: 'stripe',
-            payload: ['checkout_url' => is_string($url) ? $url : '', 'session_id' => $session->id],
+            payload: ['checkout_url' => $url ?? '', 'session_id' => $session->id],
             offSessionCapable: false,
         );
     }
