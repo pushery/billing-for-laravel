@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\TableLookup;
 
 /**
  * Prepares a host app to use the package: publishes the config and generates the owner-columns
@@ -124,10 +125,10 @@ final class InstallCommand extends Command
     private function droppableColumns(string $table, string $tierColumn, string $customerColumn): array
     {
         $drop = [$tierColumn];
-        $tableExists = Schema::hasTable($table);
+        $tableExists = TableLookup::exists($table);
 
         foreach ([$customerColumn, 'pm_type', 'pm_last_four', 'trial_ends_at'] as $column) {
-            if (! $tableExists || ! Schema::hasColumn($table, $column)) {
+            if (! $tableExists || ! Schema::hasColumn(TableLookup::qualified($table), $column)) {
                 $drop[] = $column;
             }
         }
@@ -152,13 +153,17 @@ final class InstallCommand extends Command
     }
 
     /**
-     * The migration body. Every column is guarded by hasColumn(), so it is safe to run after Cashier's
+     * The migration body. Every column is guarded by its own lacks(), so it is safe to run after Cashier's
      * own customer migration (which adds stripe_id / pm_type / pm_last_four / trial_ends_at) — it fills
      * in only the tier column, or all of them on an app that never ran Cashier's.
      *
      * The tier and customer column names come from the config the package READS at runtime, never from a
      * literal: a consumer who renamed either one and got a migration for the default name would end up
      * with a column nothing writes and a package looking at a column that does not exist.
+     *
+     * lacks() looks the column up where a query finds the table, which on PostgreSQL is along the
+     * search_path. It is written into the migration rather than calling a class of this package,
+     * because the file belongs to the application from the moment it is written.
      *
      * @param  list<string>  $dropColumns
      */
@@ -180,19 +185,19 @@ final class InstallCommand extends Command
             public function up(): void
             {
                 Schema::table('{$table}', function (Blueprint \$table): void {
-                    if (! Schema::hasColumn('{$table}', '{$tierColumn}')) {
+                    if (\$this->lacks('{$tierColumn}')) {
                         \$table->string('{$tierColumn}')->nullable();
                     }
-                    if (! Schema::hasColumn('{$table}', '{$customerColumn}')) {
+                    if (\$this->lacks('{$customerColumn}')) {
                         \$table->string('{$customerColumn}')->nullable()->index();
                     }
-                    if (! Schema::hasColumn('{$table}', 'pm_type')) {
+                    if (\$this->lacks('pm_type')) {
                         \$table->string('pm_type')->nullable();
                     }
-                    if (! Schema::hasColumn('{$table}', 'pm_last_four')) {
+                    if (\$this->lacks('pm_last_four')) {
                         \$table->string('pm_last_four', 4)->nullable();
                     }
-                    if (! Schema::hasColumn('{$table}', 'trial_ends_at')) {
+                    if (\$this->lacks('trial_ends_at')) {
                         \$table->timestamp('trial_ends_at')->nullable();
                     }
                 });
@@ -203,7 +208,7 @@ final class InstallCommand extends Command
                 // Only the columns this migration is responsible for creating, each guarded so a rollback
                 // never errors on an already-absent column — and Cashier's own columns are never dropped.
                 foreach ([{$dropList}] as \$column) {
-                    if (! Schema::hasColumn('{$table}', \$column)) {
+                    if (\$this->lacks(\$column)) {
                         continue;
                     }
 
@@ -218,6 +223,27 @@ final class InstallCommand extends Command
                         \$table->dropColumn(\$column);
                     });
                 }
+            }
+
+            /**
+             * Whether '{$table}' lacks the column, looked up where a query on the connection finds the
+             * table: on PostgreSQL along the search_path, which the schema builder alone does not walk.
+             */
+            private function lacks(string \$column): bool
+            {
+                \$connection = Schema::getConnection();
+                \$table = '{$table}';
+
+                if (\$connection->getDriverName() === 'pgsql') {
+                    \$schema = \$connection->scalar(
+                        'select n.nspname from pg_class c join pg_namespace n on n.oid = c.relnamespace where c.oid = to_regclass(?)',
+                        [\$connection->getQueryGrammar()->wrapTable(\$table)],
+                    );
+
+                    \$table = is_string(\$schema) ? \$schema.'.'.\$table : \$table;
+                }
+
+                return ! Schema::hasColumn(\$table, \$column);
             }
         };
 

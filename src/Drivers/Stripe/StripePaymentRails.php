@@ -12,6 +12,7 @@ use Pushery\Billing\Enums\FeeRefundPolicy;
 use Pushery\Billing\Exceptions\FeeRefundPolicyNotPermitted;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\ValueObjects\ChargeNarrative;
+use Pushery\Billing\ValueObjects\ChargeOptions;
 use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\MandateReference;
@@ -21,6 +22,8 @@ use Pushery\Billing\ValueObjects\TokenizedMethod;
 use RuntimeException;
 use Stripe\Charge;
 use Stripe\Exception\CardException;
+use Stripe\Exception\InvalidRequestException;
+use Stripe\Exception\RateLimitException;
 use Stripe\PaymentIntent;
 use Stripe\Refund;
 use Stripe\StripeClient;
@@ -55,7 +58,7 @@ final readonly class StripePaymentRails implements PaymentRails
         private SupplyRegimeResolver $regimes,
     ) {}
 
-    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null): ChargeResult
+    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null, ?ChargeOptions $options = null): ChargeResult
     {
         $params = $this->routed([
             'amount' => StripeAmount::of($amount),
@@ -63,6 +66,7 @@ final readonly class StripePaymentRails implements PaymentRails
             'payment_method' => $token,
             'confirm' => true,
             'off_session' => false,
+            ...$this->returnPath($options?->returnUrl),
         ], $amount, $routing);
 
         return $this->settle(
@@ -71,10 +75,30 @@ final readonly class StripePaymentRails implements PaymentRails
             // The payload IS a valid PaymentIntent request; its exact fields are asserted one by one in
             // StripeMarketplaceRoutingTest, including the assertion that an unrouted charge emits none of them.
             // @phpstan-ignore argument.type (the SDK's generated shape cannot express a payload assembled at run time)
-            fn (): PaymentIntent => $this->stripe->paymentIntents->create($this->traced($params, $idempotencyKey, $narrative), $this->options($idempotencyKey)),
+            fn (): PaymentIntent => $this->stripe->paymentIntents->create($this->traced($params, $idempotencyKey, $narrative, $options instanceof ChargeOptions ? $options->metadata : []), $this->options($idempotencyKey)),
             $amount,
             $routing,
         );
+    }
+
+    /**
+     * Where Stripe sends the customer after a step that leaves the page, for a charge confirmed on-session.
+     *
+     * A PaymentIntent enables automatic payment methods by default, and confirming one on-session needs a
+     * `return_url` unless redirects are ruled out. The return address of the charge's options comes first, then
+     * `billing.stripe.return_url`, so a method that leaves the page can come back to it. Without either,
+     * redirects are ruled out: a card that needs no redirect confirms, and one that does comes back as
+     * requires-action, as before.
+     *
+     * @return array{return_url: string}|array{automatic_payment_methods: array{enabled: true, allow_redirects: 'never'}}
+     */
+    private function returnPath(?string $asked = null): array
+    {
+        $url = $asked ?? $this->config->get('billing.stripe.return_url');
+
+        return is_string($url) && $url !== ''
+            ? ['return_url' => $url]
+            : ['automatic_payment_methods' => ['enabled' => true, 'allow_redirects' => 'never']];
     }
 
     public function createMandate(string $customerReference, string $token): MandateReference
@@ -195,10 +219,29 @@ final readonly class StripePaymentRails implements PaymentRails
             $params['expand'] = ['transfer_reversal'];
         }
 
-        $refund = $this->stripe->refunds->create($params, $this->options($idempotencyKey));
+        try {
+            $refund = $this->stripe->refunds->create($params, $this->options($idempotencyKey));
+        } catch (RateLimitException $rateLimited) {
+            // A 429 says nothing about the refund. It lands in the clause below only because the SDK makes it a
+            // subclass of InvalidRequestException, and filed there it would read as a refusal. It travels.
+            throw $rateLimited;
+        } catch (InvalidRequestException $refusal) {
+            // Stripe refused THIS refund, such as one that is already refunded or asks for more than is left. That
+            // is an answer, and it comes back as one with Stripe's code and words. Every other Stripe error says
+            // nothing about the refund and travels.
+            return new RefundResult(
+                successful: false,
+                reference: '',
+                amount: $amount,
+                failureCode: $refusal->getStripeCode(),
+                failureMessage: $refusal->getMessage(),
+            );
+        }
+
+        $successful = $refund->status === 'succeeded' || $refund->status === 'pending';
 
         return new RefundResult(
-            successful: $refund->status === 'succeeded' || $refund->status === 'pending',
+            successful: $successful,
             reference: $refund->id,
             amount: $amount,
             // The provider's own reference for the reversal, never a flag set from our intent — a refund
@@ -211,6 +254,7 @@ final readonly class StripePaymentRails implements PaymentRails
             // refund as a cumulative total on the ApplicationFee, which is not this refund's figure once a
             // second partial refund exists — and a number that is right until it quietly is not is worse
             // than none at all.
+            failureCode: $successful ? null : $refund->failure_reason ?? $refund->status,
         );
     }
 
@@ -462,13 +506,18 @@ final readonly class StripePaymentRails implements PaymentRails
      * an intent that carries no such claim would put a word on the customer's receipt that no caller
      * chose. Absent renders as the amount alone, which is what these charges have always shown.
      *
+     * A caller's metadata from the charge's options goes beside the reference, which it cannot replace.
+     *
      * @param  array<array-key, mixed>  $params
+     * @param  array<string, string|int>  $metadata
      * @return array<array-key, mixed>
      */
-    private function traced(array $params, ?string $idempotencyKey, ?ChargeNarrative $narrative = null): array
+    private function traced(array $params, ?string $idempotencyKey, ?ChargeNarrative $narrative = null, array $metadata = []): array
     {
-        if ($idempotencyKey !== null) {
-            $params = [...$params, 'metadata' => ['billing_reference' => $idempotencyKey]];
+        $metadata = [...$metadata, ...($idempotencyKey === null ? [] : ['billing_reference' => $idempotencyKey])];
+
+        if ($metadata !== []) {
+            $params = [...$params, 'metadata' => $metadata];
         }
 
         if ($narrative instanceof ChargeNarrative) {

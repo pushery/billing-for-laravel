@@ -51,6 +51,14 @@ final readonly class RefundResult
          * explicit amount knows the figure it asked for and reports that.
          */
         public ?Money $applicationFeeRefunded = null,
+        /**
+         * Why the provider did not refund, in its own terms: Stripe's error code or a refund's `failure_reason`,
+         * Mollie's HTTP status or the refund's status, as Mollie names no error codes. Null on a refund that went
+         * through.
+         */
+        public ?string $failureCode = null,
+        /** The provider's own words for the refusal, where it gave any. */
+        public ?string $failureMessage = null,
     ) {}
 
     public function failed(): bool

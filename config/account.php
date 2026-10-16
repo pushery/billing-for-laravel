@@ -46,7 +46,7 @@ return [
     |
     */
 
-    'cancel_requires_confirmation' => (bool) env('BILLING_CANCEL_CONFIRM', false),
+    'cancel_requires_confirmation' => in_array(is_string($cancelConfirm = env('BILLING_CANCEL_CONFIRM')) ? strtolower(trim($cancelConfirm)) : $cancelConfirm, [true, '1', 'true', 'yes', 'on'], true),
 
     /*
     |--------------------------------------------------------------------------
@@ -79,7 +79,7 @@ return [
     */
 
     'csp' => [
-        'enabled' => (bool) env('BILLING_ACCOUNT_CSP', true),
+        'enabled' => ! in_array(is_string($accountCsp = env('BILLING_ACCOUNT_CSP')) ? strtolower(trim($accountCsp)) : $accountCsp, [false, '', '0', 'false', 'no', 'off'], true),
         'additional' => [],
     ],
 

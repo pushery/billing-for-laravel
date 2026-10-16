@@ -43,6 +43,14 @@ use Pushery\Billing\Contracts\WebhookVerifier;
  */
 final readonly class MollieWebhookVerifier implements WebhookVerifier
 {
+    /**
+     * @param  list<string>|null  $secrets  the signing secrets of a payment account, or null for the install's
+     *                                      `billing.mollie.webhook_secret`
+     */
+    public function __construct(
+        private ?array $secrets = null,
+    ) {}
+
     public function verify(Request $request): bool
     {
         $id = $request->input('id');
@@ -117,7 +125,7 @@ final readonly class MollieWebhookVerifier implements WebhookVerifier
      */
     private function signingSecrets(): array
     {
-        $configured = Config::get('billing.mollie.webhook_secret');
+        $configured = $this->secrets ?? Config::get('billing.mollie.webhook_secret');
 
         // A COMMA-SEPARATED string is the only rotation an env file can express, and env is the channel
         // this config actually reads (`config/billing.php` calls `env()` for one string). So the array

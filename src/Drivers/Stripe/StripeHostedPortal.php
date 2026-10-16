@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers\Stripe;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\HostedPortal;
 use Pushery\Billing\Support\CheckoutUrls;
+use Pushery\Billing\Support\SafeExternalUrl;
 use Stripe\StripeClient;
 
 /**
@@ -36,6 +37,6 @@ final readonly class StripeHostedPortal implements HostedPortal
             'return_url' => $returnUrl,
         ]);
 
-        return $session->url;
+        return SafeExternalUrl::onHosts($session->url, StripeHostedPages::HOSTS);
     }
 }

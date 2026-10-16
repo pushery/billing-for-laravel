@@ -189,7 +189,8 @@ final class RetentionMatrix
      * The column names a column in the pruner's query, so it is held to a plain identifier here, at run time:
      * letters, digits and underscores, not starting with a digit, at most 64 characters. The `literal-string`
      * type says the same to static analysis, which never sees a consumer's code. The pruner hands the column to
-     * the query builder, which quotes it, so a name in mixed case reaches the column it names.
+     * the query builder, which quotes it, so a name in mixed case, or one that is a reserved word, reaches the
+     * column it names.
      *
      * @param  literal-string  $column
      *

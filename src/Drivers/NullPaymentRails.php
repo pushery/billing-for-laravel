@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers;
 use Pushery\Billing\Contracts\PaymentRails;
 use Pushery\Billing\Exceptions\BillingDisabled;
 use Pushery\Billing\ValueObjects\ChargeNarrative;
+use Pushery\Billing\ValueObjects\ChargeOptions;
 use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\MandateReference;
@@ -21,7 +22,7 @@ use Pushery\Billing\ValueObjects\TokenizedMethod;
  */
 final class NullPaymentRails implements PaymentRails
 {
-    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null): ChargeResult
+    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null, ?ChargeOptions $options = null): ChargeResult
     {
         throw BillingDisabled::cannot('charge');
     }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\TableLookup;
 
 /**
  * Index the referencing side of `billing_reporting_filings.corrects_filing_id`.
@@ -33,7 +34,7 @@ return new class extends Migration
 
     public function up(): void
     {
-        if (! Schema::hasTable(self::TABLE) || $this->alreadyIndexed()) {
+        if (! TableLookup::exists(self::TABLE) || $this->alreadyIndexed()) {
             return;
         }
 
@@ -44,7 +45,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        if (! Schema::hasTable(self::TABLE) || ! Schema::hasIndex(self::TABLE, self::INDEX)) {
+        if (! TableLookup::exists(self::TABLE) || ! Schema::hasIndex(TableLookup::qualified(self::TABLE), self::INDEX)) {
             return;
         }
 
@@ -60,11 +61,11 @@ return new class extends Migration
      */
     private function alreadyIndexed(): bool
     {
-        if (Schema::hasIndex(self::TABLE, self::INDEX)) {
+        if (Schema::hasIndex(TableLookup::qualified(self::TABLE), self::INDEX)) {
             return true;
         }
 
-        foreach (Schema::getIndexes(self::TABLE) as $index) {
+        foreach (Schema::getIndexes(TableLookup::qualified(self::TABLE)) as $index) {
             /** @var array{columns: list<string>} $index */
             if (($index['columns'][0] ?? null) === 'corrects_filing_id') {
                 return true;

@@ -6,6 +6,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\BillingSchema;
+use Pushery\Billing\Support\TableLookup;
 
 /**
  * On PostgreSQL, a column that references one of the host's models becomes the native uuid type when the host keys its
@@ -92,7 +93,7 @@ return new class extends Migration
 
         foreach (self::COLUMNS as $table => $columns) {
             foreach ($columns as $column) {
-                if (! Schema::hasColumn($table, $column) || Schema::getColumnType($table, $column) !== $from) {
+                if (! Schema::hasColumn(TableLookup::qualified($table), $column) || Schema::getColumnType(TableLookup::qualified($table), $column) !== $from) {
                     continue;
                 }
 

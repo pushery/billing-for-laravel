@@ -9,11 +9,14 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\MarketplaceWebhookEventMapper;
+use Pushery\Billing\Contracts\PaymentAccounts;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Models\BillingWebhookEvent;
 use Pushery\Billing\Models\WebhookEffectRun;
+use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\WebhookEffectLedger;
+use Pushery\Billing\ValueObjects\PaymentAccount;
 use Pushery\Billing\Webhooks\RepeatableEffect;
 use Pushery\Billing\Webhooks\WebhookEffectRegistry;
 
@@ -207,6 +210,15 @@ final class ReplayWebhooksCommand extends Command
     {
         if ($delivery->account_reference === '') {
             return $platform;
+        }
+
+        // A delivery to a payment account carries the account's key as its reference, and it is read again by that
+        // account's mapper, which reads back with the account's own client. A key never holds an underscore, so it
+        // cannot be mistaken for a merchant reference such as `acct_…`.
+        $account = $this->laravel->make(PaymentAccounts::class)->find($delivery->provider, $delivery->account_reference);
+
+        if ($account instanceof PaymentAccount) {
+            return $this->laravel->make(BillingManager::class)->accountWebhooks($account)->mapper;
         }
 
         if (! $this->laravel->bound(MarketplaceWebhookEventMapper::class)) {

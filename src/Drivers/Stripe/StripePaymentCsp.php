@@ -13,17 +13,36 @@ use Pushery\Billing\Contracts\PaymentCsp;
  * Stripe.js starts its frames on separate origins where it can. Scoped by the account hub to its own routes, so
  * these are permitted on the billing screens only.
  *
- * The guide's conditional entries are left to `account.csp.additional`, for a host that uses them: Link, and an
- * Address Element on the host's own Google Maps key.
+ * Link's sources come with `link: true`, for a page that offers Link, as the same guide lists them. An Address
+ * Element on the host's own Google Maps key stays with `account.csp.additional`. Apple Pay, Google Pay, PayPal and
+ * Klarna run inside these frames or redirect through them, and the guide lists no further source for them.
  */
-final class StripePaymentCsp implements PaymentCsp
+final readonly class StripePaymentCsp implements PaymentCsp
 {
+    /**
+     * @param  bool  $link  whether the page offers Link, whose sign-in and assets Stripe serves from `link.com`
+     */
+    public function __construct(
+        private bool $link = false,
+    ) {}
+
     public function directives(): array
     {
-        return [
+        $directives = [
             'script-src' => ['https://js.stripe.com', 'https://*.js.stripe.com'],
             'frame-src' => ['https://js.stripe.com', 'https://*.js.stripe.com', 'https://hooks.stripe.com'],
             'connect-src' => ['https://api.stripe.com'],
+        ];
+
+        if (! $this->link) {
+            return $directives;
+        }
+
+        return [
+            ...$directives,
+            'frame-src' => [...$directives['frame-src'], 'https://link.com', 'https://*.link.com'],
+            'connect-src' => [...$directives['connect-src'], 'https://link.com', 'https://*.link.com'],
+            'img-src' => ['https://*.link.com'],
         ];
     }
 }

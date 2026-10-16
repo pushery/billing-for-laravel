@@ -15,6 +15,7 @@ use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\CreditSync;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Contracts\CustomerRegistry;
+use Pushery\Billing\Contracts\EnabledPaymentMethods;
 use Pushery\Billing\Contracts\HostedPortal;
 use Pushery\Billing\Contracts\Invoices;
 use Pushery\Billing\Contracts\LateFees;
@@ -44,6 +45,7 @@ use Pushery\Billing\Contracts\UpcomingInvoice;
 use Pushery\Billing\Contracts\UsageReporter;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Contracts\WebhookVerifier;
+use Pushery\Billing\Drivers\NullBillingEngine;
 use Pushery\Billing\Drivers\NullCustomerRegistry;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
@@ -73,6 +75,8 @@ use Pushery\Billing\Events\TaxIdVerificationReported;
 use Pushery\Billing\Events\TrialEnding;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\WebhookSecretGuard;
+use Pushery\Billing\ValueObjects\PaymentAccount;
+use Pushery\Billing\Webhooks\AccountWebhooks;
 use Pushery\Billing\Webhooks\Effects\AdoptCollectedPaymentMethod;
 use Pushery\Billing\Webhooks\Effects\ClaimChargebackClawback;
 use Pushery\Billing\Webhooks\Effects\CloseInPersonSale;
@@ -268,7 +272,46 @@ final class StripeServiceProvider extends ServiceProvider
             ),
         );
 
-        $this->registerDefaultEffects($this->app->make(WebhookEffectRegistry::class));
+        // A payment account builds a driver of its own: a client with the account's key, and the null engine,
+        // because the account charges what it is handed and keeps no subscriptions at Stripe for the install.
+        $this->app->make(BillingManager::class)->extendAccounts(
+            'stripe',
+            fn (PaymentAccount $account): StripeDriver => new StripeDriver(
+                new StripePaymentRails(
+                    StripeAccountClient::for($account, $this->apiVersion($this->app)),
+                    $this->app->make(Repository::class),
+                    $this->app->make(SupplyRegimeResolver::class),
+                ),
+                engine: new NullBillingEngine,
+            ),
+        );
+
+        // Stripe signs every event, so an account without a signing secret has none of its webhooks accepted. The
+        // mapper reports AccountPaymentChanged and reads an intent back with the account's own key.
+        $this->app->make(BillingManager::class)->extendAccountWebhooks(
+            'stripe',
+            fn (PaymentAccount $account): AccountWebhooks => new AccountWebhooks(
+                new StripeWebhookVerifier($this->app->make(Repository::class), secret: $account->webhookSecret ?? ''),
+                new StripeAccountWebhookEventMapper(StripeAccountClient::for($account, $this->apiVersion($this->app)), $account->key),
+            ),
+        );
+
+        // A shop page that mounts Stripe.js for an account adds these sources to its own policy. They are the same for
+        // every account.
+        $this->app->make(BillingManager::class)->extendAccountCsp('stripe', static fn (): PaymentCsp => new StripePaymentCsp);
+
+        // The payment methods an account has turned on, from its default payment method configuration.
+        $this->app->make(BillingManager::class)->extendAccountPaymentMethods(
+            'stripe',
+            fn (PaymentAccount $account): EnabledPaymentMethods => new StripeEnabledPaymentMethods(StripeAccountClient::for($account, $this->apiVersion($this->app))),
+        );
+
+        // Receipts, dunning and credit notes belong to the billing of a SaaS application, which payments-only mode
+        // leaves off.
+        if (! $this->app->make(BillingManager::class)->paymentsOnly()) {
+            $this->registerDefaultEffects($this->app->make(WebhookEffectRegistry::class));
+        }
+
         $this->guardWebhookSecret($this->app);
     }
 

@@ -22,7 +22,24 @@ return [
     |
     */
 
-    'enabled' => (bool) env('BILLING_ENABLED', true),
+    'enabled' => ! in_array(is_string($enabled = env('BILLING_ENABLED')) ? strtolower(trim($enabled)) : $enabled, [false, '', '0', 'false', 'no', 'off'], true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Mode
+    |--------------------------------------------------------------------------
+    |
+    | What the package runs while it is enabled. `full` is the billing of a
+    | SaaS application: the account hub, the scheduled runs and the effects
+    | that send receipts, run dunning and issue credit notes. `payments` keeps
+    | only what takes payments into payment accounts: no account hub, no admin
+    | console, no Cashier routes, no default effects, and of the scheduled runs
+    | only `billing:prune`, which keeps the webhook records within their
+    | retention. Any other value is refused at boot.
+    |
+    */
+
+    'mode' => is_string($mode = env('BILLING_MODE')) && trim($mode) !== '' ? strtolower(trim($mode)) : 'full',
 
     /*
     |--------------------------------------------------------------------------
@@ -56,6 +73,10 @@ return [
 
     'stripe' => [
         'api_version' => env('BILLING_STRIPE_API_VERSION'),
+        // Where Stripe sends the customer after a payment step that leaves the page (3-D Secure outside
+        // Stripe.js, PayPal, Klarna), for a charge confirmed on-session. Null rules such methods out, so
+        // only a payment that stays on the page confirms there.
+        'return_url' => env('BILLING_STRIPE_RETURN_URL'),
     ],
 
     /*
@@ -187,7 +208,7 @@ return [
     'webhooks' => [
         'connection' => env('BILLING_WEBHOOK_QUEUE_CONNECTION'),
         'queue' => env('BILLING_WEBHOOK_QUEUE'),
-        'tries' => (int) env('BILLING_WEBHOOK_TRIES', 5),
+        'tries' => is_numeric($webhookTries = env('BILLING_WEBHOOK_TRIES')) && (int) $webhookTries >= 1 ? (int) $webhookTries : 5,
     ],
 
     /*
@@ -232,7 +253,7 @@ return [
 
     'subscribe_return_url' => env('BILLING_SUBSCRIBE_RETURN_URL'),
 
-    'mandate_verification_minor' => (int) env('BILLING_MANDATE_VERIFICATION_MINOR', 1),
+    'mandate_verification_minor' => is_numeric($mandateVerificationMinor = env('BILLING_MANDATE_VERIFICATION_MINOR')) && (int) $mandateVerificationMinor >= 1 ? (int) $mandateVerificationMinor : 1,
 
     'checkout' => [
         'success_url' => env('BILLING_CHECKOUT_SUCCESS_URL'),
@@ -243,11 +264,11 @@ return [
         // that an adopter could not discover by reading the published config was the one they were most
         // likely to need. Absent it still falls back to the payment-methods route, exactly as before.
         'payment_methods_return_url' => env('BILLING_PAYMENT_METHODS_RETURN_URL'),
-        'promotion_codes' => (bool) env('BILLING_CHECKOUT_PROMOTION_CODES', true),
+        'promotion_codes' => ! in_array(is_string($checkoutPromotionCodes = env('BILLING_CHECKOUT_PROMOTION_CODES')) ? strtolower(trim($checkoutPromotionCodes)) : $checkoutPromotionCodes, [false, '', '0', 'false', 'no', 'off'], true),
         // Whether a provider-taxed checkout asks the buyer for a tax ID. Stripe reverse-charges on an ID's format
         // before it verifies the ID, so a platform that sells to consumers can leave the field out and charge every
         // buyer the tax of their country. Only read while the provider computes tax.
-        'tax_id_collection' => (bool) env('BILLING_CHECKOUT_TAX_ID_COLLECTION', true),
+        'tax_id_collection' => ! in_array(is_string($checkoutTaxIdCollection = env('BILLING_CHECKOUT_TAX_ID_COLLECTION')) ? strtolower(trim($checkoutTaxIdCollection)) : $checkoutTaxIdCollection, [false, '', '0', 'false', 'no', 'off'], true),
     ],
 
     /*
@@ -609,7 +630,7 @@ return [
     */
 
     'usage' => [
-        'hold_seconds' => (int) env('BILLING_USAGE_HOLD_SECONDS', 900),
+        'hold_seconds' => is_numeric($usageHoldSeconds = env('BILLING_USAGE_HOLD_SECONDS')) && (int) $usageHoldSeconds >= 1 ? (int) $usageHoldSeconds : 900,
     ],
 
     /*
@@ -665,7 +686,7 @@ return [
     */
 
     'erasure' => [
-        'forget_customer' => (bool) env('BILLING_ERASURE_FORGET_CUSTOMER', false),
+        'forget_customer' => in_array(is_string($erasureForgetCustomer = env('BILLING_ERASURE_FORGET_CUSTOMER')) ? strtolower(trim($erasureForgetCustomer)) : $erasureForgetCustomer, [true, '1', 'true', 'yes', 'on'], true),
         'merchant_subscriptions' => env('BILLING_ERASURE_MERCHANT_SUBSCRIPTIONS', 'now'),
     ],
 
@@ -700,7 +721,7 @@ return [
         // floor above. Left false, a shorter erased_financial_days refuses to boot rather than prune tax
         // records early. It is declared here rather than left as an undocumented read, because a fail-closed
         // guard whose opt-out appears in no published file is one a consumer can only discover by hitting it.
-        'allow_below_statutory_minimum' => (bool) env('BILLING_RETENTION_ALLOW_BELOW_STATUTORY_MINIMUM', false),
+        'allow_below_statutory_minimum' => in_array(is_string($retentionAllowBelowStatutoryMinimum = env('BILLING_RETENTION_ALLOW_BELOW_STATUTORY_MINIMUM')) ? strtolower(trim($retentionAllowBelowStatutoryMinimum)) : $retentionAllowBelowStatutoryMinimum, [true, '1', 'true', 'yes', 'on'], true),
     ],
 
     /*
@@ -836,7 +857,7 @@ return [
     |
     */
 
-    'dunning_cure_window_days' => max(1, (int) env('BILLING_DUNNING_CURE_WINDOW_DAYS', 7)),
+    'dunning_cure_window_days' => is_numeric($dunningCureWindowDays = env('BILLING_DUNNING_CURE_WINDOW_DAYS')) && (int) $dunningCureWindowDays >= 1 ? (int) $dunningCureWindowDays : 7,
 
     /*
     |--------------------------------------------------------------------------
@@ -886,7 +907,7 @@ return [
     */
 
     'realtime' => [
-        'enabled' => (bool) env('BILLING_REALTIME', false),
+        'enabled' => in_array(is_string($realtime = env('BILLING_REALTIME')) ? strtolower(trim($realtime)) : $realtime, [true, '1', 'true', 'yes', 'on'], true),
 
         /*
          * Whether this package renders somewhere for those toasts to LAND.
@@ -904,7 +925,7 @@ return [
          * The third option is neither: leave this off and write your own one-line listener on
          * `wirekit-toast`, reading `detail.message` and `detail.variant`.
          */
-        'render_toast_region' => (bool) env('BILLING_REALTIME_TOAST_REGION', false),
+        'render_toast_region' => in_array(is_string($realtimeToastRegion = env('BILLING_REALTIME_TOAST_REGION')) ? strtolower(trim($realtimeToastRegion)) : $realtimeToastRegion, [true, '1', 'true', 'yes', 'on'], true),
     ],
 
     /*
@@ -970,6 +991,23 @@ return [
     */
 
     'link_out' => env('BILLING_LINK_OUT'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Hosts of the provider's pages
+    |--------------------------------------------------------------------------
+    |
+    | A page of the payment provider (the checkout, the page that adds a card,
+    | the customer portal, a merchant's onboarding) is handed out only when
+    | its address is https and on a host the driver names:
+    | `checkout.stripe.com`, `billing.stripe.com` and `connect.stripe.com` for
+    | Stripe, `www.mollie.com` for Mollie. Any other host in the provider's
+    | answer is refused and logged. List further hosts here, such as the
+    | custom domain your Stripe account serves Checkout and the portal from.
+    |
+    */
+
+    'redirect_hosts' => [],
 
     /*
     |--------------------------------------------------------------------------
@@ -1163,13 +1201,13 @@ return [
     */
 
     'tax_oss' => [
-        'threshold_waived' => (bool) env('BILLING_TAX_OSS_THRESHOLD_WAIVED', true),
+        'threshold_waived' => ! in_array(is_string($taxOssThresholdWaived = env('BILLING_TAX_OSS_THRESHOLD_WAIVED')) ? strtolower(trim($taxOssThresholdWaived)) : $taxOssThresholdWaived, [false, '', '0', 'false', 'no', 'off'], true),
         'waived_since' => env('BILLING_TAX_OSS_WAIVED_SINCE'),
 
         // How many years a declaration that gave up the threshold binds for. The operator's tax authority
         // sets this term, not the package — it is checked at boot, because discovered at the next sale the
         // fallback is a quiet one and every document issued meanwhile reads as normal while being wrong.
-        'binding_years' => (int) env('BILLING_TAX_OSS_BINDING_YEARS', 2),
+        'binding_years' => is_numeric($taxOssBindingYears = env('BILLING_TAX_OSS_BINDING_YEARS')) && (int) $taxOssBindingYears >= 1 ? (int) $taxOssBindingYears : 2,
 
         // `required_signals` LIVED HERE AND DECIDED NOTHING. The evidence standard is
         // `billing.tax_evidence.required_signals`, which is what the policy gates the sale on; this key was
@@ -1246,7 +1284,7 @@ return [
         // standard rating. There is deliberately NO switch for the opposite direction: a platform count under
         // the limit proves nothing (external turnover exists), so an automatic flip BACK is never offered.
         // The asymmetry is an invariant, not a default.
-        'auto_flip_enabled' => (bool) env('BILLING_TAX_SB_AUTO_FLIP', true),
+        'auto_flip_enabled' => ! in_array(is_string($taxSbAutoFlip = env('BILLING_TAX_SB_AUTO_FLIP')) ? strtolower(trim($taxSbAutoFlip)) : $taxSbAutoFlip, [false, '', '0', 'false', 'no', 'off'], true),
 
         'warning_levels' => [0.80, 0.95],
         // How long a confirmed small-business registration stands before it is asked again. A registration
@@ -1264,7 +1302,7 @@ return [
             // How many days before a declaration runs out its creator is reminded, on top of the notice
             // they get when the year turns and the renewal falls due. Long enough to answer, short enough
             // that the reminder is still about something close.
-            'remind_days' => (int) env('BILLING_TAX_REATTEST_REMIND_DAYS', 14),
+            'remind_days' => is_numeric($taxReattestRemindDays = env('BILLING_TAX_REATTEST_REMIND_DAYS')) && (int) $taxReattestRemindDays >= 0 ? (int) $taxReattestRemindDays : 14,
         ],
     ],
 
@@ -1281,8 +1319,9 @@ return [
 
     'trial' => [
         // The trial length in days. 0 disables trials. Per-tier override: tiers.<key>.trial.days.
-        // Cast: env() hands back a STRING, and the resolver treats a non-numeric length as no trial.
-        'days' => (int) env('BILLING_TRIAL_DAYS', 0),
+        // Read typed: env() hands back a STRING, and a value that is no number, or one below zero, keeps the
+        // 0 shipped here: no trial.
+        'days' => is_numeric($trialDays = env('BILLING_TRIAL_DAYS')) && (int) $trialDays >= 0 ? (int) $trialDays : 0,
 
         // Which kind of trial to grant: 'none', 'subscription' (part of the subscription, collected at
         // checkout via Stripe trial_period_days) or 'generic' (no subscription — granted by Trials::grant()
@@ -1298,7 +1337,7 @@ return [
         // (the charge lands automatically when the trial ends); false lets the owner trial without one
         // (Stripe collects the card only if the trial converts). Per-tier override:
         // tiers.<key>.trial.requires_payment_method.
-        'requires_payment_method' => (bool) env('BILLING_TRIAL_REQUIRES_PM', true),
+        'requires_payment_method' => ! in_array(is_string($trialRequiresPm = env('BILLING_TRIAL_REQUIRES_PM')) ? strtolower(trim($trialRequiresPm)) : $trialRequiresPm, [false, '', '0', 'false', 'no', 'off'], true),
 
         // How many days before a trial ends the app-shell banner starts nudging the owner to pick a plan.
         'ending_within_days' => 3,
@@ -1493,17 +1532,17 @@ return [
     */
 
     'card_present' => [
-        'small_amount_threshold_minor' => (int) env('BILLING_CARD_PRESENT_SMALL_AMOUNT_MINOR', 25_000),
+        'small_amount_threshold_minor' => is_numeric($cardPresentSmallAmountMinor = env('BILLING_CARD_PRESENT_SMALL_AMOUNT_MINOR')) && (int) $cardPresentSmallAmountMinor >= 0 ? (int) $cardPresentSmallAmountMinor : 25_000,
     ],
 
     'tax_us' => [
-        'enabled' => (bool) env('BILLING_TAX_US_ENABLED', false),
+        'enabled' => in_array(is_string($taxUsEnabled = env('BILLING_TAX_US_ENABLED')) ? strtolower(trim($taxUsEnabled)) : $taxUsEnabled, [true, '1', 'true', 'yes', 'on'], true),
 
         // How close to a region's limit counts as "approaching it", in basis points of that limit.
         // Waiting for a limit to be crossed is waiting too long: registration takes weeks, the obligation
         // starts at the crossing, and the gap is a stretch of selling into a region unregistered. The right
         // lead time depends on how fast this operator can actually register, which the package cannot know.
-        'activation_share_bps' => (int) env('BILLING_TAX_US_ACTIVATION_SHARE_BPS', 5_000),
+        'activation_share_bps' => is_numeric($taxUsActivationShareBps = env('BILLING_TAX_US_ACTIVATION_SHARE_BPS')) && (int) $taxUsActivationShareBps >= 0 ? (int) $taxUsActivationShareBps : 5_000,
     ],
 
     /*
@@ -1576,7 +1615,7 @@ return [
         // its first useful figure after the first year that could have breached a threshold — which is the
         // year it exists for.
         'us_state_gmv' => [
-            'enabled' => (bool) env('BILLING_TAX_COUNTER_US_STATE_GMV', false),
+            'enabled' => in_array(is_string($taxCounterUsStateGmv = env('BILLING_TAX_COUNTER_US_STATE_GMV')) ? strtolower(trim($taxCounterUsStateGmv)) : $taxCounterUsStateGmv, [true, '1', 'true', 'yes', 'on'], true),
         ],
 
         // The reporting counter, and whether this installation is in a regime that has one at all.
@@ -1595,7 +1634,7 @@ return [
         // different basis — whether a creator is still a small business — and it keeps running, which a
         // test asserts by switching this off and reading that one.
         'dac7' => [
-            'enabled' => (bool) env('BILLING_TAX_COUNTER_DAC7_ENABLED', true),
+            'enabled' => ! in_array(is_string($taxCounterDac7Enabled = env('BILLING_TAX_COUNTER_DAC7_ENABLED')) ? strtolower(trim($taxCounterDac7Enabled)) : $taxCounterDac7Enabled, [false, '', '0', 'false', 'no', 'off'], true),
         ],
     ],
 
@@ -1642,7 +1681,7 @@ return [
     // AND IT IS NOT A SETTING TO TRY OUT. It moves which period a transaction is taxed in, and a
     // document number's year is frozen the moment it is drawn. Changing it after documents exist does not
     // adjust them.
-    'tax_point_on_receipt' => (bool) env('BILLING_TAX_POINT_ON_RECEIPT', false),
+    'tax_point_on_receipt' => in_array(is_string($taxPointOnReceipt = env('BILLING_TAX_POINT_ON_RECEIPT')) ? strtolower(trim($taxPointOnReceipt)) : $taxPointOnReceipt, [true, '1', 'true', 'yes', 'on'], true),
 
     // Whether `billing:rates:probe` may reach the public source that publishes VAT rates.
     //
@@ -1651,7 +1690,7 @@ return [
     // silent. Turn it on where the probe is actually wanted — a nightly job, never the push gate, because a
     // network-dependent check in the push gate goes red on the first DNS hiccup and gets disabled.
     'tax_rate_probe' => [
-        'enabled' => (bool) env('BILLING_RATE_PROBE', false),
+        'enabled' => in_array(is_string($rateProbe = env('BILLING_RATE_PROBE')) ? strtolower(trim($rateProbe)) : $rateProbe, [true, '1', 'true', 'yes', 'on'], true),
 
         // Where `billing:tax-rates:check` writes its proposal. Null means beside the shipped snapshot, so the
         // two share a dating convention and can be diffed side by side.
@@ -1675,7 +1714,7 @@ return [
     // and the rules contradict each other across jurisdictions, so a package-level default would be wrong
     // for somebody by law rather than by oversight. See the ExchangeRateBasis enum for the three rules.
     'tax_exchange_rates' => [
-        'enabled' => (bool) env('BILLING_EXCHANGE_RATES', false),
+        'enabled' => in_array(is_string($exchangeRates = env('BILLING_EXCHANGE_RATES')) ? strtolower(trim($exchangeRates)) : $exchangeRates, [true, '1', 'true', 'yes', 'on'], true),
 
         // Which currencies `billing:exchange-rates:import` fetches from the central bank, as the bank names
         // them. Empty by default, so the switch above alone still contacts nobody: turning the store on and
@@ -1704,7 +1743,7 @@ return [
     'datev' => [
         'consultant' => env('BILLING_DATEV_CONSULTANT'),
         'client' => env('BILLING_DATEV_CLIENT'),
-        'account_length' => (int) env('BILLING_DATEV_ACCOUNT_LENGTH', 4),
+        'account_length' => is_numeric($datevAccountLength = env('BILLING_DATEV_ACCOUNT_LENGTH')) && (int) $datevAccountLength >= 4 ? (int) $datevAccountLength : 4,
         // The first day of the business year, as MM-DD. The batch header names where the business year begins,
         // and a business year that does not begin on 1 January needs it set, or the header names the wrong one.
         'business_year_start' => env('BILLING_DATEV_BUSINESS_YEAR_START', '01-01'),
@@ -1738,7 +1777,7 @@ return [
         // not a flag flip: earlier bookings keep pointing at the account they were made against.
         'person_accounts' => [
             'mode' => env('BILLING_DATEV_PERSON_ACCOUNTS', 'collective'),
-            'range_start' => (int) env('BILLING_DATEV_CREDITOR_RANGE_START', 70000),
+            'range_start' => is_numeric($datevCreditorRangeStart = env('BILLING_DATEV_CREDITOR_RANGE_START')) && (int) $datevCreditorRangeStart >= 1 ? (int) $datevCreditorRangeStart : 70000,
         ],
 
         'accounts' => [
@@ -1884,7 +1923,7 @@ return [
         // number — so a package that shipped one would be inventing a legal answer and hiding it in a
         // library. Empty means no end has been established, and updates keep flowing: the direction that
         // cannot harm a buyer. Set it once you have taken advice for your product class.
-        'conformity_update_period_days' => is_numeric(env('BILLING_CONFORMITY_UPDATE_PERIOD_DAYS')) ? (int) env('BILLING_CONFORMITY_UPDATE_PERIOD_DAYS') : null,
+        'conformity_update_period_days' => is_numeric($conformityUpdatePeriodDays = env('BILLING_CONFORMITY_UPDATE_PERIOD_DAYS')) && (int) $conformityUpdatePeriodDays >= 0 ? (int) $conformityUpdatePeriodDays : null,
 
         // Whether a buyer can validly agree to give up that obligation AT ALL in your jurisdiction.
         //
@@ -1896,11 +1935,11 @@ return [
         //
         // Off, because whether SECURITY fixes can be waived at all is genuinely disputed. Turning it on is
         // your decision, taken on your own advice.
-        'allow_conformity_waiver' => (bool) env('BILLING_ALLOW_CONFORMITY_WAIVER', false),
+        'allow_conformity_waiver' => in_array(is_string($allowConformityWaiver = env('BILLING_ALLOW_CONFORMITY_WAIVER')) ? strtolower(trim($allowConformityWaiver)) : $allowConformityWaiver, [true, '1', 'true', 'yes', 'on'], true),
     ],
 
     'tax_evidence' => [
-        'required_signals' => (int) env('BILLING_TAX_EVIDENCE_SIGNALS', 2),
+        'required_signals' => is_numeric($taxEvidenceSignals = env('BILLING_TAX_EVIDENCE_SIGNALS')) && (int) $taxEvidenceSignals >= 1 ? (int) $taxEvidenceSignals : 2,
 
         // Whether a sale's SUBDIVISION -- a US state -- is recorded alongside its country.
         //
@@ -1918,7 +1957,7 @@ return [
         //
         // Turn it off where your reading of data minimization differs. The rest of the evidence is
         // untouched, and a state counter then runs honestly on `unknown` rather than quietly on a guess.
-        'collect_subdivision' => (bool) env('BILLING_TAX_EVIDENCE_SUBDIVISION', true),
+        'collect_subdivision' => ! in_array(is_string($taxEvidenceSubdivision = env('BILLING_TAX_EVIDENCE_SUBDIVISION')) ? strtolower(trim($taxEvidenceSubdivision)) : $taxEvidenceSubdivision, [false, '', '0', 'false', 'no', 'off'], true),
 
         // Which countries' subdivisions are worth recording at all.
         //
@@ -1953,7 +1992,7 @@ return [
     // that re-imported the word would guarantee that somebody eventually reads a tier check as proof of
     // ownership, which is the one confusion the whole separation exists to prevent.
     'content_ownership' => [
-        'enabled' => (bool) env('BILLING_CONTENT_OWNERSHIP_ENABLED', false),
+        'enabled' => in_array(is_string($contentOwnershipEnabled = env('BILLING_CONTENT_OWNERSHIP_ENABLED')) ? strtolower(trim($contentOwnershipEnabled)) : $contentOwnershipEnabled, [true, '1', 'true', 'yes', 'on'], true),
 
         // What a sale promises about later versions when neither the work nor the merchant says otherwise.
         // One of: latest, latest_with_revisions, windowed, frozen.
@@ -1973,7 +2012,7 @@ return [
         // materialized at purchase, so off costs nothing to enforce -- a work added next month simply has no
         // row for an earlier buyer, and there is nothing to remember to switch off. On, a repeat call for the
         // same buyer tops up what has since been added.
-        'bundle_additive_default' => (bool) env('BILLING_BUNDLE_ADDITIVE_DEFAULT', false),
+        'bundle_additive_default' => in_array(is_string($bundleAdditiveDefault = env('BILLING_BUNDLE_ADDITIVE_DEFAULT')) ? strtolower(trim($bundleAdditiveDefault)) : $bundleAdditiveDefault, [true, '1', 'true', 'yes', 'on'], true),
 
         // Whether a refund also ends access to the work.
         //
@@ -1981,12 +2020,12 @@ return [
         // in place after a goodwill refund is common and often the point -- the work has already been read, so
         // taking it back costs nothing to skip and turns a recovered customer into an angry one. Ending it is
         // right where the refund was a return rather than a gesture.
-        'revoke_on_refund' => (bool) env('BILLING_REVOKE_ON_REFUND', true),
+        'revoke_on_refund' => ! in_array(is_string($revokeOnRefund = env('BILLING_REVOKE_ON_REFUND')) ? strtolower(trim($revokeOnRefund)) : $revokeOnRefund, [false, '', '0', 'false', 'no', 'off'], true),
 
         // The same question for a lost dispute, and a different situation: a chargeback is involuntary,
         // decided by somebody else, and the money is already gone. There is no version of it where the
         // platform chose to give the work away, which is why the shipped answer is to end access.
-        'revoke_on_chargeback' => (bool) env('BILLING_REVOKE_ON_CHARGEBACK', true),
+        'revoke_on_chargeback' => ! in_array(is_string($revokeOnChargeback = env('BILLING_REVOKE_ON_CHARGEBACK')) ? strtolower(trim($revokeOnChargeback)) : $revokeOnChargeback, [false, '', '0', 'false', 'no', 'off'], true),
     ],
 
     // Multi-merchant: a buyer pays this platform, and the money is destined for somebody else.
@@ -2025,7 +2064,7 @@ return [
     // Full prose: https://docs.pushery.com/billing-for-laravel/marketplace/overview
     // Driver authors: https://docs.pushery.com/billing-for-laravel/guides/upgrading
     'marketplace' => [
-        'enabled' => (bool) env('BILLING_MARKETPLACE_ENABLED', false),
+        'enabled' => in_array(is_string($marketplaceEnabled = env('BILLING_MARKETPLACE_ENABLED')) ? strtolower(trim($marketplaceEnabled)) : $marketplaceEnabled, [true, '1', 'true', 'yes', 'on'], true),
 
         /*
         | Buyer protection: the payout waits until the buyer says they got what
@@ -2080,7 +2119,7 @@ return [
             | itself. On a destination charge the provider moves the money as the payment settles, and there
             | is no moment in between for anything here to hold.
             */
-            'enabled' => (bool) env('BILLING_BUYER_PROTECTION', false),
+            'enabled' => in_array(is_string($buyerProtection = env('BILLING_BUYER_PROTECTION')) ? strtolower(trim($buyerProtection)) : $buyerProtection, [true, '1', 'true', 'yes', 'on'], true),
             'account_type' => env('BILLING_BUYER_PROTECTION_ACCOUNT_TYPE', 'express'),
             'confirm_after_days' => is_numeric($confirmAfterDays = env('BILLING_BUYER_PROTECTION_CONFIRM_AFTER_DAYS')) && (int) $confirmAfterDays >= 1 ? (int) $confirmAfterDays : 14,
             'decide_after_days' => is_numeric($decideAfterDays = env('BILLING_BUYER_PROTECTION_DECIDE_AFTER_DAYS')) && (int) $decideAfterDays >= 1 ? (int) $decideAfterDays : 60,
@@ -2100,7 +2139,7 @@ return [
         | baked into code it would silently apply somebody else's.
         */
         'negative_balance' => [
-            'offset_against_payouts' => (bool) env('BILLING_MARKETPLACE_OFFSET_DEBT', true),
+            'offset_against_payouts' => ! in_array(is_string($marketplaceOffsetDebt = env('BILLING_MARKETPLACE_OFFSET_DEBT')) ? strtolower(trim($marketplaceOffsetDebt)) : $marketplaceOffsetDebt, [false, '', '0', 'false', 'no', 'off'], true),
             'claim_after_days' => is_numeric($claimAfterDays = env('BILLING_MARKETPLACE_CLAIM_AFTER_DAYS')) && (int) $claimAfterDays >= 1 ? (int) $claimAfterDays : 90,
         ],
 
@@ -2121,7 +2160,7 @@ return [
         | reports, so the rate it reads is lower than the one Visa measures.
         */
         'dispute_rate' => [
-            'warn_at' => (float) env('BILLING_MARKETPLACE_DISPUTE_RATE_WARN_AT', 0.01),
+            'warn_at' => is_numeric($marketplaceDisputeRateWarnAt = env('BILLING_MARKETPLACE_DISPUTE_RATE_WARN_AT')) && (float) $marketplaceDisputeRateWarnAt >= 0 ? (float) $marketplaceDisputeRateWarnAt : 0.01,
         ],
 
         'seller_of_record' => [
@@ -2133,12 +2172,12 @@ return [
 
             // Default classification of what is sold. true = electronically-supplied service (Art. 9a
             // applies); false = physical goods. Override per product class through the resolver.
-            'supplies_are_electronic' => (bool) env('BILLING_MARKETPLACE_SUPPLIES_ELECTRONIC', true),
+            'supplies_are_electronic' => ! in_array(is_string($marketplaceSuppliesElectronic = env('BILLING_MARKETPLACE_SUPPLIES_ELECTRONIC')) ? strtolower(trim($marketplaceSuppliesElectronic)) : $marketplaceSuppliesElectronic, [false, '', '0', 'false', 'no', 'off'], true),
 
             // The Art. 9a rebuttal: `seller_of_record` for an electronic supply is refused unless ALL four are
             // true. A platform that sets its own terms, authorizes billing or approves the supply cannot
             // truthfully assert these — leave them false and stay the deemed supplier.
-            'art9a_rebuttal_asserted' => (bool) env('BILLING_MARKETPLACE_ART9A_REBUTTAL', false),
+            'art9a_rebuttal_asserted' => in_array(is_string($marketplaceArt9aRebuttal = env('BILLING_MARKETPLACE_ART9A_REBUTTAL')) ? strtolower(trim($marketplaceArt9aRebuttal)) : $marketplaceArt9aRebuttal, [true, '1', 'true', 'yes', 'on'], true),
             'no_agb_control' => false,
             'no_billing_authorization' => false,
             'no_supply_authorization' => false,
@@ -2183,7 +2222,7 @@ return [
         'seller_record_route' => env('BILLING_MARKETPLACE_SELLER_RECORD_ROUTE'),
 
         'seller_record' => [
-            'collect_precautionary' => (bool) env('BILLING_MARKETPLACE_COLLECT_PRECAUTIONARY', true),
+            'collect_precautionary' => ! in_array(is_string($marketplaceCollectPrecautionary = env('BILLING_MARKETPLACE_COLLECT_PRECAUTIONARY')) ? strtolower(trim($marketplaceCollectPrecautionary)) : $marketplaceCollectPrecautionary, [false, '', '0', 'false', 'no', 'off'], true),
         ],
 
         // When a seller is active enough to be asked to declare their standing.
@@ -2207,8 +2246,8 @@ return [
         // The test is activity, never intent. Somebody who sells regularly is trading whether or not they
         // make anything on it.
         'seller_activity' => [
-            'sales_threshold' => (int) env('BILLING_MARKETPLACE_SALES_THRESHOLD', 30),
-            'proceeds_threshold_minor' => (int) env('BILLING_MARKETPLACE_PROCEEDS_THRESHOLD_MINOR', 200000),
+            'sales_threshold' => is_numeric($marketplaceSalesThreshold = env('BILLING_MARKETPLACE_SALES_THRESHOLD')) && (int) $marketplaceSalesThreshold >= 0 ? (int) $marketplaceSalesThreshold : 30,
+            'proceeds_threshold_minor' => is_numeric($marketplaceProceedsThresholdMinor = env('BILLING_MARKETPLACE_PROCEEDS_THRESHOLD_MINOR')) && (int) $marketplaceProceedsThresholdMinor >= 0 ? (int) $marketplaceProceedsThresholdMinor : 200000,
             // How each figure is compared with its threshold: `>=` (reaching it is enough) or `>`.
             'sales_comparison' => env('BILLING_MARKETPLACE_SALES_COMPARISON', '>='),
             'proceeds_comparison' => env('BILLING_MARKETPLACE_PROCEEDS_COMPARISON', '>='),
@@ -2235,7 +2274,7 @@ return [
             // the gentler one: stopping somebody selling ends their income, holding their money leaves them
             // selling and unpaid.
             'measure' => env('BILLING_MARKETPLACE_DATA_MEASURE', 'withhold_payout'),
-            'measure_precautionary_gaps' => (bool) env('BILLING_MARKETPLACE_MEASURE_PRECAUTIONARY', false),
+            'measure_precautionary_gaps' => in_array(is_string($marketplaceMeasurePrecautionary = env('BILLING_MARKETPLACE_MEASURE_PRECAUTIONARY')) ? strtolower(trim($marketplaceMeasurePrecautionary)) : $marketplaceMeasurePrecautionary, [true, '1', 'true', 'yes', 'on'], true),
             'withhold_up_to_days' => is_numeric($withholdUpToDays = env('BILLING_MARKETPLACE_WITHHOLD_UP_TO_DAYS')) && (int) $withholdUpToDays >= 1 ? (int) $withholdUpToDays : 90,
             // The rail's own limit. Read here, defined by the payout schedule — this never sets it.
             'payout_deadline_days' => is_numeric($payoutDeadlineDays = env('BILLING_MARKETPLACE_PAYOUT_DEADLINE_DAYS')) && (int) $payoutDeadlineDays >= 1 ? (int) $payoutDeadlineDays : 90,
@@ -2272,8 +2311,8 @@ return [
         // A jurisdiction profile that REQUIRES the hold overrides all three of these: there the hold is a
         // legal condition rather than a rollout, and a date cannot postpone it.
         'tax_status_hold' => [
-            'blocks_payouts' => (bool) env('BILLING_MARKETPLACE_HOLD_BLOCKS_PAYOUTS', true),
-            'blocks_sales' => (bool) env('BILLING_MARKETPLACE_HOLD_BLOCKS_SALES', true),
+            'blocks_payouts' => ! in_array(is_string($marketplaceHoldBlocksPayouts = env('BILLING_MARKETPLACE_HOLD_BLOCKS_PAYOUTS')) ? strtolower(trim($marketplaceHoldBlocksPayouts)) : $marketplaceHoldBlocksPayouts, [false, '', '0', 'false', 'no', 'off'], true),
+            'blocks_sales' => ! in_array(is_string($marketplaceHoldBlocksSales = env('BILLING_MARKETPLACE_HOLD_BLOCKS_SALES')) ? strtolower(trim($marketplaceHoldBlocksSales)) : $marketplaceHoldBlocksSales, [false, '', '0', 'false', 'no', 'off'], true),
             'enforce_from' => env('BILLING_MARKETPLACE_HOLD_ENFORCE_FROM'),
 
             // How many days before that date the merchants who have not declared are told it is coming.
@@ -2340,9 +2379,9 @@ return [
             // invoice — and never calls the engine. It is a backstop, not the routing decision: the caller
             // checks this before settling, and the engine refuses loudly if it is reached while off, rather
             // than issue a document a disabled platform never meant to.
-            'enabled' => (bool) env('BILLING_MARKETPLACE_SELF_BILLING_ENABLED', true),
+            'enabled' => ! in_array(is_string($marketplaceSelfBillingEnabled = env('BILLING_MARKETPLACE_SELF_BILLING_ENABLED')) ? strtolower(trim($marketplaceSelfBillingEnabled)) : $marketplaceSelfBillingEnabled, [false, '', '0', 'false', 'no', 'off'], true),
 
-            'require_agreement' => (bool) env('BILLING_MARKETPLACE_SELF_BILLING_AGREEMENT', true),
+            'require_agreement' => ! in_array(is_string($marketplaceSelfBillingAgreement = env('BILLING_MARKETPLACE_SELF_BILLING_AGREEMENT')) ? strtolower(trim($marketplaceSelfBillingAgreement)) : $marketplaceSelfBillingAgreement, [false, '', '0', 'false', 'no', 'off'], true),
         ],
 
         // What the buyer's receipt collects, and when.
@@ -2354,7 +2393,7 @@ return [
         // which a domestic purchase gets the simplified receipt — the German § 33 UStDV figure, €250.00, so
         // it is profile knowledge, not a universal.
         'receipts' => [
-            'small_amount_threshold_minor' => (int) env('BILLING_MARKETPLACE_RECEIPT_SMALL_AMOUNT_MINOR', 25_000),
+            'small_amount_threshold_minor' => is_numeric($marketplaceReceiptSmallAmountMinor = env('BILLING_MARKETPLACE_RECEIPT_SMALL_AMOUNT_MINOR')) && (int) $marketplaceReceiptSmallAmountMinor >= 0 ? (int) $marketplaceReceiptSmallAmountMinor : 25_000,
         ],
 
         // The fallback lane — where a creator the platform does not self-bill submits their own invoice.
@@ -2362,7 +2401,7 @@ return [
             // How far, in minor units, a submitted invoice's net or tax may deviate from what the creator
             // earned that period before it is a review finding. The default is exact (0): the platform pays
             // out what the creator earned, not what they wrote, and a mismatch holds the payout.
-            'tolerance_minor' => (int) env('BILLING_MARKETPLACE_FALLBACK_TOLERANCE_MINOR', 0),
+            'tolerance_minor' => is_numeric($marketplaceFallbackToleranceMinor = env('BILLING_MARKETPLACE_FALLBACK_TOLERANCE_MINOR')) && (int) $marketplaceFallbackToleranceMinor >= 0 ? (int) $marketplaceFallbackToleranceMinor : 0,
         ],
 
         // Which quantity stays fixed when the same thing is sold into markets with different tax rates.
@@ -2403,7 +2442,7 @@ return [
         // a PWYW price is floored on the SERVER, because a buyer-chosen price is the one place the
         // anti-injection stance would otherwise lapse.
         'tips' => [
-            'enabled' => (bool) env('BILLING_MARKETPLACE_TIPS', false),
+            'enabled' => in_array(is_string($marketplaceTips = env('BILLING_MARKETPLACE_TIPS')) ? strtolower(trim($marketplaceTips)) : $marketplaceTips, [true, '1', 'true', 'yes', 'on'], true),
             // ONE LINE ON PURPOSE -- DO NOT WRAP THIS TERNARY.
             // A `: null` sitting alone on its own line is UNREACHABLE COVERAGE, not a missing test.
             // PHP emits no opcode for a constant-null false branch, so pcov never reports that line,
@@ -2412,7 +2451,7 @@ return [
             // measured directly: `: null` is absent from pcov's line map entirely, where `: 7` and
             // `: strlen('abc')` in the same position are both counted. Wrapped, this single line
             // takes the whole package below its 100 % floor and no test can lift it back.
-            'commission_bps' => is_numeric(env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS')) ? (int) env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS') : null,
+            'commission_bps' => is_numeric($marketplaceTipsCommissionBps = env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS')) && (int) $marketplaceTipsCommissionBps >= 0 ? (int) $marketplaceTipsCommissionBps : null,
 
             // What the tip line is called on the buyer's hosted checkout page — the ONE string this
             // package puts in front of a buyer on somebody else's site. Configurable because a package
@@ -2428,10 +2467,10 @@ return [
             // both entries. Set it to allow a voluntary payment lower than a purchase -- or to 0 to carry no
             // floor on tips at all, which is a different answer from saying nothing.
             // ONE LINE ON PURPOSE -- DO NOT WRAP THIS TERNARY. See the note above `commission_bps`.
-            'minimum_minor' => is_numeric(env('BILLING_MARKETPLACE_TIPS_MINIMUM_MINOR')) ? (int) env('BILLING_MARKETPLACE_TIPS_MINIMUM_MINOR') : null,
+            'minimum_minor' => is_numeric($marketplaceTipsMinimumMinor = env('BILLING_MARKETPLACE_TIPS_MINIMUM_MINOR')) && (int) $marketplaceTipsMinimumMinor >= 0 ? (int) $marketplaceTipsMinimumMinor : null,
         ],
         'pwyw' => [
-            'minimum_minor' => (int) env('BILLING_MARKETPLACE_PWYW_MINIMUM_MINOR', 0),
+            'minimum_minor' => is_numeric($marketplacePwywMinimumMinor = env('BILLING_MARKETPLACE_PWYW_MINIMUM_MINOR')) && (int) $marketplacePwywMinimumMinor >= 0 ? (int) $marketplacePwywMinimumMinor : 0,
         ],
 
         // The fee the BUYER pays on a C2C sale — a separate supply from the seller-side commission, and
@@ -2441,10 +2480,10 @@ return [
         // make a taxable supply of the platform's own disappear — the account NUMBER is config, the
         // separateness is structure.
         'buyer_fee' => [
-            'enabled' => (bool) env('BILLING_MARKETPLACE_BUYER_FEE', false),
+            'enabled' => in_array(is_string($marketplaceBuyerFee = env('BILLING_MARKETPLACE_BUYER_FEE')) ? strtolower(trim($marketplaceBuyerFee)) : $marketplaceBuyerFee, [true, '1', 'true', 'yes', 'on'], true),
             'model' => env('BILLING_MARKETPLACE_BUYER_FEE_MODEL', 'percent'),
-            'bps' => (int) env('BILLING_MARKETPLACE_BUYER_FEE_BPS', 0),
-            'fixed_minor' => (int) env('BILLING_MARKETPLACE_BUYER_FEE_FIXED_MINOR', 0),
+            'bps' => is_numeric($marketplaceBuyerFeeBps = env('BILLING_MARKETPLACE_BUYER_FEE_BPS')) && (int) $marketplaceBuyerFeeBps >= 0 ? (int) $marketplaceBuyerFeeBps : 0,
+            'fixed_minor' => is_numeric($marketplaceBuyerFeeFixedMinor = env('BILLING_MARKETPLACE_BUYER_FEE_FIXED_MINOR')) && (int) $marketplaceBuyerFeeFixedMinor >= 0 ? (int) $marketplaceBuyerFeeFixedMinor : 0,
             'revenue_account' => env('BILLING_MARKETPLACE_BUYER_FEE_ACCOUNT', '8510'),
 
             // WHERE THE MEDIATED SALE HAPPENS — the fee's place of supply, and NOT where the buyer banks.
@@ -2469,10 +2508,10 @@ return [
         // the commission chain is the named red line, and refusing before a number is drawn keeps a gapless
         // series from spending one on a document that must not exist.
         'seller_fee' => [
-            'enabled' => (bool) env('BILLING_MARKETPLACE_SELLER_FEE', false),
+            'enabled' => in_array(is_string($marketplaceSellerFee = env('BILLING_MARKETPLACE_SELLER_FEE')) ? strtolower(trim($marketplaceSellerFee)) : $marketplaceSellerFee, [true, '1', 'true', 'yes', 'on'], true),
             'model' => env('BILLING_MARKETPLACE_SELLER_FEE_MODEL', 'percent'),
-            'bps' => (int) env('BILLING_MARKETPLACE_SELLER_FEE_BPS', 0),
-            'fixed_minor' => (int) env('BILLING_MARKETPLACE_SELLER_FEE_FIXED_MINOR', 0),
+            'bps' => is_numeric($marketplaceSellerFeeBps = env('BILLING_MARKETPLACE_SELLER_FEE_BPS')) && (int) $marketplaceSellerFeeBps >= 0 ? (int) $marketplaceSellerFeeBps : 0,
+            'fixed_minor' => is_numeric($marketplaceSellerFeeFixedMinor = env('BILLING_MARKETPLACE_SELLER_FEE_FIXED_MINOR')) && (int) $marketplaceSellerFeeFixedMinor >= 0 ? (int) $marketplaceSellerFeeFixedMinor : 0,
 
             // Its own account, because it is its own supply. Booking both intermediation fees to one account
             // would make the two indistinguishable in an export that has to tell them apart.
@@ -2534,8 +2573,8 @@ return [
             // on is open; until then this comment is the only place a reader can learn that the promise has
             // an exception, and a promise with an undisclosed exception is how the two bases diverged in the
             // first place.
-            'default_bps' => (int) env('BILLING_MARKETPLACE_FEE_BPS', 0),
-            'default_flat_minor' => (int) env('BILLING_MARKETPLACE_FEE_FLAT_MINOR', 0),
+            'default_bps' => is_numeric($marketplaceFeeBps = env('BILLING_MARKETPLACE_FEE_BPS')) && (int) $marketplaceFeeBps >= 0 ? (int) $marketplaceFeeBps : 0,
+            'default_flat_minor' => is_numeric($marketplaceFeeFlatMinor = env('BILLING_MARKETPLACE_FEE_FLAT_MINOR')) && (int) $marketplaceFeeFlatMinor >= 0 ? (int) $marketplaceFeeFlatMinor : 0,
 
             // Who economically bears the payment provider's own processing fee. This is SEPARATE from the
             // platform's commission and changes the net arithmetic: under a destination charge the provider
@@ -2572,16 +2611,16 @@ return [
         | anything is a decision a person makes.
         */
         'vouchers' => [
-            'enabled' => (bool) env('BILLING_VOUCHERS_ENABLED', false),
+            'enabled' => in_array(is_string($vouchersEnabled = env('BILLING_VOUCHERS_ENABLED')) ? strtolower(trim($vouchersEnabled)) : $vouchersEnabled, [true, '1', 'true', 'yes', 'on'], true),
             'instrument_type' => env('BILLING_VOUCHER_INSTRUMENT_TYPE', 'multi_purpose'),
             'expire_after_days' => is_numeric($voucherExpireAfterDays = env('BILLING_VOUCHER_EXPIRE_AFTER_DAYS')) && (int) $voucherExpireAfterDays >= 1 ? (int) $voucherExpireAfterDays : 1095,
             'volume_window_months' => is_numeric($voucherVolumeWindowMonths = env('BILLING_VOUCHER_VOLUME_WINDOW_MONTHS')) && (int) $voucherVolumeWindowMonths >= 1 ? (int) $voucherVolumeWindowMonths : 12,
-            'volume_threshold_minor' => (int) env('BILLING_VOUCHER_VOLUME_THRESHOLD_MINOR', 100_000_000),
-            'volume_warn_at_percent' => (int) env('BILLING_VOUCHER_VOLUME_WARN_AT_PERCENT', 80),
+            'volume_threshold_minor' => is_numeric($voucherVolumeThresholdMinor = env('BILLING_VOUCHER_VOLUME_THRESHOLD_MINOR')) && (int) $voucherVolumeThresholdMinor >= 0 ? (int) $voucherVolumeThresholdMinor : 100_000_000,
+            'volume_warn_at_percent' => is_numeric($voucherVolumeWarnAtPercent = env('BILLING_VOUCHER_VOLUME_WARN_AT_PERCENT')) && (int) $voucherVolumeWarnAtPercent >= 0 ? (int) $voucherVolumeWarnAtPercent : 80,
         ],
 
         'custody' => [
-            'platform_held' => (bool) env('BILLING_MARKETPLACE_PLATFORM_HELD', false),
+            'platform_held' => in_array(is_string($marketplacePlatformHeld = env('BILLING_MARKETPLACE_PLATFORM_HELD')) ? strtolower(trim($marketplacePlatformHeld)) : $marketplacePlatformHeld, [true, '1', 'true', 'yes', 'on'], true),
         ],
 
         // Provider events ABOUT A MERCHANT arrive on their own endpoint, signed with their own key. The

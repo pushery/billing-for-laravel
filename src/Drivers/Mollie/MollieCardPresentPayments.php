@@ -11,6 +11,7 @@ use Pushery\Billing\Contracts\CardPresentPayments;
 use Pushery\Billing\Contracts\IssuesReaderPairingCodes;
 use Pushery\Billing\Enums\InPersonSaleStatus;
 use Pushery\Billing\Exceptions\ReaderUnavailable;
+use Pushery\Billing\Exceptions\SaleNotCancelable;
 use Pushery\Billing\Models\InPersonSaleRecord;
 use Pushery\Billing\Support\UniqueRow;
 use Pushery\Billing\Tax\SaleTaxDecision;
@@ -143,9 +144,17 @@ final readonly class MollieCardPresentPayments implements CardPresentPayments, I
     {
         $payment = $this->openPaymentOn($reader);
 
-        if ($payment instanceof Payment && $payment->isCancelable === true) {
-            $this->client->payments->cancel(MollieValue::id($payment->id));
+        if (! $payment instanceof Payment) {
+            return;
         }
+
+        // Mollie does not report an open terminal payment as cancelable and takes one off only at the device.
+        // Returning quietly would let a caller treat a sale as gone that the buyer can still pay.
+        if ($payment->isCancelable !== true) {
+            throw SaleNotCancelable::atTheReaderOnly($reader, MollieValue::id($payment->id));
+        }
+
+        $this->client->payments->cancel(MollieValue::id($payment->id));
     }
 
     public function requestPairingCode(string $profile): ReaderPairingCode

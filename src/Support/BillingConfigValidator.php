@@ -29,6 +29,7 @@ final readonly class BillingConfigValidator
 
     public function validate(): void
     {
+        $this->validateMode();
         $this->validateOwner();
         $this->validateTiers();
         $this->validateAddons();
@@ -54,6 +55,15 @@ final readonly class BillingConfigValidator
             (int) Carbon::now()->year,
             is_int($years) && $years > 0 ? $years : 2,
         );
+    }
+
+    private function validateMode(): void
+    {
+        $mode = $this->config->get('billing.mode', 'full');
+
+        if (! in_array($mode, ['full', 'payments'], true)) {
+            throw InvalidBillingConfig::mode(is_string($mode) ? $mode : gettype($mode));
+        }
     }
 
     private function validateOwner(): void

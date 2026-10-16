@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Contracts;
 
 use Pushery\Billing\ValueObjects\ChargeNarrative;
+use Pushery\Billing\ValueObjects\ChargeOptions;
 use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\MandateReference;
@@ -39,8 +40,12 @@ interface PaymentRails
      * exactly today's payment — the provider is sent the same fields it has always been sent, which is
      * what lets one set of contracts serve a single seller and a marketplace without either paying for
      * the other.
+     *
+     * The optional options are what a one-off payment for an order tells the provider beyond its amount:
+     * where the customer comes back to, the methods to offer, the order's lines and addresses. A driver passes
+     * on what its provider understands and documents the rest. Absent, the charge is the one it always was.
      */
-    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null): ChargeResult;
+    public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null, ?ChargeOptions $options = null): ChargeResult;
 
     /**
      * Store a reusable mandate/token for a customer so it can be charged later.

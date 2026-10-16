@@ -61,6 +61,7 @@ use Pushery\Billing\Preflight\Profiles\GermanSellerStanding;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\BillingSchema;
 use Pushery\Billing\Support\NoBusinessBuyers;
+use Pushery\Billing\Support\TableLookup;
 use Pushery\Billing\Tax\DatabaseExchangeRateSource;
 use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
 use Pushery\Billing\Tax\ShippedTaxRates;
@@ -828,7 +829,7 @@ final class DoctorCommand extends Command
         $missing = [];
 
         foreach ([Order::resolve(), MerchantCharge::resolve(), ExchangeRateRecord::resolve(), Subscription::resolve()] as $model) {
-            if (! $model->getConnection()->getSchemaBuilder()->hasTable($model->getTable())) {
+            if (! TableLookup::exists($model->getTable(), $model->getConnectionName())) {
                 $missing[] = $model->getTable();
             }
         }
@@ -886,11 +887,11 @@ final class DoctorCommand extends Command
     {
         $configured = BillingSchema::hostKeyType();
 
-        if (! Schema::hasTable('billing_subscriptions')) {
+        if (! TableLookup::exists('billing_subscriptions')) {
             return false;
         }
 
-        $actual = strtolower(Schema::getColumnType('billing_subscriptions', 'owner_id'));
+        $actual = strtolower(Schema::getColumnType(TableLookup::qualified('billing_subscriptions'), 'owner_id'));
         $isInteger = str_contains($actual, 'int');
 
         if (($configured === 'int') === $isInteger) {
