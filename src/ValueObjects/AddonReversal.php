@@ -7,12 +7,12 @@ namespace Pushery\Billing\ValueObjects;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * The result of reversing an add-on purchase: the owner whose credit to claw back, and the DELTA
+ * The result of reversing an add-on purchase: the owner whose credit to claw back, and the delta
  * actually reversed this time (never more than the purchase, never a re-reversal of what a redelivered
  * refund already undid). The reversal effect debits exactly this.
  *
- * It also carries what the purchase WAS — its add-on key and the amount originally paid — because an
- * add-on that granted usage UNITS rather than money has to claw back units, and the only honest way to
+ * It also carries what the purchase was — its add-on key and the amount originally paid — because an
+ * add-on that granted usage units rather than money has to claw back units, and the only honest way to
  * turn a partial money refund into units is proportionally: refunding half of what was paid takes back
  * half of what was granted.
  *
@@ -29,5 +29,7 @@ final readonly class AddonReversal
         public int $purchaseMinor = 0,
         public ?bool $moneyCredit = null,
         public ?UnitGrant $granted = null,
+        /** On a restoration, how many of the units the reversal clawed back come back. Zero on a reversal. */
+        public int $units = 0,
     ) {}
 }

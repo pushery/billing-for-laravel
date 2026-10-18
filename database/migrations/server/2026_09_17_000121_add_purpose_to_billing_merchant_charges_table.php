@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * WHAT was sold, beside how much of it the merchant is owed.
+ * What was sold, beside how much of it the merchant is owed.
  *
  * A routed charge records three amounts and the lane they took. It does not record what the buyer bought,
  * and a reader cannot tell a subscription cycle from a one-off purchase from a tip by looking at the row.
@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Schema;
  * ## Why a column rather than an argument on the seam
  *
  * The obvious fix is to hand the purpose to `MovesMerchantShare::transferShare()`, and it cannot be done.
- * That interface is implemented OUTSIDE this package — a consumer registers its own driver, which is the
+ * That interface is implemented outside this package — a consumer registers its own driver, which is the
  * whole reason the seam exists — and in PHP an implementation that declares fewer parameters than its
  * interface is a fatal error at class load, not a runtime failure: adding one trailing optional parameter
  * makes every existing driver fatal on `composer update`, with no graceful path. The same argument the `MovesMerchantShare` docblock makes for why it is a separate
@@ -32,7 +32,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * Null means "written before this was recorded", the same meaning `charge_type`, `seller_posture` and
  * `commission_tax_bps` give it on this table. Backfilling would have to guess, and the guess is wrong in the
- * one direction that matters: a tip persists nothing that names it, so it is only reachable by the ABSENCE
+ * one direction that matters: a tip persists nothing that names it, so it is only reachable by the absence
  * of a purchase and a subscription — and absence during a race reads a purchase whose rows have not landed
  * yet as a tip. A ledger typed from that guess is worse than one that declines to type old rows.
  *

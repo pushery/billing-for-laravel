@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\CheckpointOutcome;
  *
  * This is the same condition the boot guard refuses on, and it is here as well on purpose. The guard fires
  * when the switch is already on, which is one step too late to be useful: the operator wanted to know
- * BEFORE flipping it, and this is the line that tells them. Between them there is no gap where a
+ * before flipping it, and this is the line that tells them. Between them there is no gap where a
  * non-routing driver could carry a routed sale.
  *
  * Not waivable. A driver does not acquire the ability to route money because its key appears in a list;
@@ -52,7 +52,7 @@ final readonly class RoutingDriverCheckpoint implements GoLiveCheckpoint
 
     public function evaluate(): CheckpointOutcome
     {
-        // Billing off means the no-op driver is active, and reporting on ITS shape would be meaningless:
+        // Billing off means the no-op driver is active, and reporting on its shape would be meaningless:
         // the answer is not "this driver cannot route" but "there is no driver yet".
         if (! (bool) $this->config->get('billing.enabled', true)) {
             return CheckpointOutcome::fail(

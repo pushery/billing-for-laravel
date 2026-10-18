@@ -30,7 +30,7 @@ final readonly class CheckoutUrls
     /**
      * Where the provider returns a completed one-time purchase: the add-ons on the plan screen, where it was
      * bought, unless the install pinned `success_url`. Not the checkout-return route, which reconciles a
-     * SUBSCRIPTION and shows the overview as activating until one is recorded; a buyer of an add-on would wait
+     * subscription and shows the overview as activating until one is recorded; a buyer of an add-on would wait
      * there for something that is not coming.
      */
     public function purchaseReturnUrl(): string

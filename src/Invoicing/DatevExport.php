@@ -112,7 +112,7 @@ final readonly class DatevExport
         foreach ($invoices as $invoice) {
             // A self-billed document a creator has objected to loses its effect as an invoice from the taxation
             // period of the objection forward, so from that period on the platform draws no input tax from it:
-            // it is left out of the batch entirely (the whole booking of a settlement IS its input). A period
+            // it is left out of the batch entirely (the whole booking of a settlement is its input). A period
             // that ends before the objection is untouched — the objection is ex nunc, so the original booking
             // stands and only the current and following periods drop it.
             if ($invoice->invoiceEffectVoidForPeriod($from)) {
@@ -197,7 +197,7 @@ final readonly class DatevExport
             $this->accounts->resolve(DatevTransaction::PspFee),
             $this->accounts->resolve(DatevTransaction::MoneyTransit)->number,
             $fee->occurred_at,
-            // No document reference: that field is the open-item key and holds the platform's OWN document
+            // No document reference: that field is the open-item key and holds the platform's own document
             // number, which a provider fee has none of. The provider's charge id goes in the text instead,
             // where it is readable in full — the reference field permits neither the underscore nor the colon
             // that virtually every provider id is built from, so putting it there would mean mangling it
@@ -211,7 +211,7 @@ final readonly class DatevExport
      * The booking text, assembled from parts and kept inside the field.
      *
      * The parts are ordered by how much a reader loses without them, and one that does not fit is dropped
-     * WHOLE rather than cut. A cut identifier is the dangerous outcome: it still looks like an identifier, so
+     * whole rather than cut. A cut identifier is the dangerous outcome: it still looks like an identifier, so
      * it reads as a reference to something else, and the reconciliation it breaks gives no hint that anything
      * was shortened. An absent part is at least visibly absent — and the document reference is in its own
      * field regardless, so nothing that identifies the booking is only here.
@@ -278,13 +278,13 @@ final readonly class DatevExport
     /**
      * What a voucher event books.
      *
-     * Issue takes money against a promise — money in transit against a liability, and NO tax, because nothing
+     * Issue takes money against a promise — money in transit against a liability, and no tax, because nothing
      * has been supplied yet and neither the place nor the rate is known. Redemption is the supply: the whole
-     * sale goes to revenue, and the debit side is SPLIT between what the buyer paid now and what the
+     * sale goes to revenue, and the debit side is split between what the buyer paid now and what the
      * liability settles. Expiry keeps money for a supply that never happened, so it is income, not turnover.
      *
      * The split is what the rule turns on. Booking only the cash side would make the sale smaller by the
-     * voucher — a voucher is a way of PAYING, never a discount on what was sold, and a batch that treats it
+     * voucher — a voucher is a way of paying, never a discount on what was sold, and a batch that treats it
      * as one understates turnover by exactly the voucher's face value, every time.
      *
      * @return list<list<string>>
@@ -344,12 +344,12 @@ final readonly class DatevExport
      * What a credit-balance movement books.
      *
      * The balance is the same instrument a voucher is — money held against a promise, taxed when it is
-     * finally used — so it books against the SAME liability account. A second account would be a number
+     * finally used — so it books against the same liability account. A second account would be a number
      * nobody agreed with an accountant, and this package has a case
      * ({@see DatevTransaction::CreatorInputDeReduced}) that exists only to say what that costs.
      *
-     * BUT THE REDEMPTION BOOKS AGAINST THE RECEIVABLE, NOT AGAINST REVENUE, and that is where this
-     * differs from {@see voucherBookings()}. A voucher redemption IS the sale; a credit redemption pays an
+     * But the redemption books against the receivable, not against revenue, and that is where this
+     * differs from {@see voucherBookings()}. A voucher redemption is the sale; a credit redemption pays an
      * invoice that already exists — the local engine raised one, or the provider's was persisted — and that
      * invoice booked revenue against the customer account when it was issued. Booking revenue again here
      * would state the turnover twice, every time credit is spent.
@@ -363,11 +363,11 @@ final readonly class DatevExport
      *   provider offset    the liability     →  the customer account   the provider spent it on its invoice
      *
      * NULL for a proration credit, which is the one movement with no payment and no credit note behind it:
-     * what it IS in the books is an open question, and a booking would invent a liability nobody owes. The
+     * what it is in the books is an open question, and a booking would invent a liability nobody owes. The
      * period batch reports the amount instead of letting it vanish — {@see CreditMovement::booksAgainstMoney()}
      * is the same fact where a caller can read it.
      *
-     * AND THE REDEMPTION OF SUCH A CREDIT IS NOT BOOKED EITHER. The balance is fungible, so an offset that
+     * And the redemption of such a credit is not booked either. The balance is fungible, so an offset that
      * took the route above for its whole amount would debit the liability — including the part that was never
      * credited to it, because the grant books nothing. The account would run into debit by exactly the
      * proration share on every offset that touched one: a liability slowly turning into an asset, in a file
@@ -375,7 +375,7 @@ final readonly class DatevExport
      *
      * So an offset books only {@see CreditMovement::bookedAmount()}, the part with money behind it, and one
      * paid for entirely out of a proration credit emits no row at all. That is the decision this package
-     * already made once, in the same place: HALF-BOOKED IS WORSE THAN UNBOOKED. What the unbooked share
+     * already made once, in the same place: half-booked is worse than unbooked. What the unbooked share
      * really is — a reduction of the original taxable base under § 17 Abs. 2 Nr. 2 UStG — needs the invoice
      * it came from, because the rate lives in the revenue account and only that document names it. Until
      * that lookup exists the share is reported rather than guessed at.
@@ -391,13 +391,14 @@ final readonly class DatevExport
         $booking = match ($movement->reason) {
             CreditReason::AddonTopup => [$transit, $liabilities->number, 'Guthaben-Aufladung'],
             CreditReason::AddonReversal => [$liabilities, $transit->number, 'Guthaben-Erstattung'],
+            CreditReason::AddonReversalUndone => [$transit, $liabilities->number, 'Guthaben-Erstattung-Storno'],
             CreditReason::ChargeOffset, CreditReason::ProviderInvoiceOffset => [$liabilities, $customer->number, 'Guthaben-Einloesung'],
             CreditReason::ChargeOffsetReturned => [$customer, $liabilities->number, 'Guthaben-Rueckgabe'],
             CreditReason::ProrationCredit => null,
         };
 
         // Two refusals, and they are different questions rather than a belt and braces. The match answers
-        // whether this KIND of movement has a pair of accounts at all; `booksARow()` answers whether THIS
+        // whether this kind of movement has a pair of accounts at all; `booksARow()` answers whether this
         // one has anything left to book once the share nobody paid for is taken out of it.
         if ($booking === null || ! $movement->booksARow()) {
             return null;
@@ -439,7 +440,7 @@ final readonly class DatevExport
     /**
      * Refuse a batch that covers more than one posting period.
      *
-     * A batch IS a period: the header states the range, and the import posts the whole file into it. A range
+     * A batch is a period: the header states the range, and the import posts the whole file into it. A range
      * crossing a month boundary therefore lands part of itself in the wrong month — accepted whole, with
      * nothing anywhere saying so.
      */
@@ -453,7 +454,7 @@ final readonly class DatevExport
     /**
      * The currency this batch is declared in.
      *
-     * Taken from configuration rather than from the rows, and deliberately: a batch header states ONE
+     * Taken from configuration rather than from the rows, and deliberately: a batch header states one
      * currency, so deriving it from the rows would silently pick whichever document happened to come first
      * in a mixed export. The configured company currency is the answer that is at least stable and
      * inspectable — and a genuinely mixed batch is a question for the exporter's caller, not something a
@@ -631,9 +632,9 @@ final readonly class DatevExport
         $reference = $invoice->number ?? (string) $invoice->id;
         $date = $invoice->issued_at ?? $invoice->created_at ?? Carbon::now();
 
-        // Direction lives ONLY in the Soll/Haben marker — never the amount (field 1 is the UNSIGNED
+        // Direction lives only in the Soll/Haben marker — never the amount (field 1 is the unsigned
         // magnitude, "Umsatz OHNE Soll/Haben-Kz"; a leading minus is rejected on import). A normal invoice
-        // debits receivables ("S"); a credit note reverses to "H". So does a genuinely NEGATIVE invoice — a
+        // debits receivables ("S"); a credit note reverses to "H". So does a genuinely negative invoice — a
         // downgrade proration credit finalizes as a regular negative-total invoice (no credit-note link),
         // which is economically a revenue reduction and must book "H" too, or turnover is overstated. The
         // two ways of being a credit XOR: a negative credit note is a debit again.
@@ -658,7 +659,7 @@ final readonly class DatevExport
             $date,
             $reference,
             $this->text([
-                // What the row IS, from the document's role — a settlement is a credit note the platform
+                // What the row is, from the document's role — a settlement is a credit note the platform
                 // wrote to itself, and calling it an invoice in the one field a human reads is how it gets
                 // taken for one.
                 $invoice->settlement_document_type instanceof SettlementDocumentType ? 'Gutschrift' : 'Rechnung',
@@ -740,14 +741,14 @@ final readonly class DatevExport
             // Fields 4-6: Kurs, Basis-Umsatz, WKZ Basis-Umsatz.
             //
             // DATEV's rule is that a row whose WKZ Umsatz differs from the batch's base currency must carry
-            // the RATE or the base amount. Carrying neither is not a formatting lapse: the row is either
+            // the rate or the base amount. Carrying neither is not a formatting lapse: the row is either
             // rejected outright, or booked at face value into a base-currency account — 500,00 PLN posted as
             // 500,00 EUR, which overstates the revenue by a factor of four and looks like a plausible number
             // all the way through.
             //
-            // THE RATE, not the base amount, and that is a decision rather than a preference. The rate is
+            // The rate, not the base amount, and that is a decision rather than a preference. The rate is
             // the value frozen on the document, so writing it is a transcription; the base amount would have
-            // to be COMPUTED here, and this package has no converter — nothing in `src/` multiplies an
+            // to be computed here, and this package has no converter — nothing in `src/` multiplies an
             // amount by a rate today. Building the first one inside an export path would set the rounding
             // rule for every future conversion from the wrong place, and a second rounding rule is the
             // divergence this package keeps paying for. DATEV performs the multiplication itself.
@@ -808,7 +809,7 @@ final readonly class DatevExport
         }
 
         // The rate as the field states it: hundredths of a percent become whole tenths of a percent, so 19%
-        // is 190. It is the rate of the SUPPLY, which the recipient self-assesses at: a reverse-charged
+        // is 190. It is the rate of the supply, which the recipient self-assesses at: a reverse-charged
         // settlement states no rate of its own. A settlement with no frozen rate has nothing to qualify the
         // key with, and a key without its rate is refused by the import — so the pair stays out together.
         $rate ??= $invoice->supply_rate_bps ?? $invoice->tax_rate_bps;
@@ -829,7 +830,7 @@ final readonly class DatevExport
      * settlement knows none of what decides the account: it books a sale to France as a domestic one. The
      * collective settlement never booked it, so both now follow one rule.
      *
-     * The creditor nets to zero per transaction (+payout in, −payout out); the money-transit does NOT — it
+     * The creditor nets to zero per transaction (+payout in, −payout out); the money-transit does not — it
      * keeps the margin plus the VAT liability, which is the point. Every row is a debit of its Konto ("S") in
      * the ordinary case; a correction reverses both legs at once (a general reversal), and the buyer's side
      * is reversed by the correction of the receipt. Both carry the sale-month date (the two fictional
@@ -857,7 +858,7 @@ final readonly class DatevExport
 
         return [
             // The creator-input leg is the one the reverse charge sits on: it is the platform's input side,
-            // and the transaction key qualifies THAT booking, not the fan sale and not the payout.
+            // and the transaction key qualifies that booking, not the fan sale and not the payout.
             $this->chainRow($payout, $currency, $creatorInput, $liabilities, $date, $reference, ['Gutschrift', $reference, $creator, $corrects], $this->transactionKeyOf($invoice, $creatorInput), $marker),
             $this->chainRow($payout, $currency, new DatevAccount($liabilities), $moneyTransit->number, $date, $reference, ['Auszahlung', $reference, $creator, $corrects], marker: $marker),
         ];
@@ -878,7 +879,7 @@ final readonly class DatevExport
      * Which revenue account a sale books to.
      *
      * A sale taxed at the buyer's country goes to that country's own account: it carries foreign VAT, and on
-     * the domestic revenue account an automatic posting would derive DOMESTIC tax from it — the right gross
+     * the domestic revenue account an automatic posting would derive domestic tax from it — the right gross
      * under the wrong tax, which reconciles and is wrong. Otherwise the reduced rate for an e-book or
      * e-paper, else the standard one.
      *
@@ -928,7 +929,7 @@ final readonly class DatevExport
      *
      * A debit of the Konto **in the ordinary case** — `$marker` defaults to `'S'` and most callers take it.
      * It is not always: `settlementChain()` computes `$invoice->isCorrection() ? 'H' : 'S'` and passes it to
-     * all three legs, so every row of a correcting settlement is a CREDIT.
+     * all three legs, so every row of a correcting settlement is a credit.
      *
      * The amount carries the decimal places of its currency, as every other row of the batch does: none for
      * the yen, three for the Kuwaiti dinar.
@@ -959,7 +960,7 @@ final readonly class DatevExport
      * with no chart selected resolves to the single-seller revenue account — byte-for-byte as shipped. A
      * buyer's receipt in the commission chain books the same revenue against money in transit instead: the
      * provider collected the buyer's money for the platform, and this is the booking of that sale. A
-     * self-billed settlement (a Gutschrift or settlement note) is the platform's INPUT side: the creator's
+     * self-billed settlement (a Gutschrift or settlement note) is the platform's input side: the creator's
      * input account (its VAT treatment carried by the account itself) against the collective creator-liability
      * account. The person-account model (a single collective vs. individual creditors) is a separate concern;
      * this books the collective account.
@@ -995,7 +996,7 @@ final readonly class DatevExport
      * reduced-rate domestic input has no confirmed account, so it stays unresolved and the export fails closed
      * rather than book it to the standard account — the deliberate refusal a wrong account would hide.
      *
-     * That last sentence was a PROMISE for as long as it stood here, not a description: the method returned
+     * That last sentence was a promise for as long as it stood here, not a description: the method returned
      * CreatorInputDeStandard unconditionally, so a 7% domestic input booked to the 19% input-VAT account. It
      * had a test, and the test was green — it nulled the standard account and then observed a refusal, which
      * measures the missing account rather than the rate and would have passed with no reduced-rate branch at
@@ -1037,7 +1038,7 @@ final readonly class DatevExport
     /**
      * The document's frozen rate, or null where the row needs none — and null means exactly that.
      *
-     * - **The row is already in the base currency.** DATEV wants fields 4-6 EMPTY there, so filling them
+     * - **The row is already in the base currency.** DATEV wants fields 4-6 empty there, so filling them
      *   would be the defect. A single-currency install never enters the branch, so its export carries no
      *   rate at all. This is the one null.
      * - **A foreign-currency document with no frozen rate** is not a null: it refuses the batch. Such a row,
@@ -1051,7 +1052,7 @@ final readonly class DatevExport
      * Deriving a rate at export time stays off the table: that is the divergence the freeze exists to
      * prevent, and the books and the document would then disagree with only the books re-derivable.
      *
-     * The DOCUMENT layer specifically. A document is exported at the rate it was ISSUED at; the reporting
+     * The document layer specifically. A document is exported at the rate it was issued at; the reporting
      * layer answers a different question (what the period is declared at) and the payout layer a third
      * (what the bank actually did). They legitimately differ, and taking whichever happened to be attached
      * would make the export's number depend on which freezes had run.
@@ -1093,7 +1094,7 @@ final readonly class DatevExport
     }
 
     /**
-     * The gross total's UNSIGNED magnitude as a DATEV decimal (comma separator, no thousands), e.g.
+     * The gross total's unsigned magnitude as a DATEV decimal (comma separator, no thousands), e.g.
      * "119,00". The sign never appears here — direction is the Soll/Haben marker's job (see booking()) —
      * so a negative-total invoice books its magnitude with "H", not a minus DATEV would reject.
      */

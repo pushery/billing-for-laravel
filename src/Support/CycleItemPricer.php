@@ -11,14 +11,14 @@ use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\OrderItemDraft;
 
 /**
- * Prices a cycle from the subscription's own LINES, when it has any.
+ * Prices a cycle from the subscription's own lines, when it has any.
  *
  * The package already had every part of this and no path through them. `SubscriptionItem` carries a
  * `metered` flag and a `preprocessor` naming the resolver for its line; `CycleAmountResolver` is bound to
  * `PlanCycleAmountResolver`, which returns a fixed line's own amount and delegates a metered one to the
  * named resolver; `MeteredCycleAmountResolver` rates that line against the package's usage counters,
  * netting both the tier allowance and any prepaid units. All of it built, tested — and reached by nothing,
- * because the local engine priced a cycle from the TIER price and never looked at the lines.
+ * because the local engine priced a cycle from the tier price and never looked at the lines.
  *
  * That gap is why a subscription with three lines billed as though it had one. This class is the missing
  * call, not a new mechanism: it asks the resolver that was already bound, for each line that already

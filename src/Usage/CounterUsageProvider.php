@@ -18,7 +18,7 @@ use Pushery\Billing\ValueObjects\QuotaSnapshot;
  * The usage provider for apps that meter through this package: it reads the owner's own counters for
  * the current billing cycle and reports one dimension per metered component of their tier.
  *
- * The gauge's ceiling is the tier's INCLUDED allowance, which is what an owner wants to see — "7 300 of
+ * The gauge's ceiling is the tier's included allowance, which is what an owner wants to see — "7 300 of
  * your 10 000 included emails" — not a hard cap. Whether going past it costs money (a metered
  * component) or is simply refused (a quota) is what the metering policy says, and the screen renders
  * that. A tier with no metered components reports an empty snapshot, so the panel stays silent rather

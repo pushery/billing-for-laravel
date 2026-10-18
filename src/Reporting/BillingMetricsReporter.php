@@ -17,11 +17,11 @@ use Pushery\Billing\ValueObjects\Plan;
 /**
  * Computes {@see BillingMetrics} from the local subscription rows — no provider round-trip.
  *
- * MRR is the monthly-normalized DECLARED list price: each active tier's declared price, times the seats a
+ * MRR is the monthly-normalized declared list price: each active tier's declared price, times the seats a
  * row carries, a yearly plan divided by twelve, a weekly one times 52/12, summed in the configured billing
  * currency. Only a subscription the local engine bills carries a seat count; a provider-billed one counts
  * once, because its quantity lives at the provider and this reporter never asks it. It is what
- * your CATALOG says you charge, not what the provider actually collected after a coupon or a mid-cycle
+ * your catalog says you charge, not what the provider actually collected after a coupon or a mid-cycle
  * proration — a deliberately provider-independent, plan-level number. A tier with no `price_display`
  * (the free tier) contributes nothing, and MRR assumes a single billing currency: prices declared in a
  * currency other than `billing.currency` are summed by their minor units all the same, so keep the
@@ -30,13 +30,13 @@ use Pushery\Billing\ValueObjects\Plan;
  * ## Per merchant, or across all of them
  *
  * Every figure here can be narrowed to one seller. The money side of a marketplace was already readable per
- * merchant — the charge ledger, the annual earnings counter, the settlement inflow — and the SUBSCRIPTION
+ * merchant — the charge ledger, the annual earnings counter, the settlement inflow — and the subscription
  * side was not, which is not a boundary anybody drew but the place the marketplace grew past an older
  * reporter.
  *
- * It belongs here rather than in a consuming application because MRR is a DEFINITION, not a query: which
+ * It belongs here rather than in a consuming application because MRR is a definition, not a query: which
  * statuses count, how a yearly plan breaks to the month, how a trial counts, what a cancellation at period
- * end does. An application counting per seller on its own produces a SECOND monthly revenue, and the two
+ * end does. An application counting per seller on its own produces a second monthly revenue, and the two
  * diverge the first time either changes a status rule — leaving a different number on the seller's page
  * than on the platform's, both defensible.
  *
@@ -46,8 +46,8 @@ use Pushery\Billing\ValueObjects\Plan;
  * and the platform total lacked every marketplace tier. A single-seller install binds one catalog for every
  * scope, so nothing changes there.
  *
- * **A null scope means EVERY merchant, and that is not what a null means one level down.**
- * {@see Subscription::scopeForMerchant()} reads null as the PLATFORM's own rows — the single-seller case —
+ * **A null scope means every merchant, and that is not what a null means one level down.**
+ * {@see Subscription::scopeForMerchant()} reads null as the platform's own rows — the single-seller case —
  * because a subscription row always belongs to exactly one seller. Here there is a third thing to ask for,
  * and it is the default: no narrowing at all. Passing null through to that scope would silently turn
  * "everything" into "the platform's own", which on a marketplace is a much smaller number that still looks
@@ -154,7 +154,7 @@ final readonly class BillingMetricsReporter
     /**
      * A fresh subscription query, narrowed to one seller when one was named.
      *
-     * The null branch does NOT fall through to `forMerchant(null)`, which would mean the platform's own
+     * The null branch does not fall through to `forMerchant(null)`, which would mean the platform's own
      * rows rather than all of them. Every figure below goes through here so one added later is narrowed
      * too — the alternative is an identical `where` clause per figure and one that somebody forgets, which
      * reports a merchant's churn against the whole platform's cancellations.

@@ -34,7 +34,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * It does not sum `net_minor`, the merchant's whole receipt, which would be about a fifth too high, and
  * the direction is the expensive one: the figure decides when a creator
- * stops being a small business, so counting high flips them out of the regime EARLY and has them owing a
+ * stops being a small business, so counting high flips them out of the regime early and has them owing a
  * tax they do not yet owe, on every settlement, until somebody recomputes it by hand.
  *
  * The tax reaches the merchant because it is theirs to remit. That is precisely why it is not turnover of
@@ -43,7 +43,7 @@ use Pushery\Billing\ValueObjects\Money;
  * ## Why the withheld-fee figure is not here
  *
  * The two share a window and a replay, and still belong to two classes. A withheld fee is a deduction from a
- * particular consideration, so it is placed by the settlement DOCUMENT that credits the seller, while this
+ * particular consideration, so it is placed by the settlement document that credits the seller, while this
  * figure is placed by the money, because it answers what a seller actually received for a small-business
  * threshold. Two duties with two clocks is correct; one counter with two clocks is not.
  *
@@ -56,14 +56,14 @@ use Pushery\Billing\ValueObjects\Money;
  * rows. No aggregate can apply a per-row divisor, so the arithmetic happens here — over a query narrowed to
  * the rows that can move this window, not over the party's whole history.
  *
- * The year is a HALF-OPEN moment range ([Jan 1, next Jan 1)) rather than a `YEAR()` call, because the SQL
+ * The year is a half-open moment range ([Jan 1, next Jan 1)) rather than a `YEAR()` call, because the SQL
  * for extracting a year differs across SQLite, PostgreSQL and MySQL and a range compares identically on all
- * three. The cash basis runs in both directions: a settled charge counts in the year it SETTLED, and a
- * reversal subtracts in the year it COMPLETED — which can be a later year than the charge, exactly as the
+ * three. The cash basis runs in both directions: a settled charge counts in the year it settled, and a
+ * reversal subtracts in the year it completed — which can be a later year than the charge, exactly as the
  * receipts-basis (Ist-Prinzip) requires.
  *
  * The reversal's own row carries no party, so it is attributed through the charge it reverses, matched on the
- * provider AND the charge reference (unique together) — never the reference alone, which is unique only per
+ * provider and the charge reference (unique together) — never the reference alone, which is unique only per
  * provider.
  */
 final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarningsCounter, CountsEarnings
@@ -91,7 +91,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
     public function countedIn(Model $party, string $currency, CountingPeriod $period): Money
     {
         $code = strtoupper($currency);
-        // WHICH WINDOW A REVERSAL REDUCES, from the one place that rule lives.
+        // Which window a reversal reduces, from the one place that rule lives.
         //
         // Both counters on this seam read the same setting, so `original_period` moves a reversal for both or
         // for neither: one key, one behavior.
@@ -109,7 +109,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
 
         $charges = $this->chargesTouching($party, $code, $start, $end, $attribution);
 
-        // Every reversal of every one of those charges, in ONE query rather than one per charge. This runs
+        // Every reversal of every one of those charges, in one query rather than one per charge. This runs
         // over a whole marketplace on a nightly sweep, so a query per charge is a query per sale per creator
         // per night — and the previous shape was two aggregates, which makes a per-row fan-out a regression
         // rather than a neutral rewrite.
@@ -132,7 +132,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
 
             $mine = $reversals[ChargeReversals::keyOf($charge)] ?? [];
 
-            // Placed by the sale: every reversal of a charge that settled here reduces THIS window, whenever
+            // Placed by the sale: every reversal of a charge that settled here reduces this window, whenever
             // it happened — and a charge that settled elsewhere contributes nothing, because its reversals
             // belong to its own year. A reversal with no completion moment becomes placeable this way, which
             // is the one thing this reading can do that the other cannot.
@@ -183,7 +183,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
                 }
 
                 $touching->orWhereExists(function (QueryBuilder $reversed) use ($start, $end): void {
-                    // Matched on the provider AND the reference. The reference alone is unique only per
+                    // Matched on the provider and the reference. The reference alone is unique only per
                     // provider, so a second processor's identical reference would attach its reversals to a
                     // stranger's charge — and there is no relation to lean on here, because the pair is a
                     // composite key rather than a foreign one.
@@ -218,7 +218,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
      *
      * ## Why a division would be wrong here
      *
-     * The stored `transfer_reversal_minor` is a RECEIPT figure — it includes the buyer's tax that came back
+     * The stored `transfer_reversal_minor` is a receipt figure — it includes the buyer's tax that came back
      * with it. Turning it into a payout-net figure by dividing it by the tax rate looks right and is not:
      * the commission's flat component is not returned proportionally (the platform performed the handling
      * once, which is the whole reason {@see ClawbackCalculator} exists), and a division would spread it as
@@ -226,7 +226,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
      *
      * What holds instead is an identity that needs no fee terms at all. What a merchant holds on a sale
      * exceeds its payout net by exactly the tax on that sale, so the payout net a reversal removes is the
-     * receipt it removes LESS the tax that came back with it — and the tax that came back is the difference
+     * receipt it removes less the tax that came back with it — and the tax that came back is the difference
      * between the tax on the sale before and after. The frozen rate answers both.
      *
      * ## Why the reversals are walked in order
@@ -236,7 +236,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
      * confirmed in the same second still have one definite order rather than whichever the engine returns.
      *
      * @param  list<RefundAttempt>  $reversals
-     * @param  ?string  $start  null when the window is the SALE's rather than the reversal's, in which case
+     * @param  ?string  $start  null when the window is the sale's rather than the reversal's, in which case
      *                          every succeeded reversal belongs here — including one with no completion
      *                          moment, which has no window of its own to be placed in
      */
@@ -253,7 +253,7 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
             $refundedBefore = min($gross->minorUnits, $refundedBefore + $reversal->amount_minor);
             $after = new Money($gross->minorUnits - $refundedBefore, $charge->currency);
 
-            // What ACTUALLY moved, not what the attempt asked for. `RoutedChargeLedger::completeRefund()`
+            // What actually moved, not what the attempt asked for. `RoutedChargeLedger::completeRefund()`
             // caps each confirmation against the ceiling it reads under the lock and then stamps the attempt
             // succeeded regardless, so the row keeps the requested figure — a second confirmation of the same
             // refund is recorded as succeeded and moves nothing. Reading the request would subtract money
@@ -276,16 +276,16 @@ final readonly class MerchantChargeAnnualEarningsCounter implements AnnualEarnin
 
             $taxReturned = $charge->taxWithin($before)->minus($charge->taxWithin($after));
 
-            // FLOORED AT ZERO, because a refund must never raise what a creator is counted as having earned.
+            // Floored at zero, because a refund must never raise what a creator is counted as having earned.
             // The package ships a policy that leaves the merchant's share with them — a refund whose
-            // clawback is zero — and against it the subtraction alone comes out NEGATIVE by the tax on the
+            // clawback is zero — and against it the subtraction alone comes out negative by the tax on the
             // refunded part, so a half-refunded 90.00 sale was counted as 99.50 of turnover. Over-counting
             // on this threshold is the direction that pushes a creator out of the small-business regime
             // early, which is the whole thing the basis correction was for.
             //
             // Zero is also the honest answer there rather than a clamp: the merchant kept what they held, so
             // on a receipts basis nothing came back out of what they received.
-            // What left the creator's TURNOVER, which is not always what left the creator. Under the commission
+            // What left the creator's turnover, which is not always what left the creator. Under the commission
             // chain their supply is to the platform and its value is the payout, so the clawback is what came
             // back out of it. Otherwise their supply is to the buyer, and a refund reduces its consideration by
             // what the buyer got back, whether or not anything was clawed back from the merchant.

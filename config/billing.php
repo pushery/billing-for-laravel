@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
-// Billing ≠ licensing. This file is BILLING — your end customers' subscriptions, invoices and payments.
-// The separate config/license.php is LICENSING — the tiers/entitlements that govern what an owner may DO in
+use Pushery\Billing\DirectDebit\GermanSepaMandate;
+
+// Billing ≠ licensing. This file is billing — your end customers' subscriptions, invoices and payments.
+// The separate config/license.php is licensing — the tiers/entitlements that govern what an owner may do in
 // the app. They are orthogonal on purpose: neither ever blocks a public/marketing surface, and billing code
 // never reads config('license.*') (an arch guard enforces that) — the single sanctioned bridge is the
 // License contract's ConfigLicense binding. Keep pricing here; keep entitlements in license.php.
@@ -32,10 +34,11 @@ return [
     | What the package runs while it is enabled. `full` is the billing of a
     | SaaS application: the account hub, the scheduled runs and the effects
     | that send receipts, run dunning and issue credit notes. `payments` keeps
-    | only what takes payments into payment accounts: no account hub, no admin
-    | console, no Cashier routes, no default effects, and of the scheduled runs
-    | only `billing:prune`, which keeps the webhook records within their
-    | retention. Any other value is refused at boot.
+    | only what takes payments into payment accounts: the two tables of the
+    | webhook deliveries and the runs of their effects, no account hub, no
+    | admin console, no Cashier routes, no default effects, and of the
+    | scheduled runs only `billing:prune`, which keeps the webhook records
+    | within their retention. Any other value is refused at boot.
     |
     */
 
@@ -62,7 +65,7 @@ return [
     | The dated Stripe API version every call and webhook runs against. The
     | package PINS this itself and is tested against it — it is not inherited from
     | whatever version the installed SDK happens to ship, because Stripe versions
-    | the SHAPE of a webhook payload, and a routine `composer update` of the SDK
+    | the shape of a webhook payload, and a routine `composer update` of the SDK
     | would otherwise move it silently under a mapper that reads raw fields.
     |
     | Leave it null to use the version the package was tested against. Override it
@@ -115,7 +118,7 @@ return [
         'api_key' => env('BILLING_MOLLIE_API_KEY'),
 
         // Where Mollie posts its status pings; customers return to the checkout URLs below. It must be
-        // ABSOLUTE and reachable from the internet, which is why it is configuration rather than a generated
+        // absolute and reachable from the internet, which is why it is configuration rather than a generated
         // route URL: a package cannot know the public host, and a URL generated from a CLI run — which is
         // exactly where the scheduled billing run creates payments — has no request to take the host from.
         //
@@ -125,7 +128,7 @@ return [
         'webhook_url' => env('BILLING_MOLLIE_WEBHOOK_URL'),
 
         // The payment methods this Mollie account offers at checkout. Configurable because Mollie enables
-        // methods PER ACCOUNT — a fixed list would be wrong for most installs in both directions at once,
+        // methods per account — a fixed list would be wrong for most installs in both directions at once,
         // offering something the account cannot take and hiding something it can.
         //
         // Left null, the driver falls back to the methods a mandate can exist for. Not an empty list:
@@ -134,11 +137,11 @@ return [
         'methods' => null,
 
         // The signing secret for Mollie's next-generation webhooks, which carry an HMAC-SHA256 in
-        // `X-Mollie-Signature`. Accepts a LIST as well as a single string: rotation is a period where both
+        // `X-Mollie-Signature`. Accepts a list as well as a single string: rotation is a period where both
         // secrets are live, and without that an operator has to choose between rotating and losing
         // webhooks — which is not a choice, it is a reason not to rotate.
         //
-        // Write the list COMMA-SEPARATED, which is what this line can carry and what Mollie's own package
+        // Write the list comma-separated, which is what this line can carry and what Mollie's own package
         // documents: BILLING_MOLLIE_WEBHOOK_SECRET=old_secret,new_secret. Spacing and empty entries are
         // ignored, so a trailing comma costs nothing. Both are accepted for as long as both are set;
         // delete the old one when the dashboard no longer signs with it.
@@ -146,7 +149,7 @@ return [
         // Left null, nothing is checked: every ping is authenticated by the fetch the mapper does, since an
         // attacker cannot invent a status Mollie will confirm.
         //
-        // Set it, and a request that carries a signature has to carry a valid one, and an UNSIGNED request
+        // Set it, and a request that carries a signature has to carry a valid one, and an unsigned request
         // shaped like a next-generation event (a `type` or an `entityId`) is refused, because that
         // generation signs every delivery. The classic ping Mollie sends for each payment names the
         // payment's id and nothing else and is never signed, whatever the dashboard says, so it is
@@ -158,6 +161,27 @@ return [
         // state. Key an entry by a terminal's id ('term_…') or by a profile's id ('pfl_…') for every terminal of
         // that profile; a terminal's own entry wins. A terminal with no usable entry takes no sale.
         'terminal_countries' => [],
+
+        // How the client of a payment account talks to Mollie: seconds until a request gives up, seconds until
+        // a connection gives up (null keeps the application's own HTTP defaults), how often a request that
+        // never reached Mollie is sent again, and the pause before the first retry, which grows by the same
+        // step before each further one. Inside a web request the `request` set applies, so a caller waiting
+        // on Mollie hears at once that it cannot answer; queue workers, the scheduler and Artisan take the
+        // `background` set, which keeps the SDK's five retries.
+        'account_http' => [
+            'request' => [
+                'timeout' => is_numeric($requestTimeout = env('BILLING_MOLLIE_ACCOUNT_REQUEST_TIMEOUT')) && (int) $requestTimeout >= 1 ? (int) $requestTimeout : 10,
+                'connect_timeout' => is_numeric($requestConnectTimeout = env('BILLING_MOLLIE_ACCOUNT_REQUEST_CONNECT_TIMEOUT')) && (int) $requestConnectTimeout >= 1 ? (int) $requestConnectTimeout : 3,
+                'retries' => is_numeric($requestRetries = env('BILLING_MOLLIE_ACCOUNT_REQUEST_RETRIES')) && (int) $requestRetries >= 0 ? (int) $requestRetries : 0,
+                'retry_delay_ms' => 0,
+            ],
+            'background' => [
+                'timeout' => is_numeric($backgroundTimeout = env('BILLING_MOLLIE_ACCOUNT_BACKGROUND_TIMEOUT')) && (int) $backgroundTimeout >= 1 ? (int) $backgroundTimeout : null,
+                'connect_timeout' => is_numeric($backgroundConnectTimeout = env('BILLING_MOLLIE_ACCOUNT_BACKGROUND_CONNECT_TIMEOUT')) && (int) $backgroundConnectTimeout >= 1 ? (int) $backgroundConnectTimeout : null,
+                'retries' => is_numeric($backgroundRetries = env('BILLING_MOLLIE_ACCOUNT_BACKGROUND_RETRIES')) && (int) $backgroundRetries >= 0 ? (int) $backgroundRetries : 5,
+                'retry_delay_ms' => 1000,
+            ],
+        ],
     ],
 
     /*
@@ -187,7 +211,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Each effect a webhook triggers (sync the plan, credit an add-on, send the
-    | dunning notice) runs in its OWN queued job, so a slow or failing effect can
+    | dunning notice) runs in its own queued job, so a slow or failing effect can
     | neither hold the provider's request open nor take the other effects down
     | with it. Point them at a dedicated queue to keep billing work off the queue
     | your app's other jobs share; leave it null to use the default queue.
@@ -244,16 +268,25 @@ return [
     |
     | mandate_verification_minor is what that first payment charges, in minor units
     | of the plan's currency. It appears on the customer's statement, which is why
-    | it is configurable — and it is the SMALLEST unit by default rather than the
+    | it is configurable — and it is the smallest unit by default rather than the
     | plan price, because its purpose is to create a mandate. The first cycle is
     | billed by the engine on its own schedule, and collecting it here as well
     | would charge the customer twice for one period.
+    |
+    | collection_timing is when the engine collects each period: in_advance (the
+    | default) charges a period when it begins, the first one right after the
+    | mandate exists or when the trial ends, and settles a swap or a seat change
+    | inside a paid period at once. in_arrears charges a period when it ends and
+    | prices a swap or a seat change into that bill. Each subscription keeps the
+    | timing it started with, so a change here reaches new subscriptions only.
     |
     */
 
     'subscribe_return_url' => env('BILLING_SUBSCRIBE_RETURN_URL'),
 
     'mandate_verification_minor' => is_numeric($mandateVerificationMinor = env('BILLING_MANDATE_VERIFICATION_MINOR')) && (int) $mandateVerificationMinor >= 1 ? (int) $mandateVerificationMinor : 1,
+
+    'collection_timing' => env('BILLING_COLLECTION_TIMING', 'in_advance'),
 
     'checkout' => [
         'success_url' => env('BILLING_CHECKOUT_SUCCESS_URL'),
@@ -289,7 +322,7 @@ return [
     | which owns billing (resolved by the BillingEntityResolver). Ignored in
     | "user" mode.
     |
-    | Point it at a relation that IS the membership. A belongs-to or belongs-to-many
+    | Point it at a relation that is the membership. A belongs-to or belongs-to-many
     | carries its own proof: the row exists because the user belongs to the team. A
     | pointer the user controls -- `current_team_id` and its kind -- does not: it keeps
     | answering after the user has been removed, and billing would follow it.
@@ -314,10 +347,10 @@ return [
     |
     | - membership_relation: the relation on the team model that returns its members.
     |   HasSeats counts it for seatCount().
-    | - active_status_column / active_status_value: filter the count to ACTIVE members
+    | - active_status_column / active_status_value: filter the count to active members
     |   when the relation is not already scoped to them (a pending invite is not a paid
     |   seat). Leave the column null when the relation only ever returns active members.
-    | - membership_events: YOUR team join/leave/remove events. The queued
+    | - membership_events: your team join/leave/remove events. The queued
     |   SyncSeatsOnMembershipChange listener is registered on each, so a membership
     |   change re-syncs the seat count. Empty by default — nothing fires until you opt in.
     | - owner_properties: for an event that does not implement AffectsSeats, the
@@ -342,7 +375,7 @@ return [
     | stores the provider customer reference in (Cashier's default is stripe_id).
     | The driver's CustomerDirectory reads these to resolve a webhook's customer
     | reference back to the local owner. Leave the model null and a clone still
-    | boots — but understand what stays off: with no model, NO subscription webhook
+    | boots — but understand what stays off: with no model, no subscription webhook
     | can find its owner, so a paying customer's plan is never synced. Set this to
     | your billable model before you take a real payment.
     |
@@ -358,7 +391,7 @@ return [
     | Host key type
     |--------------------------------------------------------------------------
     |
-    | What YOUR models are keyed by: "int", "uuid" or "ulid". Every column in this
+    | What your models are keyed by: "int", "uuid" or "ulid". Every column in this
     | package that references one of your models -- the billable on a subscription,
     | the merchant on a charge, the actor on an audit row -- is declared with this
     | type when its table is created.
@@ -371,9 +404,9 @@ return [
     | One setting rather than one per table, because it is one answer: an application
     | keys its own models consistently, and a per-table choice would only produce
     | installations where half the schema cannot join to the other half. References
-    | to this package's OWN models stay integers and are not affected.
+    | to this package's own models stay integers and are not affected.
     |
-    | This is read when a table is CREATED. Changing it afterwards does not alter
+    | This is read when a table is created. Changing it afterwards does not alter
     | tables that already exist -- that is a data migration, and `billing:doctor`
     | reports the mismatch rather than leaving you to find it at the next insert.
     |
@@ -429,7 +462,7 @@ return [
     | resolved through the container, so a step may declare its own dependencies.
     |
     | This is empty by default and that is the correct default: the local engine
-    | bills the flat plan price, and what a cycle costs BEYOND that — metered
+    | bills the flat plan price, and what a cycle costs beyond that — metered
     | consumption, an application's own arithmetic — is a question only the
     | consuming application can answer. A driver that prices remotely (Stripe,
     | through meters) never reaches this at all.
@@ -474,7 +507,7 @@ return [
     | provider_price (the remote price id, e.g. a Stripe price) and an optional
     | price_display ({amount in minor units, currency}) + interval. A tier with
     | no price_display is not purchasable (e.g. the free tier). The client only
-    | ever submits a tier KEY — the price is resolved here (anti-price-injection).
+    | ever submits a tier key — the price is resolved here (anti-price-injection).
     |
     | provider_price may be a single id (one provider) OR a per-provider map, so
     | one tier config carries the right id per driver:
@@ -489,9 +522,9 @@ return [
     |     'dimensions' => ['requests'],
     | ],
     |
-    | Rotating a price in the provider does NOT strand your existing subscribers:
+    | Rotating a price in the provider does not strand your existing subscribers:
     | list the retired price ids under `legacy_prices` and a subscription still on
-    | one resolves to this tier. A legacy price is read-only history — a NEW
+    | one resolves to this tier. A legacy price is read-only history — a new
     | subscription is always sold at `provider_price`.
     |
     | 'pro' => [
@@ -499,7 +532,7 @@ return [
     |     'legacy_prices' => ['price_old_pro_2025'],     // still resolve to 'pro'
     | ],
     |
-    | A tier may also bill for USAGE on top of its base fee — "19 EUR a month,
+    | A tier may also bill for usage on top of its base fee — "19 EUR a month,
     | plus 0.50 EUR per 1 000 emails, first 10 000 included". Each entry under
     | `metered` is one such component, keyed by meter key:
     |
@@ -518,19 +551,20 @@ return [
     |             'included' => 10000,                             // free allowance
     |             'policy' => 'fair_use',                          // what happens past it
     |             'warn_threshold' => 0.8,                         // warn at 80% of the allowance (default)
+    |             'grace' => 0,                                    // units a blocking meter may go past it (default 0)
     |         ],
     |     ],
     | ],
     |
-    | IMPORTANT — the allowance and the packaging must be configured on the
-    | PROVIDER'S price as well (a graduated tier priced at 0 up to `included`,
+    | Important — the allowance and the packaging must be configured on the
+    | provider's price as well (a graduated tier priced at 0 up to `included`,
     | then a package of `package_size`), because the provider is what rates the
     | usage. The values here render the gauge and let a local engine rate the
     | same usage. Nothing cross-checks the two for you — if they drift, the gauge
-    | and the invoice drift apart. Usage is reported RAW: netting the allowance
+    | and the invoice drift apart. Usage is reported raw: netting the allowance
     | locally as well would hand the customer twice the free units.
     |
-    | For a PRICING SURFACE your application builds — a public /pricing page, or
+    | For a pricing surface your application builds — a public /pricing page, or
     | an upgrade grid of its own — a tier may carry presentation-only metadata
     | that the shared PricingCatalog reads (never a view, so two surfaces cannot
     | drift). The account hub's plan list shows each plan's label and price only:
@@ -543,11 +577,11 @@ return [
     |     'badge'     => 'pricing.badge.popular', // an optional ribbon (also an i18n key)
     | ],
     |
-    | `features` is a list of translation keys — YOUR app owns the strings, in every
+    | `features` is a list of translation keys — your app owns the strings, in every
     | locale — which PricingCatalog::bulletsFor() resolves in order. `highlight` and
     | `badge` are optional; leaving them off simply renders a plain card.
     |
-    | A tier may also say what KIND of product it sells for the consumer-rights
+    | A tier may also say what kind of product it sells for the consumer-rights
     | profile, with the key an add-on carries: 'archetype' => 'download'. Unset, a
     | tier is a 'subscription', which is what it is. Set it only for a tier whose
     | right of withdrawal ends differently, and the subscription checkout then asks
@@ -566,7 +600,7 @@ return [
     | Metered dimensions
     |--------------------------------------------------------------------------
     |
-    | Extra dimensions a CUSTOM UsageProvider reports, keyed by dimension key:
+    | Extra dimensions a custom UsageProvider reports, keyed by dimension key:
     | {label, unit, period, warn_threshold}. The default CounterUsageProvider
     | does not read this — it derives its dimensions from each tier's `metered`
     | components above, so what an owner sees on the usage screen is exactly
@@ -603,13 +637,18 @@ return [
     | counted in the provider's meter and billed on no invoice, so it is marked
     | failed and logged as an error instead. Set it to your account's grace.
     |
+    | The three read BILLING_METERING_BACKOFF_SECONDS, BILLING_METERING_STALL_HOURS
+    | and BILLING_METERING_CLOSED_PERIOD_GRACE_MINUTES, tested like max_attempts: a
+    | value that is not a number keeps the shipped one. The grace may be 0; the
+    | backoff and the stall need at least 1.
+    |
     */
 
     'metering' => [
         'max_attempts' => is_numeric($maxAttempts = env('BILLING_METERING_MAX_ATTEMPTS')) && (int) $maxAttempts >= 1 ? (int) $maxAttempts : 8,
-        'backoff_seconds' => 60,
-        'stall_hours' => 6,
-        'closed_period_grace_minutes' => 60,
+        'backoff_seconds' => is_numeric($backoffSeconds = env('BILLING_METERING_BACKOFF_SECONDS')) && (int) $backoffSeconds >= 1 ? (int) $backoffSeconds : 60,
+        'stall_hours' => is_numeric($stallHours = env('BILLING_METERING_STALL_HOURS')) && (int) $stallHours >= 1 ? (int) $stallHours : 6,
+        'closed_period_grace_minutes' => is_numeric($closedPeriodGrace = env('BILLING_METERING_CLOSED_PERIOD_GRACE_MINUTES')) && (int) $closedPeriodGrace >= 0 ? (int) $closedPeriodGrace : 60,
     ],
 
     /*
@@ -618,7 +657,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | How long a hold on a metered allowance stands before it is handed back.
-    | UsageRecorder::meter() claims the allowance BEFORE the work runs, so a
+    | UsageRecorder::meter() claims the allowance before the work runs, so a
     | hard limit cannot be oversold by requests firing in parallel — but a worker
     | killed between claiming and recording would hold that allowance forever, and
     | the owner would be refused requests they never spent. Every hold therefore
@@ -664,14 +703,14 @@ return [
     | personal data out of the webhook payloads the package kept. The package
     | stores no provider API keys; if your app does, erasing them is yours.
     |
-    | It deliberately does NOT delete their invoices. A valid invoice has to carry
+    | It deliberately does not delete their invoices. A valid invoice has to carry
     | the buyer's name and address (§14 UStG) and has to be kept for years (§147 AO,
     | §14b UStG) — the right to erasure yields to a legal retention obligation
     | (GDPR Art. 17(3)(b)). Those rows are unlinked from the owner and kept, and
     | `billing:prune` removes them once the retention window closes. Check the
     | window against your own jurisdiction: the default is the German one.
     |
-    | forget_customer additionally DELETES the customer at the provider. That is
+    | forget_customer additionally deletes the customer at the provider. That is
     | irreversible and it cancels their live subscriptions there, so it is off by
     | default — turn it on deliberately. The provider keeps its own invoice and
     | charge records regardless.
@@ -695,29 +734,29 @@ return [
         // only reason the payload is kept at all.
         'webhook_payload_days' => is_numeric($webhookPayloadDays = env('BILLING_RETENTION_WEBHOOK_PAYLOAD_DAYS')) && (int) $webhookPayloadDays >= 1 ? (int) $webhookPayloadDays : 90,
 
-        // The INVOICE window: an erased owner's retained invoices are kept eight years (2920 days) — §14b
+        // The invoice window: an erased owner's retained invoices are kept eight years (2920 days) — §14b
         // Abs. 1 UStG n. F. The clock is counted from the END of the year the invoice was issued (§147 Abs. 4
-        // AO), which billing:prune anchors to; a shorter window refuses to boot. This is a FLOOR and a
+        // AO), which billing:prune anchors to; a shorter window refuses to boot. This is a floor and a
         // default: set your own for another jurisdiction. Deliberately NOT the same as audit_days below —
         // over-retaining an invoice to the ten-year book window keeps personal data two years past its
         // obligation, in breach of storage limitation (Art. 5(1)(e)).
         'erased_financial_days' => is_numeric($erasedFinancialDays = env('BILLING_RETENTION_ERASED_FINANCIAL_DAYS')) && (int) $erasedFinancialDays >= 1 ? (int) $erasedFinancialDays : 2920,
 
-        // The BOOK/BATCH window for the audit ledger: ten years (§257 HGB / §147 AO) — longer than the
-        // invoice window above ON PURPOSE. The two numbers (3650 vs 2920) are different windows for different
+        // The book/BATCH window for the audit ledger: ten years (§257 HGB / §147 AO) — longer than the
+        // invoice window above on purpose. The two numbers (3650 vs 2920) are different windows for different
         // record classes, not a value that got out of sync; do not "unify" them. The produced tax returns
         // and seller-reporting records keep this window too, counted from the END of the year a record was
         // produced in, and so do the filings of a reporting period, which go together once the youngest of
         // them has had it.
         'audit_days' => is_numeric($auditDays = env('BILLING_RETENTION_AUDIT_DAYS')) && (int) $auditDays >= 1 ? (int) $auditDays : 3650,
 
-        // How long the evidence for a sale's country is kept. Deliberately LONGER than the document window
+        // How long the evidence for a sale's country is kept. Deliberately longer than the document window
         // and deliberately its own key: the two come from different obligations, and merging them would
         // prune the evidence years before the return it justifies stops being examinable — leaving a filed
         // figure with nothing behind it.
         'place_evidence_days' => is_numeric($placeEvidenceDays = env('BILLING_RETENTION_PLACE_EVIDENCE_DAYS')) && (int) $placeEvidenceDays >= 1 ? (int) $placeEvidenceDays : 3650,
 
-        // The escape hatch for a jurisdiction whose invoice minimum genuinely is SHORTER than the German
+        // The escape hatch for a jurisdiction whose invoice minimum genuinely is shorter than the German
         // floor above. Left false, a shorter erased_financial_days refuses to boot rather than prune tax
         // records early. It is declared here rather than left as an undocumented read, because a fail-closed
         // guard whose opt-out appears in no published file is one a consumer can only discover by hitting it.
@@ -731,7 +770,7 @@ return [
     |
     | The metered-quota gate. Apply it per route with the `billing.quota:<meter>`
     | middleware (optionally `billing.quota:<meter>,<units>`) to refuse a request
-    | that would take the owner past a BLOCKING allowance (a hard_stop / refuse
+    | that would take the owner past a blocking allowance (a hard_stop / refuse
     | meter). A degrade or fair-use meter is never blocked by the gate. `status` is
     | the HTTP code a blocked request aborts with.
     |
@@ -762,11 +801,11 @@ return [
     |--------------------------------------------------------------------------
     |
     | One-time purchasable add-ons, keyed by add-on key: {label, provider_price,
-    | price_display}. Like tiers, the client submits the add-on KEY, never a price.
+    | price_display}. Like tiers, the client submits the add-on key, never a price.
     |
-    | An add-on grants EITHER money credit (the default for an add-on with no
+    | An add-on grants either money credit (the default for an add-on with no
     | `grants` and no `archetype`, or with the `voucher` archetype — it lands on the
-    | owner's balance and reduces their next invoice) OR usage UNITS of a meter.
+    | owner's balance and reduces their next invoice) OR usage units of a meter.
     | An add-on with any other archetype is a product and credits nothing, and so
     | is a work the register of works maps it to:
     |
@@ -777,13 +816,13 @@ return [
     |       'grants' => ['meter' => 'emails', 'units' => 1000],
     |   ],
     |
-    | Granted units are PREPAID: they never expire (the tier's per-cycle `included`
-    | allowance does), and usage spends the free allowance FIRST and only then the
+    | Granted units are prepaid: they never expire (the tier's per-cycle `included`
+    | allowance does), and usage spends the free allowance first and only then the
     | units the owner paid for. Prepaid-covered usage is netted out before the
     | provider is told about it, so the customer is never billed for units they
-    | already bought. A refund claws back the units they have NOT used yet.
+    | already bought. A refund claws back the units they have not used yet.
     |
-    | An optional `archetype` says WHAT KIND of thing the add-on is, using one of
+    | An optional `archetype` says what kind of thing the add-on is, using one of
     | the nine product archetypes. It is what lets the package answer the questions
     | that depend on the kind rather than the price -- and the one it answers today
     | is the consumer-withdrawal right, which decides whether provision may begin
@@ -795,7 +834,7 @@ return [
     |       'archetype' => 'download',
     |   ],
     |
-    | Optional, and absent means UNCLASSIFIED rather than a default -- a guessed
+    | Optional, and absent means unclassified rather than a default -- a guessed
     | archetype is a guessed tax treatment and a guessed withdrawal right, and both
     | are wrong quietly. With no consumer-rights profile set, nothing reads it. A
     | value that is not one of the archetypes is refused rather than resolved to
@@ -838,12 +877,12 @@ return [
     | How many days a subscription in arrears may still be rescued before it
     | expires for good. A daily reminder goes out on each day of this window.
     |
-    | This is a SIBLING of the ladder above, not a rung of it, because the two
+    | This is a sibling of the ladder above, not a rung of it, because the two
     | answer different questions. The ladder decides which surfaces a delinquent
     | customer loses as time passes; this decides how long the relationship
     | itself survives.
     |
-    | It applies to MARKETPLACE subscriptions only. The window exists because a
+    | It applies to marketplace subscriptions only. The window exists because a
     | customer holds several subscriptions to several merchants and loses only
     | the ones in arrears; a single-seller install keeps the ladder, where
     | nothing is ever canceled. The sweeps therefore select rows that came
@@ -883,7 +922,7 @@ return [
     | toArray() payload, so the database channel works the moment you switch it
     | on (run Laravel's own notifications migration first).
     |
-    | This chooses the TRANSPORT only, never whether the customer is told. Billing
+    | This chooses the transport only, never whether the customer is told. Billing
     | notices are transactional and non-suppressible: a preference screen must not
     | offer to switch off "your payment failed". An empty/unusable value here falls
     | back to mail rather than sending nothing.
@@ -899,8 +938,8 @@ return [
     | Realtime
     |--------------------------------------------------------------------------
     |
-    | Opt-in live refresh for the account-hub screens. OFF by default: the billing
-    | events only broadcast when this is on AND a broadcaster (e.g. Reverb) is
+    | Opt-in live refresh for the account-hub screens. Off by default: the billing
+    | events only broadcast when this is on and a broadcaster (e.g. Reverb) is
     | configured, so a plain install (or a native app) has nothing on the wire and
     | falls back to a bounded poll. Switch it on once your Echo/Reverb is wired.
     |
@@ -910,9 +949,9 @@ return [
         'enabled' => in_array(is_string($realtime = env('BILLING_REALTIME')) ? strtolower(trim($realtime)) : $realtime, [true, '1', 'true', 'yes', 'on'], true),
 
         /*
-         * Whether this package renders somewhere for those toasts to LAND.
+         * Whether this package renders somewhere for those toasts to land.
          *
-         * OFF by default, and that default is the whole decision. The bridge dispatches a `wirekit-toast`
+         * Off by default, and that default is the whole decision. The bridge dispatches a `wirekit-toast`
          * browser event; the consumer for whom that already works is a WireKit host, whose own toast region
          * reads exactly this event. Shipping a second region on by default would show that consumer every
          * toast twice — a regression visible only in a browser.
@@ -934,10 +973,10 @@ return [
     |--------------------------------------------------------------------------
     |
     | Package-owned discount codes, keyed by the exact code the customer enters.
-    | Each is EITHER a percentage off (`percent`, 1..100) OR a fixed amount off
+    | Each is either a percentage off (`percent`, 1..100) OR a fixed amount off
     | (`amount` in minor units + `currency`), with an optional `expires_at`: a
     | date the code still resolves on, through the end of that day, or a moment
-    | with a time of day at which it stops. The package RESOLVES a code to a
+    | with a time of day at which it stops. The package resolves a code to a
     | Discount (DiscountResolver) — the neutral model the local engine's invoice
     | math will apply.
     |
@@ -981,9 +1020,9 @@ return [
     | External billing link-out (No-/external-Merchant-of-Record)
     |--------------------------------------------------------------------------
     |
-    | For a mode where an EXTERNAL merchant of record owns billing (an app store's
+    | For a mode where an external merchant of record owns billing (an app store's
     | subscription management, an external Lane/Fuel portal), set this to that
-    | portal's URL. The account hub then links OUT to it for billing management
+    | portal's URL. The account hub then links out to it for billing management
     | instead of offering in-app checkout it is not the merchant of record for.
     | The value is scheme-restricted (only absolute http/https with a host passes,
     | via SafeExternalUrl); anything else is ignored and link-out stays off.
@@ -1016,7 +1055,7 @@ return [
     |
     | The optional publishable admin console (billing metrics, the audit log, and a
     | comp-a-tier action) mounts under `prefix` behind `middleware`, and every access
-    | is authorized against the `ability` Gate — which YOUR app defines. Until you
+    | is authorized against the `ability` Gate — which your app defines. Until you
     | define it, the Gate denies everyone (fail-closed), so the console is never open
     | by accident. It renders only when Livewire is installed.
     |
@@ -1101,11 +1140,11 @@ return [
     | Tax rate matrix
     |--------------------------------------------------------------------------
     |
-    | Rates keyed by destination country AND supply category, for jurisdictions
+    | Rates keyed by destination country and supply category, for jurisdictions
     | that tax some supplies at a reduced rate. Null (the default) means the
     | built-in standard-rate table answers on its own, exactly as before.
     |
-    | This is a SIBLING key, deliberately. "tax" above is a scalar that selects
+    | This is a sibling key, deliberately. "tax" above is a scalar that selects
     | the calculator; turning it into an array to hold sub-keys would make it
     | match no mode, and an unresolvable mode is refused at boot — so the whole
     | application would stop rather than quietly charge nothing. Keeping the new
@@ -1132,7 +1171,7 @@ return [
     | countries can sit longer than a broad one, and the person who wrote the table
     | is the person who knows which.
     |
-    | An optional 'history' holds the SAME rates as dated intervals, for documents
+    | An optional 'history' holds the same rates as dated intervals, for documents
     | written today about a supply taxed earlier. The law binds the rate to the tax
     | point rather than to the moment of lookup, so a late invoice, a re-billing or
     | a migration of historic sales must be able to ask for the rate that applied
@@ -1161,8 +1200,8 @@ return [
     |
     | Absent, nothing changes: a tax point traveling on the money path is simply
     | ignored and every sale prices exactly as it does today. Present, a country
-    | the history CARRIES is answered from it, and a tax point falling in a gap is
-    | REFUSED rather than answered with the nearest rate — a made-up rate with a
+    | the history carries is answered from it, and a tax point falling in a gap is
+    | refused rather than answered with the nearest rate — a made-up rate with a
     | date on it cannot be told apart from a real one. A country the history says
     | nothing about keeps being priced by the table above, so opting in for one
     | member state does not turn every other into an unknown.
@@ -1181,7 +1220,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Whether the small-turnover threshold applies to you. "threshold_waived"
-    | defaults to TRUE, and that does NOT mean this package declared anything on
+    | defaults to TRUE, and that does not mean this package declared anything on
     | your behalf — it means no origin-country fallback is applied, which is the
     | direction that never under-charges. An operator who wants the threshold
     | watched turns it off and binds a CrossBorderSalesCounter.
@@ -1195,7 +1234,7 @@ return [
     | "warning_levels" are fractions of the threshold at which you want to hear
     | about it, so a registration does not begin on the day it is already needed.
     |
-    | This is a SIBLING of "tax" above, never a child — that key is a scalar, and
+    | This is a sibling of "tax" above, never a child — that key is a scalar, and
     | an array there resolves to no tax mode at all.
     |
     */
@@ -1209,19 +1248,19 @@ return [
         // fallback is a quiet one and every document issued meanwhile reads as normal while being wrong.
         'binding_years' => is_numeric($taxOssBindingYears = env('BILLING_TAX_OSS_BINDING_YEARS')) && (int) $taxOssBindingYears >= 1 ? (int) $taxOssBindingYears : 2,
 
-        // `required_signals` LIVED HERE AND DECIDED NOTHING. The evidence standard is
+        // `required_signals` lived here and decided nothing. The evidence standard is
         // `billing.tax_evidence.required_signals`, which is what the policy gates the sale on; this key was
         // read by exactly one place — the evidence record's own stamp — so setting it changed what a record
-        // CLAIMED without changing what was actually required. Both defaulted to 2, which is why nothing
+        // claimed without changing what was actually required. Both defaulted to 2, which is why nothing
         // looked wrong until somebody configured.
         //
         // Removed rather than aliased: an alias would keep two spellings alive for one idea, and the idea is
         // the thing that was duplicated.
         'warning_levels' => [0.80, 0.95],
 
-        // How long a jurisdiction lets a filed period be corrected. Measured from the DUE date, not the
+        // How long a jurisdiction lets a filed period be corrected. Measured from the due date, not the
         // period end — those are a month apart, and measuring from the wrong one lets through a correction
-        // that is already out of time. Past the window the export REFUSES rather than dropping the line: a
+        // that is already out of time. Past the window the export refuses rather than dropping the line: a
         // correction that vanishes is indistinguishable from one that was never owed.
         'correction_window_years' => is_numeric($correctionWindowYears = env('BILLING_TAX_OSS_CORRECTION_WINDOW_YEARS')) && (int) $correctionWindowYears >= 1 ? (int) $correctionWindowYears : 3,
 
@@ -1258,7 +1297,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Read only behind a jurisdiction profile that has such a threshold. Two
-    | knobs, and what is deliberately NOT a knob is the basis they are computed
+    | knobs, and what is deliberately not a knob is the basis they are computed
     | on: the same percentages against a different basis fire at a completely
     | different moment, which would look like a configuration choice and behave
     | like a different rule.
@@ -1273,16 +1312,16 @@ return [
     'tax_small_business' => [
         // The three small-business thresholds, in the currency's minor units. They are jurisdiction values,
         // not code literals: they change with the law, and a number baked into a class would be a time bomb.
-        // Read ONLY behind the German jurisdiction profile (billing.tax_profile = 'de'). Defaults are the
+        // Read only behind the German jurisdiction profile (billing.tax_profile = 'de'). Defaults are the
         // German § 19 UStG figures as of 2025: 25.000 € prior-year, 100.000 € current-year, and a 25.000 €
         // immediate limit in the founding year (no pro-rata twelfths — abolished in 2025).
         'previous_year_limit' => is_numeric($previousYearLimit = env('BILLING_TAX_SB_PREVIOUS_YEAR_LIMIT')) ? (int) $previousYearLimit : 2_500_000,
         'current_year_limit' => is_numeric($currentYearLimit = env('BILLING_TAX_SB_CURRENT_YEAR_LIMIT')) ? (int) $currentYearLimit : 10_000_000,
         'founding_year_limit' => is_numeric($foundingYearLimit = env('BILLING_TAX_SB_FOUNDING_YEAR_LIMIT')) ? (int) $foundingYearLimit : 2_500_000,
 
-        // A consumer that runs the small-business status by hand may turn OFF the automatic flip from KU to
-        // standard rating. There is deliberately NO switch for the opposite direction: a platform count under
-        // the limit proves nothing (external turnover exists), so an automatic flip BACK is never offered.
+        // A consumer that runs the small-business status by hand may turn off the automatic flip from KU to
+        // standard rating. There is deliberately no switch for the opposite direction: a platform count under
+        // the limit proves nothing (external turnover exists), so an automatic flip back is never offered.
         // The asymmetry is an invariant, not a default.
         'auto_flip_enabled' => ! in_array(is_string($taxSbAutoFlip = env('BILLING_TAX_SB_AUTO_FLIP')) ? strtolower(trim($taxSbAutoFlip)) : $taxSbAutoFlip, [false, '', '0', 'false', 'no', 'off'], true),
 
@@ -1312,14 +1351,14 @@ return [
     |--------------------------------------------------------------------------
     |
     | The trial policy — length, kind and whether a card is required — resolved by the TrialPolicy. The
-    | package default is NO trial; a project opts in here (or per tier under tiers.<key>.trial). Every
+    | package default is no trial; a project opts in here (or per tier under tiers.<key>.trial). Every
     | knob is project-overridable, so nothing hardcodes a trial rule.
     |
     */
 
     'trial' => [
         // The trial length in days. 0 disables trials. Per-tier override: tiers.<key>.trial.days.
-        // Read typed: env() hands back a STRING, and a value that is no number, or one below zero, keeps the
+        // Read typed: env() hands back a string, and a value that is no number, or one below zero, keeps the
         // 0 shipped here: no trial.
         'days' => is_numeric($trialDays = env('BILLING_TRIAL_DAYS')) && (int) $trialDays >= 0 ? (int) $trialDays : 0,
 
@@ -1329,11 +1368,11 @@ return [
         // otherwise a positive length implies 'subscription'. Per-tier override: tiers.<key>.trial.mode.
         'mode' => env('BILLING_TRIAL_MODE'),
 
-        // The tier a GENERIC trial unlocks (a trial with no subscription — "try Pro for 14 days, no card").
+        // The tier a generic trial unlocks (a trial with no subscription — "try Pro for 14 days, no card").
         // Null disables generic trials: without a tier to unlock there is nothing to grant.
         'generic_tier' => env('BILLING_TRIAL_GENERIC_TIER'),
 
-        // Whether a SUBSCRIPTION trial requires a card up front. true collects a payment method at checkout
+        // Whether a subscription trial requires a card up front. true collects a payment method at checkout
         // (the charge lands automatically when the trial ends); false lets the owner trial without one
         // (Stripe collects the card only if the trial converts). Per-tier override:
         // tiers.<key>.trial.requires_payment_method.
@@ -1363,7 +1402,7 @@ return [
         'city' => env('BILLING_COMPANY_CITY'),
         'country' => env('BILLING_COMPANY_COUNTRY', 'DE'),
         // The seller electronic address (EN 16931 BT-34) + its scheme (EAS code; "EM" = email).
-        // XRechnung 3.0 makes BT-34 MANDATORY, so an endpoint must always resolve: set this explicitly,
+        // XRechnung 3.0 makes BT-34 mandatory, so an endpoint must always resolve: set this explicitly,
         // or the renderer falls back to a company email ("EM") if configured, else the vat_id above
         // (EAS "9930"). Configure at least one of endpoint_id / email / vat_id, or the e-invoice is rejected.
         'endpoint_id' => env('BILLING_COMPANY_ENDPOINT_ID'),
@@ -1381,6 +1420,42 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | SEPA direct debit
+    |--------------------------------------------------------------------------
+    |
+    | Mandates an account holder gives on your own form, and the notice the
+    | payer gets before each direct debit the local engine draws.
+    |
+    | `notice_days` is how many calendar days before a direct debit the payer
+    | is told its amount and its day. The SEPA core rulebook sets 14 where
+    | nothing else is agreed. The mandate text this package shows agrees the
+    | number set here, and the consent keeps it, so a mandate given on your
+    | form is announced by the period it was given with. A mandate that a first
+    | payment established is announced by this number too: iDEAL, Bancontact
+    | and the other bank methods are collected as direct debits afterwards, and
+    | a period shorter than 14 days has to be agreed in your terms for them.
+    |
+    | `mandate_wordings` names the mandate text for payers in each country. The
+    | rulebook asks for a language of the payer's country, and a country without
+    | an entry gets no mandate on your form. The package ships the German
+    | wording; another language is a class of your own implementing
+    | \Pushery\Billing\Contracts\SepaMandateWording.
+    |
+    */
+
+    'direct_debit' => [
+        'notice_days' => is_numeric($directDebitNoticeDays = env('BILLING_DIRECT_DEBIT_NOTICE_DAYS')) && (int) $directDebitNoticeDays >= 1 ? (int) $directDebitNoticeDays : 14,
+
+        'mandate_wordings' => [
+            'AT' => GermanSepaMandate::class,
+            'DE' => GermanSepaMandate::class,
+            'LI' => GermanSepaMandate::class,
+            'LU' => GermanSepaMandate::class,
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | DATEV export
     |--------------------------------------------------------------------------
     |
@@ -1392,7 +1467,7 @@ return [
     |
     */
 
-    // Whether a prepayment is taxed when the money ARRIVES rather than as the service is rendered. On a year
+    // Whether a prepayment is taxed when the money arrives rather than as the service is rendered. On a year
     // paid up front the two answers are eleven months apart, and nothing on the documents themselves says
     // which was meant. Some jurisdictions require the first; off by default, because a silent change of tax
     // period is the last thing an upgrade should do.
@@ -1406,7 +1481,7 @@ return [
     | reportable — the only safe default, since guessing would hand personal data
     | to an authority under a statute the package knows nothing about.
     |
-    | Where a regime exempts small-scale sales of GOODS, both edges have to hold
+    | Where a regime exempts small-scale sales of goods, both edges have to hold
     | at once, and the operators are configurable because the texts disagree at
     | the upper one: the German statute exempts a seller paid "less than" the
     | figure, the directive behind it one who "did not exceed" it, which also
@@ -1428,7 +1503,7 @@ return [
         // the figures, short enough that the notice is still about something imminent — a reminder six weeks
         // out is filed away and not seen again.
         //
-        // Each obligation is announced ONCE for its date. Two of them share the end-of-January deadline and
+        // Each obligation is announced once for its date. Two of them share the end-of-January deadline and
         // are announced separately on purpose: different law, different data, and whoever handles the one
         // they thought of must not be able to consider the day dealt with.
         'filing_notice_days' => is_numeric($filingNoticeDays = env('BILLING_FILING_NOTICE_DAYS')) && (int) $filingNoticeDays >= 1 ? (int) $filingNoticeDays : 14,
@@ -1446,13 +1521,13 @@ return [
     | United States regime
     |--------------------------------------------------------------------------
     |
-    | OFF by default, and the fields it governs are collected anyway. That split
+    | Off by default, and the fields it governs are collected anyway. That split
     | is deliberate: a seller's declaration about where they are taxed is given
     | at onboarding or chased a year later from people who have moved or gone
     | quiet, under a filing deadline — and that chase ends in withholding money
     | from sellers who did nothing wrong.
     |
-    | Switching this on is what lets anything ACT on those declarations. Until
+    | Switching this on is what lets anything act on those declarations. Until
     | then the package records them and does nothing else with them.
     |
     | Note what is never stored: the taxpayer identification number itself. It
@@ -1467,7 +1542,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | Null asks the active jurisdiction profile, which is where the obligation
-    | actually comes from. Unset is NOT the same as false: a consumer who has
+    | actually comes from. Unset is not the same as false: a consumer who has
     | never heard of an e-invoicing regime has no opinion, and reading their
     | silence as "no" would mean an operator whose jurisdiction requires it
     | silently does not comply.
@@ -1486,10 +1561,10 @@ return [
     | Invoice documents
     |--------------------------------------------------------------------------
     |
-    | Where the ISSUED PDF of an invoice is kept, when you keep one.
+    | Where the issued PDF of an invoice is kept, when you keep one.
     |
     | The package stores no PDF. Storage is your decision, with a disk, a
-    | retention policy and a bill behind it. What it can do is SERVE what you
+    | retention policy and a bill behind it. What it can do is serve what you
     | kept instead of rendering a fresh one — and that difference is the whole
     | point: everything under a renderer moves over the years an invoice must
     | stay readable, so a re-render years later resembles the document your
@@ -1500,7 +1575,7 @@ return [
     | the route behaves exactly as before: it renders, and no disk is ever
     | touched.
     |
-    | A recorded path whose file is GONE renders too, rather than 404-ing an
+    | A recorded path whose file is gone renders too, rather than 404-ing an
     | owner out of their own invoice — but it is logged as an error naming the
     | invoice and the path, because a lost archive file is an incident and the
     | quiet version of it is the expensive one.
@@ -1550,8 +1625,8 @@ return [
     | Reporting counters
     |--------------------------------------------------------------------------
     |
-    | Which window a reversal reduces: the one it HAPPENED in ('reversal_period')
-    | or the one it CORRECTS ('original_period').
+    | Which window a reversal reduces: the one it happened in ('reversal_period')
+    | or the one it corrects ('original_period').
     |
     | This is a setting because it is genuinely undecided, not because both are
     | equally good. A counter is a record of movements and a movement has a date,
@@ -1575,7 +1650,7 @@ return [
 
     // Which window a reversal reduces — the one it happened in, or the one it corrects.
     //
-    // Read by BOTH counters on this seam, and that is the point of it living here rather than in either of
+    // Read by both counters on this seam, and that is the point of it living here rather than in either of
     // them: the threshold figure and the reporting figure must agree about WHERE a reversal belongs. They
     // still disagree about its size, which is why there are two of them.
     //
@@ -1586,11 +1661,11 @@ return [
     // unless a crossing that has already happened is explicitly kept, the tax stated in between becomes
     // retrospectively unlawful across every one of those documents at once.
     //
-    // 'original_period' is only safe BECAUSE the other half of this default also holds: a crossing that has
+    // 'original_period' is only safe because the other half of this default also holds: a crossing that has
     // already happened is final. `SmallBusinessAutoFlip` only ever flips forward, and a test pins the two
     // figures disagreeing on purpose — the year reads clean while the breach keeps its date. Setting this
     // back to 'reversal_period' is supported and changes only which window a reversal reduces; what must
-    // never happen is the clean year WITHOUT the finality rule.
+    // never happen is the clean year without the finality rule.
     //
     // An unreadable value is refused rather than defaulted: both answers are defensible, so neither is a
     // safe reading of a value somebody mistyped.
@@ -1600,11 +1675,11 @@ return [
         // Buyer gross per subdivision of a destination country — the early warning for an obligation that
         // is reached per state rather than nationally.
         //
-        // OFF by default, and the opposite default from the reporting counter on purpose. That one is on
+        // Off by default, and the opposite default from the reporting counter on purpose. That one is on
         // because it is what the package has always done; this one is new, most installations have no
         // subdivision-level obligation anywhere, and a counter nobody needs is a column nobody reads.
         //
-        // A SIBLING of `dac7`, never a child of `billing.tax_profile` — that key is a scalar, and a child
+        // A sibling of `dac7`, never a child of `billing.tax_profile` — that key is a scalar, and a child
         // under it breaks every reader that takes the profile name as a string.
         //
         // Independent of the other two switches in both directions: turning this on does not start the
@@ -1624,13 +1699,13 @@ return [
         // behavior on upgrade is not a switch, it is a surprise. A platform outside the EU turns it off and
         // stops carrying a counter for a duty it does not have.
         //
-        // OFF MEANS REFUSED, NOT ZERO. Asking a disabled counter for a quarter's figure raises rather than
+        // Off means refused, not zero. Asking a disabled counter for a quarter's figure raises rather than
         // answering nothing — a zero is a real reporting answer ("this seller received nothing"), and it is
         // the one that gets filed. Handing back the same value for "nothing arrived" and "nobody is
         // counting" is how a return goes out stating that every seller earned nothing, with no error
         // anywhere and every figure internally consistent.
         //
-        // It gates the REPORTING basis alone. The section 19 threshold counter is a different question on a
+        // It gates the reporting basis alone. The section 19 threshold counter is a different question on a
         // different basis — whether a creator is still a small business — and it keeps running, which a
         // test asserts by switching this off and reading that one.
         'dac7' => [
@@ -1638,20 +1713,20 @@ return [
         ],
     ],
 
-    // WHEN the tax on a period falls due: when the service was rendered, or when the money arrived.
+    // When the tax on a period falls due: when the service was rendered, or when the money arrived.
     //
     // In Germany these are Soll-Versteuerung (accrual, the default here) and Ist-Versteuerung (receipt),
-    // and those words appear nowhere else in this package. They are written down HERE because an operator
+    // and those words appear nowhere else in this package. They are written down here because an operator
     // who has one of them knows it by its German name and would otherwise never find this switch -- the
     // key says "tax point", the notice from their tax office says "Ist-Versteuerung", and nothing
     // connected the two.
     //
-    // OFF IS THE STATUTORY DEFAULT, NOT A PREFERENCE. Accrual is the normal case (§ 16 Abs. 1 S. 1 UStG).
-    // Receipt taxation exists ONLY on application and approval by the tax office (§ 20 UStG) -- nobody
+    // Off is the statutory default, not a preference. Accrual is the normal case (§ 16 Abs. 1 S. 1 UStG).
+    // Receipt taxation exists only on application and approval by the tax office (§ 20 UStG) -- nobody
     // has it by accident, and anybody who has it holds a notice saying so. If you are not sure, you do
     // not have it.
     //
-    // WHO MAY APPLY, as an orientation and not as advice -- § 20 Abs. 1 UStG, four alternatives:
+    // Who may apply, as an orientation and not as advice -- § 20 Abs. 1 UStG, four alternatives:
     //
     //   1. prior-year turnover of not more than 800,000 EUR
     //   2. exempt from bookkeeping obligations under § 148 AO
@@ -1674,11 +1749,11 @@ return [
     // than this comment: verified against gesetze-im-internet.de on 2026-09-17, which is a date, not a
     // guarantee.
     //
-    // IT IS A PER-TAXPAYER ELECTION, NOT A PROPERTY OF A COUNTRY. Two operators in the same
+    // IT IS A per-taxpayer election, not a property of a country. Two operators in the same
     // jurisdiction differ, so this cannot be derived from a locale, a currency or a tax profile -- it is
     // declared, once, by the operator who holds the notice.
     //
-    // AND IT IS NOT A SETTING TO TRY OUT. It moves which period a transaction is taxed in, and a
+    // And it is not a setting to try out. It moves which period a transaction is taxed in, and a
     // document number's year is frozen the moment it is drawn. Changing it after documents exist does not
     // adjust them.
     'tax_point_on_receipt' => in_array(is_string($taxPointOnReceipt = env('BILLING_TAX_POINT_ON_RECEIPT')) ? strtolower(trim($taxPointOnReceipt)) : $taxPointOnReceipt, [true, '1', 'true', 'yes', 'on'], true),
@@ -1700,7 +1775,7 @@ return [
         'proposal_path' => env('BILLING_RATE_PROPOSAL_PATH'),
     ],
 
-    // Locally held exchange rates. OFF by default, and the default is a refusal rather than a silence: with
+    // Locally held exchange rates. Off by default, and the default is a refusal rather than a silence: with
     // this off the bound ExchangeRateSource answers every conversion by saying the package ships no rates
     // and what to do about it.
     //
@@ -1709,7 +1784,7 @@ return [
     // schedule -- a package that dials out of somebody else's application unasked is an unpleasant surprise,
     // however good its reasons.
     //
-    // What it does NOT do is ship rates. The table starts empty and is filled by the importers, from the
+    // What it does not do is ship rates. The table starts empty and is filled by the importers, from the
     // publishers, into the consumer's own database. Which rate is the correct one is jurisdiction knowledge
     // and the rules contradict each other across jurisdictions, so a package-level default would be wrong
     // for somebody by law rather than by oversight. See the ExchangeRateBasis enum for the three rules.
@@ -1757,13 +1832,13 @@ return [
         // The chart of accounts whose per-transaction map below is active: 'skr03', 'skr04', or null. Null
         // (the default) uses the single-seller accounts above — the export is byte-identical. Selecting a
         // chart only changes the VALUES resolved per transaction, never the export's structure or field order.
-        // The account NUMBERS are German-accountant defaults (SKR03/SKR04) confirmed with the tax advisor,
+        // The account numbers are German-accountant defaults (SKR03/SKR04) confirmed with the tax advisor,
         // not values the package invents; a consumer with a different frame overrides them here — no code
         // change. These are read only behind the German jurisdiction profile (billing.tax_profile = 'de');
         // a consumer elsewhere runs an empty set and the DATEV export is simply not used.
         //
         // Each account is [account, automatic]. An "automatic" account (Automatikkonto) derives its VAT from
-        // the posting itself, so a BU-Schlüssel is NEVER set alongside it — doing so cancels the automatic
+        // the posting itself, so a BU-Schlüssel is never set alongside it — doing so cancels the automatic
         // derivation and is the classic import error.
         'chart' => env('BILLING_DATEV_CHART'),
 
@@ -1798,7 +1873,7 @@ return [
                 'creator_input_third_country_reverse_charge' => ['account' => '3125', 'automatic' => true],
                 'creator_input_eu_reverse_charge_reduced' => ['account' => '3113', 'automatic' => true],
                 'creator_input_third_country_reverse_charge_reduced' => ['account' => '3115', 'automatic' => true],
-                // The PSP fee is a §13b input (an Irish supplier's service), booked like an EU input — NOT a
+                // The PSP fee is a §13b input (an Irish supplier's service), booked like an EU input — not a
                 // money-transfer/bank-charge account. Getting this wrong is the classic audit finding.
                 'psp_fee' => ['account' => '3123', 'automatic' => true],
                 'money_transit' => ['account' => '1360', 'automatic' => false],
@@ -1849,7 +1924,7 @@ return [
     | default: with `enabled` false the whole marketplace path is unreachable and
     | the single-merchant behavior is byte-identical.
     |
-    | `seller_of_record` names WHO the seller is to the buyer, per sale — a
+    | `seller_of_record` names who the seller is to the buyer, per sale — a
     | liability/VAT decision the package never makes for you, only enforces. It
     | turns on what is sold: an electronically-supplied service falls under the
     | Art. 9a deemed-supplier presumption (the platform is the seller by law;
@@ -1865,7 +1940,7 @@ return [
     // Absent by default, which means no gate at all: a market check that defaulted to closed would stop
     // every existing install at its next sale, having been asked for nothing. That is an outage, not a
     // guard. Configure the map and the gate becomes fail-closed within itself — anything not explicitly
-    // `open` is refused, INCLUDING a country the evidence could not resolve, because not knowing where a
+    // `open` is refused, including a country the evidence could not resolve, because not knowing where a
     // buyer is is the clearest reason not to sell rather than a reason to guess.
     //
     // Each entry is an ISO 3166-1 alpha-2 code mapped to `open` (registered, sales allowed), `planned` (on
@@ -1877,7 +1952,7 @@ return [
     // dangerous one precisely because neither half looks wrong: the market is open, the calculator answers,
     // and the answer is zero.
     //
-    // Note the key: a SIBLING of `billing.tax`, never a child of it. `billing.tax` is a scalar read in four
+    // Note the key: a sibling of `billing.tax`, never a child of it. `billing.tax` is a scalar read in four
     // places, and nesting under it would turn it into an array — the tax calculator would fall through to
     // its no-tax branch and the guard behind it would return early, producing 0% on every invoice with no
     // error anywhere.
@@ -1893,7 +1968,7 @@ return [
     // stricter setting: too much evidence costs a checkout question, too little costs a defensible position.
     // Consumer-withdrawal rights (a digital work's 14-day right and how it extinguishes). This is
     // consumer law, not tax law, and the two do not move together — an operator can run one country's VAT
-    // and another's consumer regime — so it is its OWN profile and NOT tied to the marketplace switch: a
+    // and another's consumer regime — so it is its own profile and not tied to the marketplace switch: a
     // single seller in Germany needs it just as much. Off by default (`profile` null): no extra checkout
     // step, no changed receipt, byte-identical. Set a profile and the gate becomes fail-closed — a work
     // whose right extinguishes on delivery is not provided until the buyer's double consent is recorded.
@@ -1908,40 +1983,72 @@ return [
         // and how long it runs, are a jurisdiction's reading: the profile answers both through
         // `StatesWithdrawalWindow`, and a number in this file would either duplicate it or contradict it.
         //
-        // The window is measured from PROVISION and frozen onto the grant as
+        // The window is measured from provision and frozen onto the grant as
         // `billing_access_grants.withdrawal_window_ends_at`. Provision, not purchase and not payment: for a
         // pre-ordered work those are three different days, and a window anchored to the sale would have
         // expired before the buyer could open anything.
 
-        // How long a seller owes CONFORMITY updates on a sale — defect fixes, security fixes, staying
+        // How long a seller owes conformity updates on a sale — defect fixes, security fixes, staying
         // compatible. A different axis from what the creator sells: `content_ownership.default_update_policy`
         // governs new editions and added material, which may be withheld, while this governs what is owed
         // afterwards regardless.
         //
-        // Ships EMPTY, and empty is not an oversight. The obligation runs for as long as a buyer may
+        // Ships empty, and empty is not an oversight. The obligation runs for as long as a buyer may
         // reasonably expect, "reasonably" is a judgment about a kind of product, and no statute states a
         // number — so a package that shipped one would be inventing a legal answer and hiding it in a
         // library. Empty means no end has been established, and updates keep flowing: the direction that
         // cannot harm a buyer. Set it once you have taken advice for your product class.
         'conformity_update_period_days' => is_numeric($conformityUpdatePeriodDays = env('BILLING_CONFORMITY_UPDATE_PERIOD_DAYS')) && (int) $conformityUpdatePeriodDays >= 0 ? (int) $conformityUpdatePeriodDays : null,
 
-        // Whether a buyer can validly agree to give up that obligation AT ALL in your jurisdiction.
+        // Whether a buyer can validly agree to give up that obligation at all in your jurisdiction.
         //
         // There is deliberately no operator-wide off switch for conformity updates — that is exactly the
         // blanket arrangement the law refuses to recognize, and offering it as a setting would let a legal
         // obligation be configured away. This flag does not switch anything off: it only makes a
-        // grant-by-grant waiver POSSIBLE, and recording one still needs a reference to an actual agreement
+        // grant-by-grant waiver possible, and recording one still needs a reference to an actual agreement
         // made separately and before the contract. A flag in a file cannot produce a declaration.
         //
-        // Off, because whether SECURITY fixes can be waived at all is genuinely disputed. Turning it on is
+        // Off, because whether security fixes can be waived at all is genuinely disputed. Turning it on is
         // your decision, taken on your own advice.
         'allow_conformity_waiver' => in_array(is_string($allowConformityWaiver = env('BILLING_ALLOW_CONFORMITY_WAIVER')) ? strtolower(trim($allowConformityWaiver)) : $allowConformityWaiver, [true, '1', 'true', 'yes', 'on'], true),
+
+        // The time zone a declaration through the cancellation button or the withdrawal function states the moment
+        // it arrived in, on the confirmation and on every saved copy. The moment decides whether the declaration was in
+        // time, and a receipt time that shifts with whoever reads it is not one time, so the zone is named beside it.
+        // The zone of the business that receives the declaration; a value that names no zone states the moment in UTC.
+        'declaration_timezone' => env('BILLING_DECLARATION_TIMEZONE', 'Europe/Berlin'),
+
+        // A route of your own that shows the receipt of a declaration, given its token as the `declaration` parameter.
+        // When it is set, the confirmation mail links to it; the package draws no receipt page of its own.
+        'declaration_receipt_route' => env('BILLING_DECLARATION_RECEIPT_ROUTE'),
+    ],
+
+    // What model calls cost, and the daily caps on it (see the AI costs page of the documentation).
+    //
+    // `rates` is the price list, keyed by model id and read by array access, because a model id carries dots. Each
+    // model holds one entry or a list of entries with a `valid_from` date, priced per million tokens as decimal
+    // strings: `input` and `output` always, `cache_read`, `cache_write` and `reasoning` where the provider prices them
+    // apart (they fall back to the input and the output price). An entry may name its `currency`; otherwise `currency`
+    // below applies.
+    //
+    //     'gpt-5.4-mini' => [
+    //         ['valid_from' => '2026-01-01', 'input' => '0.25', 'output' => '2.00', 'cache_read' => '0.025'],
+    //     ],
+    //
+    // `daily_caps` caps what one provider's calls may cost per UTC day, against the margin, keyed by provider name;
+    // `owner_daily_cap` caps what one owner's calls may cost per day, against abuse. Both are decimal strings in
+    // `currency`; a provider or an owner without a cap is counted and never refused.
+    'ai' => [
+        'currency' => 'USD',
+        'rates' => [],
+        'daily_caps' => [],
+        'owner_daily_cap' => null,
     ],
 
     'tax_evidence' => [
         'required_signals' => is_numeric($taxEvidenceSignals = env('BILLING_TAX_EVIDENCE_SIGNALS')) && (int) $taxEvidenceSignals >= 1 ? (int) $taxEvidenceSignals : 2,
 
-        // Whether a sale's SUBDIVISION -- a US state -- is recorded alongside its country.
+        // Whether a sale's subdivision -- a US state -- is recorded alongside its country.
         //
         // On, and the reason it is on is that it cannot be turned on retroactively. A US sales-tax nexus is
         // measured per state over a rolling window, so the question "have we crossed the threshold in Texas"
@@ -1952,7 +2059,7 @@ return [
         //
         // It changes nothing you did not already supply. The package has no input finer than the country and
         // does not go looking for one: if your signals carry no subdivision, nothing is written. And it is
-        // recorded only for the countries below, only from the sources that named THAT country, only when
+        // recorded only for the countries below, only from the sources that named that country, only when
         // they agree, and only as the ISO 3166-2 suffix -- never a postcode, a city or a coordinate.
         //
         // Turn it off where your reading of data minimization differs. The rest of the evidence is
@@ -1970,14 +2077,14 @@ return [
 
     'tax_markets' => null,
 
-    // Content ownership: what a buyer OWNS, as opposed to what their plan lets them do.
+    // Content ownership: what a buyer owns, as opposed to what their plan lets them do.
     //
     // Two questions that sound alike and are not. The licensing side (`config/license.php`, reached through
     // the License contract) answers "what may this owner DO right now", and its answer changes the moment
     // their tier does. This answers "what did this person BUY, and is it still theirs" — a fact that
     // outlives the plan, the creator's account, and the work's own publication.
     //
-    // Off by default, and off is FAIL-CLOSED rather than merely unused. With the switch off the read seam
+    // Off by default, and off is fail-closed rather than merely unused. With the switch off the read seam
     // resolves to a reader that answers no to everything — an answer, not a resolution error, so "off" and
     // "miswired" stay distinguishable at the call site. The three effects that would otherwise write or
     // withdraw a grant (a completed purchase, a refund, a chargeback) read this key first and return before
@@ -1986,7 +2093,7 @@ return [
     // So turning it on is what makes the register exist for an installation, and turning it off is a
     // guarantee about behavior rather than an absence of code.
     //
-    // NAMING — worth reading once. The key is not `billing.entitlements.enabled`, because entitlements are not
+    // Naming — worth reading once. The key is not `billing.entitlements.enabled`, because entitlements are not
     // this package's: this file's header says "keep entitlements in license.php", and an arch guard enforces
     // that billing never reads `config('license.*')`. So the key is named after what it actually gates. A key
     // that re-imported the word would guarantee that somebody eventually reads a tier check as proof of
@@ -1997,8 +2104,8 @@ return [
         // What a sale promises about later versions when neither the work nor the merchant says otherwise.
         // One of: latest, latest_with_revisions, windowed, frozen.
         //
-        // This is the ENRICHMENT axis — new editions, added material — and it is the creator's to choose. It
-        // is NOT the conformity axis: a defect fix or a security patch is owed regardless of what stands
+        // This is the enrichment axis — new editions, added material — and it is the creator's to choose. It
+        // is not the conformity axis: a defect fix or a security patch is owed regardless of what stands
         // here, which is why there is no value that switches those off.
         //
         // A misspelt value is refused at first use rather than defaulted. Falling back to `latest` would
@@ -2026,6 +2133,11 @@ return [
         // decided by somebody else, and the money is already gone. There is no version of it where the
         // platform chose to give the work away, which is why the shipped answer is to end access.
         'revoke_on_chargeback' => ! in_array(is_string($revokeOnChargeback = env('BILLING_REVOKE_ON_CHARGEBACK')) ? strtolower(trim($revokeOnChargeback)) : $revokeOnChargeback, [false, '', '0', 'false', 'no', 'off'], true),
+
+        // Whether access a chargeback ended comes back when the bank takes the chargeback back. On, because the
+        // customer has paid after all. Only a grant the chargeback revoked returns; one that ended for another
+        // reason stays revoked. Off where somebody should look before access returns.
+        'restore_on_chargeback_reversal' => ! in_array(is_string($restoreOnReversal = env('BILLING_RESTORE_ON_CHARGEBACK_REVERSAL')) ? strtolower(trim($restoreOnReversal)) : $restoreOnReversal, [false, '', '0', 'false', 'no', 'off'], true),
     ],
 
     // Multi-merchant: a buyer pays this platform, and the money is destined for somebody else.
@@ -2036,10 +2148,10 @@ return [
     // measured against, and it is why the switch exists instead of a set of individually harmless
     // defaults that add up to a second code path nobody asked for.
     //
-    // THE FLAG ALONE DOES NOT ROUTE MONEY, and that is deliberate. The marketplace path hangs off an
+    // The flag alone does not route money, and that is deliberate. The marketplace path hangs off an
     // optional driver contract (`RoutesMoney`, which supplies a `MarketplaceRails`). A driver that does
     // not implement it has no rails to route through, so no configuration here can push a payment at a
-    // connected account it cannot reach. A driver that is handed a routing it cannot serve must THROW
+    // connected account it cannot reach. A driver that is handed a routing it cannot serve must throw
     // rather than complete the payment unrouted: silently ignoring one settles the whole amount on the
     // platform account and the merchant is never paid, with nothing in the result saying so.
     //
@@ -2069,7 +2181,7 @@ return [
         /*
         | Buyer protection: the payout waits until the buyer says they got what
         | they bought, or until enough time passes that their silence counts as
-        | consent. The money is NEVER held by this application — it stays with
+        | consent. The money is never held by this application — it stays with
         | the payment provider and a release is an instruction to it. Holding
         | other people's money is a regulated activity, and doing it by accident
         | is doing it without a license.
@@ -2089,9 +2201,9 @@ return [
         // `platform_deemed_supplier`, and `charge_type_by_posture` below does not permit that posture on a
         // destination charge: a `destination` default would be the one pairing the table forbids.
         //
-        // HEADS UP — which ENTRY POINT you use matters on this shape, and one of the two refuses on purpose.
+        // Heads up — which entry point you use matters on this shape, and one of the two refuses on purpose.
         //
-        // Separate transfer takes the whole payment and then makes a SECOND provider call to move the
+        // Separate transfer takes the whole payment and then makes a second provider call to move the
         // merchant their share. That call ships: `StripeMerchantTransfers::transferShare()`, bound
         // unconditionally, made by `RoutedPayment::charge()` for a payment that succeeds at once, and by the
         // `payment_intent.succeeded` confirmation for one that clears later. A hosted one-off purchase and a
@@ -2100,7 +2212,7 @@ return [
         // and the fee terms ride in the subscription's metadata, and each paid cycle writes its row and moves
         // the share.
         //
-        // `PaymentRails::charge()` refuses it, and that refusal is PERMANENT rather than a placeholder: the
+        // `PaymentRails::charge()` refuses it, and that refusal is permanent rather than a placeholder: the
         // transfer can only go out after the payment has succeeded, which is after that method has already
         // returned. A rail that accepted the routing would take the buyer's money and have no moment left in
         // which to pay the merchant.
@@ -2108,9 +2220,9 @@ return [
 
         'buyer_protection' => [
             /*
-            | Whether the merchant's share WAITS instead of moving the moment the payment succeeds.
+            | Whether the merchant's share waits instead of moving the moment the payment succeeds.
             |
-            | OFF by default, and the default is the whole safety of this switch: with it off the payment
+            | Off by default, and the default is the whole safety of this switch: with it off the payment
             | path is byte-identical to what it always was, so no existing installation changes behavior on
             | an upgrade. Turning it on is a decision about when a seller is paid, which is not one a package
             | may make on an operator's behalf.
@@ -2174,7 +2286,7 @@ return [
             // applies); false = physical goods. Override per product class through the resolver.
             'supplies_are_electronic' => ! in_array(is_string($marketplaceSuppliesElectronic = env('BILLING_MARKETPLACE_SUPPLIES_ELECTRONIC')) ? strtolower(trim($marketplaceSuppliesElectronic)) : $marketplaceSuppliesElectronic, [false, '', '0', 'false', 'no', 'off'], true),
 
-            // The Art. 9a rebuttal: `seller_of_record` for an electronic supply is refused unless ALL four are
+            // The Art. 9a rebuttal: `seller_of_record` for an electronic supply is refused unless all four are
             // true. A platform that sets its own terms, authorizes billing or approves the supply cannot
             // truthfully assert these — leave them false and stay the deemed supplier.
             'art9a_rebuttal_asserted' => in_array(is_string($marketplaceArt9aRebuttal = env('BILLING_MARKETPLACE_ART9A_REBUTTAL')) ? strtolower(trim($marketplaceArt9aRebuttal)) : $marketplaceArt9aRebuttal, [true, '1', 'true', 'yes', 'on'], true),
@@ -2185,7 +2297,7 @@ return [
 
         // What a platform asks a seller for at onboarding.
         //
-        // The fields a reporting duty adds are collected from EVERY seller by default, not only from the
+        // The fields a reporting duty adds are collected from every seller by default, not only from the
         // ones the duty currently covers. A seller's classification changes the day they take on different
         // work, and a platform that only asked the sellers it already knew about then has to chase the
         // rest — after the year has closed, under a deadline, from people who have gone quiet. That chase
@@ -2227,18 +2339,18 @@ return [
 
         // When a seller is active enough to be asked to declare their standing.
         //
-        // These numbers drive ONE rule: when to ask a seller to declare their standing. It fires as soon as
-        // EITHER measure is reached — a platform setting, meant to be early, since asking a question sooner
+        // These numbers drive one rule: when to ask a seller to declare their standing. It fires as soon as
+        // either measure is reached — a platform setting, meant to be early, since asking a question sooner
         // than strictly necessary costs nothing. Move them freely; they are yours.
         //
-        // They do NOT set the reporting duty's de-minimis exemption, and the similarity is a trap worth
+        // They do not set the reporting duty's de-minimis exemption, and the similarity is a trap worth
         // naming here because the two read almost identically. That boundary is set by law, holds only
-        // while BOTH measures stay under, and lives under `billing.reporting.goods_de_minimis.*` — a
+        // while both measures stay under, and lives under `billing.reporting.goods_de_minimis.*` — a
         // separate family, deliberately. With the shipped defaults the two agree at the money figure: a
         // seller paid exactly that much is asked to declare and is reportable as well. That is where the
         // German statute draws its line, not a reason to merge the two.
         //
-        // They must not be coupled: a second copy of the exemption reading THESE keys would move the
+        // They must not be coupled: a second copy of the exemption reading these keys would move the
         // statutory boundary with the declaration trigger, in the over-reporting direction. Reporting data
         // that need not be reported is itself an incorrect report and a data protection breach at the same
         // time, so that direction is not the cautious one.
@@ -2258,7 +2370,7 @@ return [
         // What happens when a seller does not supply the data a reporting duty needs.
         //
         // Reminders go to everyone with an incomplete record — asking is free and the data is wanted. The
-        // MEASURE only follows where the missing data is legally required of that seller: suspending an
+        // measure only follows where the missing data is legally required of that seller: suspending an
         // account or holding somebody's earnings over data nobody is entitled to demand is not compliance,
         // it is withholding a service on the strength of a rule that does not apply to them. Extending it
         // anyway is a contract question between a platform and its sellers, so it is off by default.
@@ -2285,8 +2397,8 @@ return [
             'on_withholding_exhausted' => env('BILLING_MARKETPLACE_ON_WITHHOLDING_EXHAUSTED', 'suspend_sales'),
         ],
 
-        // What happens while a merchant's tax standing is unestablished. Both locks default ON, and both
-        // are INERT under a jurisdiction profile that requires the hold — turning payouts back on there
+        // What happens while a merchant's tax standing is unestablished. Both locks default on, and both
+        // are inert under a jurisdiction profile that requires the hold — turning payouts back on there
         // would amount to choosing a default standing for people whose standing nobody knows.
         //
         // There is deliberately no key naming a default standing. Both possible defaults are wrong in
@@ -2295,10 +2407,10 @@ return [
         // inventing an answer to a question that was not asked.
         // When nobody knows how a merchant's supply is taxed, neither selling on their behalf nor paying
         // them out is safe — there is no conservative guess, because assuming they charge tax normally and
-        // assuming they do not produce errors that point in OPPOSITE directions.
+        // assuming they do not produce errors that point in opposite directions.
         //
         // `enforce_from` is the date the hold starts biting, and it is null until you set one. That is not
-        // the switches below being ignored: they say WHAT is held, this says FROM WHEN, and with no date
+        // the switches below being ignored: they say what is held, this says FROM WHEN, and with no date
         // the answer is "not yet". The separation exists because of what happens on the day it starts. A
         // merchant with no recorded standing is `Unclarified`, which is exactly the state that blocks — so
         // on an established marketplace, switching this on with today's date stops every creator who has
@@ -2308,7 +2420,7 @@ return [
         // and let the date arrive. `billing:marketplace:preflight` reports an unset date as outstanding
         // rather than as configured, because a hold that never begins is one nobody can rely on.
         //
-        // A jurisdiction profile that REQUIRES the hold overrides all three of these: there the hold is a
+        // A jurisdiction profile that requires the hold overrides all three of these: there the hold is a
         // legal condition rather than a rollout, and a date cannot postpone it.
         'tax_status_hold' => [
             'blocks_payouts' => ! in_array(is_string($marketplaceHoldBlocksPayouts = env('BILLING_MARKETPLACE_HOLD_BLOCKS_PAYOUTS')) ? strtolower(trim($marketplaceHoldBlocksPayouts)) : $marketplaceHoldBlocksPayouts, [false, '', '0', 'false', 'no', 'off'], true),
@@ -2341,7 +2453,7 @@ return [
 
         // The visible prefix for each document series the platform numbers itself.
         //
-        // The keys are the document ROLES (see the DocumentSeries enum); the values are a jurisdiction's
+        // The keys are the document roles (see the DocumentSeries enum); the values are a jurisdiction's
         // letters. These are the German defaults — buyer receipt F, self-billed invoice G, private
         // settlement note A, commission invoice P, and a K-prefixed correction series paired to each. A
         // consumer elsewhere maps the same roles to their own letters. A role with no configured prefix is
@@ -2375,7 +2487,7 @@ return [
         'self_billing' => [
             // Whether the platform settles creators by self-billing at all. On by default: a marketplace in a
             // jurisdiction where self-billing is the norm issues the documents itself. A consumer that does
-            // NOT self-bill turns this off and stays in the fallback lane — the creator submits their own
+            // not self-bill turns this off and stays in the fallback lane — the creator submits their own
             // invoice — and never calls the engine. It is a backstop, not the routing decision: the caller
             // checks this before settling, and the engine refuses loudly if it is reached while off, rather
             // than issue a document a disabled platform never meant to.
@@ -2389,7 +2501,7 @@ return [
         // A consumer sale carries no invoicing duty, so the receipt is chosen from the purchase and
         // collects the least data: a small domestic purchase gets a simplified receipt, a larger or
         // cross-border one a plain payment record, and only a buyer who asks for a full invoice has their
-        // name and address collected. The threshold below is the gross, in minor units, up to and INCLUDING
+        // name and address collected. The threshold below is the gross, in minor units, up to and including
         // which a domestic purchase gets the simplified receipt — the German § 33 UStDV figure, €250.00, so
         // it is profile knowledge, not a universal.
         'receipts' => [
@@ -2412,7 +2524,7 @@ return [
         // explain, and the creator sees the variation per position on their statement rather than as an
         // unexplained total. `uniform_payout` keeps the payout predictable and moves the buyer's price.
         //
-        // A creator names their target PAYOUT rather than the buyer's price. That direction is what makes a
+        // A creator names their target payout rather than the buyer's price. That direction is what makes a
         // change in their own tax standing visible: naming a fan price leaves it fixed while the payout
         // moves underneath them.
         'pricing' => [
@@ -2421,8 +2533,8 @@ return [
 
         // Which money routing is compatible with which declared seller.
         //
-        // Two independent axes: the charge type decides who the PROVIDER treats as the merchant of record,
-        // the posture decides who the DOCUMENTS name as the seller. Neither determines the other — for
+        // Two independent axes: the charge type decides who the provider treats as the merchant of record,
+        // the posture decides who the documents name as the seller. Neither determines the other — for
         // electronic services the seller is assigned by law regardless of how the money flows — and because
         // they are independent they can diverge. A pair that disagrees is not an error anybody sees; it is
         // a receipt and a settlement describing different transactions, found in an audit.
@@ -2439,12 +2551,12 @@ return [
 
         // Tips and pay-what-you-want: a fan-chosen amount run through the ordinary sale pipeline, not a
         // donation side path. Off by default. A tip takes the ordinary commission unless a tip rate is set;
-        // a PWYW price is floored on the SERVER, because a buyer-chosen price is the one place the
+        // a PWYW price is floored on the server, because a buyer-chosen price is the one place the
         // anti-injection stance would otherwise lapse.
         'tips' => [
             'enabled' => in_array(is_string($marketplaceTips = env('BILLING_MARKETPLACE_TIPS')) ? strtolower(trim($marketplaceTips)) : $marketplaceTips, [true, '1', 'true', 'yes', 'on'], true),
-            // ONE LINE ON PURPOSE -- DO NOT WRAP THIS TERNARY.
-            // A `: null` sitting alone on its own line is UNREACHABLE COVERAGE, not a missing test.
+            // One line on purpose -- do not wrap this ternary.
+            // A `: null` sitting alone on its own line is unreachable coverage, not a missing test.
             // PHP emits no opcode for a constant-null false branch, so pcov never reports that line,
             // while PHPUnit's static analyzer counts it as executable. The result is a line that
             // reads 0 % forever and cannot be covered by any test that could ever be written --
@@ -2453,31 +2565,31 @@ return [
             // takes the whole package below its 100 % floor and no test can lift it back.
             'commission_bps' => is_numeric($marketplaceTipsCommissionBps = env('BILLING_MARKETPLACE_TIPS_COMMISSION_BPS')) && (int) $marketplaceTipsCommissionBps >= 0 ? (int) $marketplaceTipsCommissionBps : null,
 
-            // What the tip line is called on the buyer's hosted checkout page — the ONE string this
+            // What the tip line is called on the buyer's hosted checkout page — the one string this
             // package puts in front of a buyer on somebody else's site. Configurable because a package
             // that hardcoded it in English would put a foreign word on a German checkout, and the default
-            // deliberately names the ACT rather than the merchant: whose page it is and whose name belongs
+            // deliberately names the act rather than the merchant: whose page it is and whose name belongs
             // on it is the consumer's to decide, and a provider page is not where this package starts
             // composing sentences about other people.
             'line_name' => env('BILLING_MARKETPLACE_TIPS_LINE_NAME', 'Tip'),
 
-            // The floor a buyer-chosen TIP must clear, enforced on the server like the sale floor below.
+            // The floor a buyer-chosen tip must clear, enforced on the server like the sale floor below.
             // Null inherits that one, which is the honest default: an operator who has said a buyer-chosen
             // amount below X is not worth a transaction has said something the provider's fee makes true of
             // both entries. Set it to allow a voluntary payment lower than a purchase -- or to 0 to carry no
             // floor on tips at all, which is a different answer from saying nothing.
-            // ONE LINE ON PURPOSE -- DO NOT WRAP THIS TERNARY. See the note above `commission_bps`.
+            // One line on purpose -- do not wrap this ternary. See the note above `commission_bps`.
             'minimum_minor' => is_numeric($marketplaceTipsMinimumMinor = env('BILLING_MARKETPLACE_TIPS_MINIMUM_MINOR')) && (int) $marketplaceTipsMinimumMinor >= 0 ? (int) $marketplaceTipsMinimumMinor : null,
         ],
         'pwyw' => [
             'minimum_minor' => is_numeric($marketplacePwywMinimumMinor = env('BILLING_MARKETPLACE_PWYW_MINIMUM_MINOR')) && (int) $marketplacePwywMinimumMinor >= 0 ? (int) $marketplacePwywMinimumMinor : 0,
         ],
 
-        // The fee the BUYER pays on a C2C sale — a separate supply from the seller-side commission, and
+        // The fee the buyer pays on a C2C sale — a separate supply from the seller-side commission, and
         // the platform's own first supply in the intermediary posture. Off by default. Its place of supply
         // is where the mediated sale happens, not where the buyer banks, and it is quoted gross. Kept on
         // its own revenue account because netting it into the item price or the seller's turnover would
-        // make a taxable supply of the platform's own disappear — the account NUMBER is config, the
+        // make a taxable supply of the platform's own disappear — the account number is config, the
         // separateness is structure.
         'buyer_fee' => [
             'enabled' => in_array(is_string($marketplaceBuyerFee = env('BILLING_MARKETPLACE_BUYER_FEE')) ? strtolower(trim($marketplaceBuyerFee)) : $marketplaceBuyerFee, [true, '1', 'true', 'yes', 'on'], true),
@@ -2486,7 +2598,7 @@ return [
             'fixed_minor' => is_numeric($marketplaceBuyerFeeFixedMinor = env('BILLING_MARKETPLACE_BUYER_FEE_FIXED_MINOR')) && (int) $marketplaceBuyerFeeFixedMinor >= 0 ? (int) $marketplaceBuyerFeeFixedMinor : 0,
             'revenue_account' => env('BILLING_MARKETPLACE_BUYER_FEE_ACCOUNT', '8510'),
 
-            // WHERE THE MEDIATED SALE HAPPENS — the fee's place of supply, and NOT where the buyer banks.
+            // Where the mediated sale happens — the fee's place of supply, and not where the buyer banks.
             // A mediation is supplied where the transaction it mediates is, so the buyer's own seat never
             // moves this. Left unset, the shipped checkout states the sale's currency region, which is what
             // that lane actually knows about the transaction; an installation that can answer more precisely
@@ -2494,7 +2606,7 @@ return [
             'place_of_supply' => env('BILLING_MARKETPLACE_BUYER_FEE_PLACE'),
         ],
 
-        // THE SELLER'S COMMISSION — the platform's second intermediation supply, and the mirror of the
+        // The seller's commission — the platform's second intermediation supply, and the mirror of the
         // buyer fee above. Under intermediation the platform arranges somebody else's sale and charges the
         // seller for arranging it; that fee is a taxable supply of the platform's own, and the seller needs
         // a document for it to deduct the tax on what was kept from them.
@@ -2502,9 +2614,9 @@ return [
         // Off by default, so no existing installation changes: with this switched off a mediated sale still
         // produces exactly the one document it produces today.
         //
-        // TWO DIFFERENCES FROM THE BUYER FEE, both deliberate. A fixed commission is CAPPED by the sale — it
+        // Two differences from the buyer fee, both deliberate. A fixed commission is capped by the sale — it
         // comes out of the payout, and a fee larger than the sale would owe the seller a negative amount.
-        // And the calculator REFUSES outside intermediation rather than returning nothing: a commission in
+        // And the calculator refuses outside intermediation rather than returning nothing: a commission in
         // the commission chain is the named red line, and refusing before a number is drawn keeps a gapless
         // series from spending one on a document that must not exist.
         'seller_fee' => [
@@ -2540,24 +2652,24 @@ return [
             //            does not undo that. Legitimate, but the merchant is then short by the retained
             //            amount, so a consumer choosing it must be able to show them why.
             //
-            // NOT available under the commission_chain regime, and refused at preflight rather than at the
+            // Not available under the commission_chain regime, and refused at preflight rather than at the
             // first refund. Retaining a fee presupposes a document the platform issued the merchant for a
             // service; a commission chain has none — the platform buys and resells, and unwinding the sale
             // unwinds both supplies. Money kept afterwards sits on no supply at all, which is turnover on a
             // tax return with nothing behind it.
             'refund_policy' => env('BILLING_MARKETPLACE_FEE_REFUND_POLICY', 'refund'),
 
-            // What the platform keeps, as basis points and a flat amount. BOTH, because both are ordinary:
+            // What the platform keeps, as basis points and a flat amount. Both, because both are ordinary:
             // the provider's own pricing is a percentage plus a fixed amount per transaction, and a
             // marketplace that could express only one of them would have to approximate the other.
             //
-            // Both default to ZERO, and that is the neutral position rather than a placeholder. A package
+            // Both default to zero, and that is the neutral position rather than a placeholder. A package
             // that shipped a take rate would be choosing a consumer's commercial terms for them, and a rate
             // nobody set is far more likely to be an oversight than an intention.
             //
-            // The rate is a NET rate: it is applied to the transaction's net, not to what the buyer paid.
+            // The rate is a net rate: it is applied to the transaction's net, not to what the buyer paid.
             //
-            // It is also a GROSS take: what the platform keeps BEFORE the provider's own processing fee.
+            // It is also a gross take: what the platform keeps before the provider's own processing fee.
             // Under the shipped account type (`marketplace.onboarding.account_type` = `express`) that fee
             // comes out of the platform's balance — measured, see that setting — so the margin is this
             // figure minus the provider's percentage and per-transaction amount. The package does not
@@ -2565,8 +2677,8 @@ return [
             // deduction would make every payout figure wrong by a guess. On a small sale the difference is
             // the whole margin.
             //
-            // TWO LANES CANNOT HONOR THAT, and saying so here is the point. Stripe's hosted subscription
-            // takes a percentage of the invoice TOTAL, which includes the buyer's tax; the hosted one-off
+            // Two lanes cannot honor that, and saying so here is the point. Stripe's hosted subscription
+            // takes a percentage of the invoice total, which includes the buyer's tax; the hosted one-off
             // purchase needs an absolute fee at the moment the session opens, which is before the buyer's
             // rate is a fact at all. Both therefore compute on the gross. The routed money path — the one
             // that writes the ledger — computes on the net as stated. Which answer the package should settle
@@ -2576,7 +2688,7 @@ return [
             'default_bps' => is_numeric($marketplaceFeeBps = env('BILLING_MARKETPLACE_FEE_BPS')) && (int) $marketplaceFeeBps >= 0 ? (int) $marketplaceFeeBps : 0,
             'default_flat_minor' => is_numeric($marketplaceFeeFlatMinor = env('BILLING_MARKETPLACE_FEE_FLAT_MINOR')) && (int) $marketplaceFeeFlatMinor >= 0 ? (int) $marketplaceFeeFlatMinor : 0,
 
-            // Who economically bears the payment provider's own processing fee. This is SEPARATE from the
+            // Who economically bears the payment provider's own processing fee. This is separate from the
             // platform's commission and changes the net arithmetic: under a destination charge the provider
             // deducts it from the connected account unless the application fee covers it.
             //
@@ -2599,12 +2711,12 @@ return [
         | for any of them, and a guard test holds the absences — but it is still
         | something to switch on knowingly rather than to find running.
         |
-        | "instrument_type" decides WHEN the tax falls, and it is frozen on each
+        | "instrument_type" decides when the tax falls, and it is frozen on each
         | voucher at issue: a supply already made cannot be re-decided by a later
         | change here. Where you sell into many countries at many rates, neither
         | the place nor the rate is fixed when a voucher is sold, so nothing is
         | taxed yet — that is "multi_purpose". With exactly one country and one
-        | rate the supply IS determined at issue, and "single_purpose" is right.
+        | rate the supply is determined at issue, and "single_purpose" is right.
         |
         | The reporting threshold is a supervisory figure, not a package one: the
         | counter produces a defensible number and raises the alarm; filing
@@ -2623,11 +2735,11 @@ return [
             'platform_held' => in_array(is_string($marketplacePlatformHeld = env('BILLING_MARKETPLACE_PLATFORM_HELD')) ? strtolower(trim($marketplacePlatformHeld)) : $marketplacePlatformHeld, [true, '1', 'true', 'yes', 'on'], true),
         ],
 
-        // Provider events ABOUT A MERCHANT arrive on their own endpoint, signed with their own key. The
+        // Provider events about a merchant arrive on their own endpoint, signed with their own key. The
         // separation is not cosmetic: a verifier taught to accept either secret would let anyone holding
         // the merchant key forge a platform event, and a platform event moves the platform's own money.
         //
-        // The secret is REQUIRED in production once the marketplace is on — the app refuses to boot without
+        // The secret is required in production once the marketplace is on — the app refuses to boot without
         // it rather than run a marketplace whose merchant events all fail verification in silence.
         'webhook' => [
             'path' => env('BILLING_MARKETPLACE_WEBHOOK_PATH', 'billing/webhook/marketplace'),
@@ -2638,14 +2750,14 @@ return [
         'onboarding' => [
             // Which kind of provider account a merchant gets. This decides who runs the identity checks and
             // who absorbs a loss, and a provider will not change it once a merchant has onboarded — so an
-            // unsupported value is refused at BOOT rather than defaulted quietly.
+            // unsupported value is refused at boot rather than defaulted quietly.
             //
             //   express  — the provider owns onboarding, identity and the merchant's own dashboard. The
             //              default: the least the platform has to build, and the MOST it carries.
             //   standard — the merchant has a full account of their own with the provider, and a direct
             //              relationship with them. More capable for the merchant, less controllable here.
             //
-            // This setting is ALSO where the money risk is decided, which is not obvious from the names.
+            // This setting is also where the money risk is decided, which is not obvious from the names.
             // Measured against the live API on 2026-08-06 (pinned version 2025-08-27.basil), identical for
             // DE and US accounts, and readable on any account as `controller.fees.payer` and
             // `controller.losses.payments`:
@@ -2654,8 +2766,8 @@ return [
             //              chargeback. Neither is visible in a charge; both are properties of the account.
             //   standard — the merchant pays the fee, and a loss is not debited from the platform balance.
             //
-            // So a platform on `express` nets its commission MINUS the provider's fee, and carries the
-            // disputes. `billing.marketplace.fee` states a GROSS take rate; the package cannot
+            // So a platform on `express` nets its commission minus the provider's fee, and carries the
+            // disputes. `billing.marketplace.fee` states a gross take rate; the package cannot
             // subtract a processing fee it does not know your pricing for. Price accordingly — that
             // difference is the whole margin on a small sale.
             'account_type' => env('BILLING_MARKETPLACE_ACCOUNT_TYPE', 'express'),
@@ -2694,8 +2806,8 @@ return [
     | Replacing the package's own models
     |--------------------------------------------------------------------------
     |
-    | Not to be confused with `customer.model` above, which names YOUR billable model. This
-    | replaces one of the package's OWN models — an order, a subscription, an invoice record —
+    | Not to be confused with `customer.model` above, which names your billable model. This
+    | replaces one of the package's own models — an order, a subscription, an invoice record —
     | with your subclass, keyed by the package class, for your own relations, scopes or casts on
     | that row. The package then uses the subclass on every path: every query, every row it
     | writes, and the relations between its models.

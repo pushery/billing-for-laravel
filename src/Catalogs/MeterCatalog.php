@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\Money;
 
 /**
  * The usage-billed components a tier carries, read from `config('billing.tiers.<tier>.metered')`.
- * Same guarantee as the plan catalog: the client submits a METER key, never a price or a quantity to
+ * Same guarantee as the plan catalog: the client submits a meter key, never a price or a quantity to
  * charge for — both are resolved here.
  *
  * Malformed metering config throws rather than resolving to "not billable". A typo that silently
@@ -71,7 +71,25 @@ final readonly class MeterCatalog
             included: $this->included($definition, $tierKey, $meterKey),
             policy: $this->policy($definition, $tierKey, $meterKey),
             warnThreshold: $this->warnThreshold($definition, $tierKey, $meterKey),
+            grace: $this->grace($definition, $tierKey, $meterKey),
         );
+    }
+
+    /**
+     * The units a blocking meter may go past its allowance. Zero by default; refused when it is not a whole number of
+     * units, because a grace that silently read as zero would cut off the work it was configured to let finish.
+     *
+     * @param  array<array-key, mixed>  $definition
+     */
+    private function grace(array $definition, string $tierKey, string $meterKey): int
+    {
+        $grace = $definition['grace'] ?? 0;
+
+        if (! is_int($grace) || $grace < 0) {
+            throw new InvalidArgumentException("Metered component '{$meterKey}' on tier '{$tierKey}': grace must be a non-negative integer.");
+        }
+
+        return $grace;
     }
 
     /**
@@ -109,7 +127,7 @@ final readonly class MeterCatalog
     }
 
     /**
-     * The provider meter (event name) of every component any tier actually BILLS for, unique and in
+     * The provider meter (event name) of every component any tier actually bills for, unique and in
      * configured order — what `billing:meters:check` verifies exists at the provider. A component is
      * billable only when it has both a provider meter and a price, so every entry here is a non-empty
      * provider meter.
@@ -130,8 +148,8 @@ final readonly class MeterCatalog
     }
 
     /**
-     * Every component any tier actually BILLS for, deduplicated by its provider meter — what
-     * `billing:meters:check` verifies against the provider's meters AND prices. Two tiers billing the same
+     * Every component any tier actually bills for, deduplicated by its provider meter — what
+     * `billing:meters:check` verifies against the provider's meters and prices. Two tiers billing the same
      * meter with the same price are one thing to check, not two.
      *
      * @return list<MeteredComponent>
@@ -150,7 +168,7 @@ final readonly class MeterCatalog
     }
 
     /**
-     * The first meter key any tier actually BILLS for — a component with both a provider meter and a
+     * The first meter key any tier actually bills for — a component with both a provider meter and a
      * price. Null when nothing is billed by usage, which is what tells the boot guard it has no work.
      */
     public function firstBillableMeter(): ?string

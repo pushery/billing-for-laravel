@@ -20,10 +20,10 @@ use Throwable;
 
 /**
  * Stops an owner's live billing the instant their account is being deleted: on {@see BillableAccountDeleting}
- * it cancels every subscription IMMEDIATELY (not into a grace period — the account is going away), so a
+ * it cancels every subscription immediately (not into a grace period — the account is going away), so a
  * deleted account never keeps paying at the provider.
  *
- * EVERY subscription means every merchant scope, not only the platform's. `cancelNow()` acts on one scope,
+ * Every subscription means every merchant scope, not only the platform's. `cancelNow()` acts on one scope,
  * and a null scope is the platform: a marketplace member who subscribed to two creators kept both of those
  * subscriptions, and kept paying for them, after deleting the account. The scopes come from the owner's own
  * rows, and the platform is always asked as well, as it always was, because a provider can hold a
@@ -38,10 +38,10 @@ use Throwable;
  * decides how: `now` ends them immediately, `period_end` lets each run to the end of the period the fan has
  * paid for and renew no more.
  *
- * Runs SYNCHRONOUSLY (never queued): the cancel must complete while the owner still exists and before the
- * row is erased. A transient provider failure is TOLERATED, because leaving a user who asked to leave
+ * Runs synchronously (never queued): the cancel must complete while the owner still exists and before the
+ * row is erased. A transient provider failure is tolerated, because leaving a user who asked to leave
  * undeletable is worse than a cancel that has to be retried, and a failure in one scope does not stop the
- * others. It is not SILENT: it is logged, and reported as {@see DeletedAccountStillSubscribed} through the
+ * others. It is not silent: it is logged, and reported as {@see DeletedAccountStillSubscribed} through the
  * application's exception handler, both with the class name and the scope only, never the provider's message.
  */
 final readonly class StopBillingForDeletedAccount

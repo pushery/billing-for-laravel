@@ -45,8 +45,8 @@ final class MollieMoneyBackOutcomes implements ReportsMoneyBackOutcomes
      */
     private const int MAX_PAGES = 40;
 
-    /** @var array<string, string> payment id => the customer it belongs to, empty where it names none */
-    private array $customers = [];
+    /** @var array<string, ?Payment> payment id => the payment, null where Mollie no longer knows it */
+    private array $payments = [];
 
     public function __construct(private readonly MollieApiClient $client) {}
 
@@ -91,7 +91,14 @@ final class MollieMoneyBackOutcomes implements ReportsMoneyBackOutcomes
 
             $payment = MollieValue::id($chargeback->paymentId ?? null);
 
-            yield new ChargebackReversed($this->customerOf($payment), $payment, $amount, $id, $this->dateOf($reversedAt));
+            yield new ChargebackReversed(
+                $this->customerOf($payment),
+                $payment,
+                $amount,
+                $id,
+                $this->dateOf($reversedAt),
+                $this->standingRefundedOf($payment, $amount->currency),
+            );
         }
     }
 
@@ -146,12 +153,24 @@ final class MollieMoneyBackOutcomes implements ReportsMoneyBackOutcomes
      */
     private function customerOf(string $paymentId): string
     {
+        $payment = $this->paymentOf($paymentId);
+
+        return $payment instanceof Payment && is_string($payment->customerId) ? $payment->customerId : '';
+    }
+
+    /**
+     * The payment an outcome names, read once per run, or null where it names none or Mollie no longer knows it.
+     *
+     * Any other refusal travels, so the run fails and the next one reads again.
+     */
+    private function paymentOf(string $paymentId): ?Payment
+    {
         if ($paymentId === '') {
-            return '';
+            return null;
         }
 
-        if (array_key_exists($paymentId, $this->customers)) {
-            return $this->customers[$paymentId];
+        if (array_key_exists($paymentId, $this->payments)) {
+            return $this->payments[$paymentId];
         }
 
         try {
@@ -164,9 +183,50 @@ final class MollieMoneyBackOutcomes implements ReportsMoneyBackOutcomes
             $payment = null;
         }
 
-        $customer = $payment instanceof Payment && is_string($payment->customerId) ? $payment->customerId : '';
+        return $this->payments[$paymentId] = $payment instanceof Payment ? $payment : null;
+    }
 
-        return $this->customers[$paymentId] = $customer;
+    /**
+     * What a payment still has refunded or charged back: its refunded amount plus the chargebacks that still stand, read
+     * the way the webhook reads it for `AddonRefunded`, in the currency of the reversed chargeback.
+     *
+     * Null where the payment is gone, its refunded amount cannot be read or is in another currency, or its chargebacks
+     * are gone: a total read in part would give back money that is still owed, so the purchase is then left as it is. A
+     * refusal that says nothing about the payment travels, as it does for the payment itself.
+     */
+    private function standingRefundedOf(string $paymentId, string $currency): ?Money
+    {
+        $payment = $this->paymentOf($paymentId);
+
+        if (! $payment instanceof Payment) {
+            return null;
+        }
+
+        try {
+            $refunded = MollieAmount::fromOptionalResource($payment->amountRefunded, $currency);
+        } catch (Throwable) {
+            return null;
+        }
+
+        if ($refunded->currency !== $currency) {
+            return null;
+        }
+
+        if (! $payment->hasChargebacks()) {
+            return $refunded;
+        }
+
+        try {
+            $chargebacks = $payment->chargebacks();
+        } catch (RequestException $refusal) {
+            if (! in_array($refusal->getStatusCode(), [404, 410], true)) {
+                throw $refusal;
+            }
+
+            return null;
+        }
+
+        return $refunded->plus(MollieChargebackEvents::standing($chargebacks, $currency));
     }
 
     /**

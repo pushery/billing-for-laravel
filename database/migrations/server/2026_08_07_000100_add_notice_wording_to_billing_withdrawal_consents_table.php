@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * The WORDING the buyer was actually shown, frozen beside the version that names it.
+ * The wording the buyer was actually shown, frozen beside the version that names it.
  *
  * ## Why a snapshot and not a lookup
  *
@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Schema;
  * document rather than resolving them again later. The text of a declaration is the same kind of fact.
  * Duplication across rows is the price of provability, not an oversight.
  *
- * ## Why TWO columns and not one
+ * ## Why two columns and not one
  *
  * They are two declarations about different things, and the package refuses to treat them as one checkbox —
  * the booleans beside them are separate for that reason. One combined blob would let a receipt carry a

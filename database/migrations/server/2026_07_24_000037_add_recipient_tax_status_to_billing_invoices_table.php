@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * What the buyer was, as far as tax is concerned, frozen with the rest of the characteristics.
  *
- * It belongs beside them because it OUTRANKS them: a validated business in another country moves the place
+ * It belongs beside them because it outranks them: a validated business in another country moves the place
  * of supply whatever the product said. Leaving it derivable would let a buyer who later registers, or later
  * lets a registration lapse, change how a sale that already happened should have been treated.
  *

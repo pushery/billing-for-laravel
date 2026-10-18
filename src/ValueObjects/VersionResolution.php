@@ -19,9 +19,9 @@ use Pushery\Billing\Enums\VersionMode;
  *
  * ## The enrichment axis only
  *
- * These four policies are about NEW content — later editions, added material. They are the creator's to
+ * These four policies are about new content — later editions, added material. They are the creator's to
  * choose. Conformity updates (a fix, a security patch) are a different axis, mandatory rather than
- * selectable, and deliberately not expressible here: `Frozen` freezes what somebody is ENTITLED to, and says
+ * selectable, and deliberately not expressible here: `Frozen` freezes what somebody is entitled to, and says
  * nothing about what the seller still owes. Mixing them would let a product setting waive an obligation that
  * cannot be waived.
  *
@@ -66,7 +66,7 @@ final readonly class VersionResolution
      * the catalog no longer lists also answers null, deliberately: silently handing over the newest one
      * instead would give somebody the opposite of what a frozen grant promised, and would do it invisibly.
      *
-     * A version published after the moment asked about is never picked. "Newest" means newest SO FAR, or a
+     * A version published after the moment asked about is never picked. "Newest" means newest so far, or a
      * back-dated access check would answer with a file that did not exist yet.
      *
      * @param  list<ContentVersion>  $versions

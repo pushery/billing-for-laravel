@@ -8,16 +8,16 @@ use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\BillingSchema;
 
 /**
- * Prepaid usage units — an add-on that grants UNITS of a meter ("+1000 emails") rather than money.
+ * Prepaid usage units — an add-on that grants units of a meter ("+1000 emails") rather than money.
  *
  * Three pieces, one feature:
  *
- * 1. `billing_prepaid_units` — the PERSISTENT balance, per owner per meter. It never expires and never
+ * 1. `billing_prepaid_units` — the persistent balance, per owner per meter. It never expires and never
  *    resets: the customer paid for those units, so they roll across billing cycles. This is what makes it
  *    different from the tier's `included` allowance, which is per-cycle and lives in the (period-scoped)
  *    usage counter.
  *
- * 2. `billing_usage_counters.prepaid_used` — how much of THIS period's usage was covered by prepaid units.
+ * 2. `billing_usage_counters.prepaid_used` — how much of this period's usage was covered by prepaid units.
  *    The flusher subtracts it before reporting, because the provider's price knows nothing about prepaid:
  *    it applies its own `included` allowance to whatever we report, so reporting `used - prepaid_used`
  *    leaves exactly the units that should actually be billed.

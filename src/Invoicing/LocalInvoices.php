@@ -145,7 +145,7 @@ final readonly class LocalInvoices implements Invoices
     }
 
     /**
-     * Every read is scoped to the owner HERE, so no caller can forget it.
+     * Every read is scoped to the owner here, so no caller can forget it.
      *
      * The native return type carries the class and the docblock carries the generic, which is the only way
      * to state both: a bare `Builder` says nothing about what it builds, and a docblock alone leaves the

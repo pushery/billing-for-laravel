@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\CountrySignals;
  *
  * 1. Where the money comes from is the strongest single signal, because it is the hardest for a buyer to
  *    choose casually — a card is issued somewhere and stays issued there.
- * 2. A buyer who says otherwise AND whose connection agrees with them outranks it. Two sources against one
+ * 2. A buyer who says otherwise and whose connection agrees with them outranks it. Two sources against one
  *    is the ordinary shape of a genuine traveller or an expatriate, and refusing them would turn a correct
  *    self-declaration into a failed sale.
  * 3. Anything else is asked, never guessed. A contradiction the sources cannot settle is settled by the one
@@ -69,9 +69,9 @@ final readonly class PaymentCountryLeadsPolicy implements CountryEvidencePolicy
     }
 
     /**
-     * A settled answer, carrying whatever subdivision the SAME sources support.
+     * A settled answer, carrying whatever subdivision the same sources support.
      *
-     * The subdivision is read from the sources that named THIS country — never from whichever source
+     * The subdivision is read from the sources that named this country — never from whichever source
      * happened to know a state — and only where the country has subdivisions in scope. Everything else
      * resolves to null, which the counter downstream reads as an explicit `unknown`.
      *

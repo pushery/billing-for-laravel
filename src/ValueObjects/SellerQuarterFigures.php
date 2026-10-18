@@ -12,7 +12,7 @@ namespace Pushery\Billing\ValueObjects;
  * and let a reader infer the count would drop every quarter whose movements netted to nothing — a quarter
  * with a sale and its reversal really did have two transactions.
  *
- * And the fee is NOT the gross inflow minus a payout. That derivation is right for one unmixed sale at one
+ * And the fee is not the gross inflow minus a payout. That derivation is right for one unmixed sale at one
  * rate and wrong for a basket that mixes rates, for a fee with a flat component, and for any quarter
  * holding both — wrong quietly, because both inputs are correct.
  */

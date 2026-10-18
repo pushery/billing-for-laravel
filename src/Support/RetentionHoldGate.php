@@ -23,7 +23,7 @@ use Throwable;
  *
  * Candidate ids are read in chunks and the seam is asked per chunk, so a table with millions of expired
  * rows costs a bounded amount of memory rather than one id per row in a single array. What is accumulated
- * is the HELD set, and only the candidates the host named go into it.
+ * is the held set, and only the candidates the host named go into it.
  *
  * ## A hold can be large, so it is never bound one id at a time
  *
@@ -103,7 +103,7 @@ final readonly class RetentionHoldGate
     /**
      * The chunk's primary keys, as something the seam can be asked about.
      *
-     * A key that is neither an int nor a string ABORTS rather than being skipped, and that direction is the
+     * A key that is neither an int nor a string aborts rather than being skipped, and that direction is the
      * whole point. Skipping it would leave one record the host was never asked about — which reads as "not
      * held" and deletes it. The one case this gate exists to prevent would then arrive through the gate
      * itself, quietly, for the rows it could not name.

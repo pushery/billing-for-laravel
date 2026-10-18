@@ -10,10 +10,10 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\SubscriptionGrant;
 
 /**
- * The read seam a consumer's content-ACL uses to ask about subscription STATE, so it never re-derives that
+ * The read seam a consumer's content-ACL uses to ask about subscription state, so it never re-derives that
  * state from the provider or from the internal tier-resolver/presenter pair.
  *
- * BOUNDARY: billing owns MONEY and SUBSCRIPTION-STATE; the consumer owns CONTENT-ACL. This seam hands the
+ * Boundary: billing owns money and subscription-state; the consumer owns CONTENT-ACL. This seam hands the
  * consumer the state — what tier, in what state, over what window, per merchant — and nothing about what a
  * tier unlocks. It is provider-free by contract: an implementation answers from local state on the hot path,
  * never a live provider read, so an access check per page never fans out to a payment provider.

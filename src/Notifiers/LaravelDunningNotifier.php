@@ -53,7 +53,7 @@ final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, 
     /**
      * The receipt — and, where one was given, the confirmation the law wants on a durable medium.
      *
-     * The declarations are FETCHED here rather than passed in, and that is what keeps the seam intact.
+     * The declarations are fetched here rather than passed in, and that is what keeps the seam intact.
      * `ReceiptNotifier` has one method and is implemented outside this package; a new required parameter
      * would be a fatal error in code this package does not own. Looking them up means the shipped notifier
      * carries them without any adopter changing a line, and an adopter with their own notifier decides

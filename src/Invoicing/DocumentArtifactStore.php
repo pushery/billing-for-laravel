@@ -68,7 +68,7 @@ final readonly class DocumentArtifactStore
      * Whether re-rendering the document today would produce what was issued.
      *
      * A mismatch is information, not a failure: it says the data underneath has moved since. What must never
-     * happen is that a caller receives the re-render BELIEVING it to be the original — which is exactly what
+     * happen is that a caller receives the re-render believing it to be the original — which is exactly what
      * a store that only kept the row and re-rendered on demand would do, every time, silently.
      */
     public function matchesIssued(InvoiceRecord $invoice, string $syntax): bool

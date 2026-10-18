@@ -14,7 +14,7 @@ namespace Pushery\Billing\Tax;
  * failure reported as "the rates are wrong" trains an operator to ignore the one signal that matters, and
  * then a real drift arrives looking identical to the noise they have learned to dismiss.
  *
- * So `unreachable` is its own state, and it is NOT a drift. It means the question was never put.
+ * So `unreachable` is its own state, and it is not a drift. It means the question was never put.
  *
  * `refused` is the fourth thing and it is not a drift either: the source answered with two different
  * standard rates for one country, so there is nothing to compare against. That is a problem with the

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Enums;
 
 /**
- * The rule that decided WHEN a supply became taxable.
+ * The rule that decided when a supply became taxable.
  *
  * A tax point is a date, and a date on its own is not enough. Two sellers with byte-identical transactions
  * can legitimately owe tax in different periods, because their jurisdictions pick the moment differently —
@@ -13,7 +13,7 @@ namespace Pushery\Billing\Enums;
  * taxed on supply it spreads across twelve. Nothing about the resulting date says which reading produced it.
  *
  * So the basis travels with the date and is frozen beside it. Without that, a document read years later
- * cannot be checked at all: a reviewer recomputing the tax point applies TODAY's configuration to a sale
+ * cannot be checked at all: a reviewer recomputing the tax point applies today's configuration to a sale
  * made under a different one, gets a different month, and has no way to tell whether the original was wrong
  * or the rule simply changed.
  *

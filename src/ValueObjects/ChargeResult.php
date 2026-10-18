@@ -12,7 +12,7 @@ namespace Pushery\Billing\ValueObjects;
  * come back needing the cardholder to authenticate (3-D Secure — `requiresAction`, with the
  * `clientSecret` the front end confirms against), and a bank-debit method (SEPA) is `pending` for days
  * before it settles. Collapsing those onto "failed" reports a good payment as a decline. `successful`
- * stays true only for a settled charge; `requiresAction` and `pending` are NOT failures — they are
+ * stays true only for a settled charge; `requiresAction` and `pending` are not failures — they are
  * "not yet", so `failed()` excludes them.
  */
 final readonly class ChargeResult
@@ -48,7 +48,7 @@ final readonly class ChargeResult
         return $this->destination !== null;
     }
 
-    /** A genuine failure — a decline. An unsettled charge that still might succeed (action/pending) is NOT failed. */
+    /** A genuine failure — a decline. An unsettled charge that still might succeed (action/pending) is not failed. */
     public function failed(): bool
     {
         return ! $this->successful && ! $this->requiresAction && ! $this->pending;

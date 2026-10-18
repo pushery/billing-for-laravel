@@ -40,7 +40,7 @@ use Stripe\Transfer;
  * Naming the charge makes the provider wait for that specific payment to settle and then move its share.
  * That is the behavior a separate transfer is supposed to have.
  *
- * ## And it has to name a CHARGE, which the ledger does not hold
+ * ## And it has to name a charge, which the ledger does not hold
  *
  * The reference a caller passes is the one the payment lane recorded: the PaymentIntent a payment created
  * (`pi_…`), or the invoice a routed subscription cycle is keyed on (`in_…`). Stripe's `source_transaction` takes
@@ -71,7 +71,7 @@ final readonly class StripeMerchantTransfers implements FindsMovedShare, MovesMe
                 'amount' => StripeAmount::of($amount),
                 'currency' => strtolower($amount->currency),
                 'destination' => $destination->accountId,
-                // Funded by THIS payment, never by the platform balance. See the class docblock.
+                // Funded by this payment, never by the platform balance. See the class docblock.
                 'source_transaction' => $this->fundingChargeOf($sourceCharge),
             ],
             $idempotencyKey === null ? [] : ['idempotency_key' => $idempotencyKey],
@@ -184,7 +184,7 @@ final readonly class StripeMerchantTransfers implements FindsMovedShare, MovesMe
         try {
             $transfer = $this->stripe->transfers->retrieve($transferReference);
         } catch (RateLimitException $e) {
-            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // A 429 is transient and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException $missing) {
@@ -192,9 +192,9 @@ final readonly class StripeMerchantTransfers implements FindsMovedShare, MovesMe
             // caller is a reconciliation sweep: one unknown reference is the finding it exists to surface,
             // and an exception here would abandon every merchant after it.
             //
-            // NARROWED TO 404, and the clause above is why that is not the same statement twice. The
+            // Narrowed to 404, and the clause above is why that is not the same statement twice. The
             // dedicated rate-limit clause takes the 429 out of this branch entirely; the status check then
-            // covers every OTHER non-404 the parent type carries. Both matter: without the first a busy
+            // covers every other non-404 the parent type carries. Both matter: without the first a busy
             // provider is reported as a transfer that does not exist — the most serious alarm this class
             // can raise, manufactured — and without the second any other refusal reads the same way.
             // Reporting over an unreadable provider is the one answer a reconciliation must never give.
@@ -207,7 +207,7 @@ final readonly class StripeMerchantTransfers implements FindsMovedShare, MovesMe
 
         $currency = strtoupper((string) $transfer->currency);
 
-        // `amount_reversed` is the provider's CUMULATIVE figure for this transfer. Summing the reversal
+        // `amount_reversed` is the provider's cumulative figure for this transfer. Summing the reversal
         // objects instead would be the same number until a redelivered webhook or a partial second reversal
         // makes it not, and it would then read as more clawed back than actually was.
         return new MovedShare(
@@ -222,7 +222,7 @@ final readonly class StripeMerchantTransfers implements FindsMovedShare, MovesMe
         Money $amount,
         ?string $idempotencyKey = null,
     ): TransferReversal {
-        // A reversal is created ON the transfer, not as a top-level object, which is why the reference the
+        // A reversal is created on the transfer, not as a top-level object, which is why the reference the
         // caller holds is the transfer's and not a payment's. This is the call the separate-transfer lane
         // never had: refunding the payment does not touch a transfer that moved in its own request, so
         // without this a marketplace on the shipped default could pay a merchant and claw back nothing.
@@ -234,7 +234,7 @@ final readonly class StripeMerchantTransfers implements FindsMovedShare, MovesMe
 
         // The provider's own figure, exactly as the outbound side does it -- and it matters more here. They
         // can differ when part of the transfer has already been reversed, and a ledger that recorded the
-        // REQUESTED amount would believe the clawback was complete and never ask for the rest, leaving the
+        // requested amount would believe the clawback was complete and never ask for the rest, leaving the
         // difference with the merchant while every total still adds up.
         return new TransferReversal(
             (string) $reversal->id,

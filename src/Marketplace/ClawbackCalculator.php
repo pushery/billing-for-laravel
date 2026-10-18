@@ -12,7 +12,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
 /**
  * How much of a merchant's share comes back when a buyer is refunded.
  *
- * The rule is: recompute what the merchant would have been owed on what REMAINS of the sale, and claw back
+ * The rule is: recompute what the merchant would have been owed on what remains of the sale, and claw back
  * the difference. Not a proportional share of the original payout — and the distinction is the whole reason
  * this class exists rather than a multiplication at the call site.
  *
@@ -56,7 +56,7 @@ final readonly class ClawbackCalculator
 
         // The heart of it: the merchant's share of what is LEFT, computed from scratch.
         //
-        // On the SAME BASE the sale was made on, which the row carries. The commission is a net rate, so
+        // On the same base the sale was made on, which the row carries. The commission is a net rate, so
         // the remainder's commission is taken on the remainder's net — and the rate for that is frozen,
         // never read from today's configuration. A sale made under one basis and reversed under another
         // does not return what was taken: the two figures differ by the commission on the buyer's tax, and
@@ -90,7 +90,7 @@ final readonly class ClawbackCalculator
     /**
      * A reversal is never negative.
      *
-     * A negative result would mean paying the merchant MORE because a buyer was refunded, which is not a
+     * A negative result would mean paying the merchant more because a buyer was refunded, which is not a
      * correction of anything. It can arise from a charge whose totals were moved by another path, and the
      * honest answer there is to reverse nothing rather than to invent a payment.
      */

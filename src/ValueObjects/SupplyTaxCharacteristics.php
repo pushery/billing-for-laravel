@@ -11,7 +11,7 @@ use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Enums\TaxRateCategory;
 
 /**
- * What a supply WAS, in the terms its tax treatment turns on — carried as one argument.
+ * What a supply was, in the terms its tax treatment turns on — carried as one argument.
  *
  * Every field is nullable and every field defaults to null, and that is the whole design rather than a
  * convenience. These characteristics are independently known: a caller may have the archetype from a
@@ -25,7 +25,7 @@ use Pushery\Billing\Enums\TaxRateCategory;
  * The docblock this replaces argued for separate parameters on the ground that they are independently
  * known and that "a wrapper would have to invent a rule for a partially-filled one". The first half is
  * still true and is why the fields are nullable. The second half was the part that did not survive:
- * there IS no rule to invent, because a partially-filled object is not a lesser object here. An empty
+ * there is no rule to invent, because a partially-filled object is not a lesser object here. An empty
  * one is exactly as valid as a full one, and it means the same thing the absent arguments meant — the
  * caller does not know, and the document says so by leaving the columns null.
  *
@@ -35,7 +35,7 @@ use Pushery\Billing\Enums\TaxRateCategory;
  * positional argument after it, and two of the pairs it could shift past are type-compatible, so the
  * statics stay silent while a document acquires a wrong date. One argument cannot be mis-ordered.
  *
- * ## What does NOT belong here
+ * ## What does not belong here
  *
  * The payment provider and the charge reference. They travel together with the sale's tax
  * characteristics in several signatures and are not any of them: they identify the money, not the
@@ -45,7 +45,7 @@ final readonly class SupplyTaxCharacteristics
 {
     /**
      * @param  ?TaxArchetype  $archetype  what was sold, in the terms the tax treatment turns on
-     * @param  ?TaxArchetype  $soldAlongside  what a voluntary payment was paid ON — the thing a tip
+     * @param  ?TaxArchetype  $soldAlongside  what a voluntary payment was paid on — the thing a tip
      *                                        accompanied, which it otherwise has no way of naming
      * @param  ?PlaceOfSupplyRule  $placeOfSupply  where the supply was taxed
      * @param  ?TaxRateCategory  $rateCategory  which rate band it fell in

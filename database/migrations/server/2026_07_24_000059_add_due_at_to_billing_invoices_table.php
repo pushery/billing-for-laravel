@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * Nullable and written by nobody in this package — a document that states no due date keeps the empty field
  * it has always had, which is what leaves an existing batch byte for byte as it was. It exists so a consumer
- * that HAS payment terms can put them where the export can find them.
+ * that has payment terms can put them where the export can find them.
  */
 return new class extends Migration
 {

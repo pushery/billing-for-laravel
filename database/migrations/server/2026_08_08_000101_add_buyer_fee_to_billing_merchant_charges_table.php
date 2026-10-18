@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## Why it has to be stored and cannot be recomputed
  *
- * A withdrawal returns the fee that was CHARGED, and the only honest source for that figure is the sale.
+ * A withdrawal returns the fee that was charged, and the only honest source for that figure is the sale.
  * Recomputing it from configuration at withdrawal time would price an old sale at today's rate, at today's
  * model, and at today's place of supply — three inputs an operator is free to change, none of which leaves
  * a trace saying it did. The result would be a plausible number, which is the worst kind of wrong here.
@@ -42,7 +42,7 @@ return new class extends Migration
             $table->unsignedBigInteger('buyer_fee_tax_minor')->nullable()->after('buyer_fee_net_minor');
             $table->string('buyer_fee_place_of_supply', 2)->nullable()->after('buyer_fee_tax_minor');
 
-            // What has already gone back, so a retried withdrawal returns the fee once. NOT nullable and not
+            // What has already gone back, so a retried withdrawal returns the fee once. Not nullable and not
             // merged into `refunded_minor`: that counter is capped against the sale's gross, which the fee is
             // not part of, so a shared counter would either cap the fee away or inflate the sale's own cap.
             $table->unsignedBigInteger('buyer_fee_refunded_minor')->default(0)->after('buyer_fee_place_of_supply');

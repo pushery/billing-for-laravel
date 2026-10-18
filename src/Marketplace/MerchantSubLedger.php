@@ -22,16 +22,16 @@ use Pushery\Billing\ValueObjects\Money;
  * so. So a shortfall is charged here, the balance goes negative, and the next settlement is applied against
  * it before anything leaves.
  *
- * ## Offsetting is a PAYMENT event, never a reduction of consideration
+ * ## Offsetting is a payment event, never a reduction of consideration
  *
  * This is the distinction the whole class turns on. Withholding a settlement to pay down a debt changes what
- * the merchant RECEIVES; it does not change what they EARNED. The settlement document still states its full
+ * the merchant receives; it does not change what they earned. The settlement document still states its full
  * amount, the tax base is untouched, and no correcting document is due — the money simply went to the debt
  * instead of to the bank. Treating an offset as a reduction would quietly turn a collection into a tax
  * correction, understating the platform's own turnover by the same amount, and the documents would still all
  * look right.
  *
- * Which is also why the offset works on the settlement's GROSS: the clawback that created the debt took the
+ * Which is also why the offset works on the settlement's gross: the clawback that created the debt took the
  * gross, tax paid through included, so paying it back with a net would leave the tax half of it outstanding
  * forever, shrinking by a fraction of itself on every settlement.
  *
@@ -73,7 +73,7 @@ final readonly class MerchantSubLedger
      * Since when — null when nothing is owed.
      *
      * Kept as its own column rather than read from the row's last update, because that answers the opposite
-     * question: a debt paid down twice looks NEWER than one nobody has touched, and it is the untouched one
+     * question: a debt paid down twice looks newer than one nobody has touched, and it is the untouched one
      * that is the receivable.
      */
     public function inDebtSince(Model $merchant, string $currency): ?Carbon
@@ -131,7 +131,7 @@ final readonly class MerchantSubLedger
     /**
      * Charge a shortfall the platform could not reclaim from the provider.
      *
-     * Takes a positive amount and drives the balance DOWN, so a call site cannot pay a debt off by passing a
+     * Takes a positive amount and drives the balance down, so a call site cannot pay a debt off by passing a
      * negative number to the method named for owing one.
      */
     public function chargeShortfall(Model $merchant, Money $amount): Money
@@ -223,7 +223,7 @@ final readonly class MerchantSubLedger
     /**
      * Write the balance, and start or stop the clock the receivable is aged by.
      *
-     * The clock starts when the balance crosses INTO debt and is cleared the moment it leaves — so a merchant
+     * The clock starts when the balance crosses into debt and is cleared the moment it leaves — so a merchant
      * who runs up a second debt starts a second clock rather than inheriting the age of the first.
      */
     private function write(Model $merchant, Money $balance): Money

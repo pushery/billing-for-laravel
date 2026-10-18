@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\ContentReference;
  *
  * The name is the documentation. This package does not hold the works, so with no catalog wired it has
  * nothing to ask and exactly one honest thing to say — that it knows of no reason the work is missing. It
- * does NOT know the work is there.
+ * does not know the work is there.
  *
  * The direction is deliberate and is the opposite of the scope's. Availability is not a permission: reported
  * wrongly it produces a broken download in the consumer's own delivery path, which the consumer sees

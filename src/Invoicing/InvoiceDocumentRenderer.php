@@ -93,12 +93,12 @@ final readonly class InvoiceDocumentRenderer
         $subtotal = $invoice->subtotal_minor ?? ($invoice->total_minor - ($invoice->tax_minor ?? 0) - $collected);
         $tax = $invoice->tax_minor ?? 0;
 
-        // A short receipt states the gross with its rate in ONE sum and names nobody. Splitting it into net
+        // A short receipt states the gross with its rate in one sum and names nobody. Splitting it into net
         // and tax, or printing an empty recipient block, would make a document that is deliberately
         // anonymous look like an incomplete invoice — and a reader would go looking for the missing name.
         $itemised = $invoice->receipt_tier?->itemisesTax() ?? true;
 
-        // A margin-taxed document states NO tax and no rate — stating either is treated as a separate
+        // A margin-taxed document states no tax and no rate — stating either is treated as a separate
         // statement of tax, which the seller then owes on top of what they already owe on the margin. The
         // prescribed wording is what makes the document legible as margin-taxed; without it the same page
         // reads as an ordinary sale that forgot its tax, and a buyer may ask for a figure that must never
@@ -135,6 +135,7 @@ final readonly class InvoiceDocumentRenderer
             // again -- which they did, silently, because only one half is checked by a validator.
             'selfBilled' => $invoice->isSelfBilled(),
             'correctsNumber' => $invoice->credited_invoice_number,
+            'reinstatesNumber' => $invoice->reinstatedInvoiceNumber(),
             'reverseCharge' => (bool) $invoice->reverse_charge,
             'vatNote' => is_string($invoice->vat_note) ? $invoice->vat_note : null,
             'lines' => $lines,
@@ -217,7 +218,7 @@ final readonly class InvoiceDocumentRenderer
      * said. On a self-billed settlement the visible page would name the platform while the machine-readable
      * half named the creator, in one file, about the one fact the document exists to state.
      *
-     * A hybrid format exists so that a person and a machine read the SAME invoice. Two answers to "who
+     * A hybrid format exists so that a person and a machine read the same invoice. Two answers to "who
      * supplied this" is not an imprecision; which one counts depends on which software opens the file.
      *
      * For a document with no snapshot the resolver's default is the platform company, so a single-seller

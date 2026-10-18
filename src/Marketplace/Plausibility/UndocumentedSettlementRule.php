@@ -42,7 +42,7 @@ use Pushery\Billing\ValueObjects\PlausibilityFinding;
  *
  * ## What an acknowledgement covers
  *
- * A finding's key is the rule and the subject; an acknowledgement also carries the PERIOD. So answering
+ * A finding's key is the rule and the subject; an acknowledgement also carries the period. So answering
  * this for a seller settles it for that period only, and a charge that is still undocumented next quarter
  * is reported again — which is the behavior worth having, because the second quarter is new information
  * about the same gap rather than a repeat of the first.

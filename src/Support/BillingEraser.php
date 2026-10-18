@@ -20,24 +20,24 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 /**
  * Erases an owner's billing data — the package's answer to a right-to-erasure request (GDPR Art. 17).
  *
- * WHAT IT DOES NOT DO IS THE IMPORTANT PART. It does not delete the invoices. A valid invoice must carry
+ * What it does not do is the important part. It does not delete the invoices. A valid invoice must carry
  * the buyer's name and address (§14 UStG), and invoices must be kept for years (§147 AO, §14b UStG); the
  * right to erasure yields to a legal retention obligation (Art. 17(3)(b)). So the financial record is
- * UNLINKED from the owner and kept, and the retention clock (`billing:prune`) removes it once the law stops
+ * unlinked from the owner and kept, and the retention clock (`billing:prune`) removes it once the law stops
  * requiring it. An implementation that cascaded the invoices away would destroy tax records.
  *
- * Everything else goes, and the stored webhook payloads are SCRUBBED rather than kept: they carry the
+ * Everything else goes, and the stored webhook payloads are scrubbed rather than kept: they carry the
  * customer's email, name, billing address and card last four, and a right to erasure that cannot reach the
  * data is not a right to erasure.
  *
- * ## What this does NOT reach
+ * ## What this does not reach
  *
  * There are no provider API keys here to delete. This package stores no secret of any kind — the merchant
- * row carries an account REFERENCE (`acct_…`), which is an identifier and goes with the row; a credential
+ * row carries an account reference (`acct_…`), which is an identifier and goes with the row; a credential
  * would be a different thing and there is no column for one. `NoStoredCredentialsTest` holds that, so the
  * sentence cannot quietly stop being true.
  *
- * **If YOUR app stores a merchant's API keys, erasing them is your job.**
+ * **If your app stores a merchant's API keys, erasing them is your job.**
  * `BillableAccountDeleting` is the hook — dispatched first and outside the transaction, so a listener can
  * make a provider call — and it is where that deletion belongs.
  *
@@ -53,7 +53,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * at the provider first, in the same listener that ends the person's own: a subscription left running there
  * would renew for a merchant who no longer exists, with no local row left to show it.
  *
- * It all happens in ONE transaction: a half-erased owner is worse than an un-erased one, because nobody
+ * It all happens in one transaction: a half-erased owner is worse than an un-erased one, because nobody
  * would know which half.
  */
 final readonly class BillingEraser
@@ -61,6 +61,7 @@ final readonly class BillingEraser
     public function __construct(
         private BillingEventLog $log,
         private CustomerRegistry $customers,
+        private BillingManager $manager,
         private SubjectScopedRecords $records = new SubjectScopedRecords,
     ) {}
 
@@ -68,10 +69,10 @@ final readonly class BillingEraser
     {
         $this->assertSaved($owner);
 
-        // Stop live billing FIRST, before anything is erased: an owner whose data is gone but whose
-        // subscription keeps charging is a money leak AND a compliance breach (you cannot bill someone you
+        // Stop live billing first, before anything is erased: an owner whose data is gone but whose
+        // subscription keeps charging is a money leak and a compliance breach (you cannot bill someone you
         // erased). Dispatched — not called directly — so the same listener serves an app's own delete flow,
-        // and OUTSIDE the erase transaction below so the provider API call never runs inside the DB tx. The
+        // and outside the erase transaction below so the provider API call never runs inside the DB tx. The
         // listener degrades on a transient provider failure (logs + continues), so the erase is never orphaned.
         // It also ends what others hold with the person as a merchant, before the merchant axis purges it.
         Event::dispatch(new BillableAccountDeleting($owner));
@@ -100,6 +101,10 @@ final readonly class BillingEraser
     {
         $this->assertSaved($owner);
 
+        if ($this->manager->paymentsOnly()) {
+            return $this->scrubDeliveries($owner);
+        }
+
         $credit = $this->outstandingCredit($owner);
 
         return DB::transaction(function () use ($owner, $credit): ErasureReport {
@@ -114,7 +119,7 @@ final readonly class BillingEraser
             // package holds about a merchant and reported success. Every column name below arrives with the
             // axis, so both run the same code.
             foreach (OwnerScopedTables::axes() as $axis) {
-                // Child tables go FIRST, while the parent rows still exist to join through. The delivery
+                // Child tables go first, while the parent rows still exist to join through. The delivery
                 // record stays and only its payload goes: the row is what makes a failed effect replayable, and
                 // the package's own account of what the provider sent.
                 $axisPurged = [
@@ -139,7 +144,7 @@ final readonly class BillingEraser
             $axes[$merchant]['retained'] ??= [];
             $purged = $this->sum($purged, $coupons);
 
-            // The owner's own audit rows go with them. Then ONE row records that the erasure happened:
+            // The owner's own audit rows go with them. Then one row records that the erasure happened:
             // accountability (Art. 5(2)) means being able to show it was done — and that record must not
             // itself become a fresh copy of the personal data, so it carries the morph class and nothing
             // that could identify the person.
@@ -168,6 +173,19 @@ final readonly class BillingEraser
 
             return new ErasureReport($purged, $retained, $credit, $axes);
         });
+    }
+
+    /**
+     * An erasure in payments-only mode, which keeps the webhook deliveries and nothing else
+     * ({@see PaymentsModeSchema}). The payloads the owner's deliveries stored are scrubbed as in full mode; there is
+     * no credit, coupon or audit trail to remove, and no table to look for one in.
+     */
+    private function scrubDeliveries(Model $owner): ErasureReport
+    {
+        $axis = PaymentsModeSchema::ownerAxis();
+        $scrubbed = DB::transaction(fn (): array => $this->records->scrub($axis, $owner));
+
+        return new ErasureReport($scrubbed, [], axes: [$axis->name => ['purged' => $scrubbed, 'retained' => []]]);
     }
 
     /**

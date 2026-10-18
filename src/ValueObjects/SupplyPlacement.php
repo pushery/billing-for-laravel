@@ -18,7 +18,7 @@ use Pushery\Billing\Enums\RecipientTaxStatus;
 final readonly class SupplyPlacement
 {
     public function __construct(
-        /** Where it is taxed, AFTER the buyer's status has had its say. */
+        /** Where it is taxed, after the buyer's status has had its say. */
         public PlaceOfSupplyRule $rule,
         public RecipientTaxStatus $recipient,
         /** Whether the buyer accounts for the tax instead of the seller. */

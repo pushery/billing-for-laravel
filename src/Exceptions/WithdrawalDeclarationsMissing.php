@@ -11,7 +11,7 @@ use RuntimeException;
  *
  * ## Why this refuses at the checkout and not at provision
  *
- * The gate before PROVISION already exists and already refuses. On its own it is the wrong end of the
+ * The gate before provision already exists and already refuses. On its own it is the wrong end of the
  * problem: the buyer has paid by then. A work whose right of withdrawal ends at provision cannot be handed
  * over without the two declarations, so a purchase that reaches the provider without them buys something
  * the buyer cannot receive — and the operator is left issuing a refund for a sale the package could have
@@ -21,7 +21,7 @@ use RuntimeException;
  *
  * ## Why an unclassified product refuses too
  *
- * The withdrawal gate needs TWO conditions to bite — an active consumer-rights profile AND a classified
+ * The withdrawal gate needs two conditions to bite — an active consumer-rights profile and a classified
  * archetype — and until now the second one failing meant the first was never consulted. An operator who
  * turned the profile on and left one work without an `archetype` key got that work sold and delivered with
  * no consent recorded, and nothing anywhere said so. `billing:doctor` reported the combination; nothing

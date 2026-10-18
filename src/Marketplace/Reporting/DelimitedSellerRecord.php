@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\SellerQuarterFigures;
  * ## What this is and is not
  *
  * It is a complete, deterministic, archivable record of what a period says — the shape every bulk-filing
- * interface asks for, in the plainest carrier there is. It is NOT any particular authority's wire format,
+ * interface asks for, in the plainest carrier there is. It is not any particular authority's wire format,
  * and nothing here pretends to be: a real submission format is a schema with a namespace, and a package
  * that guessed at one would produce a file that validates nowhere.
  *
@@ -40,7 +40,7 @@ use Pushery\Billing\ValueObjects\SellerQuarterFigures;
  *
  * - **Order.** The reports arrive sorted by the seller's stored morph pair ({@see SellerReportingPeriod}),
  *   and that order is passed through untouched rather than re-sorted here on anything a database chose.
- * - **Numbers.** Amounts are written in MINOR UNITS as integers. A decimal rendering would depend on the
+ * - **Numbers.** Amounts are written in minor units as integers. A decimal rendering would depend on the
  *   locale, and a float would depend on the platform.
  * - **Time.** Nothing here reads a clock. A generated-at stamp inside the payload would make every run
  *   differ from every other, which is the same as having no comparison at all.

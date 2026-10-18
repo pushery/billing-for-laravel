@@ -9,11 +9,11 @@ use Pushery\Billing\Enums\InvoiceStatus;
 /**
  * A provider-neutral snapshot of an invoice at the moment it was finalized — everything the package needs
  * to persist a compliant, immutable record and render an EN 16931 / XRechnung document or a DATEV booking
- * from it later, WITHOUT going back to the provider.
+ * from it later, without going back to the provider.
  *
  * It is frozen on purpose: the buyer's name and address, the line items and the tax split are captured as
  * they were on the invoice, because a valid invoice must carry them (§14 UStG) and must not change after
- * issue. The number is the PROVIDER'S invoice number. Stripe assigns it when the invoice is finalized and keeps
+ * issue. The number is the provider's invoice number. Stripe assigns it when the invoice is finalized and keeps
  * the sequence unique and gapless as long as the account invoices only through Stripe and edits no number, and
  * minting a second of our own would give one invoice two numbers.
  *
@@ -47,10 +47,10 @@ final readonly class InvoiceSnapshot
          *
          * Zero on a driver that holds no such balance, and zero on an invoice that consumed none — the two
          * are the same answer here on purpose: what a reader does with it is spend it down, and there is
-         * nothing to spend in either case. The distinction that does matter, whether the provider CAN hold
+         * nothing to spend in either case. The distinction that does matter, whether the provider can hold
          * a balance, is already the difference between a real CreditSync and the null one.
          *
-         * Never negative. An invoice can also ADD to the balance, and a reader treating that as a debit
+         * Never negative. An invoice can also add to the balance, and a reader treating that as a debit
          * would take credit away at the moment the customer gained it.
          */
         public int $creditAppliedMinor = 0,

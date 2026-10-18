@@ -29,7 +29,7 @@ use RuntimeException;
  *
  * ## Country codes only
  *
- * What each signal ANSWERED, never what it was derived from. That is everything a later reader needs, and
+ * What each signal answered, never what it was derived from. That is everything a later reader needs, and
  * the raw inputs have no business surviving the moment they were resolved.
  */
 final readonly class PlaceEvidenceStore
@@ -116,7 +116,7 @@ final readonly class PlaceEvidenceStore
      */
     public function requiredSignals(): int
     {
-        // THE SAME KEY THE POLICY GATES ON, and that is the whole point of this method: the record states the
+        // The same key the policy gates on, and that is the whole point of this method: the record states the
         // standard `PaymentCountryLeadsPolicy` decided under. A second key for the same idea would agree on a
         // default install, where both are 2, and part the moment an operator configures one, which is exactly
         // when this record starts being worth something: a one-signal sale, correctly settled under a

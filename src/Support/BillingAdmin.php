@@ -37,7 +37,7 @@ use Pushery\Billing\ValueObjects\RefundResult;
  * The support/admin console core: the three out-of-band operations a support agent performs on an
  * owner's billing — comp a tier, cancel immediately, refund a charge — each recorded on the billing
  * audit ledger, plus a reader for that ledger. It carries no UI and no authorization of its own: an
- * app wires these into its OWN admin panel behind its OWN admin gate. Every action leaves an audit
+ * app wires these into its own admin panel behind its own admin gate. Every action leaves an audit
  * trail so a comp or refund is always traceable to who did it — the app passes the acting agent as $actor.
  */
 final readonly class BillingAdmin
@@ -57,7 +57,7 @@ final readonly class BillingAdmin
          */
         private RoutedChargeLedger $routed = new RoutedChargeLedger,
         /**
-         * The chain corrector and the standing it needs, for a refund on a ROUTED sale.
+         * The chain corrector and the standing it needs, for a refund on a routed sale.
          *
          * Both nullable and both resolved at the point of use rather than defaulted here: the corrector
          * takes collaborators of its own, so a hand-built default would be a second wiring of the document
@@ -65,7 +65,7 @@ final readonly class BillingAdmin
          * also what keeps a single-seller installation from constructing machinery it never reaches.
          *
          * This is the gap they close. Chargeback, statutory withdrawal and prepaid-term cancellation all
-         * corrected the chain; the package's only refund VERB did not. So an ordinary support refund on a
+         * corrected the chain; the package's only refund verb did not. So an ordinary support refund on a
          * routed sale moved the money and left the creator's settlement and the buyer's receipt claiming the
          * full amount — and settlement numbers come from a gapless series, so that state can only be
          * answered by a further correcting document, never tidied away.
@@ -125,19 +125,19 @@ final readonly class BillingAdmin
      *
      * When the refunded charge was a one-time add-on, the credit it granted is clawed back in the same
      * breath (reverse + debit + audit, atomically) — so a support refund is not a double loss: the money
-     * goes back AND the customer no longer keeps the credit they were refunded for. A refund of anything
+     * goes back and the customer no longer keeps the credit they were refunded for. A refund of anything
      * that is not a tracked add-on (a subscription invoice) reverses nothing. The provider round-trip is
-     * kept OUTSIDE any transaction; only the local reversal is transactional.
+     * kept outside any transaction; only the local reversal is transactional.
      *
-     * @param  ?string  $reason  what happened in THIS case, in somebody's own words
-     * @param  RefundKind  $kind  what KIND of thing it was — a category the books can group by, which a
+     * @param  ?string  $reason  what happened in this case, in somebody's own words
+     * @param  RefundKind  $kind  what kind of thing it was — a category the books can group by, which a
      *                            sentence cannot. Trailing and defaulted so every existing call site keeps
      *                            writing the row it wrote before, and `Goodwill` is what those rows are:
      *                            nothing in this package could exercise a withdrawal right yet
      */
     public function refund(Model $owner, string $chargeReference, Money $amount, ?string $reason = null, ?string $idempotencyKey = null, ?Model $actor = null, RefundKind $kind = RefundKind::Goodwill): RefundResult
     {
-        // The routed charge, resolved ONCE. The routing and the ledger work both need it, and reading the
+        // The routed charge, resolved once. The routing and the ledger work both need it, and reading the
         // row twice is two readings that can differ: a concurrent reversal between them would price this
         // refund against one state and cap it against another.
         $charge = $this->routedChargeFor($chargeReference);
@@ -150,7 +150,7 @@ final readonly class BillingAdmin
             return $this->madeBy($attempt);
         }
 
-        // The attempt's key when there is one. The row is written BEFORE the provider is called and its id
+        // The attempt's key when there is one. The row is written before the provider is called and its id
         // is what the key is derived from, so a retry of the same intent reaches the provider with the same
         // key and is collapsed there -- which a key recomputed from amounts cannot promise, because the
         // amounts are exactly what a partly-applied reversal changes. A caller that named the refund with a
@@ -162,7 +162,7 @@ final readonly class BillingAdmin
             ? $attempt->idempotency_key
             : $idempotencyKey ?? 'refund:'.$chargeReference.':'.$amount->minorUnits.':'.$amount->currency;
 
-        // WHETHER THIS SALE WAS ROUTED, and it was never asked before. The rails' refund has taken a routing
+        // Whether this sale was routed, and it was never asked before. The rails' refund has taken a routing
         // since the marketplace lane was built, and the only caller in the package -- this one -- passed
         // three arguments, so the reversal branch inside it was unreachable from production. A support
         // refund on a routed sale gave the buyer their money back and left the merchant their share.
@@ -176,7 +176,7 @@ final readonly class BillingAdmin
         // a refused refund leaves the three cumulative columns exactly where they were.
         if ($attempt instanceof RefundAttempt) {
             $result->successful
-                // Book what CAME BACK, not what was asked for. On the separate-transfer lane the rails
+                // Book what came back, not what was asked for. On the separate-transfer lane the rails
                 // report no reversal reference on purpose -- the share moved in its own call and refunding
                 // the payment does not touch it -- and booking the intent there told a consumer to unwind a
                 // payout still sitting with the merchant, while spending the room a later chargeback needs.
@@ -263,7 +263,7 @@ final readonly class BillingAdmin
     /**
      * Correct the document chain behind a routed sale, after money has actually gone back.
      *
-     * Called only on SUCCESS, and only from the routed branch. A correcting document for money that never
+     * Called only on success, and only from the routed branch. A correcting document for money that never
      * moved would state a reduction that did not happen — permanently, out of a gapless series.
      *
      * Three silences here are answers rather than gaps, and each has already been decided elsewhere on the
@@ -272,15 +272,15 @@ final readonly class BillingAdmin
      * would strand the buyer's refund over a bookkeeping input; and a sale the collective run has not
      * settled yet is answered by the corrector itself with nulls.
      *
-     * The attempt is carried through because THIS path is the one that holds it. It was in scope here all
+     * The attempt is carried through because this path is the one that holds it. It was in scope here all
      * along and stopped at the call, so the documents stating a reversal's consequence could not name the
      * reversal — the one path that could answer the question was the one throwing the answer away. Null on a
      * single-seller charge, where no attempt row was opened at all.
      */
     private function correctChain(string $chargeReference, Money $refunded, ?RefundAttempt $attempt = null): void
     {
-        // Its OWN lookup, and deliberately not `routedChargeFor()`. That helper gates on the driver being a
-        // `RoutesMoney`, which is the right question for the REVERSAL — the routing handed to the rails is
+        // Its own lookup, and deliberately not `routedChargeFor()`. That helper gates on the driver being a
+        // `RoutesMoney`, which is the right question for the reversal — the routing handed to the rails is
         // meaningless without it. It is the wrong question for a document: whether the chain needs
         // correcting depends on whether a routed charge exists, not on what the current driver can do.
         //
@@ -305,8 +305,8 @@ final readonly class BillingAdmin
         // Frozen at the supply, not read as of today: a creator who has since registered for VAT must not
         // retroactively change how a sale made before that is corrected.
         //
-        // ON ONE LINE, and not a style choice — do not fold it back. php-code-coverage 14 counts the
-        // CONTINUATION line of a multi-line ternary as executable and never records it as hit.
+        // On one line, and not a style choice — do not fold it back. php-code-coverage 14 counts the
+        // continuation line of a multi-line ternary as executable and never records it as hit.
         $suppliedOn = $charge->settled_at instanceof Carbon ? CarbonImmutable::parse($charge->settled_at) : CarbonImmutable::now();
 
         $corrector->correct(
@@ -322,17 +322,17 @@ final readonly class BillingAdmin
     }
 
     /**
-     * Return money the PLATFORM took for a supply of its own, on a sale it also collected for somebody else.
+     * Return money the platform took for a supply of its own, on a sale it also collected for somebody else.
      *
      * ## Why this is not {@see self::refund()} with an argument
      *
-     * That method returns part of the SALE, and everything it does follows from that: it prices a reversal
+     * That method returns part of the sale, and everything it does follows from that: it prices a reversal
      * of the merchant's transfer, it caps against the sale's gross, and it claws back the entitlement the
      * purchase granted. None of the three is right here. A buyer fee granted no entitlement, it never
      * entered the merchant's transfer, and it is not part of the gross those caps are read from — so
      * routing it through that path would take money back off a creator who was never paid it.
      *
-     * ## The routing is null ON PURPOSE, and that is the whole mechanism
+     * ## The routing is null on purpose, and that is the whole mechanism
      *
      * With no routing the rails ask the provider for a plain refund: no transfer reversal, no application-fee
      * refund. The money therefore comes out of the platform's own share, which is exactly where the fee went.
@@ -350,12 +350,12 @@ final readonly class BillingAdmin
         ?string $reason = null,
         ?Model $actor = null,
     ): RefundResult {
-        // Derived from the KIND as well as the reference and amount, so the platform's own supply and the
+        // Derived from the kind as well as the reference and amount, so the platform's own supply and the
         // sale it rode on cannot collapse into one another at the provider — two refunds of the same cents
         // on the same payment are exactly what an idempotency key is supposed to keep apart, not merge.
         $key = 'refund:'.$kind->value.':'.$chargeReference.':'.$amount->minorUnits.':'.$amount->currency;
 
-        // NO ROUTING ARGUMENT, and its absence is the mechanism rather than an omission. Without one the
+        // No routing argument, and its absence is the mechanism rather than an omission. Without one the
         // rails ask for a plain refund — no transfer reversal, no application-fee refund — so the money
         // comes out of the platform's own share, which is where the fee went. Passing this sale's routing
         // would have been the plausible line to write and would have taken the money from the creator.
@@ -417,9 +417,9 @@ final readonly class BillingAdmin
     /**
      * Write down what this reversal intends to move, before the provider is asked to move it.
      *
-     * The three amounts are recorded together and are NOT proportional to one another — a fee with a fixed
+     * The three amounts are recorded together and are not proportional to one another — a fee with a fixed
      * component makes the merchant's share of a half refund more than half of their payout — so they are
-     * computed once, here, from the terms the SALE was made under rather than from today's configuration.
+     * computed once, here, from the terms the sale was made under rather than from today's configuration.
      *
      * @throws CommissionTermsUnknown when a partial reversal has no terms to price the remainder with
      */
@@ -430,7 +430,7 @@ final readonly class BillingAdmin
 
         // A row from before the terms were recorded can still be refunded IN FULL: with nothing left of the
         // sale there is no remainder to price, so every rate returns the same figure -- everything the
-        // merchant still holds. A PARTIAL one genuinely cannot be computed, and a rate borrowed from today
+        // merchant still holds. A partial one genuinely cannot be computed, and a rate borrowed from today
         // would produce a balanced number belonging to a different sale.
         if (! $terms instanceof PlatformFee) {
             if (! $full) {
@@ -509,9 +509,9 @@ final readonly class BillingAdmin
     }
 
     /**
-     * The lane a reversal has to take, built from the charge ALREADY IN HAND, or null when it was not routed.
+     * The lane a reversal has to take, built from the charge already in hand, or null when it was not routed.
      *
-     * Read off the ROW rather than resolved again, and that is the whole point of the row carrying it. The
+     * Read off the row rather than resolved again, and that is the whole point of the row carrying it. The
      * lane decides how the reversal happens -- a destination charge unwinds its transfer with the refund, a
      * separate transfer needs its own call -- so taking it from today's configuration would reverse an old
      * sale as though it had been made under the current lane, silently and in either direction.

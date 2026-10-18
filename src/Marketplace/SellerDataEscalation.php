@@ -15,12 +15,12 @@ use Pushery\Billing\Enums\SellerRecordCompleteness;
  *
  * Two separations carry the design, and both exist because the obvious single rule is wrong.
  *
- * REMINDERS AND MEASURES ARE NOT THE SAME REACH. Everyone with an incomplete record gets reminded — asking
+ * Reminders and measures are not the same reach. Everyone with an incomplete record gets reminded — asking
  * is free and the data is wanted. But suspending an account or holding somebody's earnings only follows
- * where the missing data is legally required OF THAT SELLER. Doing it to a seller no reporting duty covers
+ * where the missing data is legally required of that seller. Doing it to a seller no reporting duty covers
  * is not compliance; it is withholding a service on the strength of a rule that does not apply to them.
  *
- * A WITHHOLDING CANNOT OUTLAST THE MONEY. "Held until they cooperate" is open-ended, and the rail the money
+ * A withholding cannot outlast the money. "Held until they cooperate" is open-ended, and the rail the money
  * sits on is not: it has a hard limit after which the money must move. Two clocks set independently, never
  * compared — so this one reads the other's limit and stops there rather than running past it and turning a
  * compliance measure into a stuck payment.
@@ -32,7 +32,7 @@ final readonly class SellerDataEscalation
     /**
      * The stage a seller should be at.
      *
-     * @param  bool  $missingRequired  whether what is outstanding is legally required of THIS seller
+     * @param  bool  $missingRequired  whether what is outstanding is legally required of this seller
      * @param  int  $daysOutstanding  how long the record has been incomplete
      */
     public function stageFor(SellerRecordCompleteness $record, bool $missingRequired, int $daysOutstanding): Stage

@@ -9,7 +9,7 @@ use Illuminate\Queue\SerializesModels;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
- * The package's journal and the provider DISAGREE about money that already moved to a merchant.
+ * The package's journal and the provider disagree about money that already moved to a merchant.
  *
  * ## Why this alarm and not a balance comparison
  *
@@ -19,12 +19,12 @@ use Pushery\Billing\ValueObjects\Money;
  * and an alarm that fires on all of them is switched off within a week. On a money path an alarm nobody
  * reads is worse than no alarm, because it is also an alibi.
  *
- * So the comparison is per TRANSFER: the one object both sides name, that only this package creates, and
+ * So the comparison is per transfer: the one object both sides name, that only this package creates, and
  * that nothing outside it moves. Everything else about the account is legitimately none of our business.
  *
  * ## Which side is right
  *
- * The provider is authoritative for what MOVED; this package is authoritative for what was OWED. They are
+ * The provider is authoritative for what moved; this package is authoritative for what was owed. They are
  * different questions, and only the first is what this event reports. So a drift is always corrected by
  * fixing the local row — never by re-transferring to match the journal, which would move real money to
  * repair a bookkeeping disagreement.

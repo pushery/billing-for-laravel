@@ -7,13 +7,13 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * The marker that keeps the daily payment reminder to ONE per day, per subscription.
+ * The marker that keeps the daily payment reminder to one per day, per subscription.
  *
  * ## Why a date and not a flag
  *
  * The neighboring tax-hold sweep marks with `hold_announced_at`, a nullable timestamp, because that
  * announcement happens exactly once and never again. This one repeats every day of the cure window, so a
- * "already told them" flag would silence the second day onward. The column therefore records WHICH DAY the
+ * "already told them" flag would silence the second day onward. The column therefore records which day the
  * reminder last went out, and the sweep sends when that day is not today.
  *
  * ## Why it sits on the subscription and not on the owner

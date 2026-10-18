@@ -17,10 +17,10 @@ use Illuminate\Support\Facades\Schema;
  *
  * `applied_count` is the count. `last_applied_period` is what makes incrementing it safe.
  *
- * The period key matters more than it looks. A cycle is priced BEFORE its order is claimed — it has to
+ * The period key matters more than it looks. A cycle is priced before its order is claimed — it has to
  * be, since the total decides what to claim — and the claim can then lose to a concurrent run or an
  * order that already exists. Counting at pricing time would therefore count attempts rather than cycles,
- * and a retried run would burn a customer's remaining months without billing anything. Recording WHICH
+ * and a retried run would burn a customer's remaining months without billing anything. Recording which
  * period was discounted makes a second look at the same period a no-op by construction, which is a
  * cheaper guarantee than a transaction spanning two different concerns.
  */

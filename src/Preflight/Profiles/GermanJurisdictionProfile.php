@@ -32,7 +32,7 @@ use Pushery\Billing\ValueObjects\ReportingPeriod;
 /**
  * The German jurisdiction profile: what a platform established in Germany owes before its first routed sale.
  *
- * Every point here is an ATTESTATION, and that is a statement about the points, not a shortcut. Publishing
+ * Every point here is an attestation, and that is a statement about the points, not a shortcut. Publishing
  * terms and filing a registration happen outside the application entirely; no configuration value and no
  * database row is evidence of either. The honest model is therefore the operator's dated, versioned word,
  * which the package holds to a version and re-opens when the requirement moves.
@@ -57,7 +57,7 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
     /**
      * The day the rates below were read from the published tables.
      *
-     * It is a constant rather than a computed value because it says when somebody LOOKED, and a value that
+     * It is a constant rather than a computed value because it says when somebody looked, and a value that
      * moved on its own would say nothing. `billing:doctor` reports the resulting age so an operator learns
      * the table has drifted from a diagnostic rather than from a tax return.
      */
@@ -116,13 +116,13 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
      */
     public function marginSchemeNote(TaxationBasis $basis): string
     {
-        // THE THREE KEYS ARE WRITTEN OUT, and that is deliberate rather than lazy. Built by concatenation
+        // The three keys are written out, and that is deliberate rather than lazy. Built by concatenation
         // they are invisible to `TranslationKeysAreReachableTest`, which scans for the literal key a
         // package renders -- and a string shipped in seven languages that no scan can reach is exactly
         // what that guard exists to refuse. Spelled here, the mapping is also greppable: somebody asking
         // "which words does an antique carry" finds the answer in the file that decides it.
         //
-        // SECOND-HAND GOODS KEEPS THE UNSUFFIXED KEY, AND THAT IS NOT TIDINESS. `margin_scheme_note` has
+        // Second-hand goods keeps the unsuffixed key, and that is not tidiness. `margin_scheme_note` has
         // shipped for releases, so a host that ran `vendor:publish` carries it under that name in its own
         // `lang/vendor/billing`. Renaming it would leave every one of those hosts falling back to the
         // package's copy -- their translation still on disk, silently unused, and only a reader who knew
@@ -242,7 +242,7 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
      * § 16 (6) sentence 4 UStG, transposing Art. 369h(2) of the VAT Directive: the central bank's rate on
      * the last day of the tax period, and where that day has none, the next day one was published. Sentence
      * 4 displaces sentences 1 to 3 — so the ministry's monthly average, which is the correct rule for the
-     * document, is expressly NOT available here. There is no election to make: the two figures diverge by
+     * document, is expressly not available here. There is no election to make: the two figures diverge by
      * law, and a filer who used one rule for both would be wrong on one of them.
      */
     #[Override]
@@ -272,8 +272,8 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
      * leaves arranging the sale as the only description the facts support, whatever the platform configured
      * for everything else.
      *
-     * The FACT it rests on is jurisdiction-neutral;
-     * concluding a REGIME from it is not, which is why it is stated here by a profile that answers for one
+     * The fact it rests on is jurisdiction-neutral;
+     * concluding a regime from it is not, which is why it is stated here by a profile that answers for one
      * jurisdiction rather than there by a class that answers for all of them.
      *
      * Every other archetype is left to the platform's configured default: nothing in the law compels a

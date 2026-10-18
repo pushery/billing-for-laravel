@@ -26,7 +26,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * makes them one act. A refund that computed the correction and issued nothing, or issued a document from
  * figures computed some other way, would be the same failure in two different shapes.
  *
- * ## Everything comes from the FROZEN sale, nothing from today
+ * ## Everything comes from the frozen sale, nothing from today
  *
  * The buyer's gross, the rate it was taxed at, the terms it was priced under, the standing the merchant had:
  * every input is read off the settlement that was issued, not resolved again now. A rate cut, a merchant who
@@ -89,7 +89,7 @@ final readonly class RoutedRefundCorrector
             return [null, null, null];
         }
 
-        // The charge knows WHOSE reference it is, so the lookup is given both halves of the key. Passing the
+        // The charge knows whose reference it is, so the lookup is given both halves of the key. Passing the
         // reference alone would work on this installation and quietly match a stranger's document on one with
         // a second driver — and the correction would then reverse a sale that was never refunded.
         $settlement = $this->issuer->settlementFor($charge->charge_reference, $charge->provider);
@@ -98,7 +98,7 @@ final readonly class RoutedRefundCorrector
             return [null, null, null];
         }
 
-        // WHICH line of the settlement this charge is, where the settlement carries more than one.
+        // Which line of the settlement this charge is, where the settlement carries more than one.
         //
         // A collective document settles a month, so its header states no commission, no rate and no fan
         // gross — a month has one of none of those. Everything below reads exactly those off `$settlement`.
@@ -106,13 +106,13 @@ final readonly class RoutedRefundCorrector
         // correcting document needs the same line for its frozen characteristics.
         //
         // Null for a per-transaction settlement, whose single line names no charge because there the header
-        // IS the line. That is not a special case to branch on — the header answers, as it always has.
+        // is the line. That is not a special case to branch on — the header answers, as it always has.
         $line = $settlement->lineSettling($charge->provider, $charge->charge_reference);
 
         if ($settlement->settlement_period !== null && ! $this->lineAnswersEverything($line)) {
-            // Refused, and the condition is deliberately TOTAL rather than "no line names the charge".
+            // Refused, and the condition is deliberately total rather than "no line names the charge".
             //
-            // A line missing any ONE of the three produces a correction computed partly from zeros, and
+            // A line missing any one of the three produces a correction computed partly from zeros, and
             // each missing field fails differently while looking equally complete. An absent commission
             // books a reversal as if the platform kept nothing; an absent fan gross books it as 0.00
             // outright against a real sale.
@@ -132,7 +132,7 @@ final readonly class RoutedRefundCorrector
         $correction = $this->cascade->forRefund(
             $settlement->supply_regime ?? SupplyRegime::CommissionChain,
             $saleGross,
-            // What the buyer had already been given back BEFORE this refund. The ledger's running total
+            // What the buyer had already been given back before this refund. The ledger's running total
             // already includes this one by the time it is applied, so the earlier state is the difference.
             $this->refundedBefore($charge, $refunded),
             $refunded,
@@ -141,7 +141,7 @@ final readonly class RoutedRefundCorrector
             $this->frozenRate($settlement, $line),
             $this->frozenRate($settlement, $line),
             // Handed to the cascade as well, not only to the issuers below. It was reaching the documents
-            // and not the arithmetic that decides WHICH documents exist, so an uncollectible loss produced
+            // and not the arithmetic that decides which documents exist, so an uncollectible loss produced
             // a creator-side correction anyway — the one thing the reason is carried to prevent.
             $reason,
         );
@@ -151,7 +151,7 @@ final readonly class RoutedRefundCorrector
         return [
             $correction,
             $this->issuer->issue($settlement, $correction, $correctedOn, $reason, $attempt, $correctionKey),
-            // ON ONE LINE for the same reason as SubscriptionOverview: the continuation line of a
+            // On one line for the same reason as SubscriptionOverview: the continuation line of a
             // multi-line ternary is counted executable by php-code-coverage 14 and never recorded hit.
             $receipt instanceof InvoiceRecord ? $this->issuer->issueForBuyer($receipt, $correction, $correctedOn, $reason, $attempt, $correctionKey) : null,
         ];
@@ -168,7 +168,7 @@ final readonly class RoutedRefundCorrector
      */
     private function saleGross(InvoiceRecord $settlement, string $currency, ?array $line = null): Money
     {
-        // The LINE first, for the same reason as the commission and the rate: a month has no single fan
+        // The line first, for the same reason as the commission and the rate: a month has no single fan
         // gross, so a collective header states none, and reading it there answers 0.00 for every
         // collectively settled sale.
         if ($line !== null && is_int($line['fan_gross_minor'] ?? null)) {
@@ -197,7 +197,7 @@ final readonly class RoutedRefundCorrector
      * cascade call and two private helpers — and a field checked at one and missing at another is a
      * correction half computed from the line and half from a header that states nothing.
      *
-     * `commission_flat_minor` and `commission_residual` are NOT required. A fee with no fixed part is the
+     * `commission_flat_minor` and `commission_residual` are not required. A fee with no fixed part is the
      * ordinary case and a zero there is a true statement about it; the residual has a configured fallback
      * the per-transaction path has always used for settlements written before the direction was recorded.
      * The three below have no true default: a missing commission rate is not a zero rate, and a missing fan
@@ -250,7 +250,7 @@ final readonly class RoutedRefundCorrector
      */
     private function frozenCommission(InvoiceRecord $settlement, ?array $line = null): PlatformFee
     {
-        // The LINE first, where there is one. A collective document states no commission on its header, so
+        // The line first, where there is one. A collective document states no commission on its header, so
         // reading the header there would treat every collectively settled sale as having carried none.
         if ($line !== null) {
             return new PlatformFee(

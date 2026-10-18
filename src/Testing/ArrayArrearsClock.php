@@ -20,7 +20,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * decision the ladder makes — which rung, which surface — behind a stub whose behavior nobody checked, and
  * a stub is exactly where a lockout quietly stops happening.
  *
- * So the storage is fake and NOTHING else is: the rung still comes from the configured schedule and the
+ * So the storage is fake and nothing else is: the rung still comes from the configured schedule and the
  * withdrawal still comes from the policy, because this class answers one question and holds no opinion
  * about what the answer means. It is the same split `ArraySubscriptionStateReader` makes next door.
  */

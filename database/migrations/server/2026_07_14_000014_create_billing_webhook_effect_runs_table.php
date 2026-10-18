@@ -7,14 +7,14 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * One row per (effect, reference): did THIS effect already run for THIS thing? It is both the dedup
+ * One row per (effect, reference): did this effect already run for this thing? It is both the dedup
  * ledger the effects rely on and the record of what still owes work — a failed run is what
  * `billing:webhooks:replay` picks back up.
  *
- * The `reference` is chosen by the EFFECT, not by the transport, and that distinction is load-bearing.
+ * The `reference` is chosen by the effect, not by the transport, and that distinction is load-bearing.
  * Most effects dedup per delivery, so their reference is the provider's event id. But an effect that
- * must fire once per INVOICE (the dunning notice) uses the invoice reference instead — because a
- * provider mints a FRESH event id for every retry of the same failing invoice, so deduping the dunning
+ * must fire once per invoice (the dunning notice) uses the invoice reference instead — because a
+ * provider mints a fresh event id for every retry of the same failing invoice, so deduping the dunning
  * mail on the event id would send it once per retry.
  *
  * `delivery_id` points back at the webhook delivery whose payload can re-drive this effect, so a replay

@@ -11,7 +11,7 @@ use Pushery\Billing\ValueObjects\SellerPeriodReport;
  * Where a seller's own record lives — which is the consuming application, not this package.
  *
  * {@see SellerPeriodReport} says what it deliberately does not carry: a
- * seller's name, address and statutory identifiers. The package holds the field CATALOG and the
+ * seller's name, address and statutory identifiers. The package holds the field catalog and the
  * completeness rule; the VALUES belong to whoever owns seller master data, and a package that stored them
  * would be a second home for personal data with no way to honor an erasure request made against the first.
  *

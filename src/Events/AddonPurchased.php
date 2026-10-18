@@ -11,7 +11,7 @@ use Pushery\Billing\ValueObjects\Money;
  * A one-time add-on was bought and paid (the neutral form of a completed one-off checkout). The
  * reference is the checkout/session identifier — the natural dedup key, so the credit is applied
  * exactly once per purchase however many times the webhook is redelivered. The paymentReference is the
- * provider PAYMENT id (a PaymentIntent), a separate key: a later refund webhook carries the payment id,
+ * provider payment id (a PaymentIntent), a separate key: a later refund webhook carries the payment id,
  * not the session, so this is what a reversal is matched on.
  */
 final readonly class AddonPurchased implements BillingDomainEvent, IdentifiesCustomer
@@ -23,7 +23,7 @@ final readonly class AddonPurchased implements BillingDomainEvent, IdentifiesCus
         public string $reference,
         public ?string $paymentReference = null,
         /**
-         * The declaration reference the package minted BEFORE the redirect, echoed back by the provider.
+         * The declaration reference the package minted before the redirect, echoed back by the provider.
          *
          * Null on every purchase that carried none -- which is every purchase on an install with no
          * consumer-rights profile, and every one made before the declarations were collected. Null is
@@ -44,13 +44,13 @@ final readonly class AddonPurchased implements BillingDomainEvent, IdentifiesCus
         /**
          * What the provider charged in tax on this sale, in minor units, where it computed any.
          *
-         * Null and zero are NOT the same answer, and the difference decides whether a document can be
+         * Null and zero are not the same answer, and the difference decides whether a document can be
          * issued at all. Zero says the provider computed tax and it was none — a sale with no separately
          * stated tax, where the price is the gross. Null says nothing was reported, which is the honest
          * reading of a payload that carried no total breakdown.
          *
          * A positive figure says the provider computed the tax from the buyer's address, and then this
-         * package holds AMOUNTS and no rate: the rate lives on the session's line items, which a webhook
+         * package holds amounts and no rate: the rate lives on the session's line items, which a webhook
          * payload does not carry. What a document may state in that case is an open decision, not a
          * derivation — see the issuer.
          */
@@ -59,7 +59,7 @@ final readonly class AddonPurchased implements BillingDomainEvent, IdentifiesCus
          * Which provider's ids the two references above are, where the producer named it.
          *
          * A reader matching `paymentReference` against a stored charge needs it: the uniqueness that table
-         * guarantees is on the PAIR, so a lookup without the provider is asking a question the index cannot
+         * guarantees is on the pair, so a lookup without the provider is asking a question the index cannot
          * answer. Null on an event from a producer that predates this, and a reader that needs it treats
          * null as "cannot tell" rather than as a default provider.
          */
@@ -67,12 +67,12 @@ final readonly class AddonPurchased implements BillingDomainEvent, IdentifiesCus
         /**
          * The caller's own correlation key, carried through the purchase and never interpreted.
          *
-         * A consumer that writes its row BEFORE opening the checkout has to find that row again here. Until
-         * this existed the only key that traveled was `declarationReference`, which a BUSINESS buyer never
+         * A consumer that writes its row before opening the checkout has to find that row again here. Until
+         * this existed the only key that traveled was `declarationReference`, which a business buyer never
          * has — a business has no right of withdrawal to declare — so exactly the purchases without a
          * declaration arrived with no key at all.
          *
-         * IT IS NOT A SECOND DECLARATION REFERENCE, AND THE DIFFERENCE IS A LEGAL ONE. A correlation id
+         * It is not a second declaration reference, and the difference is a legal one. A correlation id
          * sent as `withdrawal_declaration` would come back meaning "this buyer declared", which is the one
          * statement a business checkout must not make. This package attaches no meaning to the value at all:
          * it goes out as its own provider key and comes back unchanged.

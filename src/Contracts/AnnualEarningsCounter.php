@@ -12,7 +12,7 @@ use Pushery\Billing\ValueObjects\Money;
  * evaluates against a limit.
  *
  * It knows nothing of any tax regime: no limit, no status, no country. It answers one factual question —
- * "what did this party actually receive in year Y, in currency C" — on the CASH basis (counted when the
+ * "what did this party actually receive in year Y, in currency C" — on the cash basis (counted when the
  * money arrived, not when the sale happened) and net of anything reversed in that same year. A jurisdiction
  * profile takes this number and decides what a limit break means; the number itself carries no meaning.
  *
@@ -24,8 +24,8 @@ use Pushery\Billing\ValueObjects\Money;
 interface AnnualEarningsCounter
 {
     /**
-     * The party's payout-net earnings that ARRIVED in the given calendar year and currency, less anything
-     * reversed (refund, clawed-back dispute) that COMPLETED in that same year — the cash basis in both
+     * The party's payout-net earnings that arrived in the given calendar year and currency, less anything
+     * reversed (refund, clawed-back dispute) that completed in that same year — the cash basis in both
      * directions.
      */
     public function earnedIn(Model $party, string $currency, int $year): Money;

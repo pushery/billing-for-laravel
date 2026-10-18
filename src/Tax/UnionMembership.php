@@ -24,7 +24,7 @@ final class UnionMembership
      * for a different population, which makes the return wrong as a whole rather than wrong by a number.
      *
      * It moves on a different clock from the rate table — the last change was a departure in 2020 — so this
-     * is REPORTED and never turned into a failure. An error that would be red for a decade at a stretch is
+     * is reported and never turned into a failure. An error that would be red for a decade at a stretch is
      * an error an operator learns to scroll past, and then it is not there for the year it matters.
      *
      * `DefinesUnionMembership::unionMembersValidFrom()` is the same fact for a consumer who supplies their

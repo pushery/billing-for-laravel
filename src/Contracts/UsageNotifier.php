@@ -7,7 +7,7 @@ namespace Pushery\Billing\Contracts;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Warns the owner that a metered allowance is running out — BEFORE the meter's policy acts on it. Without
+ * Warns the owner that a metered allowance is running out — before the meter's policy acts on it. Without
  * this the first thing a customer learns about their limit is being refused by it; the gauge only helps
  * someone who happens to be looking at the account screen.
  *

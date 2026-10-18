@@ -43,13 +43,13 @@ final readonly class StripeInvoices implements InvoicesContract
         $rows = [];
 
         foreach ($invoices->data as $invoice) {
-            // READ THROUGH ARRAY ACCESS, NOT THE MAGIC PROPERTY, and the difference is the whole point.
+            // Read through array access, not the magic property, and the difference is the whole point.
             //
             // `Stripe\Invoice::$id` is a docblock `@property string $id` on every major -- there is no
             // declared property, and `StripeObject::&__get()` answers null for a key the payload does
             // not carry, and emits "Stripe Notice: Undefined property" while it does.
             //
-            // So the value CAN be null here, and a guard against it is not dead code, though PHPStan, which
+            // So the value can be null here, and a guard against it is not dead code, though PHPStan, which
             // believes the docblock, would call it that. Array access hands back the same value without the
             // overstated type, which lets the check be written as what it is.
             //
@@ -78,7 +78,7 @@ final readonly class StripeInvoices implements InvoicesContract
         try {
             $invoice = $this->stripe->invoices->retrieve($invoiceId);
         } catch (RateLimitException $e) {
-            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // A 429 is transient and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException) {

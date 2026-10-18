@@ -16,8 +16,8 @@ use Pushery\Billing\Contracts\VerifiesBillingMembership;
  * yields no model (a user without a team yet), the user owns billing rather than nothing — so a
  * half-configured tenancy never leaves an actor ownerless.
  *
- * AND IT ASKS A TEAM THAT CAN ANSWER WHETHER THE ACTOR STILL BELONGS TO IT. The configured
- * relation is read off the actor, which proves membership when the relation IS the membership and
+ * And it asks a team that can answer whether the actor still belongs to it. The configured
+ * relation is read off the actor, which proves membership when the relation is the membership and
  * proves nothing when it is a pointer the user controls -- `current_team_id` and its kind keep
  * answering after the user has been removed. An owner implementing {@see VerifiesBillingMembership}
  * is asked; one that does not is trusted, which is what every consumer gets today. A refusal falls

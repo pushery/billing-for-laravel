@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Schema;
  * `billing_document_artifacts` already applies to the XML forms; this is the anchor for the human-readable
  * one, which the package cannot keep for the consumer.
  *
- * It is a POINTER and nothing more. The package never writes it, never reads bytes through it, and takes no
+ * It is a pointer and nothing more. The package never writes it, never reads bytes through it, and takes no
  * view on what it addresses — a disk-relative path, a media-library id, an object key. A consumer that
  * attaches the PDF (Lane does, via its media library) records where, so a later download can serve what was
  * issued rather than what renders today.

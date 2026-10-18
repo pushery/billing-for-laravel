@@ -35,7 +35,7 @@ use Pushery\Billing\ValueObjects\TaxContext;
  *
  * A provider-driven driver has its tax determined for it and the package copies the result. A local engine
  * has no such source, so `OrderInvoiceIssuer` left `tax_minor` null on every document it ever raised. That
- * was honest and incomplete at once: an invoice with no tax is not a WRONG document for a cycle that
+ * was honest and incomplete at once: an invoice with no tax is not a wrong document for a cycle that
  * triggers VAT, it is merely not a complete one.
  *
  * Everything needed to complete it was already here and none of it was wired: `SaleTaxDecision` had one
@@ -59,7 +59,7 @@ use Pushery\Billing\ValueObjects\TaxContext;
  * "nobody established this"; zero says "none was due". They are different claims and only one of them is
  * defensible without a basis.
  *
- * ## Why the archetype comes from the TIER and an unset one refuses
+ * ## Why the archetype comes from the tier and an unset one refuses
  *
  * A subscription is not automatically an electronically supplied service. One that includes a live
  * one-to-one session, a shipped item or a membership is placed under a different rule, and those are
@@ -67,16 +67,16 @@ use Pushery\Billing\ValueObjects\TaxContext;
  * `billing.tiers.<key>.archetype`, through {@see SuppliesProductArchetypes} — and the taxonomy behind
  * {@see SaleTaxDecision} turns the answer into a place rule, a band and an exemption.
  *
- * An UNSET archetype answers null and this refuses. Defaulting it to a subscription would be a guessed tax
+ * An unset archetype answers null and this refuses. Defaulting it to a subscription would be a guessed tax
  * treatment frozen onto an immutable document, and it would be right often enough that nobody would find
  * the times it was not.
  *
- * ## Why the place is READ and never re-derived
+ * ## Why the place is read and never re-derived
  *
  * The evidence for where a buyer is — what they declared, where their instrument is issued, where their
  * connection was — exists only at the moment of the sale. A cycle is billed by a scheduler weeks later,
  * with no connection open and nothing fresh to read, so there is nothing to derive from except a stored
- * address. Deriving from that would let a customer who has since moved change what an OLD cycle was taxed
+ * address. Deriving from that would let a customer who has since moved change what an old cycle was taxed
  * under, retroactively and invisibly, which is the one thing {@see SupplyPlaceDecision} was built to
  * prevent.
  *
@@ -105,7 +105,7 @@ final readonly class OrderTaxBasis
      * in the expensive direction: every cycle simply finds no evidence and issues a document with no tax,
      * which is indistinguishable from an application that never recorded any.
      *
-     * The SUBSCRIPTION, not the order. The place is established once, when the customer signs up and the
+     * The subscription, not the order. The place is established once, when the customer signs up and the
      * signals exist; every cycle after that inherits it rather than re-establishing something nobody can
      * re-observe.
      */
@@ -146,7 +146,7 @@ final readonly class OrderTaxBasis
      * up, and a purchase made later has nothing fresher to read. The supply is the day the payment was confirmed,
      * because an add-on is supplied when it is paid for. Any of the three missing refuses, as for a cycle.
      *
-     * A MONEY CREDIT IS A VOUCHER, and under a multi-purpose instrument no tax falls when it is sold: it falls on
+     * A money credit is a voucher, and under a multi-purpose instrument no tax falls when it is sold: it falls on
      * what the balance later pays for. Stating a rate here would tax the same money twice, so that case refuses
      * rather than claiming either a figure or zero. `billing.marketplace.vouchers.instrument_type` decides it, the
      * setting the provider-driven checkout reads for the same question.
@@ -232,7 +232,7 @@ final readonly class OrderTaxBasis
 
         $paidOn = $order->processed_at === null ? null : CarbonImmutable::parse($order->processed_at->toIso8601String());
 
-        // Priced GROSS, because that is how the cycle was charged: the customer paid the order total and
+        // Priced gross, because that is how the cycle was charged: the customer paid the order total and
         // the tax is the part of it that belongs to the state. Determining from a net would mean inventing
         // a net nobody charged and then adding tax on top of it, producing a total the customer never paid.
         $facts = $this->taxes->decideOnGross($archetype, $gross, $buyer, $period, $paidOn);
@@ -302,8 +302,8 @@ final readonly class OrderTaxBasis
      *
      * ## The end moves by a day, and it has to
      *
-     * A subscription's `current_period_end` is the next period's START — `advanceCycle()` carries it
-     * straight over — while a {@see ServicePeriod} ends on the last day COVERED. Copied across unchanged,
+     * A subscription's `current_period_end` is the next period's start — `advanceCycle()` carries it
+     * straight over — while a {@see ServicePeriod} ends on the last day covered. Copied across unchanged,
      * every document would claim a day the following document also claims, and two invoices lined up would
      * overlap by one day each month with every total still adding up.
      */
@@ -334,7 +334,7 @@ final readonly class OrderTaxBasis
      * register answered `verified` for. Absent one, the customer is treated as a consumer, which is the
      * safe direction — over-charging is corrected with a credit note, under-charging VAT is a liability.
      *
-     * Read across providers on purpose. The row records which provider ASKED, but the answer is about the
+     * Read across providers on purpose. The row records which provider asked, but the answer is about the
      * buyer and the register: an id the register confirmed is confirmed however the question reached it,
      * and scoping the read to the local driver would mean an install that verifies through one provider
      * and bills through another reverse-charges nothing it should.
@@ -413,8 +413,8 @@ final readonly class OrderTaxBasis
      *
      * A business supply is placed where the business receives it, and the id the business gives names that
      * establishment (Article 22(1) of Implementing Regulation (EU) No 282/2011). So the country comes from
-     * the id, not from the place evidence, which answers where a CONSUMER is: a German business whose
-     * evidence reads AT is still a German business buying from a German seller.
+     * the id, not from the place evidence, which answers where a consumer is: a German business whose
+     * evidence reads at is still a German business buying from a German seller.
      *
      * A union VAT id carries its country as a prefix, read as itself except `EL` as `GR` and `XI` as `GB`,
      * because a Northern Irish id is a United Kingdom business for a service. Every other type names its

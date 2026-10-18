@@ -14,13 +14,13 @@ use Pushery\Billing\ValueObjects\Money;
 /**
  * The fee a buyer pays on a C2C sale, resolved into its own tax-carrying line.
  *
- * This is an intermediation service the platform renders to the buyer — its FIRST supply in the
+ * This is an intermediation service the platform renders to the buyer — its first supply in the
  * intermediary posture, the one the platform earns for itself rather than passes through. Everything about
  * it exists to keep it separate: a separate line, a separate net and tax, a separate revenue account. Netted
  * into the item price or the seller's turnover, a taxable supply of the platform's own would vanish.
  *
  * Two things it must get right that a naive reading gets wrong. Its place of supply is where the mediated
- * sale happens, NOT where the buyer banks — the location follows the transaction, not the person paying the
+ * sale happens, not where the buyer banks — the location follows the transaction, not the person paying the
  * fee. And it is quoted gross: the buyer is told 5.00, and the net and tax are read back out of that, never
  * added on top of it.
  */
@@ -76,7 +76,7 @@ final readonly class BuyerFeeCalculator
     /** The gross fee for a sale, from the configured model. */
     private function grossFeeFor(Money $saleGross): Money
     {
-        // A buyer fee is charged ON TOP of the item price, so a fixed amount is simply that amount — it is
+        // A buyer fee is charged on top of the item price, so a fixed amount is simply that amount — it is
         // not capped by the sale, the way a seller-side deduction is capped by the payout it comes out of.
         return match ($this->model()) {
             BuyerFeeModel::Percent => $saleGross->proportion($this->bps(), 10_000),

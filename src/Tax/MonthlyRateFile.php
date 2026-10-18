@@ -12,7 +12,7 @@ use Pushery\Billing\Exceptions\ExchangeRateFeedUnreadable;
  *
  * ## Why a file and not a fetch
  *
- * The rule this feeds takes an authority's ANNOUNCED monthly average — in Germany the ministry's table,
+ * The rule this feeds takes an authority's announced monthly average — in Germany the ministry's table,
  * which is mandatory rather than preferred; a daily rate needs the tax office's permission. That table is
  * published behind a page that refuses automated retrieval, and going around a bot defense is not something
  * a published package should do: it turns the package into something that pretends to be a browser, it
@@ -25,7 +25,7 @@ use Pushery\Billing\Exceptions\ExchangeRateFeedUnreadable;
  * ## Why the average is not computed from the daily series instead
  *
  * It is arithmetically tempting — the authority derives its table from the same reference rates the daily
- * importer already holds — and it is still the wrong number. The statute asks for the ANNOUNCED average, and
+ * importer already holds — and it is still the wrong number. The statute asks for the announced average, and
  * a self-computed one parts company with it the moment a day is missing from the local series, a publisher
  * revises an observation, or the rounding differs by a digit. None of that is visible: it produces a
  * plausible figure on a tax document that is checked, years later, against the official table.

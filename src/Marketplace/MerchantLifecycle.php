@@ -23,7 +23,7 @@ use Pushery\Billing\Models\MerchantAccount;
  * The transitions are guarded rather than free. A terminated merchant is never reinstated by a capability
  * report, because a provider keeps reporting healthy capabilities for an account long after its owner
  * disconnected it from this platform; obeying that report would resume routing into a relationship that no
- * longer exists. Termination is therefore one-way from any WEBHOOK — what undoes it is `reopen()` below,
+ * longer exists. Termination is therefore one-way from any webhook — what undoes it is `reopen()` below,
  * an explicit act of an operator, and that separation is the whole point: a provider that keeps reporting
  * healthy capabilities must never be able to resume a relationship a person ended.
  */
@@ -96,7 +96,7 @@ final readonly class MerchantLifecycle
      * ## Why the capability flags go back to false
      *
      * Conservatively, and deliberately not "leave them and wait for the next `account.updated`". Those flags
-     * were gathered BEFORE the disconnection; carrying them forward declares a merchant receivable on the
+     * were gathered before the disconnection; carrying them forward declares a merchant receivable on the
      * strength of what was true about a relationship that had since ended. Setting them false says the only
      * honest thing — the provider has not spoken since — and lets it speak again.
      *
@@ -118,7 +118,7 @@ final readonly class MerchantLifecycle
 
         $this->moveTo($account, MerchantStatus::Active, null);
 
-        // The same event a reinstatement announces, and on purpose: to everything downstream this IS a
+        // The same event a reinstatement announces, and on purpose: to everything downstream this is a
         // reinstatement — routing may resume once the provider confirms. A separate event would make every
         // listener handle two shapes of one fact.
         $this->events->dispatch(new MerchantRoutingReinstated($account->provider, $account->account_reference));
@@ -129,7 +129,7 @@ final readonly class MerchantLifecycle
     /**
      * End the relationship.
      *
-     * Reachable from active AND from suspended, because the two paths are both real: a merchant can
+     * Reachable from active and from suspended, because the two paths are both real: a merchant can
      * disconnect while healthy, or after weeks of being unable to receive. Only a second termination is a
      * no-op — the first one recorded when the platform lost reach, and that date is what a dispute turns on.
      */

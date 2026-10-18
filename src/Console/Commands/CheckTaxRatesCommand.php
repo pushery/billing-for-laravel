@@ -16,11 +16,11 @@ use Pushery\Billing\Tax\RateProposal;
 use Pushery\Billing\Tax\TedbRateSource;
 
 /**
- * Ask the source what the rates should be, and write down a PROPOSAL — never a change.
+ * Ask the source what the rates should be, and write down a proposal — never a change.
  *
  * ## The half that existed and could not be reached
  *
- * `billing:rates:probe` compares: it says THAT the shipped table differs from what the source publishes.
+ * `billing:rates:probe` compares: it says that the shipped table differs from what the source publishes.
  * The work that turns that report into something an operator can act on — plausibility, triage against the
  * countries this installation has actually billed into, a reviewable proposal on disk — was built, tested,
  * and had no entry point at all. `RateImporter` had zero callers, which made the whole cluster behind it
@@ -28,7 +28,7 @@ use Pushery\Billing\Tax\TedbRateSource;
  *
  * ## It proposes. It does not apply.
  *
- * The proposal is written BESIDE the snapshot and the snapshot is never touched. That is a decision, not an
+ * The proposal is written beside the snapshot and the snapshot is never touched. That is a decision, not an
  * omission: a rate change is a legal statement about what a member state charges, and a package that edited
  * its own priced-from file on the strength of one HTTP response would be making that statement on the
  * operator's behalf. `RateChangeExclusions` says the same thing in the other direction — no mass rate
@@ -75,7 +75,7 @@ final class CheckTaxRatesCommand extends Command
 
         $proposal = $importer->propose($answer->rows, $answer->situationOn, $on, $on, EuOssTaxCalculator::shippedRatesBps());
 
-        // Written only when there is something to review AND the answer is usable. A proposal file for an
+        // Written only when there is something to review and the answer is usable. A proposal file for an
         // unusable answer would be a file an operator opens, reads, and cannot act on — and next time does
         // not open.
         $written = $proposal->usable() && $proposal->hasChanges() ? $this->write($proposal) : null;

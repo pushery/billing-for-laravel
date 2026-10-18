@@ -17,13 +17,13 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * A refund, resolved into the correction it makes to every link of a commission-chain sale.
  *
  * A refund is a change to the taxable base, and in a chain it changes every base the sale created — the
- * platform's supply to the buyer AND the creator's supply to the platform. Correcting one and not the other
+ * platform's supply to the buyer and the creator's supply to the platform. Correcting one and not the other
  * is not a partial job, it is a wrong one: the input tax deducted on the creator's link stays deducted, and
  * nothing about the books looks unusual afterwards.
  *
  * ## Recomputed on the remainder, never scaled
  *
- * Every figure comes from asking what the sale WOULD have been had it always been the smaller sale, and
+ * Every figure comes from asking what the sale would have been had it always been the smaller sale, and
  * subtracting. Never from taking a share of the original. With a percentage-only commission the two agree,
  * which is exactly why the difference survives review; add a fixed component and they part company on every
  * partial refund, in the platform's disfavor, permanently. Recomputing also makes repetition harmless: two
@@ -37,7 +37,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * reverses it — a second implementation of that decision would be a second thing to keep right, and the
  * status vocabulary is exactly where such drift hides.
  *
- * ## The standing is the one FROZEN at the supply
+ * ## The standing is the one frozen at the supply
  *
  * The caller passes the creator's standing as it was when the supply happened, not as it is now, and this is
  * load-bearing rather than pedantic: a creator who crossed a registration threshold between the sale and the
@@ -64,10 +64,10 @@ final readonly class RefundCascade
      * @param  Money  $refundedBefore  what the buyer had already been given back before this refund
      * @param  Money  $refundNow  what the buyer is being given back now
      * @param  PlatformFee  $commission  the platform's take, as it applied to this sale
-     * @param  CreatorTaxStatus  $creatorStatusAtSupply  the creator's standing WHEN THE SUPPLY HAPPENED
+     * @param  CreatorTaxStatus  $creatorStatusAtSupply  the creator's standing when the supply happened
      * @param  int  $outboundRateBps  the rate of the platform's own supply to the buyer
      * @param  int  $inboundRateBps  the rate of the creator's supply to the platform
-     * @param  TaxBaseChangeReason  $reason  why the base is changing, which decides whether the CREATOR's
+     * @param  TaxBaseChangeReason  $reason  why the base is changing, which decides whether the creator's
      *                                       link is corrected at all — see below
      */
     public function forRefund(
@@ -83,7 +83,7 @@ final readonly class RefundCascade
     ): ChainCorrection {
         $this->guard($regime, $saleGross, $refundedBefore, $refundNow);
 
-        // Both sides are the sale AS IT STOOD — before this refund and after it — never the whole sale
+        // Both sides are the sale as it stood — before this refund and after it — never the whole sale
         // against the remainder. The distinction only shows up on the second partial refund, where the
         // latter would re-correct the first one: the same document issued twice and the payout reclaimed
         // past what was ever paid. Capped at the sale, because a cumulative total that overshoots corrects
@@ -117,13 +117,13 @@ final readonly class RefundCascade
                 ->minus($this->reversedTaxOf($treatmentAfter, $inboundRateBps)),
             merchantClawback: $treatmentBefore->payoutAmount->minus($treatmentAfter->payoutAmount),
             commissionReturned: $commissionReturned,
-            // The creator's link is corrected only where the CONSIDERATION went back. On an uncollectible
+            // The creator's link is corrected only where the consideration went back. On an uncollectible
             // loss it did not: the creator supplied what they promised, and the money is gone to a stolen
             // card rather than returned to a customer. Issuing a correcting document against them there
             // would reduce the turnover of somebody who did nothing wrong — the platform's loss written
             // onto the creator's tax return, on a document they receive and cannot explain.
             //
-            // Only the DOCUMENT is suppressed here. Whether the platform recovers the money from the
+            // Only the document is suppressed here. Whether the platform recovers the money from the
             // creator under its contract is a separate claim and a separate path; this class answers what
             // the tax base did, and on this branch the creator's base did not move.
             inboundDocument: $reason === TaxBaseChangeReason::Uncollectible ? null : $treatmentBefore->document,
@@ -173,7 +173,7 @@ final readonly class RefundCascade
     /**
      * The cost the creator's link represents: what they are paid, less any tax paid through with it.
      *
-     * Taken as a subtraction rather than read from a field because the payout is the ONE figure the tax
+     * Taken as a subtraction rather than read from a field because the payout is the one figure the tax
      * treatment reports gross of its own tax — it is what leaves the bank — while the expense is what the
      * platform booked. Reading the payout as the expense would inflate the cost by the tax on every
      * tax-stating supply, and deflate nothing anywhere else, so the error would look like a rounding drift.
@@ -183,7 +183,7 @@ final readonly class RefundCascade
         return $treatment->payoutAmount->minus($treatment->taxAmount);
     }
 
-    /** The tax the creator's document actually STATED — the only tax that yielded a deduction. */
+    /** The tax the creator's document actually stated — the only tax that yielded a deduction. */
     private function statedTaxOf(InboundTaxTreatment $treatment): Money
     {
         return $treatment->showsTax ? $treatment->taxAmount : Money::zero($treatment->payoutAmount->currency);

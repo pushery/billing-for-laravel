@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\SellerRecordField;
  * Whether a seller's record is good enough to act on — and, crucially, what "good enough" is allowed to
  * mean.
  *
- * Only a missing REQUIRED field makes a record incomplete. A record missing precautionary fields is
+ * Only a missing required field makes a record incomplete. A record missing precautionary fields is
  * complete, because an escalation that withheld somebody's money over data no law entitles anybody to
  * demand would be a worse failure than the gap it was chasing.
  *

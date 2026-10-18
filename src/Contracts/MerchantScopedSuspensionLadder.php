@@ -8,20 +8,20 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
- * The suspension ladder asked about ONE merchant: whether this surface is withdrawn for this owner in this
+ * The suspension ladder asked about one merchant: whether this surface is withdrawn for this owner in this
  * relationship.
  *
  * ## Why this is its own interface rather than a parameter on {@see SuspensionLadder}
  *
  * Same reason as its dunning sibling, and the same evidence: appending an optional parameter to a published
  * interface fatals every existing implementation at the declaration, before any call. A consumer who bound
- * their own ladder would meet that on a MINOR upgrade. An optional sibling costs them nothing.
+ * their own ladder would meet that on a minor upgrade. An optional sibling costs them nothing.
  *
  * ## What the scope removes
  *
  * A ladder that picked a clock from among the owner's rows would be wrong whichever way it picked. Reading
- * the NEWEST row would let a fan two rungs deep reset to zero by subscribing to anybody, because a row with
- * no clock erases the ladder. Reading the EARLIEST would make the longest-standing debt govern every merchant
+ * the newest row would let a fan two rungs deep reset to zero by subscribing to anybody, because a row with
+ * no clock erases the ladder. Reading the earliest would make the longest-standing debt govern every merchant
  * at once. Both are aggregates, and an aggregate is what turns a debt owed to A into a lockout at B.
  *
  * With a merchant there is nothing to pick: one relationship, one clock, one answer. A null scope is the

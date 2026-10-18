@@ -57,7 +57,7 @@ final class BillingController
 
     /**
      * The hosted-checkout return URL. The customer is back from the provider — possibly before the webhook
-     * arrived — so the subscription is reconciled onto the local row NOW, then they are sent to the
+     * arrived — so the subscription is reconciled onto the local row now, then they are sent to the
      * subscription screen. A failed reconcile is reported and swallowed: the webhook is the durable path,
      * and a customer must never be shown an error page after a successful payment.
      */
@@ -71,15 +71,15 @@ final class BillingController
 
         $owner = Container::getInstance()->make(BillingEntityResolver::class)->ownerFor($actor);
 
-        // ASKED FIRST, because there is nothing to reconcile against under a driver whose cycle this package
+        // Asked first, because there is nothing to reconcile against under a driver whose cycle this package
         // runs itself. `SubscriptionSync` is bound only by the Stripe provider, and both driver providers
-        // register unconditionally — so on a Mollie install, asked second, this would ask STRIPE about a
+        // register unconditionally — so on a Mollie install, asked second, this would ask Stripe about a
         // customer whose reference Mollie wrote. An outbound call to the wrong provider on the page a customer
         // lands on straight after paying, and the catch below would report the resulting error: one entry in
         // the install's error tracker per completed sale, looking exactly like a real failure. An error stream
         // that fires on every sale gets muted, and after that the real one is gone too.
         //
-        // Decided on the ENGINE rather than a driver name: a local engine holds the cycle here, so there is
+        // Decided on the engine rather than a driver name: a local engine holds the cycle here, so there is
         // no provider-side subscription to read back. The webhook is the durable path anyway — this
         // reconcile is a courtesy for a customer who beats it home, and where there is nothing to pull
         // there is no courtesy to do.
@@ -115,7 +115,7 @@ final class BillingController
         $document = $reader->download($owner, $invoiceId);
 
         // A provider that hosts its own PDFs (Stripe) answers here. For an invoice it does not host, the
-        // package serves its own stored one. A reader that IS the package's own table has already looked at
+        // package serves its own stored one. A reader that is the package's own table has already looked at
         // that row, kept file included, so its answer is the whole answer. A foreign invoice and an absent one
         // are both a 404, so one owner can neither pull another's document nor learn that it exists by
         // guessing an id.
@@ -138,12 +138,12 @@ final class BillingController
     }
 
     /**
-     * Render one of the package's OWN stored invoices as a document — the local path for an invoice the
+     * Render one of the package's own stored invoices as a document — the local path for an invoice the
      * provider does not host. The invoice is looked up among the owner's own rows, so a row belonging to
      * another owner reads as absent: a shared id space can neither leak one owner's document to another nor
      * confirm that it exists.
      *
-     * The KEPT file wins over a fresh render where there is one, for the reason `KeptInvoicePdf` gives.
+     * The kept file wins over a fresh render where there is one, for the reason `KeptInvoicePdf` gives.
      *
      * Without a kept file and without a PDF renderer, the shipped default, there is no document to hand over,
      * and the route answers 404 as it does for an invoice that is not there. A missing optional dependency is

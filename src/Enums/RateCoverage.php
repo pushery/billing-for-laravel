@@ -25,7 +25,7 @@ enum RateCoverage: string
     /**
      * Deliberately outside the tax area — the zero here is a decision, not an absence.
      *
-     * A third country is the ordinary case: no union VAT is due, and that IS the answer rather than a gap
+     * A third country is the ordinary case: no union VAT is due, and that is the answer rather than a gap
      * in one. What makes it different from `Unknown` is that somebody classified it.
      */
     case DeliberatelyUntaxed = 'deliberately_untaxed';

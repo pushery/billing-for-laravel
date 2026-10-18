@@ -6,7 +6,7 @@ namespace Pushery\Billing\ValueObjects;
 
 /**
  * A granted claim on a metered allowance: the units are already held against the owner's ceiling, so no
- * other request can spend them. The caller does its work and then SETTLES the hold — turning it into
+ * other request can spend them. The caller does its work and then settles the hold — turning it into
  * recorded usage, or handing it back.
  *
  * The token is the hold's identity, and settling is keyed on it: a hold settled twice (a retried job, a

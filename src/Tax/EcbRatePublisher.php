@@ -11,7 +11,7 @@ use Pushery\Billing\Contracts\PublishesExchangeRates;
  *
  * Shipped and bound so that an installation which never thinks about publishers keeps precisely the
  * behavior it had: same series, same source name, same URL. What changes is that the identity is now
- * REPLACEABLE, which is what an installation filing under a different jurisdiction's rule needs.
+ * replaceable, which is what an installation filing under a different jurisdiction's rule needs.
  *
  * The series is the SDMX daily reference rate: one quote currency, denominated in euro, published on
  * business days. Rates are stored in the direction the bank publishes them and never turned around —

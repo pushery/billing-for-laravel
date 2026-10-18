@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\OrderItemDraft;
  * A provider that prices usage remotely — Stripe, through meters — needs none of this: the amount to
  * collect comes back from the provider already correct. A local engine has no such source, so anything
  * beyond the flat plan price has to be computed here: metered consumption, a coupon, an application's own
- * per-cycle arithmetic. That is why the chain exists at all, and why its default is EMPTY: what a cycle
+ * per-cycle arithmetic. That is why the chain exists at all, and why its default is empty: what a cycle
  * costs beyond its plan is a question only the consuming application can answer.
  *
  * Implementations are pure. They receive the lines decided so far and return the lines that should stand

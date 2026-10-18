@@ -12,7 +12,7 @@ use RuntimeException;
  *
  * ## What this refuses, and what it deliberately does not
  *
- * It refuses the CLASSIFICATION, never the money. A platform may refund out of goodwill whenever it
+ * It refuses the classification, never the money. A platform may refund out of goodwill whenever it
  * likes, and that path is untouched — `BillingAdmin::refund()` with the default kind does exactly that.
  * What must not happen is the two being recorded as the same event: `RefundKind::StatutoryWithdrawal` is
  * the statement "the buyer exercised a RIGHT", and after the window that statement is false.

@@ -23,16 +23,16 @@ use Pushery\Billing\ValueObjects\SellerReportingLine;
  *
  * ## One line per archetype, not one per seller
  *
- * The rule branches on WHAT was sold: there is no small-scale relief for commissioned work, and a thousand
+ * The rule branches on what was sold: there is no small-scale relief for commissioned work, and a thousand
  * standardized downloads are not reportable however much they came to. A seller who sold both in one
  * quarter has two answers, and a single figure handed to the rule would get one of them — whichever the
  * caller happened to name — for all of it.
  *
  * ## Nothing is decided about what the records cannot say
  *
- * Sales carrying no archetype come back as their own line with `classified: false` and NO verdict. That is
+ * Sales carrying no archetype come back as their own line with `classified: false` and no verdict. That is
  * the whole safety of this class. Three real things land there: a settlement from before the classification
- * could be recorded, a COLLECTIVE settlement, which covers many transactions and has no single archetype to
+ * could be recorded, a collective settlement, which covers many transactions and has no single archetype to
  * carry, and a sale arranged as an intermediary that was recorded before its archetype was. Deciding either
  * way about them would be a guess in a place where both directions are violations — filing a seller the
  * statute leaves out hands an authority personal data with no basis, and leaving out one it covers is the
@@ -78,7 +78,7 @@ final readonly class SellerReportingRun
         $unclassified = null;
 
         foreach ($activities as $activity) {
-            // The unclassified group is built the same way and then NOT judged. Asking the rule anyway would
+            // The unclassified group is built the same way and then not judged. Asking the rule anyway would
             // get an answer — `standardized`, because an absent archetype is not goods and not a commission
             // — and that answer would be indistinguishable from one the documents actually supported.
             $line = $activity->archetype instanceof TaxArchetype
@@ -102,14 +102,14 @@ final readonly class SellerReportingRun
      *
      * ## Why the counter's split is not the rule's split
      *
-     * The counter groups by what the DOCUMENTS say — the archetype and, for a voluntary payment, the thing
+     * The counter groups by what the documents say — the archetype and, for a voluntary payment, the thing
      * it was paid alongside. That is the right split for a figure, because it keeps the reference visible.
-     * It is the wrong split for the RULE, and the difference is not cosmetic: a tip that delegates to goods
+     * It is the wrong split for the rule, and the difference is not cosmetic: a tip that delegates to goods
      * and the goods themselves are, to the rule, one activity. Handing it two lines makes it measure each
      * fragment on its own.
      *
-     * That matters because one of the rule's branches is a THRESHOLD. The small-scale relief asks whether a
-     * seller stayed under a sales count AND an amount — and it is asked per line. A seller who is over both
+     * That matters because one of the rule's branches is a threshold. The small-scale relief asks whether a
+     * seller stayed under a sales count and an amount — and it is asked per line. A seller who is over both
      * edges, split into two lines that are each under them, comes back exempt twice and is never filed.
      * Under-reporting: the direction the statute sanctions.
      *
@@ -117,19 +117,19 @@ final readonly class SellerReportingRun
      * 205,008 — over both shipped edges (30 / 200,000). Split, both fragments read as within the relief
      * and the seller disappears from the return.
      *
-     * So the merge happens HERE and not in the counter. The counter would need to know which archetypes
+     * So the merge happens here and not in the counter. The counter would need to know which archetypes
      * delegate, which is a jurisdiction's answer living in the taxonomy — and putting it there would make
      * a figure depend on a rule, which is the coupling this package keeps taking apart.
      *
      * ## What the merged line carries
      *
-     * The EFFECTIVE archetype and no reference. Once a tip has been resolved onto what it accompanied, the
+     * The effective archetype and no reference. Once a tip has been resolved onto what it accompanied, the
      * reference has done its work: keeping it would state that the whole merged line was paid alongside
      * something, which is untrue of the part that was the sale itself. Two tips with different references
      * merge into their two different targets, which is exactly what delegation means.
      *
      * Groups with no archetype merge together too, and that is a fix rather than a side effect: they used
-     * to be held in one variable and the second one silently REPLACED the first, so a period with an
+     * to be held in one variable and the second one silently replaced the first, so a period with an
      * unclassified tip and an unclassified sale reported one of them and the lines stopped adding up to the
      * period's own total.
      *

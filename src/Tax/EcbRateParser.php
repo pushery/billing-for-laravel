@@ -15,7 +15,7 @@ use Pushery\Billing\Exceptions\ExchangeRateFeedUnreadable;
  * will eventually run without them.
  *
  * That sibling is named in prose rather than with a `@see`, and the omission is deliberate. The register
- * that finds classes nothing calls scans for a class NAME anywhere in the shipped tree — so a docblock
+ * that finds classes nothing calls scans for a class name anywhere in the shipped tree — so a docblock
  * mentioning it would have counted as a caller, and quietly cleared a class that still has none.
  *
  * ## Why the SDMX endpoint and not the daily XML file
@@ -25,7 +25,7 @@ use Pushery\Billing\Exceptions\ExchangeRateFeedUnreadable;
  * 200 carrying Friday's data**, with the real date inside the document.
  *
  * That difference decides which one is usable. The rule for a day the bank did not publish is the next
- * publication day, and implementing it correctly requires absence to BE absence. Against the daily file, a
+ * publication day, and implementing it correctly requires absence to be absence. Against the daily file, a
  * missing day is indistinguishable from a repeated one, and a rate would be booked for a date the bank
  * never issued it for.
  *

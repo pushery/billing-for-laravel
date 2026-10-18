@@ -10,7 +10,7 @@ use RuntimeException;
  * Thrown when a coupon cannot be redeemed: it is inactive, expired, has reached its global
  * max-redemptions cap, the owner has already redeemed it, or it belongs to a different seller. Each reason is a recoverable runtime
  * condition (show the customer why the code was rejected), not a programming error — so the caller can
- * catch this and surface the message, while a redemption that WOULD over-grant the discount never happens.
+ * catch this and surface the message, while a redemption that would over-grant the discount never happens.
  *
  * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
  * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
@@ -44,7 +44,7 @@ final class CouponUnavailable extends RuntimeException
      * The coupon belongs to a different seller than the sale it is being spent on.
      *
      * A separate reason rather than folding into "not active", because it is the only one that is about
-     * WHOSE money funds the discount: one seller's 25% spent on another seller's sale is a transfer between
+     * whose money funds the discount: one seller's 25% spent on another seller's sale is a transfer between
      * two merchants that neither agreed to. A message that said "not active" would send whoever debugs it
      * looking at the coupon's own flags, which are all fine.
      */

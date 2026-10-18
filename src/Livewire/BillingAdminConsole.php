@@ -31,8 +31,8 @@ use Throwable;
 
 /**
  * The optional, publishable admin console: billing metrics, the recent audit log, and a comp-a-tier action.
- * Every entry point — mount, render, AND the action — is authorized against the app-defined
- * `billing.admin.ability` Gate, FAIL-CLOSED: an undefined Gate denies everyone, so the console is never open
+ * Every entry point — mount, render, and the action — is authorized against the app-defined
+ * `billing.admin.ability` Gate, fail-closed: an undefined Gate denies everyone, so the console is never open
  * by accident and a crafted request to the action is refused even if the render was somehow reached.
  *
  * It is framework-agnostic plain Blade, exactly like the account hub, so the core needs no UI-kit dependency;
@@ -72,13 +72,13 @@ final class BillingAdminConsole extends Component
     public string $datevImbalance = '';
 
     /**
-     * What the LAST downloaded batch left unbooked, as a sentence, or '' when none was produced.
+     * What the last downloaded batch left unbooked, as a sentence, or '' when none was produced.
      *
      * The command that writes the same file has reported this since credit movements reached the
      * export, and this screen did not — so an operator who takes the file from here instead of from
      * a shell got a complete batch with an open question in it and no way to know.
      *
-     * A ZERO IS STATED TOO, and that is the whole argument for the figure. A period that booked
+     * A zero is stated too, and that is the whole argument for the figure. A period that booked
      * everything and one whose credit movements were never loaded produce the same silence, and only
      * the number tells them apart. It is a net rather than a running total: spending such a grant
      * takes its share back out, so a period that granted and redeemed the same credit owes the books
@@ -91,7 +91,7 @@ final class BillingAdminConsole extends Component
     public string $datevUnbooked = '';
 
     /**
-     * Whether the operator has been shown an imbalance for THIS period and asked for the file anyway.
+     * Whether the operator has been shown an imbalance for this period and asked for the file anyway.
      *
      * Held per period rather than per session, and cleared whenever a bound moves: an acknowledgement
      * carried across a change of dates would hand somebody a different unbalanced month in silence, which
@@ -113,7 +113,7 @@ final class BillingAdminConsole extends Component
         // visitor whose admin grant was revoked between requests.
         $this->authorizeAdmin();
 
-        // ->layout() is Livewire's full-page wrapper, registered as a macro on the CONCRETE view class --
+        // ->layout() is Livewire's full-page wrapper, registered as a macro on the concrete view class --
         // the contract the factory is documented against does not carry it. Same naming as
         // AccountScreen::view(). Without a layout a routed Livewire view has no page shell.
         /** @var ConcreteView $rendered */
@@ -139,7 +139,7 @@ final class BillingAdminConsole extends Component
 
         $tier = Str::trim($this->compTier);
 
-        // Validate the tier BEFORE touching the owner, exactly as GrantTierCommand does: existence in the
+        // Validate the tier before touching the owner, exactly as GrantTierCommand does: existence in the
         // catalog, not resolvability (the priced-free tier is a valid target). Without this an empty or
         // typo'd key would forceFill the tier column verbatim — an empty key resolves to the free zero-tier,
         // silently downgrading a paying customer while the audit trail records it as a normal grant.
@@ -172,7 +172,7 @@ final class BillingAdminConsole extends Component
      * where the local row drifts and this package's audit trail stays empty, or consumer code reinventing an
      * authorization gate that already exists and already fronts the at-least-as-consequential comp action.
      *
-     * Re-authorized like every other entry point, and an unknown owner is REPORTED rather than fataled —
+     * Re-authorized like every other entry point, and an unknown owner is reported rather than fataled —
      * the same graceful outcome the comp action promises for the same input.
      */
     public function cancel(): void
@@ -230,7 +230,7 @@ final class BillingAdminConsole extends Component
     /**
      * Hand the accountant a period's booking batch, from the browser instead of a shell.
      *
-     * ## It runs the SAME assembly as the command, and that is the whole design
+     * ## It runs the same assembly as the command, and that is the whole design
      *
      * The batch is put together by `DatevPeriodBatch`, which the scheduled command also calls. A second
      * assembly here would drift, and the drift is the invisible kind: this export has twice shipped a
@@ -238,7 +238,7 @@ final class BillingAdminConsole extends Component
      * nobody enumerates. The refusals in the writer are reached for the same reason — a screen that caught
      * them and reported success would emit exactly the file they exist to prevent.
      *
-     * ## A refusal produces a MESSAGE and no file
+     * ## A refusal produces a message and no file
      *
      * That asymmetry matters more than it looks. The writer refuses rather than emits precisely because the
      * import will not argue: a truncated reference lands as a booking pointing at nothing, and a batch
@@ -279,7 +279,7 @@ final class BillingAdminConsole extends Component
         }
 
         // Resolved here rather than declared as a parameter: the component framework fills an action's
-        // parameters from the CLIENT, not from the container, so a type-hinted dependency arrives as null
+        // parameters from the client, not from the container, so a type-hinted dependency arrives as null
         // and the action fails before it authorizes anything.
         $batch = Container::getInstance()->make(DatevPeriodBatch::class);
 
@@ -290,16 +290,16 @@ final class BillingAdminConsole extends Component
             // or a specific period boundary, and an operator who is told which one can fix it; one who is
             // told "export failed" reruns it and gets the same nothing.
             //
-            // THE SECOND TYPE IS A REFUSAL TOO, and it must not leave through this method uncaught: a
+            // The second type is a refusal too, and it must not leave through this method uncaught: a
             // transaction the active chart has no account for raises it, and out of a Livewire action
             // that is an error page. The command that writes the same file catches Throwable and answers
             // with a line, so one misconfiguration would be a sentence on one route and a 500 on the other.
             //
-            // It joins `refused` rather than becoming a fifth direction because it IS one — no file, and
+            // It joins `refused` rather than becoming a fifth direction because it is one — no file, and
             // here is why. Its message already names the transaction, the country where one applies and
             // the configuration path, which is more than a heading of our own could say.
             //
-            // The two types are NAMED rather than caught as a common ancestor. Both extend
+            // The two types are named rather than caught as a common ancestor. Both extend
             // RuntimeException, and catching that would swallow every defect this screen should show as
             // an error page — a swallow disguised as a fix, on the surface that hands out the operator's
             // whole revenue history.
@@ -309,7 +309,7 @@ final class BillingAdminConsole extends Component
             return null;
         }
 
-        // The batch does not tie out, and nobody has said "give it to me anyway" for THIS period.
+        // The batch does not tie out, and nobody has said "give it to me anyway" for this period.
         //
         // The command writes the file and fails; this refuses the download and says why, and the two agree
         // in substance: the file is one click away, not withheld. The difference is what a download IS. It
@@ -338,9 +338,9 @@ final class BillingAdminConsole extends Component
             return null;
         }
 
-        // THE STATE SURVIVES THE DOWNLOAD. Livewire does not
+        // The state survives the download. Livewire does not
         // hand a returned StreamedResponse to the browser raw: `SupportFileDownloads` captures its
-        // content into a `download` EFFECT and the request dehydrates normally, so the response the
+        // content into a `download` effect and the request dehydrates normally, so the response the
         // client gets carries both the file and this property. The warning above — never depend on
         // state set before a raw stream — is about a raw response and does not reach this one.
         $this->datevUnbooked = Container::getInstance()->make(Translator::class)->get(

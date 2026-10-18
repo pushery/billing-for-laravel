@@ -26,7 +26,7 @@ use Pushery\Billing\ValueObjects\UsageHold;
 use Throwable;
 
 /**
- * The one entry point an app calls when its customer USES something it will be billed for:
+ * The one entry point an app calls when its customer uses something it will be billed for:
  *
  *     app(UsageRecorder::class)->record($team, 'emails', 42_000, sourceKey: "campaign:{$campaign->id}");
  *
@@ -36,7 +36,7 @@ use Throwable;
  * send would make this a distributed transaction, and a failed send would either lose the usage or
  * double-report it. The flusher owns the network.
  *
- * The usage is reported to the provider RAW. The allowance ("first 10 000 free") and the packaging
+ * The usage is reported to the provider raw. The allowance ("first 10 000 free") and the packaging
  * ("per 1 000") live in the provider's price and are applied once, to the period's total. Netting them
  * here as well would give the customer the free allowance twice, and rounding each record up to a whole
  * package would charge ten packages for ten sends of a hundred emails.
@@ -105,7 +105,7 @@ final readonly class UsageRecorder
 
     /**
      * Tell the owner their allowance is running out — once per meter per period, and only for a meter that
-     * HAS an allowance to run out of.
+     * has an allowance to run out of.
      *
      * Deliberately after the write's transaction, never inside it: the notice is a fact about usage that is
      * already on the books, and mailing from inside a transaction that may still roll back is how a customer
@@ -142,7 +142,7 @@ final readonly class UsageRecorder
     }
 
     /**
-     * The one write: the outbox row the provider is billed from AND the counter the owner is shown, in a
+     * The one write: the outbox row the provider is billed from and the counter the owner is shown, in a
      * single transaction, so the number a customer sees and the number they are charged for come from the
      * same act. A hold, when there is one, is settled inside it — so the allowance it claimed becomes the
      * usage it recorded, atomically.
@@ -157,7 +157,7 @@ final readonly class UsageRecorder
         BillingPeriod $period,
         ?UsageHold $hold,
     ): bool {
-        // Reportable only when the tier actually bills this meter AND billing is switched on. Otherwise
+        // Reportable only when the tier actually bills this meter and billing is switched on. Otherwise
         // the event is a counter entry: the app still meters (its quota must keep working), but there is
         // nothing to hand a provider, and the flusher must never pick it up. The switch is read the way every
         // other reader of it reads it: `BILLING_ENABLED=0` arrives as the string "0", which they took for off
@@ -204,12 +204,12 @@ final readonly class UsageRecorder
             }
 
             // Whichever way it was metered, the counter draws on the free allowance first and on the
-            // owner's PREPAID units only past it, and tells us how many prepaid units this usage ate.
+            // owner's prepaid units only past it, and tells us how many prepaid units this usage ate.
             $drawn = $hold instanceof UsageHold
                 ? ($this->counters->settle($hold, $quantity) ?? 0)
                 : $this->counters->record($owner, $meterKey, $period->key, $quantity, $included);
 
-            // Carried on the EVENT, not derived from the period total: the flusher nets prepaid at the
+            // Carried on the event, not derived from the period total: the flusher nets prepaid at the
             // rollup, and a rollup only covers the events folded into it — deriving it from the period
             // would subtract the same units again on the next flush of the same cycle.
             if ($drawn > 0) {
@@ -223,16 +223,16 @@ final readonly class UsageRecorder
     }
 
     /**
-     * Meter a unit of work OVERSELL-SAFELY: claim the allowance, do the work, record what it really used.
+     * Meter a unit of work oversell-safely: claim the allowance, do the work, record what it really used.
      *
      *     $sent = app(UsageRecorder::class)->meter($team, 'emails', 5_000, fn () => $mailer->send($batch));
      *
-     * This is the difference between asking and taking. The quota GATE is a point-in-time read: two
+     * This is the difference between asking and taking. The quota gate is a point-in-time read: two
      * requests can read the same number and both pass it, so an owner one unit below a hard limit gets
      * through as many times as they can fire requests at once. meter() holds the allowance under a row
-     * lock BEFORE the work runs, so the ceiling actually holds.
+     * lock before the work runs, so the ceiling actually holds.
      *
-     * The closure may return the number of units it ACTUALLY consumed — reserve 5 000 sends, make 4 812,
+     * The closure may return the number of units it actually consumed — reserve 5 000 sends, make 4 812,
      * return 4 812, and the other 188 go straight back to the allowance. Return null (or nothing) and the
      * whole reservation is recorded.
      *
@@ -268,10 +268,11 @@ final readonly class UsageRecorder
             $period->key,
             $quantity,
             $component?->included,
-            // Only a BLOCKING policy refuses past the allowance: a degrade or fair-use meter is billed past
+            // Only a blocking policy refuses past the allowance: a degrade or fair-use meter is billed past
             // it, not refused, so there is nothing to defend and the reservation is granted unconditionally.
             $component instanceof MeteredComponent && $component->policy->isBlocking(),
             Carbon::now()->addSeconds($this->holdSeconds()),
+            $component instanceof MeteredComponent ? $component->grace : 0,
         );
 
         if (! $hold instanceof UsageHold) {

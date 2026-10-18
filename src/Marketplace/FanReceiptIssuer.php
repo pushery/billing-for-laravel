@@ -28,14 +28,14 @@ use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
  * The buyer's document for a routed sale, at the least tier the purchase needs.
  *
  * The tier decision is made elsewhere ({@see FanReceiptTierResolver}); this issues what it decided. What it
- * adds is the consequence that decision has for DATA: the two lower tiers carry no buyer identity at all,
+ * adds is the consequence that decision has for data: the two lower tiers carry no buyer identity at all,
  * because they do not need one — and a document that carried it anyway would be collection without a ground.
  *
  * In a commission chain that matters twice over. The buyer's identity is not merely surplus there: the same
  * document that names them also names the platform as seller, and pairing the two is how a buyer and a
  * merchant learn each other's identity from a receipt neither asked for.
  *
- * A buyer who ASKS for a full invoice is the one case where the data is collected, because then it is
+ * A buyer who asks for a full invoice is the one case where the data is collected, because then it is
  * required — and the asking is what makes it lawful to hold. A caller who supplies buyer details for a lower
  * tier is refused rather than quietly trimmed: passing them means the call site believes they belong on the
  * document, and silently dropping them would leave that belief in place and untested.
@@ -48,13 +48,13 @@ use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 final readonly class FanReceiptIssuer
 {
     /**
-     * The frozen characteristics a restatement does NOT carry over, and why each one differs.
+     * The frozen characteristics a restatement does not carry over, and why each one differs.
      *
      * Stated rather than achieved by omission. A restatement assembled from a hand-written list of columns
      * beside the one `issue()` writes drifts from it, and a column nobody typed is not an error: the row is
      * valid, the totals add up, and the document no longer says when the supply happened or why it was exempt.
      *
-     * So the carried set is DERIVED from {@see InvoiceRecord::FROZEN_SCALARS} — the same list the
+     * So the carried set is derived from {@see InvoiceRecord::FROZEN_SCALARS} — the same list the
      * immutability guard reads — and this is the exception list. A column that changes on a restatement is a
      * decision somebody made, and it belongs here with its reason.
      *
@@ -76,7 +76,7 @@ final readonly class FanReceiptIssuer
         'document_series',
         // A unique index spans period and series, so a second row carrying the same period could not exist.
         'settlement_period',
-        // The claim on the settled charge belongs to the FIRST document over that sale. A restatement that
+        // The claim on the settled charge belongs to the first document over that sale. A restatement that
         // claimed it again would hand the sale's exclusive slot to a second row, undoing from inside the
         // application the constraint the database holds.
         'charge_claim_key',
@@ -92,13 +92,13 @@ final readonly class FanReceiptIssuer
      * Issue the buyer's document for a routed sale.
      *
      * @param  Money  $gross  what the buyer paid
-     * @param  ?array<string, mixed>  $buyer  the buyer's details — permitted ONLY for a full invoice
+     * @param  ?array<string, mixed>  $buyer  the buyer's details — permitted only for a full invoice
      * @param  ?ServicePeriod  $period  the stretch this document covers, where it covers one. A subscription
      *                                  cycle is a PART-SUPPLY and its document says which part; a one-off
      *                                  purchase has no period and states none.
-     * @param  ?SupplyTaxCharacteristics  $characteristics  what the supply WAS, in the terms its tax treatment turns on
+     * @param  ?SupplyTaxCharacteristics  $characteristics  what the supply was, in the terms its tax treatment turns on
      * @param  ?string  $provider  which provider the charge reference belongs to — the money, not the supply
-     * @param  int|ProviderComputedTax  $taxRateBps  a rate in basis points, or the whole position a PROVIDER
+     * @param  int|ProviderComputedTax  $taxRateBps  a rate in basis points, or the whole position a provider
      *                                               computed. A union rather than an eleventh parameter: the
      *                                               position already CARRIES its rate, so the two are one
      *                                               argument's worth of meaning — what this document's tax
@@ -108,11 +108,11 @@ final readonly class FanReceiptIssuer
      *                                               to be one the provider stated.
      *
      * The tax characteristics are frozen here for the same reason the rate and the tier already are: the
-     * document has to keep saying what the supply WAS, after the product behind it has legitimately
+     * document has to keep saying what the supply was, after the product behind it has legitimately
      * changed. They arrive from the caller rather than being looked up, because nothing in this class is
      * jurisdictional and the catalog is the consuming application's.
      *
-     * They travel as ONE argument. Each characteristic is known on its own, which is why every field of
+     * They travel as one argument. Each characteristic is known on its own, which is why every field of
      * `SupplyTaxCharacteristics` is nullable, and an empty set is exactly as valid as a full one. As separate
      * parameters of a long signature they would be filled positionally, and a characteristic inserted in the
      * middle would shift every argument after it past type-compatible pairs, silently, since the statics
@@ -150,10 +150,10 @@ final readonly class FanReceiptIssuer
 
         $rateBps = $taxRateBps instanceof ProviderComputedTax ? $taxRateBps->rateBps : $taxRateBps;
 
-        // Tax as the DIFFERENCE from the gross, the same way the sale was priced: computing the net from the
+        // Tax as the difference from the gross, the same way the sale was priced: computing the net from the
         // rate and the tax from the net loses a cent the buyer nonetheless paid.
         //
-        // WHERE THE PROVIDER COMPUTED IT, THE SPLIT IS TAKEN RATHER THAN MADE. The rate is still stated —
+        // Where the provider computed it, the split is taken rather than made. The rate is still stated —
         // a tax document has to name one — but it is the provider's own, and deriving the amounts from it
         // again would replace two exact figures with two of this package's, which may differ by the cent
         // that rounding falls on. The rate then no longer reproduces the amounts beside it, and on a tax
@@ -191,7 +191,7 @@ final readonly class FanReceiptIssuer
             // surface for.
             'seller_posture' => SupplyRegime::CommissionChain->requiredPosture(),
             'document_series' => DocumentSeries::BuyerReceipt,
-            // The tier this document IS, frozen when it is issued. It was decided from this document's own
+            // The tier this document is, frozen when it is issued. It was decided from this document's own
             // gross, and re-deriving it later — after a threshold moved, say — would render the document as
             // something it never was.
             'receipt_tier' => $tier,
@@ -201,7 +201,7 @@ final readonly class FanReceiptIssuer
             // absence — the EN 16931 category reads it as "a service", and the return files the sale under
             // the standard band whatever rate it actually carried.
             'tax_archetype' => $characteristics->archetype,
-            // What a voluntary payment was paid ON. The two columns beside it are the DERIVED answers; this
+            // What a voluntary payment was paid ON. The two columns beside it are the derived answers; this
             // is what they were derived FROM, and keeping it is what lets a reader check the derivation
             // rather than take it. It is also the transaction line's reference to the thing it accompanied,
             // which a tip otherwise has no way of naming.
@@ -219,14 +219,14 @@ final readonly class FanReceiptIssuer
             // is frozen against later change, so a term the issuer does not write here is missing from the
             // document for good.
             'delivered_on' => $characteristics->deliveredOn,
-            // WHY no tax was charged, where none was. It has to be stated rather than inferred, because the
-            // renderer can only infer ONE of the two: with this absent it falls back to "reverse charge, or
+            // Why no tax was charged, where none was. It has to be stated rather than inferred, because the
+            // renderer can only infer one of the two: with this absent it falls back to "reverse charge, or
             // nothing", so `SuppliedOutsideTheUnion` was unreachable — and with it EN 16931 category `G`.
             // An export to a third country could not be stated as one on any document this package issued,
             // while the renderer has been able to render it and a test proves so against a hand-built row.
             //
             // The two are not interchangeable and the difference is not cosmetic: a reverse-charged supply
-            // IS taxed, by the other party, and belongs in a return on both sides. An export placed outside
+            // is taxed, by the other party, and belongs in a return on both sides. An export placed outside
             // the union is taxed by nobody. Rendering the first where the second happened tells the recipient
             // to account for tax that nothing is owed on.
             'tax_exemption_reason' => $characteristics->exemptionReason,
@@ -236,7 +236,7 @@ final readonly class FanReceiptIssuer
             // business sale out by it. Left unset, a reverse-charged sale booked as a domestic taxed one and
             // counted towards a threshold that is about consumers.
             'reverse_charge' => $characteristics->exemptionReason === TaxExemptionReason::ReverseCharge,
-            // WHICH provider's reference that is. Frozen beside it because the two are one key: the charge
+            // Which provider's reference that is. Frozen beside it because the two are one key: the charge
             // table is unique on the pair, and a reference on its own is a prefix rather than an identifier.
             // A document that stored only the reference could be matched to another provider's sale — and
             // the failure direction is a receipt that is never issued at all.
@@ -245,7 +245,7 @@ final readonly class FanReceiptIssuer
             // The dedup key of a billing cycle, and null for anything that is not one. A one-off purchase
             // has no period to repeat, so it carries none and reads exactly as it always did.
             'settlement_period' => $period?->key(),
-            // The same stretch at the DOCUMENT level, which is a separate statement from the line's and is
+            // The same stretch at the document level, which is a separate statement from the line's and is
             // what EN 16931 asks for as BG-14. Both e-invoice writers render these columns; until this
             // assignment existed nothing filled them, so the term they emit was empty on every document the
             // package issued — the renderers were tested with rows built by hand, and a test that supplies
@@ -255,7 +255,7 @@ final readonly class FanReceiptIssuer
             // The platform sells to the buyer in this regime, so it is the seller named here — the mirror of
             // the settlement, where the merchant is.
             'seller' => $this->platformParty(),
-            // Empty rather than null for a lower tier: the document HAS a buyer side, it just carries no
+            // Empty rather than null for a lower tier: the document has a buyer side, it just carries no
             // identity. Null would read as "not yet filled in", which invites somebody to fill it in.
             'buyer' => $buyer ?? [],
             // The line states the stretch it covers when there is one. Additive and absent otherwise, so a
@@ -275,13 +275,13 @@ final readonly class FanReceiptIssuer
     }
 
     /**
-     * The platform's commission invoice to the SELLER — the second intermediation supply, and the half that
+     * The platform's commission invoice to the seller — the second intermediation supply, and the half that
      * was missing.
      *
      * ## What was wrong before this existed
      *
      * Under intermediation the package drew exactly one commission number, and the document it belonged to
-     * was owned by the BUYER. The platform withheld a commission from the seller and invoiced it nowhere: a
+     * was owned by the buyer. The platform withheld a commission from the seller and invoiced it nowhere: a
      * taxable supply made and not documented, and a seller holding no document for the tax on money kept
      * from them. Three places in the package already described this invoice as existing — the regime enum,
      * the shipped configuration, and `SellerReportingPeriod` — which is why its absence read as a design.
@@ -290,8 +290,8 @@ final readonly class FanReceiptIssuer
      *
      * The platform is the seller of this supply and the merchant is its recipient. That is the opposite of
      * the mediated sale, where the merchant sells to the buyer and the platform arranges it — and it is why
-     * this document, like the buyer-side commission invoice, carries the regime and NOT a seller-of-record
-     * posture: the posture states who sells THE SALE, and answering it here would make the document
+     * this document, like the buyer-side commission invoice, carries the regime and not a seller-of-record
+     * posture: the posture states who sells the sale, and answering it here would make the document
      * contradict itself.
      *
      * The taxable base is the commission alone. The mediated sale is the merchant's supply and appears
@@ -368,11 +368,11 @@ final readonly class FanReceiptIssuer
      * ## Two different repeats, and only one of them is common
      *
      * A payment event that arrives twice, one after the other, is the normal thing these paths exist for —
-     * a provider redelivers, a billing run is retried. That repeat is recognized by READING, before anything
+     * a provider redelivers, a billing run is retried. That repeat is recognized by reading, before anything
      * is written and before a number is drawn, and it is the reason this method is asked before `issue()`
      * builds a row.
      *
-     * Two deliveries arriving at the SAME time are a different case: both read, both find nothing, both
+     * Two deliveries arriving at the same time are a different case: both read, both find nothing, both
      * write, and the unique index on (owner, series, period) refuses the second. That refusal is what makes
      * "one cycle, one document" true rather than hoped for, and it is left to surface. The provider records
      * a failed delivery and sends the event again, and the resend takes the read path above and gets the
@@ -381,7 +381,7 @@ final readonly class FanReceiptIssuer
      * ## Why the loser is not quietly handed the winner's document instead
      *
      * That was built, and it cannot be done portably. Absorbing the violation means reading the winner back
-     * after a failed insert, and the two engines this package is proven on demand OPPOSITE things — neither
+     * after a failed insert, and the two engines this package is proven on demand opposite things — neither
      * of them visible on SQLite:
      *
      * - **Postgres** refuses every further statement in a transaction once one has failed ("current
@@ -395,32 +395,32 @@ final readonly class FanReceiptIssuer
      * plain refusal it was meant to soften, because it fails where somebody took care. The read above
      * removes the common repeat; the rare one is a retry, which providers already do.
      *
-     * A PERIODLESS document repeats on its charge reference instead, and that is not a nicety. A document with
-     * no period is not a cycle, and it can still repeat: a routed one-time sale has no period and IS
+     * A periodless document repeats on its charge reference instead, and that is not a nicety. A document with
+     * no period is not a cycle, and it can still repeat: a routed one-time sale has no period and is
      * redelivered. Providers retry, and a webhook arriving twice would draw a second number for the same sale,
      * a second document that cannot be taken back.
      *
      * Matched on `settled_charge_reference` because that is the value the sale itself states — the same
      * anchor the settlement side already uses, rather than a second notion of "the same sale".
      *
-     * ## And on the PROVIDER beside it, because the reference alone is not a key
+     * ## And on the provider beside it, because the reference alone is not a key
      *
      * `billing_merchant_charges` is unique on `(provider, charge_reference)`, and the counter that reads it
      * says so six times in its own words: never the reference alone, which is unique only per provider.
      * This lookup did use the reference alone — so on an installation with two drivers, a sale whose
-     * reference happened to collide with another provider's would find THAT sale's document and issue
+     * reference happened to collide with another provider's would find that sale's document and issue
      * none of its own. The buyer gets no receipt and nothing turns red: a repeat and a collision are
      * indistinguishable to a query that cannot see which provider either belongs to.
      *
      * Latent today, because exactly one driver ships. It arms itself the day a second one does.
      *
-     * A caller that names no provider is matched on the reference alone, as before. That is a REAL
+     * A caller that names no provider is matched on the reference alone, as before. That is a real
      * fallback and not an equivalent one: it is sound on a single-driver installation and nowhere else,
      * which is why it is said here rather than left as a default that looks total.
      *
-     * A caller that DOES name one also matches a document that recorded NONE, and that direction is the
+     * A caller that does name one also matches a document that recorded none, and that direction is the
      * upgrade. Every receipt a marketplace issuer wrote before the provider was frozen carries null, so a strict pair match
-     * would stop recognizing them the moment this shipped — and the failure would be a SECOND document
+     * would stop recognizing them the moment this shipped — and the failure would be a second document
      * drawn for a sale that already had one, from a series that must have no gaps. A null row can only have
      * been written while the installation recorded no provider at all, which is before a second driver
      * existed, so it belongs to whichever one there was.
@@ -452,9 +452,9 @@ final readonly class FanReceiptIssuer
                 )
                 ->when(
                     $provider !== null && $provider !== '',
-                    // The EXACT match first. Admitting NULL rows is what carries the upgrade, and it also
+                    // The exact match first. Admitting NULL rows is what carries the upgrade, and it also
                     // makes a legacy row a candidate for a provider it may not belong to -- with `orderBy('id')`
-                    // alone the older row has the smaller id and WINS against the document that names this
+                    // alone the older row has the smaller id and wins against the document that names this
                     // provider outright. That is the collision this scoping was written to prevent, arriving
                     // through the fallback that was meant to be harmless.
                     fn (Builder $q): Builder => $q->orderByRaw('case when provider = ? then 0 else 1 end', [$provider]),
@@ -483,7 +483,7 @@ final readonly class FanReceiptIssuer
     }
 
     /**
-     * A document already issued for a LONGER stretch that swallows this cycle whole.
+     * A document already issued for a longer stretch that swallows this cycle whole.
      *
      * ## The case, and it doubles the tax without breaking anything
      *
@@ -494,7 +494,7 @@ final readonly class FanReceiptIssuer
      * one contains the other either.
      *
      * Measured on this package before this method existed: a prepaid year plus its twelve cycles produced
-     * THIRTEEN documents and 37.96 of tax where 19.00 was owed. Nothing about any single one of them looks
+     * thirteen documents and 37.96 of tax where 19.00 was owed. Nothing about any single one of them looks
      * wrong — each states a real period and a correct amount. The error is only in the sum, which no document
      * carries and no reader is looking at.
      *
@@ -502,14 +502,14 @@ final readonly class FanReceiptIssuer
      *
      * It looks like it should need a guard against matching the cycle's own document — the bounds are equal
      * there, so a containment test finds it. It does not need one, and a clause requiring the cover to be
-     * strictly wider was built and REMOVED: neutralizing it failed no test, because it could not change an
+     * strictly wider was built and removed: neutralizing it failed no test, because it could not change an
      * answer. `ServicePeriod::key()` is derived from the two dates, so "same bounds" and "same key" are one
      * statement, and the key lookup has already returned that document before this runs.
      *
      * A guard that cannot change an outcome reads in the test output exactly like a guard that works, which
      * is the reason it is gone rather than kept for comfort.
      *
-     * A cycle that falls AFTER the prepaid term is not covered and is issued normally, so a subscription that
+     * A cycle that falls after the prepaid term is not covered and is issued normally, so a subscription that
      * was prepaid for a year and then continues monthly keeps billing.
      */
     private function documentCovering(Model $buyerOwner, ServicePeriod $period): ?InvoiceRecord
@@ -520,7 +520,7 @@ final readonly class FanReceiptIssuer
             // `whereDate`, not a plain comparison against the date string, and on SQLite the difference is a
             // whole month. The columns are `date` casts, and SQLite, which has no date type, keeps the text the
             // cast serializes with the connection's datetime format: "2026-01-01 00:00:00". Compared against
-            // the bare "2026-01-01" a string comparison finds it GREATER — the longer string wins on the shared
+            // the bare "2026-01-01" a string comparison finds it greater — the longer string wins on the shared
             // prefix — so the one cycle whose start equals the term's start slips through while every later
             // month matches. MySQL and PostgreSQL keep the date alone in a `date` column, and `whereDate`
             // compares the date on all three. Measured on SQLite: a prepaid year plus its cycles left exactly
@@ -536,7 +536,7 @@ final readonly class FanReceiptIssuer
      * A creator's settlement for the same month carries a period too, and matching on the period alone would
      * hand a buyer's billing run the creator's document.
      *
-     * The SERIES is a parameter, and that is the half of this fix nobody would have missed until it was too
+     * The series is a parameter, and that is the half of this fix nobody would have missed until it was too
      * late. It was hard-wired to the buyer receipt, so routing the intermediated issuer through the repeat
      * guard would have changed nothing: the lookup searched a series the commission document does not carry,
      * found nothing, and drew a second number anyway. It would have read as fixed in every test that only
@@ -553,7 +553,7 @@ final readonly class FanReceiptIssuer
     }
 
     /**
-     * The buyer's document for a sale the platform only ARRANGED.
+     * The buyer's document for a sale the platform only arranged.
      *
      * The buyer paid one amount and it contains two very different things. The goods are a supply between
      * two users that the platform is not part of; the fee is the platform's own service to the buyer. Only
@@ -572,7 +572,7 @@ final readonly class FanReceiptIssuer
      *
      * @param  Money  $goodsGross  what the buyer paid the seller — passing through, not the platform's
      * @param  Money  $feeGross  what the buyer paid the platform for arranging it
-     * @param  ?array<string, mixed>  $buyer  the buyer's details — permitted ONLY for a full invoice, as on every
+     * @param  ?array<string, mixed>  $buyer  the buyer's details — permitted only for a full invoice, as on every
      *                                        buyer's document
      */
     public function issueIntermediated(
@@ -596,7 +596,7 @@ final readonly class FanReceiptIssuer
 
         [$feeNet, $feeTax] = $feeGross->baseFromMarkup($feeRateBps);
 
-        // Through the repeat guard, like every other buyer document — and the number is drawn INSIDE the
+        // Through the repeat guard, like every other buyer document — and the number is drawn inside the
         // closure, so a redelivery that finds an existing document never spends one. Writing directly meant
         // the number came first and the unique constraint second: a number gone from a gapless series with
         // no document behind it, which is the one failure a retry cannot heal.
@@ -610,7 +610,7 @@ final readonly class FanReceiptIssuer
                 'currency' => $feeGross->currency,
                 'status' => InvoiceStatus::Open,
                 'issued_at' => $soldOn,
-                // The taxable base is the FEE alone. The goods are stated on the document but are not part of
+                // The taxable base is the fee alone. The goods are stated on the document but are not part of
                 // what the platform is taxed on, because they are not the platform's supply.
                 'subtotal_minor' => $feeNet->minorUnits,
                 'tax_minor' => $feeTax->minorUnits,
@@ -618,15 +618,15 @@ final readonly class FanReceiptIssuer
                 'tax_rate_bps' => $feeRateBps,
                 'fan_gross_minor' => $goodsGross->minorUnits + $feeGross->minorUnits,
                 'supply_regime' => SupplyRegime::Intermediation,
-                // NO posture on this one, and the omission is the answer rather than the same gap one document
-                // over. The posture states who sells THE SALE toward the buyer, and under intermediation that is
+                // No posture on this one, and the omission is the answer rather than the same gap one document
+                // over. The posture states who sells the sale toward the buyer, and under intermediation that is
                 // the merchant. This document is not the sale: it is the platform's own invoice for arranging
                 // it, and its seller is correctly the platform. Deriving the posture from the regime here would
                 // therefore make the document contradict itself -- which the seller guard says out loud, and
                 // which is how this was found rather than shipped.
                 //
                 // Same shape as `SelfBillingEngine`, which leaves the posture off a self-billed document because
-                // that one names the CREATOR as seller. In both cases the regime is the field the document can
+                // that one names the creator as seller. In both cases the regime is the field the document can
                 // carry cleanly and the posture is not.
                 'document_series' => DocumentSeries::CommissionInvoice,
                 'receipt_tier' => $tier,
@@ -666,7 +666,7 @@ final readonly class FanReceiptIssuer
      * its own series. The second states the fee the buyer paid the platform beside the goods it passed on, and a
      * buyer who needs their details on it, a business deducting the tax on the fee, asks for it the same way.
      *
-     * NOT routed through the repeat guard, and deliberately so — this is the one entry point that is SUPPOSED
+     * Not routed through the repeat guard, and deliberately so — this is the one entry point that is supposed
      * to draw a fresh number. It restates a sale a buyer already has a document for, and a second document
      * for one sale is the whole point of it. Of the direct writes to the number series, this is the one that
      * draws a fresh number on purpose.
@@ -679,7 +679,7 @@ final readonly class FanReceiptIssuer
      * documents skips a restatement — otherwise the sale is declared twice and tax is reported that nobody
      * ever took.
      *
-     * @param  array<string, mixed>  $buyer  the details collected AT the request, which did not exist before it
+     * @param  array<string, mixed>  $buyer  the details collected at the request, which did not exist before it
      */
     public function reissueAsFullInvoice(
         InvoiceRecord $receipt,
@@ -703,7 +703,7 @@ final readonly class FanReceiptIssuer
             );
         }
 
-        // Everything that decided how the sale was TAXED comes across unchanged, and it is TAKEN from the
+        // Everything that decided how the sale was taxed comes across unchanged, and it is taken from the
         // frozen list rather than typed again here. A restatement that lost the destination, the rate
         // category or the exemption reason would describe a different supply to the one person who asked
         // for a document they could rely on.

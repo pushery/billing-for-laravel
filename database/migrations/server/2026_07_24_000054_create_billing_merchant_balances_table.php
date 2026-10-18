@@ -20,8 +20,8 @@ use Pushery\Billing\Support\BillingSchema;
  * the platform; this is a debt owed by somebody selling through it. Sharing a table would put a payable and
  * a receivable in the same column and make one person's prepayment offsettable against another's clawback.
  *
- * The unique key spans the merchant AND the currency, and the merchant half is nullable so an erasure can
- * unlink it. That combination works BECAUSE a unique index treats nulls as distinct: several erased
+ * The unique key spans the merchant and the currency, and the merchant half is nullable so an erasure can
+ * unlink it. That combination works because a unique index treats nulls as distinct: several erased
  * merchants' balances can sit side by side without colliding. This is the exact inverse of the decision on
  * the webhook account reference, where nulls being distinct would have broken deduplication and the column
  * therefore defaults to an empty string — same property of the same index type, opposite consequence, so it

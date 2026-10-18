@@ -18,7 +18,7 @@ use Pushery\Billing\Models\ReportingFiling;
  * Before a period is filed, {@see ReportingExport} may produce it as often as anybody likes; each run must
  * come back byte-identical, and a run that does not is the signal that something moved. After it is filed,
  * the figures that went out are settled. Producing the period again stays allowed and stays useful — it is
- * how divergence is DETECTED — but what comes back is a new record, and the only way it reaches an
+ * how divergence is detected — but what comes back is a new record, and the only way it reaches an
  * authority is as a correction naming the filing it supersedes.
  *
  * Nothing here reaches back into what was filed. That is the property the whole chain is built for: an
@@ -46,7 +46,7 @@ final readonly class ReportingFilingRegister
     public function __construct(private ReportingExportArchive $archive) {}
 
     /**
-     * File a produced record as the period's FIRST filing.
+     * File a produced record as the period's first filing.
      *
      * @throws ReportingFilingRefused when the period already went out — which is over-reporting, not an
      *                                idempotent repeat, so it is refused rather than absorbed
@@ -122,7 +122,7 @@ final readonly class ReportingFilingRegister
     /**
      * Whether a freshly produced record differs from what the period last reported.
      *
-     * This is the trigger for a correction, and it is deliberately a QUESTION rather than an alarm. A period
+     * This is the trigger for a correction, and it is deliberately a question rather than an alarm. A period
      * whose figures moved after filing is the ordinary consequence of a late refund, a corrected
      * classification or a seller's amended master data — the divergence is the expected outcome of those
      * events, not a defect in the run that produced them. What matters is that somebody sees it before the

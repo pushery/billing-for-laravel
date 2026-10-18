@@ -48,13 +48,13 @@ final class UsageHistory extends AccountScreen
             $byPeriod[$row->period][] = $row;
         }
 
-        // The movement stream, and ONLY when a project has bound something that can account for one.
+        // The movement stream, and only when a project has bound something that can account for one.
         //
         // Asked of the container rather than of `$history`, for two reasons. It decouples: a project can
         // supply movements without also replacing the history provider, which is the more common shape —
         // the two answer different questions from different tables. And this package's own
-        // DatabaseUsageHistory deliberately does NOT implement it: `billing_usage_events` records
-        // consumption, but grants land in the prepaid ledger as a BALANCE (`balance`, `granted_total`),
+        // DatabaseUsageHistory deliberately does not implement it: `billing_usage_events` records
+        // consumption, but grants land in the prepaid ledger as a balance (`balance`, `granted_total`),
         // with no row per credit. A stream that showed spending and hid the top-ups would raise exactly
         // the question it exists to answer, so the honest default is to show none at all.
         $container = Container::getInstance();

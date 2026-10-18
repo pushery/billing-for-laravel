@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * Until now exactly one such fact was frozen. The rest — what kind of thing was sold, which rule decided
  * where it was taxed, which rate band applied, the rate itself, whether the sale was reportable — were read
- * back from the PRODUCT whenever anybody asked. Products change legitimately: an author adds a video to a
+ * back from the product whenever anybody asked. Products change legitimately: an author adds a video to a
  * text-only work and it loses its reduced band, a creator turns a broadcast into a private session and it
  * stops being taxed where the buyer is. Neither change may reach backwards, and both did.
  *

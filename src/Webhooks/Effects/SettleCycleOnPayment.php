@@ -30,7 +30,7 @@ use Pushery\Billing\Support\LocalBillingEngine;
  *
  * ## It selects itself
  *
- * Only a LOCAL engine holds a cycle open, so only a local engine has one of these to settle. A driver whose
+ * Only a local engine holds a cycle open, so only a local engine has one of these to settle. A driver whose
  * provider runs the subscription answers its own cycles through its own events, and this finds nothing for
  * them — no driver name appears in the decision.
  */
@@ -40,8 +40,8 @@ final readonly class SettleCycleOnPayment
 
     public function __invoke(PaymentSucceeded $event): void
     {
-        // Resolved through the MANAGER, which is what everything else in this package does and what the
-        // container can actually build. `BillingEngine` is an interface bound NOWHERE — the engine is
+        // Resolved through the manager, which is what everything else in this package does and what the
+        // container can actually build. `BillingEngine` is an interface bound nowhere — the engine is
         // reached only as `driver()->engine()` — so injecting it would make this class unconstructible, and
         // `HandleWebhookEffect` builds effects with `Container::make()`. Every held cycle would then stay
         // held forever while every test stayed green, because a test that constructs the engine by hand

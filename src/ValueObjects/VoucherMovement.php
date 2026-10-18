@@ -17,7 +17,7 @@ use Pushery\Billing\Enums\VoucherEvent;
  * supply that has not happened, and taxing it again at redemption taxes it twice.
  *
  * The redemption carries the part of the sale the voucher paid for, alongside the full gross. Those are not
- * the same number and must not be netted: the voucher reduces what the buyer PAYS, never what was sold.
+ * the same number and must not be netted: the voucher reduces what the buyer pays, never what was sold.
  */
 final readonly class VoucherMovement
 {

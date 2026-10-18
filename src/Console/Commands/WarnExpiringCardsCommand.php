@@ -128,7 +128,7 @@ final class WarnExpiringCardsCommand extends Command
     private function windowDays(Repository $config): int
     {
         // `is_numeric` rather than `is_string`, and it is the same line the trial command already carries —
-        // whose comment names THIS command as the one that lacked it. The command line always hands a
+        // whose comment names this command as the one that lacked it. The command line always hands a
         // string; `Artisan::call(..., ['--days' => 60])` hands an int, and the stricter check discarded it
         // and returned the configured default instead. A setting that is quietly ignored is worse than one
         // that is refused: the caller gets a plausible result for a window they did not ask for.

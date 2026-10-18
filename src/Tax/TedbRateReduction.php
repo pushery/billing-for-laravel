@@ -67,9 +67,9 @@ final readonly class TedbRateReduction
             if ($row['rateType'] !== 'DEFAULT') {
                 continue;
             }
-            // NOT filtered on having a comment. Six member states state their legal basis there, and
+            // Not filtered on having a comment. Six member states state their legal basis there, and
             // dropping commented rows deletes six correct standard rates while looking like tidying. A
-            // comment that NAMES a territory outside the VAT area is different: that row is the territory's.
+            // comment that names a territory outside the VAT area is different: that row is the territory's.
             if (self::namesATerritoryOutsideTheVatArea($row['comment'] ?? '')) {
                 continue;
             }
@@ -108,7 +108,7 @@ final readonly class TedbRateReduction
     /**
      * The ISO code TEDB's member-state code corresponds to, or null where it must not be folded in.
      *
-     * `XI` is Northern Ireland under the Windsor Framework. It is deliberately NOT mapped: it participates
+     * `XI` is Northern Ireland under the Windsor Framework. It is deliberately not mapped: it participates
      * in the union's rules for goods only, and quietly listing it as a member state would put it into every
      * place-of-supply answer as though it were one.
      */
@@ -132,12 +132,12 @@ final readonly class TedbRateReduction
     /**
      * Whether a response can hold for the window that was asked about.
      *
-     * `$situationOn` is the day the NEWEST rate situation in the response began (the service states it on
+     * `$situationOn` is the day the newest rate situation in the response began (the service states it on
      * every row). The response holds for the window when that situation was already in force on its first
      * day, and when the window has already begun.
      *
      * **Both halves are traps that were measured, one per direction.** A day beyond the service's data is
-     * answered SILENTLY WITH CURRENT DATA: `from=2027-01-01` came back HTTP 200, no fault, no warning, and
+     * answered silently with current data: `from=2027-01-01` came back HTTP 200, no fault, no warning, and
      * every row's situation began before 2027. So a window that has not begun cannot be confirmed, and the
      * check says so instead of answering "what rate applies in 2027" with today's rate. In the other
      * direction, a response whose newest situation began after the window's first day describes a change
@@ -145,7 +145,7 @@ final readonly class TedbRateReduction
      *
      * The parsing has its own trap, and it bites in both directions. `situationOn` arrives as
      * `2026-07-01+02:00`, a date carrying a timezone offset. `createFromFormat('Y-m-d', …)` reads that
-     * wrong. But so does parsing it as an INSTANT: `+02:00` makes midnight on the 1st land at 22:00 on the
+     * wrong. But so does parsing it as an instant: `+02:00` makes midnight on the 1st land at 22:00 on the
      * previous day in UTC, so the situation silently begins one calendar day earlier. That day is a quarter
      * boundary, which is exactly where rate changes happen.
      *

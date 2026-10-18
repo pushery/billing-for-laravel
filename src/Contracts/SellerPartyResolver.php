@@ -9,7 +9,7 @@ use Pushery\Billing\Invoicing\Party;
 use Pushery\Billing\Models\InvoiceRecord;
 
 /**
- * Who is named as the SELLER on a document — a different question from the seller-of-record POSTURE.
+ * Who is named as the seller on a document — a different question from the seller-of-record posture.
  *
  * The posture ({@see SellerOfRecordPosture}) answers which ROLE the platform plays;
  * this answers which concrete party — name, address, tax ids — that role resolves to. They are one decision

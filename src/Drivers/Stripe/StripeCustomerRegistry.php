@@ -110,7 +110,7 @@ final readonly class StripeCustomerRegistry implements CustomerRegistry
         try {
             $this->stripe->customers->delete($customerId);
         } catch (RateLimitException $e) {
-            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // A 429 is transient and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException) {

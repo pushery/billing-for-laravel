@@ -11,15 +11,15 @@ use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
 
 /**
- * Reads what Stripe ACTUALLY has: which meters are active, and what a metered price really says.
+ * Reads what Stripe actually has: which meters are active, and what a metered price really says.
  *
  * `billing:meters:check` compares the configured `provider_meter` against the active meters, so a tier
  * pointing at a meter that was never created (or was archived) is caught before a month of usage goes
- * unbilled. It also compares the configured allowance against the PRICE — because the allowance lives in the
+ * unbilled. It also compares the configured allowance against the price — because the allowance lives in the
  * price (a graduated first tier costing nothing), and `included` in config only drives the gauge. If they
  * disagree the customer is quietly given a different number of free units than the interface promised.
  *
- * Only ACTIVE meters count: an archived meter no longer rates usage, so a tier still pointing at one is just
+ * Only active meters count: an archived meter no longer rates usage, so a tier still pointing at one is just
  * as broken as a tier pointing at nothing.
  */
 final class StripeMeterInspector implements MeterInspector
@@ -45,7 +45,7 @@ final class StripeMeterInspector implements MeterInspector
             // invisible and the check would silently pass a price it never actually read.
             $price = $this->stripe->prices->retrieve($providerPriceId, ['expand' => ['tiers']]);
         } catch (RateLimitException $e) {
-            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // A 429 is transient and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException) {
@@ -65,7 +65,7 @@ final class StripeMeterInspector implements MeterInspector
     }
 
     /**
-     * The `up_to` of the graduated FIRST tier — the units the provider really gives away free. `inf` (a
+     * The `up_to` of the graduated first tier — the units the provider really gives away free. `inf` (a
      * single-tier price that is free forever) is not an allowance, it is a bug in the price, and reads as
      * null rather than as a number the check would happily match.
      *
@@ -104,10 +104,10 @@ final class StripeMeterInspector implements MeterInspector
     }
 
     /**
-     * Stripe's ACTIVE meters as id => event name.
+     * Stripe's active meters as id => event name.
      *
      * The map is the point: a price names the meter by ID (`recurring.meter`), while the package's config
-     * names it by EVENT NAME (`provider_meter`) — the same identifier the usage reports carry. Comparing the
+     * names it by event name (`provider_meter`) — the same identifier the usage reports carry. Comparing the
      * two needs both sides of the map.
      *
      * @return array<string, string>

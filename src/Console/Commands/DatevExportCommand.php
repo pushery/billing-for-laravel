@@ -18,7 +18,7 @@ use Throwable;
  * the file. The period defaults to the previous calendar month, so a monthly cron with no arguments
  * exports "last month" — the natural cadence for handing bookings to the Steuerberater.
  *
- * Only ISSUED invoices are exported (a draft has no `issued_at` and no booking date), and they are
+ * Only issued invoices are exported (a draft has no `issued_at` and no booking date), and they are
  * ordered by document date so the batch reads chronologically. The account numbers still come from
  * `billing.datev` and must be confirmed with the advisor; left unset the file is structurally valid
  * with blank account fields to fill in — this command does not post anything itself.
@@ -57,7 +57,7 @@ final class DatevExportCommand extends Command
 
         $path = $this->option('path');
 
-        // EVERY count, always, including the zeroes. A line that reports only some of what was loaded reads
+        // Every count, always, including the zeroes. A line that reports only some of what was loaded reads
         // as the whole batch, so an operator cannot tell a month whose vouchers were loaded and empty from
         // a month whose vouchers were never loaded at all. For the whole life of this command it was the
         // second, for both fees and vouchers, and that is precisely why the number goes in the line rather
@@ -86,7 +86,7 @@ final class DatevExportCommand extends Command
      *
      * ## The file is written either way, and the command still fails
      *
-     * Withholding the batch would take away the only thing that can be used to find out WHY it does not
+     * Withholding the batch would take away the only thing that can be used to find out why it does not
      * tie — the difference is a statement about that file, and an operator cannot investigate a file they
      * were not given. But a close that does not tie out is not a close: the two sides are one obligation
      * counted twice, there is no reading under which they legitimately differ, and a command that reports
@@ -171,7 +171,7 @@ final class DatevExportCommand extends Command
      * batch: the file is correct and complete about everything it does book. The exit code stays with the
      * reconciliation, which is an arithmetic contradiction and a different kind of statement.
      *
-     * The figure is a NET, and it can be negative. Spending such a grant takes its share back out, so a
+     * The figure is a net, and it can be negative. Spending such a grant takes its share back out, so a
      * period that granted and redeemed the same credit owes the books nothing and says so with a zero. Read
      * as a running total of grants it would grow forever while describing a gap that had already closed.
      */

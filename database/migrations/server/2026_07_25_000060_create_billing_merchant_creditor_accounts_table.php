@@ -25,7 +25,7 @@ return new class extends Migration
     {
         Schema::create('billing_merchant_creditor_accounts', function (Blueprint $table): void {
             $table->id();
-            // The merchant half is nullable so an erasure can UNLINK the row instead of deleting it. The
+            // The merchant half is nullable so an erasure can unlink the row instead of deleting it. The
             // number must outlive the merchant: bookings already made point at it, and freeing it would hand
             // it to the next merchant — two people's obligations on one account, reconciling perfectly and
             // telling nobody.

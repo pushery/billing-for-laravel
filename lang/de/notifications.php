@@ -123,4 +123,29 @@ return [
         'cta' => 'Zahlung bestätigen',
     ],
 
+    'direct_debit_announced' => [
+        'subject' => 'Deine nächste Lastschrift',
+        'intro' => ':payee zieht am :date :amount per SEPA-Lastschrift von deinem Konto ein.',
+        'recurring' => 'Danach wird derselbe Betrag zu jedem Fälligkeitstermin deines Abos eingezogen. Ändert sich der Betrag, bekommst du vorher Bescheid.',
+        'account' => 'Konto mit der Endung :account.',
+        'mandate' => 'Mandatsreferenz: :reference.',
+        'creditor' => 'Gläubiger-Identifikationsnummer: :creditor.',
+        'outro' => 'Du musst nichts weiter tun.',
+        'cta' => 'Zahlungsmethoden ansehen',
+    ],
+
+    'cancellation_received' => [
+        'subject' => 'Wir haben deine Kündigung erhalten',
+        'intro' => 'Hiermit bestätigen wir deine Kündigung mit ihrem vollständigen Inhalt und dem Datum und der Uhrzeit, zu der sie bei uns eingegangen ist.',
+        'outro' => 'Bewahre diese E-Mail auf: Damit kannst du deine Kündigung und ihren Eingang bei uns belegen.',
+        'cta' => 'Kündigung ansehen',
+    ],
+
+    'withdrawal_received' => [
+        'subject' => 'Wir haben deinen Widerruf erhalten',
+        'intro' => 'Hiermit bestätigen wir deinen Widerruf mit seinem vollständigen Inhalt und dem Datum und der Uhrzeit, zu der er bei uns eingegangen ist.',
+        'outro' => 'Bewahre diese E-Mail auf: Damit kannst du deinen Widerruf und seinen Eingang bei uns belegen.',
+        'cta' => 'Widerruf ansehen',
+    ],
+
 ];

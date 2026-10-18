@@ -30,7 +30,7 @@ final readonly class SubjectScopedRecords
     /**
      * Delete the child tables of this axis, joined through their parents.
      *
-     * They must go FIRST, while the parent rows still exist to join through. Why this is not left to the
+     * They must go first, while the parent rows still exist to join through. Why this is not left to the
      * foreign key is recorded on the map itself.
      *
      * @return array<string, int> table => rows deleted
@@ -84,7 +84,7 @@ final readonly class SubjectScopedRecords
 
             // Only rows that still hold something: counting rows already scrubbed would report work that did
             // not happen, and this count is what an erasure receipt is written from. The alternatives are
-            // NESTED — at the top level an `orWhere` would sit beside the two morph conditions and turn
+            // nested — at the top level an `orWhere` would sit beside the two morph conditions and turn
             // "this person's rows that hold data" into "this person's rows, OR anyone's row that holds
             // data", scrubbing strangers.
             $scrubbed[$table] = $this->scoped($axis, $table, $subject)
@@ -155,7 +155,7 @@ final readonly class SubjectScopedRecords
     }
 
     /**
-     * Delete the retained records of ALREADY-ERASED people whose statutory window has run out.
+     * Delete the retained records of already-erased people whose statutory window has run out.
      *
      * Two conditions, both required. The person must have been erased — a record still linked to a living
      * customer is not the retention clock's business. And the window must have passed, measured from the
@@ -168,7 +168,7 @@ final readonly class SubjectScopedRecords
      *
      * A record the host holds is left where it is, however far past the window it is. The two duties are
      * both real and they point opposite ways — storage limitation says delete, a legal hold says preserve —
-     * so the host, which is the side that received the order, decides per record. The gate is a REQUIRED
+     * so the host, which is the side that received the order, decides per record. The gate is a required
      * parameter rather than an optional one: a seam a caller may forget is a seam that silently stops being
      * asked, and the symptom of forgetting it here is a destroyed record nobody can get back.
      *

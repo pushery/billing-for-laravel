@@ -9,9 +9,9 @@ use Illuminate\Support\Facades\Schema;
 /**
  * How much less of the merchant's share came back than the reversal asked for.
  *
- * The attempt already records what was ASKED for (`transfer_reversal_minor`). What actually moved is the
+ * The attempt already records what was asked for (`transfer_reversal_minor`). What actually moved is the
  * provider's answer, and on a destination charge the two systematically differ: the provider reverses
- * PROPORTIONALLY, while a fee with any fixed component owes more than the proportional share on a partial
+ * proportionally, while a fee with any fixed component owes more than the proportional share on a partial
  * refund. Both figures look reasonable, the gap is small, and it never appears in one case — it only
  * accumulates.
  *

@@ -43,7 +43,7 @@
         @endif
 
         {{-- The movement stream, rendered only when a project bound something that can account for one.
-             Deliberately BELOW the aggregates: periods answer "what did this cost", movements answer
+             Deliberately below the aggregates: periods answer "what did this cost", movements answer
              "why", and somebody who opens this screen usually wants the first before the second. --}}
         @if ($movements !== null && $movements->isNotEmpty())
             <section class="space-y-3" aria-label="{{ __('billing::account.usage_history.movements_heading') }}">

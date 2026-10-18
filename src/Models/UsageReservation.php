@@ -20,6 +20,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * @property string $period
  * @property int $amount
  * @property ?int $included
+ * @property ?int $grace
  * @property ReservationState $state
  * @property Carbon $expires_at
  */
@@ -30,7 +31,7 @@ class UsageReservation extends Model
     protected $table = 'billing_usage_reservations';
 
     /** @var list<string> */
-    protected $fillable = ['token', 'owner_type', 'owner_id', 'meter_key', 'period', 'amount', 'included', 'state', 'expires_at'];
+    protected $fillable = ['token', 'owner_type', 'owner_id', 'meter_key', 'period', 'amount', 'included', 'grace', 'state', 'expires_at'];
 
     /**
      * The same defaults the schema carries, so a row that was just created reads like one that was read back.
@@ -48,6 +49,7 @@ class UsageReservation extends Model
     /** @var array<string, string> */
     protected $casts = [
         'amount' => 'integer',
+        'grace' => 'integer',
         'state' => ReservationState::class,
         'expires_at' => 'datetime',
     ];

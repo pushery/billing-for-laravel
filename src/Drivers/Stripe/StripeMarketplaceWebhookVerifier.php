@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Pushery\Billing\Contracts\MarketplaceWebhookVerifier;
 
 /**
- * The merchant endpoint's verifier: the same signature check, against the OTHER secret.
+ * The merchant endpoint's verifier: the same signature check, against the other secret.
  *
  * It wraps rather than duplicates, because a second copy of a signature check is a second place for it to
  * be got wrong — and the two would drift on the day one of them learned about a new header or a changed

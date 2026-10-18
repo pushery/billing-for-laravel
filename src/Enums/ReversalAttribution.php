@@ -14,11 +14,11 @@ use Pushery\Billing\Exceptions\InvalidBillingConfig;
  *
  * The counter has two defensible readings. One counts the period the reversal happened in, on the reasoning
  * that a counter is a record of movements and a movement has a date. The other counts the original period,
- * because applying the tax-booking rule ("ex nunc", the month it happened) mechanically to the COUNTER is the
+ * because applying the tax-booking rule ("ex nunc", the month it happened) mechanically to the counter is the
  * mistake — a booking and a count answer different questions about the same event.
  *
  * Neither is obviously right and only one may hold, so the choice belongs to whoever owns the reporting
- * obligation. The default: a reversal reduces the period of the document it corrects, AND a crossing that
+ * obligation. The default: a reversal reduces the period of the document it corrects, and a crossing that
  * has already happened is final. The two halves ship together because only the pair is safe — see below.
  *
  * ## What hangs on it
@@ -27,14 +27,14 @@ use Pushery\Billing\Exceptions\InvalidBillingConfig;
  * standard-rated from then on. In January they issue eight settlements showing 136.80 of VAT. In February
  * the December sale is refunded.
  *
- * Attributed to the REVERSAL period, the crossing stands and those settlements stay correct — but the
- * year's figure includes turnover that was undone. Attributed to the ORIGINAL period, the year's figure is
+ * Attributed to the reversal period, the crossing stands and those settlements stay correct — but the
+ * year's figure includes turnover that was undone. Attributed to the original period, the year's figure is
  * clean — and unless a crossing that has already happened is explicitly kept, the January VAT becomes
  * retrospectively unlawful across every one of those documents at once.
  *
  * So the second option is only safe together with a rule that a completed crossing is final. That rule is
  * not in this enum and not in the counter — it lives in `SmallBusinessAutoFlip`, which only ever flips
- * forward, and it is pinned by a test that asserts the two figures DISAGREEING: the counter reports the
+ * forward, and it is pinned by a test that asserts the two figures disagreeing: the counter reports the
  * reduced year while the breach still names the transaction and the date it happened on.
  *
  * Choosing the clean year without that rule is the expensive mistake, and it is not hypothetical arithmetic:
@@ -50,7 +50,7 @@ enum ReversalAttribution: string
     case OriginalPeriod = 'original_period';
 
     /**
-     * The setting this installation runs under, read in ONE place.
+     * The setting this installation runs under, read in one place.
      *
      * Both counters ask this question about the same configuration key, and the answer decides which period
      * a reported figure belongs to. Two readers with their own copy of the rule is how a key ends up
@@ -61,10 +61,10 @@ enum ReversalAttribution: string
      * Defaulted to `OriginalPeriod` when no configuration is reachable, so a counter constructed by hand in
      * a test or a script answers the same way the container-resolved one does.
      *
-     * That default is a DECISION, not inherited behavior, and it moves a reported figure between quarters:
+     * That default is a decision, not inherited behavior, and it moves a reported figure between quarters:
      * an installation that wants a reversal reported in the quarter it happened sets `reversal_period`.
      *
-     * An unreadable value is REFUSED rather than defaulted. Both answers are defensible, so neither is a
+     * An unreadable value is refused rather than defaulted. Both answers are defensible, so neither is a
      * safe reading of a value somebody mistyped — and the difference is invisible in every figure it
      * produces.
      */
@@ -73,7 +73,7 @@ enum ReversalAttribution: string
         $value = $config?->get('billing.tax_counters.reversal_attribution');
 
         // The decided answer, so a counter built by hand in a test or a script agrees with the
-        // container-resolved one. It is NOT "what the package always did" any more — that was
+        // container-resolved one. It is not "what the package always did" any more — that was
         // `reversal_period`, and the change is deliberate.
         if ($value === null) {
             return self::OriginalPeriod;

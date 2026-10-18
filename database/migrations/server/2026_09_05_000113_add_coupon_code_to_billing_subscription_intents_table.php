@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
  * ## Why the code has to survive the redirect at all
  *
  * Under a driver the package bills itself, a coupon is not applied at checkout -- there is no checkout to
- * apply it at. The customer is sent to the provider for a mandate, and the discount is a line the CYCLE
+ * apply it at. The customer is sent to the provider for a mandate, and the discount is a line the cycle
  * writes, months of them for a repeating coupon. So the moment the customer chooses the code and the
  * moment anything can act on it are separated by a browser round trip and a webhook, and the only thing
  * that crosses that gap is this row.

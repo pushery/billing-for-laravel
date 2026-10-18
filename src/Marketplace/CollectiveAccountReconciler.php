@@ -17,7 +17,7 @@ use Pushery\Billing\ValueObjects\SubLedgerMovement;
  *
  * This is the whole value of the check. Recomputing the collective balance from the same documents the
  * sub-ledger already read would compare a figure with itself: every rule they share cancels out, and the
- * only errors it could ever find are arithmetic ones. Reading the BATCH means the comparison spans the
+ * only errors it could ever find are arithmetic ones. Reading the batch means the comparison spans the
  * export — so a document the batch leaves out, an account resolved differently, a direction marker written
  * the wrong way round, all surface here as a difference, and none of them would otherwise surface at all
  * until an accountant asked why the account does not tie out.

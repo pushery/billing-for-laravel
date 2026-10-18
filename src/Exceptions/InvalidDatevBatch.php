@@ -50,16 +50,16 @@ final class InvalidDatevBatch extends RuntimeException
      *
      * DATEV's rule is that a row whose currency differs from the batch's base must carry the rate or the
      * base amount. Carrying neither is not a formatting lapse: the import either rejects the row outright or
-     * books it AT FACE VALUE into a base-currency account — 500,00 PLN posted as 500,00 EUR — and the second
+     * books it at face value into a base-currency account — 500,00 PLN posted as 500,00 EUR — and the second
      * outcome overstates the revenue by the exchange rate while looking like a plausible figure the whole
      * way through.
      *
      * Refused rather than dropped, and the distinction is the whole argument. Dropping the row would hide
      * revenue, which is worse than a row an importer questions; that objection is right and it is about
-     * dropping. A refused BATCH exports nothing and says why, so nothing is hidden, nothing is posted wrong,
+     * dropping. A refused batch exports nothing and says why, so nothing is hidden, nothing is posted wrong,
      * and the missing freeze becomes the operator's next action instead of a reconciliation months later.
      *
-     * What settled it against sending the row is that sending rests on the import QUESTIONING it, and this
+     * What settled it against sending the row is that sending rests on the import questioning it, and this
      * package's own export comment says the import either rejects it or books it at face value. Correctness
      * that depends on somebody else's undefined behavior is not correctness.
      *

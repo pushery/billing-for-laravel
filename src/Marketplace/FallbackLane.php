@@ -15,14 +15,14 @@ use Pushery\Billing\ValueObjects\Money;
  * The fallback lane's review: reconcile a creator's submitted invoice against what they actually earned, and
  * hold their payout until it clears.
  *
- * The reconciliation is the whole point. Without it the platform pays out what the creator WRITES — a
+ * The reconciliation is the whole point. Without it the platform pays out what the creator writes — a
  * creator who invoices 300.00 net when the transactions of the period come to 270.00 would be overpaid by
  * 30.00. So the submitted net and tax must match the expected figures within a tolerance (config, default
  * exact); a mismatch is a finding per field, and only a passing review may release the payout. The figures
  * are compared in their currency first: 27,000 yen are not 270.00 euros, however alike the digits are.
  *
- * WHERE THAT LOCK IS NOT, and it matters: `holdsPayout()` has no caller in this package, because there is
- * no payout path here to hang it on. This class ANSWERS whether a creator may be paid; nothing in `src/`
+ * Where that lock is not, and it matters: `holdsPayout()` has no caller in this package, because there is
+ * no payout path here to hang it on. This class answers whether a creator may be paid; nothing in `src/`
  * asks. Until a payout path exists, the answer has to be asked by whoever pays — a consumer that pays out
  * without calling this is not defeating a lock, it is skipping a question nobody put in its way.
  *
@@ -85,7 +85,7 @@ final readonly class FallbackLane
      * Whether a creator's payout is held because a fallback submission has not cleared.
      *
      * A creator on the fallback lane is paid only once their invoice passes: any submission that is pending,
-     * failed or in manual review holds the whole payout. A creator with no submission at all is NOT held here
+     * failed or in manual review holds the whole payout. A creator with no submission at all is not held here
      * — that is the self-billed path's or a caller's concern; this speaks only to submissions that exist.
      */
     public function holdsPayout(Model $creator): bool

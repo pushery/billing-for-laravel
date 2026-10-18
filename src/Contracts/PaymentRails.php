@@ -19,14 +19,14 @@ use Pushery\Billing\ValueObjects\TokenizedMethod;
  * proration — those live in the BillingEngine above it. Everything crosses the boundary as Money and
  * value objects, never a raw provider response.
  *
- * THIS LAYER IS DELIBERATELY NOT ELIGIBILITY-GATED, and it must stay that way. The eligibility gate
- * (CanTransactMoney) belongs at the ENTRY seams — Checkout, OneTimeCharge, SubscriptionActions::swap —
- * where a payment BEGINS, not on every charge. Wrapping this interface in a gate looks like the tidier,
+ * This layer is deliberately not eligibility-gated, and it must stay that way. The eligibility gate
+ * (CanTransactMoney) belongs at the entry seams — Checkout, OneTimeCharge, SubscriptionActions::swap —
+ * where a payment begins, not on every charge. Wrapping this interface in a gate looks like the tidier,
  * more central place for it and is the wrong answer twice over: it guards nothing today, and once dunning
- * retries exist it would start REFUSING legitimate collections. offSessionCharge() is what a retry uses,
+ * retries exist it would start refusing legitimate collections. offSessionCharge() is what a retry uses,
  * and a subscriber who was eligible when they subscribed can later fail an age or KYC predicate — gating
  * here would block collecting money they already owe. That an entry-seam gate cannot be forgotten is
- * enforced structurally instead (tests/Unit/MoneyEntryGateTest.php).
+ * enforced structurally instead, by the package's own test suite.
  */
 interface PaymentRails
 {
@@ -50,9 +50,9 @@ interface PaymentRails
     /**
      * Store a reusable mandate/token for a customer so it can be charged later.
      *
-     * THE RETURN TYPE IS A PROMISE, and not every provider can keep it: it says a mandate exists once this
+     * The return type is a promise, and not every provider can keep it: it says a mandate exists once this
      * returns. That holds where a stored method is attached by a server call. It does not hold where the
-     * mandate is established by the CUSTOMER completing a redirect — there the mandate is born when they
+     * mandate is established by the customer completing a redirect — there the mandate is born when they
      * finish a first payment, and depending on what they do it may never be born.
      *
      * The precondition is written here rather than left inside the type, because a driver that cannot meet
@@ -81,7 +81,7 @@ interface PaymentRails
     /**
      * Refund a previous charge, in full or in part. The idempotency key prevents a double refund on retry.
      *
-     * With routing, the merchant's share is reversed with it. Refunding a routed payment WITHOUT reversing
+     * With routing, the merchant's share is reversed with it. Refunding a routed payment without reversing
      * is an unbounded loss path rather than a variation: the buyer is made whole out of the platform's own
      * money while the merchant keeps theirs, and a lost chargeback is not a call the package can decline.
      */

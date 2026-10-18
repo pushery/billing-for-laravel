@@ -32,7 +32,7 @@ final readonly class ReportingBaseComparability
      * Whether the reported proceeds and the taxable base may be checked against each other.
      *
      * Everything except the margin basis: for an ordinary sale, a small business, or a private seller, the
-     * two figures describe the same money and a disagreement between them IS a finding.
+     * two figures describe the same money and a disagreement between them is a finding.
      */
     public function comparable(?TaxationBasis $basis): bool
     {

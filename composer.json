@@ -42,6 +42,7 @@
         "ext-bcmath": "*",
         "ext-ctype": "*",
         "ext-dom": "*",
+        "ext-filter": "*",
         "ext-hash": "*",
         "ext-json": "*",
         "ext-libxml": "*",
@@ -96,8 +97,9 @@
         "pestphp/pest-plugin-laravel": "^5.0",
         "pestphp/pest-plugin-phpstan": "5.2.1",
         "pestphp/pest-plugin-type-coverage": "^5.0",
-        "phpstan/phpstan": "2.2.15",
-        "rector/rector": "2.6.7",
+        "phpstan/phpstan": "2.3.1",
+        "pushery/sqlens-for-laravel": "^0.29",
+        "rector/rector": "2.7.0",
         "setasign/fpdf": "^1.8.2",
         "smalot/pdfparser": "^2.0",
         "spaze/phpstan-disallowed-calls": "4.14.0"
@@ -114,42 +116,6 @@
         "psr-4": {
             "Pushery\\Billing\\": "src/"
         }
-    },
-    "autoload-dev": {
-        "psr-4": {
-            "Pushery\\Billing\\Tests\\": "tests/",
-            "Workbench\\App\\": "workbench/app/",
-            "Workbench\\Database\\Factories\\": "workbench/database/factories/",
-            "Workbench\\Database\\Seeders\\": "workbench/database/seeders/"
-        }
-    },
-    "scripts": {
-        "test": "pest",
-        "test:coverage": "@php vendor/bin/pest --coverage-clover=build/clover.xml",
-        "test:type-coverage": "@php vendor/bin/pest --type-coverage --type-coverage-json=build/types.json --min=100",
-        "demo-css": [
-            "npx @tailwindcss/cli -i workbench/resources/css/account.src.css -o workbench/resources/css/account.css --minify",
-            "@php -r \"touch('workbench/resources/css/account.css');\""
-        ],
-        "test:browser": "composer demo-css && pest tests/Browser",
-        "test:stripe-live": "pest tests/LiveStripe",
-        "test:mollie-live": "pest tests/LiveMollie",
-        "test:evals": "pest tests/Evals --evals",
-        "test:database": "pest --testsuite=Postgres,MySql",
-        "analyze": "phpstan analyse --memory-limit=1G",
-        "format": "pint",
-        "format:test": "pint --test",
-        "rector": "rector process",
-        "rector:test": "rector process --dry-run",
-        "mutate": "@php -d pcov.directory=src vendor/bin/pest --mutate --everything --covered-only --min=85 --testsuite=Unit,Feature,Stripe",
-        "mutate:detect": "@php -d pcov.directory=src vendor/bin/pest --mutate --everything --covered-only --parallel --processes=4 --min=85 --testsuite=Unit,Feature,Stripe",
-        "qa": [
-            "@format:test",
-            "@rector:test",
-            "@analyze",
-            "@test:type-coverage",
-            "@test:coverage"
-        ]
     },
     "config": {
         "sort-packages": true,

@@ -19,12 +19,12 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Runs ONE webhook effect, on the queue, exactly once.
+ * Runs one webhook effect, on the queue, exactly once.
  *
  * One job per effect is what buys per-effect isolation: an effect that throws fails its own job and
  * retries on its own, instead of aborting every effect registered after it and 500-ing the provider.
  *
- * THE ORDER INSIDE IS THE WHOLE POINT — claim, run, mark handled, all in ONE transaction:
+ * The order inside is the whole point — claim, run, mark handled, all in one transaction:
  *
  *   - If the effect throws, the transaction rolls back and takes the CLAIM with it. The work is
  *     re-claimable, so the queue's retry (and `billing:webhooks:replay`) will do it again. A dedup marker

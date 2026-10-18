@@ -31,7 +31,7 @@ use Pushery\Billing\ValueObjects\Plan;
  * delegated strategy on such a driver. The package's own engine is not one: it bills a period when it closes, so
  * there is no paid remainder to give back, and it binds {@see ArrearsProrationStrategy}.
  *
- * WHY THE CREDIT IS BOOKED AND THE CHARGE IS NOT. A swap has two halves: the unused old time (a credit,
+ * Why the credit is booked and the charge is not. A swap has two halves: the unused old time (a credit,
  * which is money the customer is owed and which nothing else in the system will remember) and the new
  * plan's remaining time (a charge, which the next order raises anyway). Booking the credit here and
  * leaving the charge to the order is what keeps the two from being counted twice — this strategy never
@@ -87,7 +87,7 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
         [$remaining, $length] = $this->clock($period);
 
         // The invoice whose consideration this credit gives back -- and, where there is one, the
-        // amount it gives back a share OF. Without it the credit is prorated from the plan's LIST
+        // amount it gives back a share OF. Without it the credit is prorated from the plan's list
         // price, and a customer who paid a discounted invoice would be credited more than they ever
         // paid: the excess is then a gift rather than a returned consideration, which is a different
         // thing in the books and in the tax on them.
@@ -102,9 +102,9 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
             return;
         }
 
-        // The SOURCE is what makes this credit bookable later. A proration credit gives back part of
+        // The source is what makes this credit bookable later. A proration credit gives back part of
         // an already invoiced and already taxed consideration, so the correction it eventually needs
-        // belongs to THAT invoice, at THAT invoice's tax rate. Written here or never: nothing
+        // belongs to that invoice, at that invoice's tax rate. Written here or never: nothing
         // downstream can reconstruct which invoice a balance movement came from.
         $this->ledger->credit(
             $billable,
@@ -113,7 +113,7 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
             $invoice instanceof InvoiceRecord ? CreditSource::for($invoice) : null,
         );
 
-        // The balance alone says WHAT the customer has, never WHY. Without this line a support agent
+        // The balance alone says what the customer has, never why. Without this line a support agent
         // looking at a credit has no way to tell a proration from a refund or a goodwill gesture.
         $this->log->record('billing.proration_credited', $billable, [
             'from_tier' => $current->key,
@@ -127,13 +127,13 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
     }
 
     /**
-     * The paid invoice this period's consideration was paid on, or null when no ONE invoice answers.
+     * The paid invoice this period's consideration was paid on, or null when no one invoice answers.
      *
      * ## Why a match on fields rather than "the latest paid invoice"
      *
      * There is no stored edge from an invoice to the period it covers — `InvoiceRecord` carries an
      * owner, a status and an `issued_at`, and the period lives on the subscription. So the question
-     * is answered by intersecting what IS stored: same owner, same currency, paid, issued inside
+     * is answered by intersecting what is stored: same owner, same currency, paid, issued inside
      * this period. Taking the most recent paid invoice instead would be an ordering guess, and the
      * thing it guesses at is which invoice a later tax correction belongs to.
      *
@@ -187,7 +187,7 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
     /**
      * Where the clock sits in the current period: seconds left, and how long the period is.
      *
-     * Both are taken from the SAME period so they cannot disagree, and the remainder is measured from
+     * Both are taken from the same period so they cannot disagree, and the remainder is measured from
      * now rather than stored, because a swap is priced at the moment it happens.
      *
      * @return array{int, int}

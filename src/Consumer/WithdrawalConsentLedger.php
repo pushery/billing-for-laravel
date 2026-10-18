@@ -14,12 +14,12 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
 /**
  * Where a buyer's pre-provision declarations are written down and read back.
  *
- * The consumer records the consent at ITS checkout, because that is the only place the declarations are
+ * The consumer records the consent at its checkout, because that is the only place the declarations are
  * actually made — this package never renders the checkbox and never will; the notice wording is the
  * operator's and their adviser's. What the package owns is that the answer survives, in one shape, keyed
  * the way the grant path already looks things up.
  *
- * ## Recording is idempotent, and it keeps the FIRST answer
+ * ## Recording is idempotent, and it keeps the first answer
  *
  * A retried checkout submits the same declarations again. Overwriting would move `given_at` forward and
  * rewrite the notice version to today's, which is exactly the reinterpretation the version exists to
@@ -76,7 +76,7 @@ final readonly class WithdrawalConsentLedger
     }
 
     /**
-     * What this buyer declared for the purchase behind a PAYMENT reference.
+     * What this buyer declared for the purchase behind a payment reference.
      *
      * The receipt is where the law wants the two declarations repeated on a durable medium, and the receipt
      * knows the payment — `PaymentSucceeded` carries `pi_…`, while the consent is keyed on the checkout
@@ -103,7 +103,7 @@ final readonly class WithdrawalConsentLedger
             return null;
         }
 
-        // The MINTED key first. A declaration is recorded before the buyer leaves for the provider, so it
+        // The minted key first. A declaration is recorded before the buyer leaves for the provider, so it
         // cannot be keyed on a reference that does not exist yet -- the package mints one, and the purchase
         // carries it home. Falling straight through to `reference` would answer null for every purchase made
         // that way, and null on this path reads as "the buyer declared nothing": wrong, and indistinguishable

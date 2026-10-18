@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
  * The fan-side gross of the transaction a self-billed settlement settles — frozen onto the Gutschrift so the
  * DATEV booking chain can post the fan sale it is the counterpart of.
  *
- * A commission-chain transaction is two fictional supplies of ONE sale: the platform sells to the fan and
+ * A commission-chain transaction is two fictional supplies of one sale: the platform sells to the fan and
  * buys from the creator. The DATEV chain books both legs plus the payout, and the fan leg (money-in against
  * revenue) needs the fan gross (119.00 on the worked example). The Gutschrift is the record that ties the two
  * legs together — it settles exactly that fan transaction — so the fan gross is frozen here, at issue, when

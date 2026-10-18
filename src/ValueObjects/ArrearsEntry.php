@@ -12,14 +12,14 @@ use Pushery\Billing\Contracts\ArrearsRoster;
 /**
  * One relationship that is behind on what it owes — who, to which merchant, and since when.
  *
- * The unit an {@see ArrearsRoster} answers in. It is a RELATIONSHIP rather than a customer, and that is the
+ * The unit an {@see ArrearsRoster} answers in. It is a relationship rather than a customer, and that is the
  * whole shape: a fan behind with creator A keeps creator B, so a reminder is owed per relationship and a
  * message about "your payment" is one the recipient cannot act on.
  *
  * ## Why the subscription is optional
  *
  * An application that keeps its own view of a subscription has no row in this package's table to hand over
- * — that is the reason the roster seam exists. Where this package IS the storage, the row is carried along
+ * — that is the reason the roster seam exists. Where this package is the storage, the row is carried along
  * so a listener written before the seam existed keeps working untouched.
  *
  * ## The key is opaque, and deliberately so

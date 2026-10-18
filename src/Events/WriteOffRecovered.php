@@ -15,12 +15,12 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * The correcting documents already have an owner: the refund cascade issues them on both legs of the chain,
  * and a second path that also issued documents would be two answers to "what does this correction look
- * like". This event says WHAT HAPPENED; the cascade decides what it costs.
+ * like". This event says what happened; the cascade decides what it costs.
  *
  * ## What it means, and what it does not
  *
  * A correction issued because the consideration would not be received is a judgment about the future. The
- * money turning up says the judgment was wrong, so the tax goes back. That is the ONLY case this event is
+ * money turning up says the judgment was wrong, so the tax goes back. That is the only case this event is
  * raised for — a correction issued because the consideration was handed back can never be reopened, and a
  * payment afterwards is a new transaction with its own document. Nothing in the amounts distinguishes the
  * two afterwards, which is why the reason is read off the document rather than inferred.

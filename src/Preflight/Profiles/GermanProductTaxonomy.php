@@ -18,15 +18,15 @@ use Pushery\Billing\ValueObjects\TaxonomyCell;
  *
  * Three rows are worth reading twice, because they are where a table like this normally goes wrong.
  *
- * A bundle containing audio or video is its OWN row rather than a text work with a flag, and it takes the
+ * A bundle containing audio or video is its own row rather than a text work with a flag, and it takes the
  * standard band. Any such content disqualifies the reduced one outright, and a platform that wants the
  * reduced band splits the product instead — a distinction that evaporates the moment it is left to be
  * re-derived from a product whose contents can change.
  *
- * A voluntary payment DELEGATES: its regime, its band and its reportability come from whatever it was paid
+ * A voluntary payment delegates: its regime, its band and its reportability come from whatever it was paid
  * on. Wiring it to "not reportable" would under-report every tip on commissioned work.
  *
- * A multi-purpose voucher DEFERS: at issue nobody knows what will be bought with it, so nothing about it is
+ * A multi-purpose voucher defers: at issue nobody knows what will be bought with it, so nothing about it is
  * taxable yet. A null quietly read as "the usual" would tax it at issue, which is precisely backwards.
  */
 final readonly class GermanProductTaxonomy implements ProductTaxonomy

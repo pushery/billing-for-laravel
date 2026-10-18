@@ -50,6 +50,7 @@ use Pushery\Billing\Drivers\NullCustomerRegistry;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\ChargebackReceived;
+use Pushery\Billing\Events\ChargebackReversed;
 use Pushery\Billing\Events\DisputeOpened;
 use Pushery\Billing\Events\InPersonSaleCanceled;
 use Pushery\Billing\Events\InPersonSalePaid;
@@ -99,7 +100,10 @@ use Pushery\Billing\Webhooks\Effects\RecordProviderTransferReversal;
 use Pushery\Billing\Webhooks\Effects\RecordRoutedSubscriptionCharge;
 use Pushery\Billing\Webhooks\Effects\RecordTaxIdVerification;
 use Pushery\Billing\Webhooks\Effects\RefreshMerchantCapabilities;
+use Pushery\Billing\Webhooks\Effects\ReinstateLocalInvoiceOnChargebackReversal;
 use Pushery\Billing\Webhooks\Effects\ReopenWriteOffOnLateReceipt;
+use Pushery\Billing\Webhooks\Effects\RestoreAccessOnChargebackReversal;
+use Pushery\Billing\Webhooks\Effects\RestoreAddonPurchaseOnChargebackReversal;
 use Pushery\Billing\Webhooks\Effects\ReverseAddonPurchase;
 use Pushery\Billing\Webhooks\Effects\ReverseSaleIntoClosedMarket;
 use Pushery\Billing\Webhooks\Effects\RevokeAccessOnChargeback;
@@ -126,7 +130,7 @@ use Stripe\StripeClient;
 final class StripeServiceProvider extends ServiceProvider
 {
     /**
-     * The Stripe API version the package is written and TESTED against. The default a consuming app runs
+     * The Stripe API version the package is written and tested against. The default a consuming app runs
      * on unless it sets billing.stripe.api_version. Moving this is a deliberate act, never a side effect of a
      * dependency update: read Stripe's changelog for the new version for removed or renamed fields on the
      * objects the webhook mappers read, bump it, run the live-Stripe suite against the new version, point
@@ -140,7 +144,7 @@ final class StripeServiceProvider extends ServiceProvider
      * response shapes. The rule above guards the half that does not move on its own, and the package's own
      * tests compare the two, so a drift fails there instead of waiting to be noticed.
      *
-     * Matching Cashier's value is an ALIGNMENT, not a departure. It is also the floor the Accounts v2 API
+     * Matching Cashier's value is an alignment, not a departure. It is also the floor the Accounts v2 API
      * requires: under `basil` that API is not addressable at all on the real test API.
      */
     public const string STRIPE_API_VERSION = '2026-08-26.dahlia';
@@ -148,7 +152,7 @@ final class StripeServiceProvider extends ServiceProvider
     #[Override]
     public function register(): void
     {
-        // The seam the routed-cycle effect reads its commission through. Bound in the DRIVER provider, so
+        // The seam the routed-cycle effect reads its commission through. Bound in the driver provider, so
         // an install on another driver never resolves a Stripe client for it -- and the effect itself never
         // learns whose API answered.
         $this->app->bind(ReadsRoutedInvoiceCommission::class, fn (Application $app): StripeRoutedInvoiceCommission => new StripeRoutedInvoiceCommission($app->make(StripeClient::class)));
@@ -195,7 +199,7 @@ final class StripeServiceProvider extends ServiceProvider
         $this->app->bind(SubscriptionSync::class, StripeSubscriptionSync::class);
 
         // The receiving side. Bound whenever the Stripe driver is active, not only with the marketplace
-        // switched on: onboarding merchants and gating them comes BEFORE the switch in the go-live order,
+        // switched on: onboarding merchants and gating them comes before the switch in the go-live order,
         // so a binding that appeared only once the switch was on would be missing exactly when it is used.
         $this->app->bind(MerchantOnboarding::class, StripeMerchantOnboarding::class);
 
@@ -221,7 +225,7 @@ final class StripeServiceProvider extends ServiceProvider
         $this->app->bind(MarketplaceWebhookVerifier::class, StripeMarketplaceWebhookVerifier::class);
         $this->app->bind(MarketplaceWebhookEventMapper::class, StripeMarketplaceWebhookEventMapper::class);
         // Stripe books proration on its own side, but the account hub still previews the cost of a
-        // swap before committing — the Stripe strategy does that via create_preview. This REPLACES the
+        // swap before committing — the Stripe strategy does that via create_preview. This replaces the
         // generic strategy the core provider bound a moment ago, which is what makes that one a real
         // default rather than a described one: the core binds first, every driver overrides after.
         $this->app->bind(ProrationStrategy::class, StripeProrationStrategy::class);
@@ -238,7 +242,7 @@ final class StripeServiceProvider extends ServiceProvider
         // Package credit is mirrored onto the Stripe customer balance so it reduces the next invoice.
         $this->app->bind(CreditSync::class, StripeCreditSync::class);
 
-        // Whether erasing an owner also DELETES their customer at Stripe. Off unless the app asks: it is
+        // Whether erasing an owner also deletes their customer at Stripe. Off unless the app asks: it is
         // irreversible, and it cancels that customer's live subscriptions at the provider.
         $this->app->bind(CustomerRegistry::class, function (Application $app): CustomerRegistry {
             $forget = $app->make(Repository::class)->get('billing.erasure.forget_customer', false);
@@ -260,7 +264,7 @@ final class StripeServiceProvider extends ServiceProvider
                     $this->app->make(SupplyRegimeResolver::class),
                 ),
                 // Built unconditionally, and that is not the same as switched on. The marketplace master
-                // switch and the go-live checklist decide whether anything may USE these rails; the driver
+                // switch and the go-live checklist decide whether anything may use these rails; the driver
                 // only declares that it can. Wiring the capability to the switch would make the checklist
                 // check its own precondition, and a checklist that passes because the feature is off is
                 // the one shape it must never have.
@@ -273,17 +277,25 @@ final class StripeServiceProvider extends ServiceProvider
         );
 
         // A payment account builds a driver of its own: a client with the account's key, and the null engine,
-        // because the account charges what it is handed and keeps no subscriptions at Stripe for the install.
+        // because the account charges what it is handed and keeps no subscriptions at Stripe for the install. A
+        // charge without a payment method opens Stripe's checkout page on the account, which the account's own
+        // hosts may serve.
         $this->app->make(BillingManager::class)->extendAccounts(
             'stripe',
-            fn (PaymentAccount $account): StripeDriver => new StripeDriver(
-                new StripePaymentRails(
-                    StripeAccountClient::for($account, $this->apiVersion($this->app)),
-                    $this->app->make(Repository::class),
-                    $this->app->make(SupplyRegimeResolver::class),
-                ),
-                engine: new NullBillingEngine,
-            ),
+            function (PaymentAccount $account): StripeDriver {
+                $client = StripeAccountClient::for($account, $this->apiVersion($this->app));
+                $config = $this->app->make(Repository::class);
+
+                return new StripeDriver(
+                    new StripePaymentRails(
+                        $client,
+                        $config,
+                        $this->app->make(SupplyRegimeResolver::class),
+                        new StripeCheckoutCharge($client, $config, $account->redirectHosts),
+                    ),
+                    engine: new NullBillingEngine,
+                );
+            },
         );
 
         // Stripe signs every event, so an account without a signing secret has none of its webhooks accepted. The
@@ -318,7 +330,7 @@ final class StripeServiceProvider extends ServiceProvider
     /**
      * Wire the package's default webhook effects onto the neutral effect bus so a Stripe app syncs plans,
      * credits add-ons, reverses refunded ones and sends dunning out of the box. Effects are registered by
-     * CLASS, so each is dispatched as its own queued job — isolated, retried and recorded on its own. A
+     * class, so each is dispatched as its own queued job — isolated, retried and recorded on its own. A
      * consuming app registers further effects on the same registry.
      */
     private function registerDefaultEffects(WebhookEffectRegistry $registry): void
@@ -331,7 +343,7 @@ final class StripeServiceProvider extends ServiceProvider
         // past_due back to active does not welcome the customer a second time.
         $registry->on(SubscriptionStateChanged::class, SendSubscriptionActivatedNotice::class);
         $registry->on(AddonPurchased::class, CreditAddonPurchase::class);
-        // AFTER the credit, and the order is a statement rather than a preference: a document is about a
+        // After the credit, and the order is a statement rather than a preference: a document is about a
         // sale that happened, and the effect that records what the buyer got should not be waiting behind
         // one that writes paper. Each effect is its own queued job, so neither can take the other down.
         $registry->on(AddonPurchased::class, IssueDocumentForRoutedHostedPurchase::class);
@@ -339,12 +351,12 @@ final class StripeServiceProvider extends ServiceProvider
         // different lifetimes, and folded together a failure in either half would roll back the other —
         // leaving a buyer charged, credited, and without the row saying they own what they paid for.
         $registry->on(AddonPurchased::class, GrantPurchasedContent::class);
-        // The invoice of a purchase a LOCAL engine sold, raised from the order it wrote when the checkout opened.
+        // The invoice of a purchase a local engine sold, raised from the order it wrote when the checkout opened.
         // Neutral like the credit note further down: it acts only where such an order exists, which a Stripe
         // purchase never has, so on this driver it passes every event through untouched.
         $registry->on(AddonPurchased::class, InvoiceLocalPurchase::class);
         // The routed subscription cycle, and the one sale the money ledger never saw. A routed subscription
-        // is priced with a RATE, so its commission exists once per cycle and only at the provider — which is
+        // is priced with a rate, so its commission exists once per cycle and only at the provider — which is
         // why this is the first effect in the package that reads from one. It asks the local subscription
         // first and stops there for every unrouted cycle, so an install that routes nothing pays nothing.
         $registry->on(RoutedSubscriptionInvoicePaid::class, RecordRoutedSubscriptionCharge::class);
@@ -353,7 +365,7 @@ final class StripeServiceProvider extends ServiceProvider
         // is a real policy, and a build that welded the two together would make it impossible to express.
         $registry->on(AddonRefunded::class, RevokeAccessOnRefund::class);
         // Neutral despite living here with the other defaults: it acts only where the refunded payment
-        // leads to an invoice this package RAISED, which a Stripe invoice never is — Stripe announces its
+        // leads to an invoice this package raised, which a Stripe invoice never is — Stripe announces its
         // own correction and PersistInvoiceCorrection stores that. A local engine has nobody to announce
         // it, so without this a refunded cycle leaves the books overstating turnover.
         $registry->on(AddonRefunded::class, IssueLocalCreditNote::class);
@@ -361,7 +373,7 @@ final class StripeServiceProvider extends ServiceProvider
         // A payment the bank held for 3-D Secure: nudge the customer to confirm, or the subscription sits
         // incomplete while they think they subscribed.
         $registry->on(PaymentActionRequired::class, SendPaymentActionRequiredNotice::class);
-        // The other half of the money conversation: the package told the customer when their money did NOT
+        // The other half of the money conversation: the package told the customer when their money did not
         // move; this tells them when it did.
         $registry->on(PaymentSucceeded::class, SendPaymentReceipt::class);
         // And the case where the money was not expected at all: a payment against a receivable somebody had
@@ -371,7 +383,7 @@ final class StripeServiceProvider extends ServiceProvider
         $registry->on(PaymentSucceeded::class, ReopenWriteOffOnLateReceipt::class);
         $registry->on(InvoiceFinalized::class, PersistInvoice::class);
         // Immediately after it, and the order is load-bearing: the ledger's source is a morph, so the
-        // offset is keyed on the invoice RECORD, and the record is what PersistInvoice just wrote. It
+        // offset is keyed on the invoice record, and the record is what PersistInvoice just wrote. It
         // brings credit the provider spent on its own back onto the ledger this package calls its source
         // of truth — without it the local balance is too high from the first such invoice onward, and it
         // is the balance the account hub shows and a local charge spends from.
@@ -397,17 +409,17 @@ final class StripeServiceProvider extends ServiceProvider
         // The merchant events. Registered unconditionally, and gating the registration on config instead
         // would put a config read on a path that already has a switch above it.
         //
-        // MOST of them are harmless without the marketplace because the only thing that emits them is the
+        // Most of them are harmless without the marketplace because the only thing that emits them is the
         // marketplace mapper, which only the merchant endpoint reads, and that endpoint does not exist
         // while the marketplace is off.
         //
-        // TWO OF THEM ARE NOT REACHED THAT WAY, and the distinction matters because it is the safety
-        // argument. `RoutedChargeConfirmed` and `RoutedChargeAbandoned` are emitted by the PLATFORM mapper
+        // Two of them are not reached that way, and the distinction matters because it is the safety
+        // argument. `RoutedChargeConfirmed` and `RoutedChargeAbandoned` are emitted by the platform mapper
         // (StripeWebhookEventMapper::routedChargeEvents()), on the ordinary platform webhook endpoint that
         // exists whenever the Stripe driver is active — marketplace or not. The marketplace mapper never
         // constructs them.
         //
-        // They are still harmless, for a DIFFERENT reason, and it is worth naming rather than inheriting:
+        // They are still harmless, for a different reason, and it is worth naming rather than inheriting:
         // the effect matches the provider's reference against a routed charge this package itself wrote,
         // so an event naming a payment it never routed finds nothing and does nothing. An ordinary
         // one-time checkout carries no invoice either and reaches the same effect — SettleRoutedCharge-
@@ -435,13 +447,19 @@ final class StripeServiceProvider extends ServiceProvider
         // the other.
         $registry->on(ChargebackReceived::class, RevokeAccessOnChargeback::class);
         // And the money side: the correcting documents the lost dispute owes. Its own effect again, because
-        // it is the one that must distinguish WHICH legs are corrected -- a fraud loss corrects the buyer's
+        // it is the one that must distinguish which legs are corrected -- a fraud loss corrects the buyer's
         // side only, while a supply the buyer never received corrects the creator's settlement with it.
         $registry->on(ChargebackReceived::class, CorrectChainOnChargeback::class);
         // And the money itself. Its own effect for the third time, and for a reason the other two do not
-        // have: it has to reach the PROVIDER, which an effect cannot do from inside the transaction it runs
+        // have: it has to reach the provider, which an effect cannot do from inside the transaction it runs
         // in. So it claims here and spends in a job, as every effect that reaches the provider does.
         $registry->on(ChargebackReceived::class, ClaimChargebackClawback::class);
+        // A chargeback the bank takes back gives back the access it ended and the add-on purchase it reversed, and charges
+        // again on an invoice of its own what a locally raised invoice was credited for it. Only Mollie reports one, from
+        // the daily reconciliation, because only there is a chargeback reported before the bank decides.
+        $registry->on(ChargebackReversed::class, RestoreAccessOnChargebackReversal::class);
+        $registry->on(ChargebackReversed::class, RestoreAddonPurchaseOnChargebackReversal::class);
+        $registry->on(ChargebackReversed::class, ReinstateLocalInvoiceOnChargebackReversal::class);
     }
 
     /** In production with Stripe active, refuse to boot without a webhook signing secret. */
@@ -469,7 +487,7 @@ final class StripeServiceProvider extends ServiceProvider
             return;
         }
 
-        // The merchant endpoint has its OWN secret, and a marketplace running without it is the quietest
+        // The merchant endpoint has its own secret, and a marketplace running without it is the quietest
         // possible failure: every merchant event fails verification, so the capability flags simply never
         // move — a merchant who lost their payout capability keeps being paid, and nothing anywhere reports
         // an error. Refuse to boot instead.
@@ -491,12 +509,12 @@ final class StripeServiceProvider extends ServiceProvider
     }
 
     /**
-     * The Stripe API version every call and webhook runs against — pinned BY THE PACKAGE, not inherited.
+     * The Stripe API version every call and webhook runs against — pinned by the package, not inherited.
      *
      * Stripe versions its API by date, and the shape of a webhook payload follows the version. If the
-     * version tracked whatever the installed SDK happens to ship (the SDK's own CURRENT constant, which
+     * version tracked whatever the installed SDK happens to ship (the SDK's own current constant, which
      * every SDK release rewrites), a routine `composer update` — in the
-     * CONSUMER's app, not ours — would silently move the version our mapper parses against. And the failure
+     * consumer's app, not ours — would silently move the version our mapper parses against. And the failure
      * is silent, not loud: the mapper reads each field defensively and a removed field makes a real billing
      * event quietly not fire. So the version is ours to choose and hold, and a change to it is a change a
      * human makes here, against the live-Stripe suite — never a side effect of updating a dependency.

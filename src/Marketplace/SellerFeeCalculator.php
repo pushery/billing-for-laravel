@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
- * The commission a SELLER pays for having their sale arranged — the platform's second intermediation supply.
+ * The commission a seller pays for having their sale arranged — the platform's second intermediation supply.
  *
  * ## The half that was missing
  *
@@ -22,24 +22,24 @@ use Pushery\Billing\ValueObjects\Money;
  * shipped configuration calls the buyer fee "a separate supply from the seller-side commission", and
  * `SellerReportingPeriod` states that under intermediation "the platform issues the seller a commission
  * invoice for its fee". None of that had a calculator or an issuer behind it: every commission number the
- * package drew belonged to a document owned by the BUYER.
+ * package drew belonged to a document owned by the buyer.
  *
  * So the platform withheld a commission and documented it nowhere. It had made a taxable supply without
  * invoicing it, and the seller held no document to deduct the tax on the amount kept from them.
  *
  * ## Two things it does that the buyer-side calculator deliberately does not
  *
- * It REFUSES outside intermediation. A commission chain has the platform buying and reselling, so there is
+ * It refuses outside intermediation. A commission chain has the platform buying and reselling, so there is
  * no arranging fee to charge — a document claiming one there is the named red line the role guard already
  * enforces, and refusing at the calculator means the mistake is caught before a number is drawn.
  *
- * And a fixed fee is CAPPED by the sale. The buyer's fee is charged on top of the item price and is not
+ * And a fixed fee is capped by the sale. The buyer's fee is charged on top of the item price and is not
  * bounded by it; the seller's comes out of what reaches them, so a fee larger than the sale would pay the
  * seller a negative amount. That difference is stated in the buyer calculator's own comment and is the one
  * place a copy of it would be wrong.
  *
  * Like its sibling: quoted gross, with net and tax read back out of it, and its place of supply is where the
- * MEDIATED SALE happens rather than where the seller is established.
+ * mediated sale happens rather than where the seller is established.
  */
 final readonly class SellerFeeCalculator
 {
@@ -102,7 +102,7 @@ final readonly class SellerFeeCalculator
         };
 
         // Capped, and this is the line that makes it a seller fee rather than a copy of the buyer one. A
-        // commission comes OUT of the payout: a fixed 5.00 on a 3.00 sale would otherwise owe the seller
+        // commission comes out of the payout: a fixed 5.00 on a 3.00 sale would otherwise owe the seller
         // minus 2.00, which is not a payout at all but a debt the sale created.
         return $fee->minorUnits > $saleGross->minorUnits ? $saleGross : $fee;
     }

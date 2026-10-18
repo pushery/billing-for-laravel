@@ -13,7 +13,7 @@ use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
 
 /**
- * Mints a Stripe coupon for a local coupon row, on the PLATFORM account.
+ * Mints a Stripe coupon for a local coupon row, on the platform account.
  *
  * ## The account is not a choice here, it follows the price
  *
@@ -34,23 +34,23 @@ use Stripe\StripeClient;
  * The id is a digest rather than the readable parts. A coupon id is a bounded string and a code is free
  * text; the readable identity travels in `metadata`, where somebody debugging will look anyway.
  *
- * ## What is deliberately NOT sent
+ * ## What is deliberately not sent
  *
  * `max_redemptions` and `redeem_by`. The local row enforces both — `CouponRedeemer` locks and counts, and
  * `isLive()` is what decides whether the code reaches this lane at all — and a second enforcement at the
  * provider would be a second set of numbers to keep in step, drifting silently the moment a host edits the
  * row. One authority for the limit, and it is the row.
  *
- * THAT LAST SENTENCE IS A CONDITION, NOT A GUARANTEE, and reading it as one has already cost a consumer
+ * That last sentence is a condition, not a guarantee, and reading it as one has already cost a consumer
  * a broken promise to an end user. The row is the authority **while the redemption goes through
- * `CouponRedeemer`**. On a HOSTED lane it does not go through anything of ours: the discount is applied
+ * `CouponRedeemer`**. On a hosted lane it does not go through anything of ours: the discount is applied
  * inside the provider's checkout session, the consumer is not in that transaction, and nothing afterwards
  * tells them which code took effect. The single authority is then one that never speaks —
  * `redeemed_count` stays 0 and `max_redemptions` is decoration, while the provider was never given the
  * limit either. A creator who set "100 redemptions" has nobody holding it.
  *
  * So a hosted consumer reads the redeemed code off `SubscriptionStateChanged::$couponCode` and books the
- * redemption themselves. That field exists for exactly this, and it carries the LOCAL code rather than the
+ * redemption themselves. That field exists for exactly this, and it carries the local code rather than the
  * provider id, so booking it needs none of the provider arithmetic this class is here to encapsulate.
  */
 final readonly class StripePlatformCouponProvisioner implements MerchantCouponProvisioner
@@ -67,7 +67,7 @@ final readonly class StripePlatformCouponProvisioner implements MerchantCouponPr
         try {
             return (string) $this->stripe->coupons->retrieve($id)->id;
         } catch (RateLimitException $e) {
-            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a subclass of
+            // A 429 is transient and only lands here because the SDK makes RateLimitException a subclass of
             // InvalidRequestException. Swallowing it would file "try again" as "does not exist" and mint a
             // second coupon under an id that is already taken.
             throw $e;

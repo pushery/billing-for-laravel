@@ -44,7 +44,7 @@ return new class extends Migration
             $table->string('customer_reference')->nullable();
             $table->timestamps();
 
-            // Per PROVIDER, not globally: two providers' id spaces are unrelated, so the same string under
+            // Per provider, not globally: two providers' id spaces are unrelated, so the same string under
             // both is a coincidence rather than a duplicate. Refusing it would leave an install running two
             // drivers unable to store a valid mandate.
             $table->unique(['provider', 'mandate_reference'], 'billing_payment_mandates_reference_unique');

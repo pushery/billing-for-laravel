@@ -8,16 +8,20 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Event;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\AppliesScheduledSwaps;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\EndsNowOnTheOwnersRequest;
+use Pushery\Billing\Contracts\PausesSubscriptions;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Drivers\NullSubscriptionActions;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Enums\SwapTiming;
+use Pushery\Billing\Events\SubscriptionPaused;
+use Pushery\Billing\Events\SubscriptionUnpaused;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\EndInsidePeriodIsFinal;
 use Pushery\Billing\Models\Subscription;
@@ -26,7 +30,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Plan;
 
 /**
- * Cancel, resume and swap for a driver whose subscription state lives HERE rather than at a provider.
+ * Cancel, resume and swap for a driver whose subscription state lives here rather than at a provider.
  *
  * Stripe's adapter tells Stripe and lets the webhook come back. A local engine is the record — there is
  * nobody to tell — so these operate on the row directly. Without this the local drivers fell back to
@@ -37,7 +41,7 @@ use Pushery\Billing\ValueObjects\Plan;
  * ## Upgrade now, downgrade at the period end
  *
  * An upgrade takes effect immediately and books the proration credit for the unused remainder of the old
- * plan — the customer asked for more and is charged the difference. A downgrade is SCHEDULED for the
+ * plan — the customer asked for more and is charged the difference. A downgrade is scheduled for the
  * period end by default, because they have already paid for the period they are in: switching them down
  * at once would take away access they bought. `billing.subscriptions.downgrade_timing` flips that for an
  * install that would rather refund than wait, and both screens read the same value so they cannot
@@ -52,7 +56,7 @@ use Pushery\Billing\ValueObjects\Plan;
  * same reason: it moves no money either, it only brings the last cycle forward, and the run collects that
  * cycle like any other.
  */
-final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, EndsNowOnTheOwnersRequest, SubscriptionActions
+final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, EndsNowOnTheOwnersRequest, PausesSubscriptions, SubscriptionActions
 {
     public function __construct(
         private PlanCatalog $plans,
@@ -81,6 +85,14 @@ final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, 
         $subscription = $this->subscriptionFor($billable, $merchant, $type);
 
         if (! $subscription instanceof Subscription || $subscription->endInsideItsPeriod() instanceof Carbon) {
+            return;
+        }
+
+        // A paused subscription is collected by no run, so an end at the period end would never be reached. It
+        // ends now, with nothing more billed: the customer has no access while it rests.
+        if ($subscription->paused()) {
+            $this->endWithoutBilling($subscription);
+
             return;
         }
 
@@ -139,10 +151,72 @@ final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, 
 
         $subscription->assertCanEndAt($endsAt);
 
+        // Paused, no run would reach the date: the subscription ends now, as a cancellation at the period end does.
+        if ($subscription->paused()) {
+            $this->endWithoutBilling($subscription);
+
+            return;
+        }
+
         $subscription->update([
             'ends_at' => CarbonImmutable::instance($endsAt),
             'scheduled_processing_at' => CarbonImmutable::instance($endsAt),
         ]);
+    }
+
+    /**
+     * Let the subscription rest: no run collects it and it grants no access until it is taken up again.
+     *
+     * Nothing is asked of a provider, because the engine that would collect it is this package's own. The moment is
+     * recorded, so the time the pause takes can be added to the period when it goes on.
+     *
+     * @throws InvalidArgumentException when the subscription is not active, or is ending
+     */
+    public function pause(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
+
+        if (! $subscription instanceof Subscription) {
+            return;
+        }
+
+        if (! $subscription->active() || $subscription->ends_at !== null) {
+            throw new InvalidArgumentException(
+                "Cannot pause the subscription ({$subscription->status}): only an active subscription that is not ending can rest."
+            );
+        }
+
+        $subscription->update(['status' => SubscriptionState::Paused->value, 'paused_at' => CarbonImmutable::now()]);
+
+        Event::dispatch(new SubscriptionPaused($billable));
+    }
+
+    /**
+     * Take the paused subscription up again, from now, with the time it rested added to the period it is in.
+     *
+     * Collected in advance, the period was paid before the pause, so the paid days that were left when it began are
+     * there after it. Collected in arrears, the bill that closes the period prices the days the customer had, not the
+     * days it rested. The next run is moved by the same time.
+     */
+    public function unpause(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
+        $pausedAt = $subscription?->paused_at;
+
+        if (! $subscription instanceof Subscription || ! $subscription->paused() || ! $pausedAt instanceof Carbon) {
+            return;
+        }
+
+        $seconds = max(0, CarbonImmutable::now()->getTimestamp() - $pausedAt->getTimestamp());
+
+        $subscription->update([
+            'status' => SubscriptionState::Active->value,
+            'paused_at' => null,
+            'current_period_end' => $subscription->current_period_end?->copy()->addSeconds($seconds),
+            'scheduled_processing_at' => $subscription->scheduled_processing_at?->copy()->addSeconds($seconds),
+        ]);
+
+        Event::dispatch(new SubscriptionUnpaused($billable, $seconds));
     }
 
     /**
@@ -278,7 +352,7 @@ final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, 
             return;
         }
 
-        // Proration first, then the tier: the strategy reads the plan the subscriber is LEAVING to work
+        // Proration first, then the tier: the strategy reads the plan the subscriber is leaving to work
         // out what the swap is worth, so repricing the row first would price it against the plan they are
         // moving to.
         if ($prorate && $due) {
@@ -310,7 +384,7 @@ final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, 
     }
 
     /**
-     * Whether this swap IS the row's own schedule coming due: the tier it scheduled, at or after its moment.
+     * Whether this swap is the row's own schedule coming due: the tier it scheduled, at or after its moment.
      *
      * The scheduled-swap runner applies a due downgrade through this same method. Without this answer the
      * downgrade was a downgrade again, so it was scheduled again for the end of the period that had just

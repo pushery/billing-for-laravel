@@ -11,19 +11,19 @@ use Pushery\Billing\Support\BillingSchema;
  * The movements behind an owner's credit balance.
  *
  * `billing_credit_balances` holds the running total and is the fast read every screen does. It could not
- * answer WHY it holds what it holds: the reasons lived in the audit log, in a different table, written by a
+ * answer why it holds what it holds: the reasons lived in the audit log, in a different table, written by a
  * separate call after the balance transaction had already committed. Two consequences followed, and both
  * were real rather than theoretical — an interruption between the two writes left a balance nobody could
  * account for, and `billing:prune` ages audit rows out on a configurable clock while a balance is a holding
  * and is never pruned, so the explanation could expire while the thing it explained stayed.
  *
  * An entry is written in the same transaction as the balance it moves, so the two cannot disagree. The
- * amount is SIGNED — a credit is positive, a debit negative — so the balance is the plain sum of the
+ * amount is signed — a credit is positive, a debit negative — so the balance is the plain sum of the
  * entries per currency, and that is exactly what the invariant test asserts. Storing magnitudes plus a
  * direction flag would make the same sum a two-step calculation that a reader has to trust.
  *
  * Provider-neutral by name and by column, because the second and third drivers share it. There is
- * deliberately NO `provider` column: a balance belongs to an owner and a currency and never to a driver, so
+ * deliberately no `provider` column: a balance belongs to an owner and a currency and never to a driver, so
  * the column would not be part of any key — and no writer has a driver to hand anyway. Resolving one from
  * config would stamp today's default onto a movement made under whatever was configured back then, which is
  * a wrong answer rather than a missing one. A column that is always null is worse than an absent one,

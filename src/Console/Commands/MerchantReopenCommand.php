@@ -88,7 +88,7 @@ final class MerchantReopenCommand extends Command
         $type = (string) $this->argument('type');
         $id = $this->argument('id');
 
-        // The morph ALIAS as readily as the class, for the reason the onboarding command gives: an
+        // The morph alias as readily as the class, for the reason the onboarding command gives: an
         // installation with a morph map has no reason to know its own class names at the command line.
         $class = Relation::getMorphedModel($type) ?? $type;
 

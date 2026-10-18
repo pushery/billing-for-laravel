@@ -43,8 +43,8 @@ final readonly class SubscriptionPeriods
         $periods = [];
 
         for ($index = 0; $index < $count; $index++) {
-            // NoOverflow, and every boundary measured from the ORIGINAL start. Adding a month to a 31st
-            // otherwise lands in the month AFTER next, which does not merely shift a boundary — it makes one
+            // NoOverflow, and every boundary measured from the original start. Adding a month to a 31st
+            // otherwise lands in the month after next, which does not merely shift a boundary — it makes one
             // period swallow another, and the totals still add up while the dates say something false.
             // Anchoring on the start also keeps the 31st a 31st wherever the month has one, instead of
             // walking backwards a day at a time from the first short month.

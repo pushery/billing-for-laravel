@@ -7,10 +7,10 @@ namespace Pushery\Billing\Enums;
 /**
  * Which mechanism actually carries out a retention rule.
  *
- * The matrix is a DECLARATION, and for a long time that was all it was: rules were written there, printed
+ * The matrix is a declaration, and for a long time that was all it was: rules were written there, printed
  * by `billing:prune --dry-run` under a heading calling them "the record of what this run enforces", and
  * nothing connected them to a mechanism. Two of them were enforced by nobody. The dry-run said otherwise
- * and no test could go red, because the only test compared the declared NUMBER of days against config.
+ * and no test could go red, because the only test compared the declared number of days against config.
  *
  * The failure was structural rather than an oversight: declaration and execution were two lists with no
  * link, so a new period-scoped document type gets a rule and no deletion path, every time, silently.
@@ -25,7 +25,7 @@ enum RetentionExecutor: string
     /**
      * The time pruner in `billing:prune` deletes these rows once their own clock has run out.
      *
-     * For records nobody owns — a document naming a PERIOD rather than a person, which no erasure axis can
+     * For records nobody owns — a document naming a period rather than a person, which no erasure axis can
      * ever reach because there is no subject to erase.
      */
     case TimePruner = 'time_pruner';
@@ -39,7 +39,7 @@ enum RetentionExecutor: string
 
     /**
      * A named path in `billing:prune` written for this rule specifically, because it needs more than a
-     * cutoff — the audit ledger, for instance, waits for BOTH its owner to be erased and its window to
+     * cutoff — the audit ledger, for instance, waits for both its owner to be erased and its window to
      * expire, and neither alone is enough.
      */
     case DedicatedPruner = 'dedicated_pruner';

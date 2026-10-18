@@ -56,7 +56,7 @@ final readonly class SaleTaxFacts
      *
      * Only the amount moves; the placement, the country, the rate and the exemption are the regime's answers
      * and are not this method's to touch. It exists because a gross-priced sale settles its tax as the
-     * REMAINDER of the total — the only split whose parts add back to what the buyer agreed to pay — while
+     * remainder of the total — the only split whose parts add back to what the buyer agreed to pay — while
      * everything else about how that sale is taxed was already decided the ordinary way.
      *
      * Deliberately narrow. A general `with()` would let a caller restate the country or the rate, and those

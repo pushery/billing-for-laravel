@@ -43,7 +43,7 @@ final readonly class RecordProviderFee
             ? null
             : $this->accounts->merchantForReference($event->merchantReference);
 
-        // THE DISPUTE, not the charge it was raised against — and the fallback is what makes that safe.
+        // The dispute, not the charge it was raised against — and the fallback is what makes that safe.
         //
         // The claim was on the charge reference while this docblock, the migration and the docs all said
         // "once per dispute". A charge can carry more than one (only part of an order may be disputed), so a

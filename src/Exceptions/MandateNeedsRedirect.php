@@ -11,7 +11,7 @@ use RuntimeException;
  *
  * `PaymentRails::createMandate()` returns a non-nullable MandateReference, which is a promise: after this
  * call, a mandate exists. Stripe keeps it. Mollie cannot — a mandate there is born when the customer
- * COMPLETES a redirect on Mollie's own checkout, and depending on what they do it may never be born.
+ * completes a redirect on Mollie's own checkout, and depending on what they do it may never be born.
  *
  * Refusing is the only one of the three available answers that is not a defect. Returning the payment id
  * instead would be stored as a mandate, charged against on the next cycle, refused by Mollie, and read as

@@ -7,14 +7,14 @@ namespace Pushery\Billing\Enums;
 /**
  * Which document a buyer's purchase produces — chosen from the sale, not from a setting.
  *
- * A consumer sale carries no invoicing duty, so the platform issues the LEAST document each purchase needs
+ * A consumer sale carries no invoicing duty, so the platform issues the least document each purchase needs
  * and collects the least data. A small domestic purchase gets a simplified receipt; a larger one, or a
- * cross-border one, gets a plain payment record; and only a buyer who explicitly ASKS for a full invoice
+ * cross-border one, gets a plain payment record; and only a buyer who explicitly asks for a full invoice
  * has their name and address collected at all. The anonymity that follows is the point, not a side effect:
  * capturing a name for every purchase would be data collection with no legal ground, and it would identify
  * the buyer — and, in a commission chain, expose the merchant to them as the seller.
  *
- * The tiers are named for what they ARE, not for a statute. Which purchase falls into which, and at what
+ * The tiers are named for what they are, not for a statute. Which purchase falls into which, and at what
  * threshold, is a jurisdiction's answer and lives in its profile — a consumer elsewhere reads these three
  * words and no national rule.
  */

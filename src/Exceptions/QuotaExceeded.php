@@ -8,7 +8,7 @@ use Pushery\Billing\Enums\MeteringPolicy;
 use RuntimeException;
 
 /**
- * A metered request was refused because it would take the owner past a BLOCKING allowance (a hard-stop
+ * A metered request was refused because it would take the owner past a blocking allowance (a hard-stop
  * or refuse policy). A degrading or fair-use meter never raises this — those keep serving and are just
  * flagged. Carries the meter, the policy and how much of the allowance was left, so a caller can render
  * a precise "you have N left" rather than a bare 429.

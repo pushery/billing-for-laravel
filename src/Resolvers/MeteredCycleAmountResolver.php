@@ -21,7 +21,7 @@ use Pushery\Billing\ValueObjects\Money;
  * Name it on a line's `preprocessor`, or bind it as the CycleAmountResolver when every metered line is
  * priced this way.
  *
- * DO NOT BIND THIS ON A DRIVER THAT RATES USAGE REMOTELY. The tier's included allowance is netted here, and
+ * Do not bind this on a driver that rates usage remotely. The tier's included allowance is netted here, and
  * the provider's own price nets it again — the customer gets the free units twice, and the invoice is short
  * by exactly one allowance with nothing to show for it. The MeteredComponent's own documentation says the
  * same thing from the other side: the allowance lives in the provider's price, and rating it in both places

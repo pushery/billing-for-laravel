@@ -17,7 +17,7 @@ use Pushery\Billing\Support\UntouchableTiers;
  *
  * Two guards make it hard to shoot yourself in the foot: an unknown tier key is refused before anything
  * is written (a typo would otherwise comp an owner onto a tier that does not exist), and granting a tier
- * that is NOT untouchable (`billing.untouchable_tiers`, or the tier's own `untouchable` flag) warns — because
+ * that is not untouchable (`billing.untouchable_tiers`, or the tier's own `untouchable` flag) warns — because
  * the next provider webhook is free to overwrite such a grant, which is rarely what a support comp intends.
  */
 final class GrantTierCommand extends Command

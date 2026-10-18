@@ -9,11 +9,11 @@ namespace Pushery\Billing\Enums;
  *
  * Four roles the platform mints numbers for — the buyer's receipt, the self-billed invoice to a merchant,
  * the settlement note to a private party, the commission invoice of a genuine intermediation — and a
- * correction series paired to each. A correction draws from its OWN series and references the document it
+ * correction series paired to each. A correction draws from its own series and references the document it
  * corrects, so a corrected invoice and its correction never share a number and a reader can tell them apart
  * at a glance.
  *
- * These are ROLES, not prefixes. The visible prefix (`G-`, `KF-`, …) is a jurisdiction's choice and lives
+ * These are roles, not prefixes. The visible prefix (`G-`, `KF-`, …) is a jurisdiction's choice and lives
  * in config; the enum is what the code branches on, so a typo at a call site cannot invent a ninth series.
  * A consumer elsewhere maps these same roles to their own letters and reads no German mnemonic.
  */

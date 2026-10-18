@@ -17,7 +17,7 @@ use Pushery\Billing\Models\Subscription;
  *
  * ## The window this belongs to
  *
- * Arrears withdraw the merchant's own surfaces IMMEDIATELY — the customer has already lost access when this
+ * Arrears withdraw the merchant's own surfaces immediately — the customer has already lost access when this
  * sweep first speaks. The window that follows is a chance to cure, not a grace period with the service still
  * running, and the reminder has to read that way: it is not "your payment is outstanding", it is "this is
  * still recoverable, and here is what it costs when it is not".
@@ -28,7 +28,7 @@ use Pushery\Billing\Models\Subscription;
  * hand, and a customer who receives fourteen messages in a seven-day window has silenced the sender long
  * before the one that matters arrives.
  *
- * The marker is a DATE on the subscription row. Not a boolean, because this repeats and a flag would
+ * The marker is a date on the subscription row. Not a boolean, because this repeats and a flag would
  * silence day two onward. And not on the customer, because arrears are per relationship: a marker on the
  * customer would let the reminder for one merchant suppress another merchant's reminder the same day. That
  * is the platform-wide-lockout defect one level down, and harder to see — the customer does get a message,

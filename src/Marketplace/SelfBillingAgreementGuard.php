@@ -19,7 +19,7 @@ use Pushery\Billing\Models\SelfBillingAgreement;
  * protect a job, a console command, or any consumer path that reaches the writer directly, and a document
  * that slips through there is a worthless one that cannot be repaired.
  *
- * The authorization is time-checked at BOTH ends against the supply date, not merely "does a record exist":
+ * The authorization is time-checked at both ends against the supply date, not merely "does a record exist":
  * an agreement accepted after the supply does not reach back to cover it, and a revocation dated after the
  * supply leaves that supply covered because the arrangement was live when it happened. A creator may hold
  * several versions over time; any one that authorizes the supply is enough.

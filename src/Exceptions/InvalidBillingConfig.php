@@ -8,7 +8,7 @@ use RuntimeException;
 
 /**
  * The billing configuration is internally inconsistent — a misconfiguration that would otherwise fail
- * SILENTLY at runtime: a zero_tier that grants free access to a tier that does not exist, a tier pointing at
+ * silently at runtime: a zero_tier that grants free access to a tier that does not exist, a tier pointing at
  * an unknown dimension, dunning rungs out of order that never escalate. Like the webhook-secret and metering
  * guards, this refuses to boot with a clear message rather than let the dashboard break or a customer be
  * mis-tiered mid-request.
@@ -92,6 +92,11 @@ final class InvalidBillingConfig extends RuntimeException
     public static function ownerMode(string $owner): self
     {
         return new self("billing.owner must be 'user' or 'team', got '{$owner}'.");
+    }
+
+    public static function collectionTiming(string $timing): self
+    {
+        return new self("billing.collection_timing must be 'in_advance' or 'in_arrears', got '{$timing}'.");
     }
 
     public static function zeroTierMissing(string $zeroTier): self

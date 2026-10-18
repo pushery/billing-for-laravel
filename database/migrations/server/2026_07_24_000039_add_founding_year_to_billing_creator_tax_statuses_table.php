@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * The year the merchant's business started, as declared.
  *
- * It sits on the declaration rather than on the merchant, because it is part of what was DECLARED and a
+ * It sits on the declaration rather than on the merchant, because it is part of what was declared and a
  * later declaration re-states it. Kept beside the standing it was declared with, it can be read back
  * exactly as it stood when a document was produced — which is the same reason the standing itself is a
  * series rather than a column.

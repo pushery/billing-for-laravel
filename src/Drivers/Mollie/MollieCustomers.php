@@ -44,7 +44,7 @@ final readonly class MollieCustomers implements CustomerRegistry, EnsuresProvide
     private const string PREFIX = 'cst_';
 
     /**
-     * The CLIENT, not the factory that builds one — which is the house idiom and also the only shape that
+     * The client, not the factory that builds one — which is the house idiom and also the only shape that
      * can be exercised. `MollieClientFactory` is a `final readonly` class reading configuration, so a class
      * depending on it cannot be reached by any test: no subclass, no rebind, and no way to answer a create
      * with a known body. The sibling rails take the client for the same reason, and the container's

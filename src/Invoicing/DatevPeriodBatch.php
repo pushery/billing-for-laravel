@@ -40,7 +40,7 @@ use Pushery\Billing\ValueObjects\VoucherMovement;
  * ## The two exclusions are not filters, they are corrections
  *
  * A draft has no `issued_at` and therefore no booking date. A restatement — the full invoice a buyer asked
- * for after their receipt — is the same sale stated a second time, and booking it doubles the revenue AND
+ * for after their receipt — is the same sale stated a second time, and booking it doubles the revenue and
  * the tax in the books.
  */
 final readonly class DatevPeriodBatch
@@ -61,7 +61,7 @@ final readonly class DatevPeriodBatch
      * that counts separately can report a number the file does not contain — and a number in an operator's
      * confirmation line is read as a description of the file.
      *
-     * ## The reconciliation is computed HERE, and that placement is the point
+     * ## The reconciliation is computed here, and that placement is the point
      *
      * Whether the merchant payables in the emitted file tie out to the sub-ledger can only be asked of the
      * documents this file was built from. A caller doing it would have to re-query the period, and every
@@ -70,7 +70,7 @@ final readonly class DatevPeriodBatch
      * the same defect the counts were moved in here for, on a figure an accountant acts on.
      *
      * So the documents never leave this method, and the report states what the file says about itself.
-     * A caller decides what a difference MEANS to it — an exit code, a warning on a screen — but no caller
+     * A caller decides what a difference means to it — an exit code, a warning on a screen — but no caller
      * has to know how to establish one.
      *
      * ## One pass, a page at a time
@@ -109,7 +109,7 @@ final readonly class DatevPeriodBatch
             ->orderBy('id')
             ->get();
 
-        // The fourth source, and the docblock above says why it is added HERE rather than at a call site.
+        // The fourth source, and the docblock above says why it is added here rather than at a call site.
         $creditEntries = CreditLedgerEntry::model()::query()
             ->whereBetween('created_at', [$from, $to])
             ->orderBy('created_at')
@@ -129,7 +129,7 @@ final readonly class DatevPeriodBatch
             creditMovements: $creditMovements,
         );
 
-        // What a movement leaves UNBOOKED, signed the way the movement is.
+        // What a movement leaves unbooked, signed the way the movement is.
         //
         // A proration grant is the whole of itself: nothing books it, because a booking would invent a
         // liability nobody owes. An offset leaves behind only the share it took out of such a grant — the
@@ -141,7 +141,7 @@ final readonly class DatevPeriodBatch
             ? -$movement->unpaidShareMinor()
             : $movement->amount->minorUnits;
 
-        // Counted by whether a ROW was produced, not by the reason — and the movement answers that, so this
+        // Counted by whether a row was produced, not by the reason — and the movement answers that, so this
         // count and the export's decision to emit cannot drift apart. An offset paid for entirely out of
         // proration credit books nothing, and counting it would state a booking the file does not contain.
         $bookedCredit = $creditMovements->filter(
@@ -161,7 +161,7 @@ final readonly class DatevPeriodBatch
             // and puts the gap in front of the person who runs it — a zero here and a zero because nothing
             // happened look identical, and only this figure tells them apart.
             //
-            // IT IS NOT THE SUM OF THE UNBOOKABLE GRANTS, and that is the correction of 2026-09-16. Spend
+            // It is not the sum of the unbookable GRANTs, and that is the correction of 2026-09-16. Spend
             // such a grant and its share leaves this figure again: nothing was booked either way, so a period
             // that granted and redeemed the same credit owes the books nothing and now says so. Read as a
             // grant total it would have grown forever while describing a gap that had already closed.
@@ -201,7 +201,7 @@ final readonly class DatevPeriodBatch
      *
      * A balance is fungible: one negative entry spends whatever is in it. The books need the halves apart,
      * because a paid top-up is money held against a promise while a proration credit is consideration being
-     * given back, and those do not touch the same account. Deciding which is which needs the owner's WHOLE
+     * given back, and those do not touch the same account. Deciding which is which needs the owner's whole
      * ledger rather than this period's slice — a credit granted in March and spent in June is the ordinary
      * case, and a period-bounded replay would report that June spend as having consumed nothing.
      *
@@ -214,7 +214,7 @@ final readonly class DatevPeriodBatch
      * They still COUNT as consumption inside the replay, because they really did take credit out of the
      * balance; what they do not get is an attribution of their own.
      *
-     * ## The history query is a deliberate SUPERSET
+     * ## The history query is a deliberate superset
      *
      * The owner is a morph pair, and an exact `(type, id)` tuple filter is not portable across the three
      * engines this package supports. Two `whereIn`s therefore fetch a superset — every id that occurs against

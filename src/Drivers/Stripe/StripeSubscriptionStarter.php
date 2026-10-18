@@ -12,7 +12,7 @@ use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\SubscriptionStart;
 
 /**
- * Starting a subscription where the PROVIDER runs the billing cycle.
+ * Starting a subscription where the provider runs the billing cycle.
  *
  * ## Why this exists rather than the screen asking `Checkout` directly
  *
@@ -20,7 +20,7 @@ use Pushery\Billing\ValueObjects\SubscriptionStart;
  * interface under every other one and end in a `BindingResolutionException`. A driver that bills locally
  * has no hosted checkout to bind, and it should not have to pretend otherwise.
  *
- * So the screen asks the contract that describes what it WANTS -- start a subscription -- and each driver
+ * So the screen asks the contract that describes what it wants -- start a subscription -- and each driver
  * answers it in its own shape. Here that shape is a redirect to a hosted checkout, which is why this class
  * is thin: it is an adapter, and the Stripe behavior it adapts stays in {@see StripeCheckout} where the
  * rest of the Stripe money math lives.
@@ -42,7 +42,7 @@ final readonly class StripeSubscriptionStarter implements StartsSubscriptions
 
         // Validated here rather than at the caller, and the caller keeps its own check as well. A payload
         // is provider-shaped and this is the seam that stops being provider-shaped, so a tampered or absent
-        // URL has to become a null HERE -- `SubscriptionStart::needsRedirect()` is a promise about a URL
+        // URL has to become a null here -- `SubscriptionStart::needsRedirect()` is a promise about a URL
         // somebody is going to be sent to, and it must not be able to carry a script target.
         $url = SafeExternalUrl::orNull($intent->payload['checkout_url'] ?? null);
 
@@ -52,7 +52,7 @@ final readonly class StripeSubscriptionStarter implements StartsSubscriptions
     /**
      * Whether a checkout started here would actually apply this code.
      *
-     * Two conditions, and the second is the one easily missed. The catalog has to accept the code, AND it
+     * Two conditions, and the second is the one easily missed. The catalog has to accept the code, and it
      * has to map to a provider coupon -- because the provider is what applies the discount here, and a code
      * with no mapping reaches the session as nothing at all. A screen that asked only the catalog would tell
      * the customer their code took and then charge them in full, which is the same silent loss the local

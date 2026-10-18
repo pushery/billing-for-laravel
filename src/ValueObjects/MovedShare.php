@@ -8,7 +8,7 @@ namespace Pushery\Billing\ValueObjects;
  * What the provider says about a transfer that already happened — read back, not requested.
  *
  * The distinction from `TransferResult` is the whole reason this exists. That one is the answer to "move
- * this", captured once at the moment of the call. This one is the answer to "what is this transfer NOW",
+ * this", captured once at the moment of the call. This one is the answer to "what is this transfer now",
  * and the two disagree in exactly the cases reconciliation is for: a reversal raised at the provider that
  * never reached the local row, a transfer the provider adjusted afterwards, a reference the local journal
  * carries and the provider has no record of.

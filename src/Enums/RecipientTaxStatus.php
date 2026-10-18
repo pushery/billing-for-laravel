@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Enums;
 
 /**
- * What the BUYER is, as far as tax is concerned — the question that has to be answered before the product's
+ * What the buyer is, as far as tax is concerned — the question that has to be answered before the product's
  * own classification means anything.
  *
  * The order matters and was the defect. A product carries a rule for where it is taxed, and that rule is

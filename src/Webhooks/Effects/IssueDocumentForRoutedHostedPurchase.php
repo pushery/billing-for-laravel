@@ -39,7 +39,7 @@ use Pushery\Billing\Webhooks\RepeatableEffect;
  *
  * `checkout.session.completed` carries everything a document needs and carries it better than the payment
  * confirmation does: the buyer through the customer reference, the archetype through the add-on key, the
- * place through `customer_details.address` — WHERE THE BUYER SAID THEY WERE, rather than a country somebody
+ * place through `customer_details.address` — where the buyer said they were, rather than a country somebody
  * guessed before the redirect — and the money including the tax, for which a payment intent has no field.
  * The confirmation was tried first and reverted: it would have needed all of it shipped along as metadata,
  * which is machinery for facts the payload already holds.
@@ -102,14 +102,14 @@ final readonly class IssueDocumentForRoutedHostedPurchase implements RepeatableE
             return;
         }
 
-        // Read off the ROW, which froze it when the session opened — not from today's configuration, which
+        // Read off the row, which froze it when the session opened — not from today's configuration, which
         // on a bank debit can be days younger than the sale.
         if ($charge->postureOr(SellerOfRecordPosture::PlatformDeemedSupplier) !== SellerOfRecordPosture::PlatformDeemedSupplier) {
             return;
         }
 
         // Zero is answered by the event itself: the provider computed the tax and there was none, so the
-        // price IS the gross with nothing separately stated. Anything else — a figure, or no breakdown at
+        // price is the gross with nothing separately stated. Anything else — a figure, or no breakdown at
         // all — is a question the event cannot answer, because it carries amounts and never a rate. That is
         // asked of the provider instead, through a seam, and a sale it cannot answer for gets no document.
         $providerTax = null;
@@ -134,7 +134,7 @@ final readonly class IssueDocumentForRoutedHostedPurchase implements RepeatableE
 
         $archetype = $this->archetypeOf($event->addonKey);
 
-        // A FIFTH refusal, and it was very nearly a throw inside a queued job. The classifier does not take
+        // A fifth refusal, and it was very nearly a throw inside a queued job. The classifier does not take
         // null — it raises `ProductNotClassified`, and its message says why: "the alternative is not one
         // unknown but five guesses, each of which would be right often enough to look fine". So an
         // unclassified add-on gets no document rather than a document about a treatment nobody established,
@@ -145,7 +145,7 @@ final readonly class IssueDocumentForRoutedHostedPurchase implements RepeatableE
 
         $classification = $this->classifier->classify($archetype);
 
-        // Read ONCE and reused, the same way the synchronous path does it: two calls to now() can land either
+        // Read once and reused, the same way the synchronous path does it: two calls to now() can land either
         // side of a second boundary, and the document would then state a sale date and a delivery date that
         // disagree about when the same instant was.
         $soldOn = CarbonImmutable::now();
@@ -155,8 +155,8 @@ final readonly class IssueDocumentForRoutedHostedPurchase implements RepeatableE
             tier: $this->tiers->tierFor($event->amount, $this->buyerIsDomestic($event->buyerCountry), false),
             gross: $event->amount,
             // Stated, never derived — and now stated from one of two places. Zero where the provider
-            // computed no tax, so the price IS the gross with nothing separately stated; otherwise the
-            // whole position the provider computed, which carries its own rate AND its own amounts. Handing
+            // computed no tax, so the price is the gross with nothing separately stated; otherwise the
+            // whole position the provider computed, which carries its own rate and its own amounts. Handing
             // over the position rather than the rate alone is what keeps the document's figures the
             // provider's: deriving them again from the rate can land a cent away.
             taxRateBps: $providerTax ?? 0,
@@ -199,7 +199,7 @@ final readonly class IssueDocumentForRoutedHostedPurchase implements RepeatableE
     /** The routed sale this purchase is, or null where it is an ordinary single-seller one. */
     private function routedCharge(AddonPurchased $event): ?MerchantCharge
     {
-        // BOTH halves of the key. The table's uniqueness is on the pair, so a lookup on the reference alone
+        // Both halves of the key. The table's uniqueness is on the pair, so a lookup on the reference alone
         // is asking a question the index cannot answer — and the answer it would give is another provider's
         // row.
         if ($event->provider === null || $event->paymentReference === null) {
@@ -216,8 +216,8 @@ final readonly class IssueDocumentForRoutedHostedPurchase implements RepeatableE
      * Whether the seller's own small-value rules apply, from two stated countries.
      *
      * The buyer's is what they entered at the provider; the seller's is configured. Absent on either side
-     * reads as NOT domestic, and that is the conservative direction rather than an answer: a domestic flag
-     * switches a relief ON, so guessing it true would claim one nobody is entitled to.
+     * reads as not domestic, and that is the conservative direction rather than an answer: a domestic flag
+     * switches a relief on, so guessing it true would claim one nobody is entitled to.
      */
     private function buyerIsDomestic(?string $buyerCountry): bool
     {

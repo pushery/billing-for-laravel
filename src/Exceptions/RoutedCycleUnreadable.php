@@ -11,7 +11,7 @@ use RuntimeException;
  *
  * ## Why this throws instead of returning
  *
- * The routed subscription lane READS the commission rather than computing it, and the entire justification
+ * The routed subscription lane reads the commission rather than computing it, and the entire justification
  * for that — three provider calls on every routed cycle — is the direction the two fail in.
  *
  * A computed commission that drifts from the provider's is a **plausible wrong number** sitting in a money
@@ -24,7 +24,7 @@ use RuntimeException;
  * The effect runs queued, so throwing means the queue retries a transient failure and surfaces a permanent
  * one as a failed job. That is a thing an operator can see and act on. A missing ledger row is not.
  *
- * ## What it does NOT mean
+ * ## What it does not mean
  *
  * Not "the subscription is unrouted" — that is decided from the local subscription row before the provider
  * is asked at all, and it returns without raising anything. Reaching this means the cycle looked routed and

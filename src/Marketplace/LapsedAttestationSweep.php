@@ -61,7 +61,7 @@ final readonly class LapsedAttestationSweep
             ->get();
 
         foreach ($lapsed as $record) {
-            // Only the interval that actually ANSWERS today. An older, superseded row may also carry a past
+            // Only the interval that actually answers today. An older, superseded row may also carry a past
             // attestation date without being what `statusAt()` reads — announcing on that would tell a
             // merchant they are held when a later declaration already covers them.
             if (! $this->stillGoverns($record, $at)) {

@@ -11,7 +11,7 @@ use Pushery\Billing\Marketplace\SmallBusinessFlipSweep;
 /**
  * Flip the creators who have outgrown their size relief.
  *
- * ## This command DECIDES something, which its siblings do not
+ * ## This command decides something, which its siblings do not
  *
  * `billing:tax-holds:announce` tells merchants about a hold that already began. This one writes a new tax
  * standing: a creator whose turnover here has broken a small-business limit stops being exempt, from the
@@ -24,7 +24,7 @@ use Pushery\Billing\Marketplace\SmallBusinessFlipSweep;
  *
  * ## What it never does
  *
- * It never flips a creator back. The count it works from sees only what was sold through THIS platform, so
+ * It never flips a creator back. The count it works from sees only what was sold through this platform, so
  * it is a lower bound: over the limit here means over the limit for certain, while under the limit here
  * proves nothing at all. Returning somebody to a relief is a self-declaration with its own effective date.
  *

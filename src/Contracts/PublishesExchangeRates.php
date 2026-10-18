@@ -11,7 +11,7 @@ namespace Pushery\Billing\Contracts;
  *
  * Which rate is the correct one is jurisdiction knowledge, and the rules contradict each other across
  * jurisdictions — the sibling {@see SuppliesExchangeRateBasis} exists for exactly that reason. The
- * PUBLISHER is the other half of the same fact: a German document's conversion is correct under the finance
+ * publisher is the other half of the same fact: a German document's conversion is correct under the finance
  * ministry's monthly average, an OSS return under the central bank's quarter-end reference rate, and a
  * payout under whatever the bank actually gave. Those are three publishers, not one.
  *

@@ -13,7 +13,7 @@ namespace Pushery\Billing\Enums;
  * have gone quiet — is the expensive case this whole approach exists to avoid.
  *
  * Recording which is which keeps a records-of-processing entry and a privacy notice honest. Declaring
- * everything as legally required would be the same overreach on the COLLECTION side that over-reporting is
+ * everything as legally required would be the same overreach on the collection side that over-reporting is
  * on the reporting side: a claim that a law demands something it does not.
  */
 enum SellerFieldBasis: string

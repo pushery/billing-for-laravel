@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
  *
  * ## The question the read layer could not answer
  *
- * Every per-merchant reader takes the currency as a REQUIRED parameter — `availableFor($party, $currency)`,
+ * Every per-merchant reader takes the currency as a required parameter — `availableFor($party, $currency)`,
  * `pendingFor`, `heldFor`, `earnedIn`, `countedIn`, `reportsFor`. That is right: a currency is a bucket and
  * is never converted. But it left "show me my balance per currency" unanswerable, because nothing said which
  * buckets exist for a given party.
@@ -22,13 +22,13 @@ use Illuminate\Database\Eloquent\Model;
  * ## Why the configured currency list is not the answer
  *
  * `billing.tax_exchange_rates.currencies` looks like it, and a loop over it is silently incomplete: it lists
- * the currencies rates are IMPORTED for, which its own configuration comment separates in as many words from
+ * the currencies rates are imported for, which its own configuration comment separates in as many words from
  * the currencies money is settled in. A creator with earnings in a currency nobody imports rates for would
  * simply be shown one balance fewer, with nothing anywhere going red.
  *
  * ## Why a sibling contract rather than a method on the balance reader
  *
- * {@see LedgerBalanceReader} is documented as implementable BY a consumer. Adding a method to it would be a
+ * {@see LedgerBalanceReader} is documented as implementable by a consumer. Adding a method to it would be a
  * fatal error in every such implementation on the next update — the interface would demand something their
  * class does not have. A separate contract is additive: an existing implementation keeps working untouched,
  * and a consumer who wants the enumeration binds this one too.

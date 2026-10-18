@@ -7,7 +7,7 @@ namespace Pushery\Billing\Contracts;
 /**
  * The jurisdiction-specific half of the go-live checklist.
  *
- * The package's core knows the SHAPE of a checklist — ordered stages, points that block or warn, points
+ * The package's core knows the shape of a checklist — ordered stages, points that block or warn, points
  * that are checked or attested. It does not know that a German platform owes an OSS registration or that a
  * commission clause belongs in the terms. Those are entries of a profile, so that a consumer in another
  * country fills the same structure with their own points and never reads a single line about somebody

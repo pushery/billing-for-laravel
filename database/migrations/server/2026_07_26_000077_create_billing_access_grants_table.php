@@ -13,8 +13,8 @@ use Pushery\Billing\Support\BillingSchema;
  * ## Why this is not the existing entitlements layer
  *
  * The package already answers "what may this plan DO" (`License` / `Entitlements` / `TierResolver`). That is
- * a question about a subscription's CURRENT tier, and its answer changes the moment the tier does. This
- * table answers a different one: what did this person BUY, and does it still belong to them. A bought work
+ * a question about a subscription's current tier, and its answer changes the moment the tier does. This
+ * table answers a different one: what did this person buy, and does it still belong to them. A bought work
  * outlives the plan that was current when it was bought, the creator's account, and the work's own
  * publication. The names were kept apart deliberately — one word for both would guarantee that somebody
  * eventually reads a tier check as proof of ownership.
@@ -52,9 +52,9 @@ return new class extends Migration
             $table->id();
 
             // The principal — who owns it. A morph rather than a user id, because the package never assumes
-            // what a customer is, and NO real name is needed here: ownership is a fact about an account.
+            // what a customer is, and no real name is needed here: ownership is a fact about an account.
             //
-            // Declared column by column instead of `morphs()`, and with LENGTHS, because of the unique index
+            // Declared column by column instead of `morphs()`, and with lengths, because of the unique index
             // below. MySQL caps an index key at 3072 bytes, and utf8mb4 counts four bytes per character, so
             // four default-length strings (255 × 4 = 1020 each) overrun it before the fifth column is even
             // considered. The lengths here are what the values actually are — a class name, a short kind, an
@@ -67,7 +67,7 @@ return new class extends Migration
             // one column that silently stayed an integer after the setting was turned on.
             BillingSchema::hostKey($table, 'owner_id');
 
-            // Who PAID, when that is somebody else. Null on an ordinary purchase; set on a gift, where the
+            // Who paid, when that is somebody else. Null on an ordinary purchase; set on a gift, where the
             // two parties are genuinely different and a refund belongs to the purchaser while the work
             // belongs to the recipient.
             BillingSchema::nullableMorphs($table, 'purchaser');
@@ -82,7 +82,7 @@ return new class extends Migration
             $table->string('status')->default('active');
             $table->timestamp('acquired_at');
 
-            // Null means PERMANENT. A rental or a windowed license sets it. Null is not "unknown" here — a
+            // Null means permanent. A rental or a windowed license sets it. Null is not "unknown" here — a
             // grant always knows whether it ends, and a missing date is the answer "it does not".
             $table->timestamp('expires_at')->nullable();
 
@@ -90,7 +90,7 @@ return new class extends Migration
             $table->string('revoked_reason')->nullable();
 
             // Back to the purchase that produced this grant, so money and ownership can be reconciled
-            // without duplicating either. The money and tax snapshot deliberately lives ONLY on the
+            // without duplicating either. The money and tax snapshot deliberately lives only on the
             // purchase: copied here it would be a second truth, and the two would part company at the first
             // correction.
             $table->string('source_reference')->nullable();
@@ -106,10 +106,10 @@ return new class extends Migration
             $table->timestamp('conformity_update_until')->nullable();
             $table->boolean('conformity_waiver')->default(false);
 
-            // The withdrawal type FROZEN at purchase, and the declaration that made the right lapse. Both
+            // The withdrawal type frozen at purchase, and the declaration that made the right lapse. Both
             // nullable because an install with no consumer-rights profile records neither.
             //
-            // The type is a SNAPSHOT of the one classification, never a second categorization: two places
+            // The type is a snapshot of the one classification, never a second categorization: two places
             // deciding what kind of withdrawal applies is two answers, and the whole point of the taxonomy
             // is that there is one.
             $table->string('withdrawal_type')->nullable();

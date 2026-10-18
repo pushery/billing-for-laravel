@@ -32,7 +32,7 @@ use Pushery\Billing\ValueObjects\ProviderComputedTax;
  *
  * Null means the provider could not be asked, or answered something this package refuses to
  * interpret: several rates on one sale, a rate that is not a percentage, a rate finer than the
- * document can carry. The caller then issues NOTHING, exactly as it did before this contract
+ * document can carry. The caller then issues nothing, exactly as it did before this contract
  * existed — the sale stays as visible as it was, and no document states a number nobody stands
  * behind. Swallowing the null and falling back on a derivation would give away the whole advantage:
  * a failed read is loud, a wrong computation is a plausible figure nobody questions.

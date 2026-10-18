@@ -25,7 +25,7 @@ use Pushery\Billing\Support\BillingSchema;
  *
  * ## Why the owner columns are nullable
  *
- * The table is RETAINED on erasure. The answer supports invoices that are kept for years, so the row stays and the
+ * The table is retained on erasure. The answer supports invoices that are kept for years, so the row stays and the
  * person is unlinked from it.
  */
 return new class extends Migration

@@ -15,7 +15,7 @@ use Illuminate\Contracts\Config\Repository;
  * so no code path hardcodes a trial rule.
  *
  * Resolution order for every knob: the per-tier override at `billing.tiers.<key>.trial.<knob>`, then the
- * global default at `billing.trial.<knob>`. The package default is NO trial (length 0), project-overridable.
+ * global default at `billing.trial.<knob>`. The package default is no trial (length 0), project-overridable.
  *
  * The end date is computed from a start date so the trial clock is a stored timestamp, never a live
  * provider call (consistent with the column-authoritative subscription model). Zero — or any
@@ -40,7 +40,7 @@ final readonly class TrialPolicy
      * Which kind of trial applies. An explicit `mode` (per-tier or global) wins; otherwise it is derived:
      * a configured `generic_tier` implies a generic trial, a positive length alone implies a subscription
      * trial, and nothing configured is None. Deriving Generic from `generic_tier` is what keeps a
-     * generic-trial app from ALSO adding a subscription trial at checkout (a double trial).
+     * generic-trial app from also adding a subscription trial at checkout (a double trial).
      */
     public function mode(?string $tierKey = null): TrialMode
     {
@@ -69,7 +69,7 @@ final readonly class TrialPolicy
         return $value !== false;
     }
 
-    /** The tier a GENERIC trial unlocks, or null when the app configures none (disabling generic trials). */
+    /** The tier a generic trial unlocks, or null when the app configures none (disabling generic trials). */
     public function genericTier(): ?string
     {
         $tier = $this->config->get('billing.trial.generic_tier');
@@ -83,7 +83,7 @@ final readonly class TrialPolicy
         return $this->mode($tierKey) !== TrialMode::None && $this->days($tierKey) > 0;
     }
 
-    /** Whether the checkout should attach a SUBSCRIPTION trial for a tier (mode subscription + positive length). */
+    /** Whether the checkout should attach a subscription trial for a tier (mode subscription + positive length). */
     public function subscriptionTrialEnabled(?string $tierKey = null): bool
     {
         return $this->mode($tierKey) === TrialMode::Subscription && $this->days($tierKey) > 0;
@@ -107,7 +107,7 @@ final readonly class TrialPolicy
             return null;
         }
 
-        // Index the tiers map by the LITERAL tier key rather than a dotted config path, so a key that
+        // Index the tiers map by the literal tier key rather than a dotted config path, so a key that
         // itself contains a dot resolves to its own array instead of being split into nested keys.
         $tiers = $this->config->get('billing.tiers');
         $tier = is_array($tiers) ? ($tiers[$tierKey] ?? null) : null;

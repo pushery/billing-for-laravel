@@ -14,7 +14,7 @@ use Pushery\Billing\Enums\GoLiveStep;
 use Pushery\Billing\ValueObjects\CheckpointOutcome;
 
 /**
- * Somebody decided who may RECEIVE money, rather than the shipped default deciding it for them.
+ * Somebody decided who may receive money, rather than the shipped default deciding it for them.
  *
  * The package binds `CanReceiveMoney` to {@see AlwaysReceivable}, whose `check()` is a literal `return
  * true`. That is the right default for a single-seller install — there are no merchants to gate — and it
@@ -29,7 +29,7 @@ use Pushery\Billing\ValueObjects\CheckpointOutcome;
  * tree that said otherwise was a comment at the binding claiming the checklist covered it.
  *
  * The failure direction is as quiet as it gets: no test goes red, nothing is logged, and the first symptom
- * is at a stranger's checkout. Stripe refuses a payment to an account that cannot receive, so the BUYER
+ * is at a stranger's checkout. Stripe refuses a payment to an account that cannot receive, so the buyer
  * sees the error rather than the merchant. In the less friendly case — an account that still receives but
  * is suspended in the operator's own records — the money simply arrives at a merchant they just blocked.
  *
@@ -40,7 +40,7 @@ use Pushery\Billing\ValueObjects\CheckpointOutcome;
  * Waivable, because the package cannot judge somebody else's gate. A consumer may bind their own
  * implementation under any name and this check can only see that it is not the shipped default; refusing to
  * be waived would block every legitimate custom gate and teach operators to route around the checklist,
- * which costs more than it saves. The point is that it is SEEN.
+ * which costs more than it saves. The point is that it is seen.
  *
  * The gate is injected rather than resolved in the body: the checkpoint then reads nothing at all when it
  * runs, which is the purity {@see GoLiveCheckpoint} asks for stated in the signature instead of promised in

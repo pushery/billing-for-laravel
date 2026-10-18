@@ -18,7 +18,7 @@ use Pushery\Billing\ValueObjects\UnitGrant;
 
 /**
  * The config-driven add-on catalog (config('billing.addons')). One-time purchases resolve their
- * price here from the add-on KEY — the client never submits a price, mirroring the tier allowlist.
+ * price here from the add-on key — the client never submits a price, mirroring the tier allowlist.
  */
 final readonly class ConfigAddonCatalog implements AddonCatalog, ClassifiesMoneyCredit, SuppliesBuyerAudiences, SuppliesProductArchetypes
 {
@@ -65,7 +65,7 @@ final readonly class ConfigAddonCatalog implements AddonCatalog, ClassifiesMoney
 
     public function providerPriceFor(string $key): ?string
     {
-        // Supports a per-provider price map as well as a scalar; the add-on KEY is the client's input, the
+        // Supports a per-provider price map as well as a scalar; the add-on key is the client's input, the
         // price is resolved from config (anti-price-injection).
         return $this->prices->forAddon($key);
     }
@@ -123,7 +123,7 @@ final readonly class ConfigAddonCatalog implements AddonCatalog, ClassifiesMoney
     /**
      * What kind of thing this add-on is, from `billing.addons.<key>.archetype`.
      *
-     * An UNSET key answers null, and an unreadable one REFUSES. The two are different situations: nobody
+     * An unset key answers null, and an unreadable one refuses. The two are different situations: nobody
      * having classified an add-on yet is an ordinary state on an install that does not use the classification
      * at all, while a value that is not one of the archetypes is a typo — and resolving a typo to null
      * would hand the caller "unclassified" for a product somebody believed they had classified.

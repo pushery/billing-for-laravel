@@ -12,7 +12,7 @@ use Stripe\Subscription;
 use Stripe\SubscriptionItem;
 
 /**
- * Finds the item a subscription's TIER lives on.
+ * Finds the item a subscription's tier lives on.
  *
  * A subscription may legitimately carry more than one item — a metered component billed on top of the
  * base fee, or an item the host app added itself — and Stripe does not promise the order of
@@ -22,7 +22,7 @@ use Stripe\SubscriptionItem;
  * put there is left strictly alone.
  *
  * The base item is the one whose price the tier catalog knows. When no price matches — a grandfathered
- * tier the catalog no longer lists — the single non-metered item IS the base. When that is still
+ * tier the catalog no longer lists — the single non-metered item is the base. When that is still
  * ambiguous, the answer is null and the caller fails loudly rather than mutating a guess.
  */
 final readonly class StripeSubscriptionItems
@@ -32,7 +32,7 @@ final readonly class StripeSubscriptionItems
     /**
      * The item carrying the subscription's tier price, or null when it cannot be identified safely.
      *
-     * The merchant scope picks which catalog decides what a tier price IS: a marketplace swap must recognize
+     * The merchant scope picks which catalog decides what a tier price is: a marketplace swap must recognize
      * the item against the creator's own tiers, never the platform's, or it reprices the wrong one. A null
      * scope reads the platform catalog, unchanged for a single-seller install.
      */

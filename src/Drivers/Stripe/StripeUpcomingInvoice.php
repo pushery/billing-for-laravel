@@ -14,14 +14,14 @@ use Stripe\StripeClient;
 use Throwable;
 
 /**
- * A best-effort preview of a billable's next Stripe invoice — the ONE live provider read on the otherwise
+ * A best-effort preview of a billable's next Stripe invoice — the one live provider read on the otherwise
  * column-authoritative subscription screen. Three properties matter and are all deliberate:
  *
  * 1. Null-tolerant. No customer / no live subscription → null with NO Stripe call. Any provider error →
  *    null too, so the screen leaves the line out rather than 500-ing on a connection/timeout/rate-limit
  *    (the catch is `Throwable`, not just Stripe's invalid-request).
  * 2. Cached per customer for a few minutes, so a screen render does not hit Stripe every time.
- * 3. A FAILURE is never cached. Cache::remember stores only a value the callback RETURNS; a thrown outage
+ * 3. A failure is never cached. Cache::remember stores only a value the callback returns; a thrown outage
  *    propagates out of remember uncached, so the next render retries Stripe instead of pinning the preview
  *    to "no estimate" for the whole TTL.
  *
@@ -46,7 +46,7 @@ final readonly class StripeUpcomingInvoice implements UpcomingInvoiceContract
         $customerId = $this->customers->find($billable);
         $subscriptionId = $this->subscriptionReference($billable);
 
-        // Stripe cannot preview an invoice from a customer alone — it rejects the call unless told WHAT to
+        // Stripe cannot preview an invoice from a customer alone — it rejects the call unless told what to
         // preview. With no live subscription there is simply nothing upcoming; short-circuit before any read.
         if ($customerId === null || $subscriptionId === null) {
             return null;
@@ -60,7 +60,7 @@ final readonly class StripeUpcomingInvoice implements UpcomingInvoiceContract
             );
         } catch (Throwable) {
             // A provider outage (or nothing to preview) — degrade to null rather than 500 the screen. The
-            // failure left remember by throwing, so it was NOT cached and the next render retries.
+            // failure left remember by throwing, so it was not cached and the next render retries.
             //
             // @rate-limit-deliberate: a 429 is swallowed here on purpose, and it is the one place in this
             // driver where that is right. Nothing is written, nothing is marked done, and the failure is not

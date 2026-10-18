@@ -7,13 +7,13 @@ namespace Pushery\Billing\Livewire\Concerns;
 /**
  * A bounded wire:poll for the live screens (overview, payment recovery). A transition state — the
  * post-checkout "activating" wait, a past-due recovery — needs the screen to refresh itself until the state
- * settles. This concern makes that a SHORT, self-limiting poll rather than a permanent one:
+ * settles. This concern makes that a short, self-limiting poll rather than a permanent one:
  *
  *  - it polls only WHILE the transition is active,
  *  - only up to a hard cap of ticks (~30s at 5s), then stops so a stuck state never polls forever.
  *
- * The poll is the RELIABLE refresh mechanism and runs whether or not realtime is enabled: realtime broadcasts
- * (`AccountToastNotified` → the `AccountRealtime` toast bridge) NOTIFY the owner, they do not re-render these
+ * The poll is the reliable refresh mechanism and runs whether or not realtime is enabled: realtime broadcasts
+ * (`AccountToastNotified` → the `AccountRealtime` toast bridge) notify the owner, they do not re-render these
  * screens, so gating the poll on realtime would leave a transition with no refresh at all. The poll is
  * lightweight and bounded, so it is safe to keep on; an instant echo-driven `$refresh` is a possible future
  * enhancement, not a prerequisite for the screen settling.

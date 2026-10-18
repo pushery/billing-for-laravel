@@ -22,7 +22,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## Why there is no index
  *
- * Nothing looks a subscription up BY this column. It is read off a row already found by its owner.
+ * Nothing looks a subscription up by this column. It is read off a row already found by its owner.
  */
 return new class extends Migration
 {

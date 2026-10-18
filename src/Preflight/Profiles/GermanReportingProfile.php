@@ -20,7 +20,7 @@ use Pushery\Billing\ValueObjects\SellerRecordField;
  *
  * Two things are worth reading twice.
  *
- * The list does NOT change with whether a seller is currently reportable — only the BASIS of its fields
+ * The list does not change with whether a seller is currently reportable — only the basis of its fields
  * does. A seller who takes on one commissioned piece of work becomes reportable that day, and a platform
  * that only collected from the sellers it already knew about then has to chase the rest: after the year has
  * closed, under a filing deadline, from people who have gone quiet or changed their address. That chase
@@ -99,14 +99,14 @@ final readonly class GermanReportingProfile implements ClassifiesReportability, 
      *
      * ## Both directions are mistakes, so neither is the safe one
      *
-     * Failing to report is an offense. Reporting somebody the law leaves out is ALSO one, and a data
+     * Failing to report is an offense. Reporting somebody the law leaves out is also one, and a data
      * protection breach besides, because it hands a person's details to an authority with nothing entitling
      * anyone to them. "When in doubt, report" is not caution — it is the second error, and it is the one
      * that looks responsible while it happens.
      *
-     * ## The exemption is cumulative, and both of its edges are STRICT
+     * ## The exemption is cumulative, and both of its edges are strict
      *
-     * Few enough sales AND a small enough amount. One alone exempts nobody. And the German statute words
+     * Few enough sales and a small enough amount. One alone exempts nobody. And the German statute words
      * both edges as "less than": § 4 Abs. 5 Satz 1 Nr. 4 PStTG exempts a seller with fewer than 30 sales of
      * goods who received "weniger als 2 000 Euro" for them. The directive it implements reads "did not
      * exceed EUR 2 000" (DAC7, Annex V, Section I, B.4(d)), which would also exempt the seller sitting
@@ -137,7 +137,7 @@ final readonly class GermanReportingProfile implements ClassifiesReportability, 
     }
 
     /**
-     * Whether a goods seller stays under BOTH edges of the exemption.
+     * Whether a goods seller stays under both edges of the exemption.
      *
      * The operators are configurable, not the comparison written into the code, because the two texts
      * behind the upper edge disagree on exactly one amount: the German statute exempts less than the

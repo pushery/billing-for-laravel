@@ -26,7 +26,7 @@ use Pushery\Billing\Support\BillingSchema;
  * ## The wording version is the point of the row
  *
  * A sale is governed by the words shown at the time. Recording that consent was given, without recording
- * WHICH notice was shown, produces a record that a later edit silently reinterprets — the same failure the
+ * which notice was shown, produces a record that a later edit silently reinterprets — the same failure the
  * seller posture and the commission terms are snapshotted to avoid. The version is a plain string because
  * the notice texts are the operator's, not the package's.
  *
@@ -43,7 +43,7 @@ return new class extends Migration
     {
         Schema::create('billing_withdrawal_consents', function (Blueprint $table): void {
             $table->id();
-            // NULLABLE, and paired with the stamp below. This row is RETAINED through an owner erasure --
+            // Nullable, and paired with the stamp below. This row is retained through an owner erasure --
             // it is the proof the buyer's right of withdrawal was extinguished lawfully, and destroying it
             // would hand every past sale back to the fourteen-day rule rather than relieve the buyer of
             // anything. So the person is unlinked and the fact stays, exactly as the invoice does.

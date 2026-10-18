@@ -20,7 +20,7 @@ use Pushery\Billing\Exceptions\CustomerBelongsToAnotherProvider;
  * ## Separate from `CustomerDirectory`, which goes the other way
  *
  * That one resolves a reference arriving on a webhook back to an owner. This one turns an owner into a
- * reference, and it may WRITE. Reading and creating are different privileges, and a package that can be
+ * reference, and it may write. Reading and creating are different privileges, and a package that can be
  * asked "who is this?" should not thereby be able to create accounts at a payment provider.
  */
 interface EnsuresProviderCustomer

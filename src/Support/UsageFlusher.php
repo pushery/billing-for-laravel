@@ -38,7 +38,7 @@ use Throwable;
  * identifier while our write failed, and re-reporting those units under a fresh identifier is precisely
  * how a customer is charged twice.
  *
- * A provider outage is not a crash: rows stay pending, back off, and are retried. What is NOT tolerated
+ * A provider outage is not a crash: rows stay pending, back off, and are retried. What is not tolerated
  * is silence — past the retry budget the event is marked failed and logged as what it is: revenue that
  * will not be collected unless someone acts.
  *
@@ -72,10 +72,10 @@ final readonly class UsageFlusher
     }
 
     /**
-     * Force ONE owner's pending usage to the provider NOW — backoff and the scheduled cadence ignored.
+     * Force one owner's pending usage to the provider now — backoff and the scheduled cadence ignored.
      *
      * Called when the provider signals a customer's next invoice is about to finalize: any usage still in
-     * the outbox has to land on THAT invoice, and waiting for the next scheduled flush (or for a rollup's
+     * the outbox has to land on that invoice, and waiting for the next scheduled flush (or for a rollup's
      * retry backoff to elapse) could reach the provider after the invoice is finalized, where it is billed on no
      * invoice. Scoped to the one owner so an upcoming-invoice
      * signal for one customer never drains everyone else's outbox. Returns how many rollups were reported.
@@ -146,10 +146,10 @@ final readonly class UsageFlusher
                     'meter_key' => $group->meter_key,
                     'provider_meter' => $sources->first()->provider_meter,
                     'quantity' => $sources->sum('quantity'),
-                    // Carried up with the usage: what the owner's PREPAID units already covered. The
+                    // Carried up with the usage: what the owner's prepaid units already covered. The
                     // provider must not bill it — see report().
                     'prepaid_units' => $sources->sum('prepaid_units'),
-                    // The LATEST source's moment: the rollup must not claim usage happened earlier than
+                    // The latest source's moment: the rollup must not claim usage happened earlier than
                     // it did, and every source in it belongs to the same cycle anyway.
                     'occurred_at' => $sources->max('occurred_at'),
                     'period' => $group->period,
@@ -179,7 +179,7 @@ final readonly class UsageFlusher
     }
 
     /**
-     * Every pending rollup of one owner whose moment has come, backoff IGNORED — the force-flush's queue. A
+     * Every pending rollup of one owner whose moment has come, backoff ignored — the force-flush's queue. A
      * rollup mid-backoff is still reported here on purpose: the invoice is closing now, so the usage goes on it
      * regardless of when its next scheduled retry would have been.
      *
@@ -211,8 +211,8 @@ final readonly class UsageFlusher
             return false;
         }
 
-        // NET THE PREPAID UNITS. The provider's price knows nothing about units the owner bought outright —
-        // it only applies its own allowance to whatever we hand it. So we hand it the usage MINUS what
+        // Net the prepaid units. The provider's price knows nothing about units the owner bought outright —
+        // it only applies its own allowance to whatever we hand it. So we hand it the usage minus what
         // prepaid already covered, and its price then applies the tier's `included` on top. Reporting the
         // raw total would bill the customer for units they have already paid for.
         $billable = $rollup->quantity - $rollup->prepaid_units;

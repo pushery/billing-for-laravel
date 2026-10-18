@@ -29,7 +29,7 @@ use Stripe\StripeObject;
  * Stripe's receiving side: create the merchant's connected account and hand back a link into Stripe's own
  * hosted identity flow.
  *
- * `createAccount` is idempotent through the LOCAL row, not through a provider lookup. Asking Stripe "does
+ * `createAccount` is idempotent through the local row, not through a provider lookup. Asking Stripe "does
  * this merchant already have an account" has no answer — Stripe has no notion of our merchants — so a
  * second call without the local check creates a second account, and a merchant with two accounts has their
  * money split across two identities the provider pays separately. The unique index behind the row is the
@@ -60,7 +60,7 @@ use Stripe\StripeObject;
  * cannot see a response header — which is exactly how this notice was found — so shipping the rebuild on
  * a green fake would be asserting the one thing the fake cannot answer.
  *
- * The notice is deliberately NOT dropped. Suppressing another company's deprecation signal inside a library
+ * The notice is deliberately not dropped. Suppressing another company's deprecation signal inside a library
  * decides the consumer's log policy for them and removes the advance warning the header exists to give. It is
  * written to the log as a warning instead of being raised: Laravel's error handler turns every warning into an
  * exception, so raised it ended every account creation in an error after the account existed and before its
@@ -87,7 +87,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
         $existing = $this->row($merchant);
 
         if ($existing instanceof MerchantAccount) {
-            // A row whose relationship has ENDED is not an onboarding to continue. Handing it back was the
+            // A row whose relationship has ended is not an onboarding to continue. Handing it back was the
             // silent half of this: no second provider account, no exception, no change, exit 0 — and an
             // operator holding a link to an account the provider no longer releases funds through, having
             // done exactly what the code told them to do. Reopening is a decision somebody makes, not a
@@ -101,7 +101,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
 
         $key = $merchant->getKey();
 
-        // A merchant that was never stored has no key, and every such merchant would derive the SAME creation
+        // A merchant that was never stored has no key, and every such merchant would derive the same creation
         // key below: the provider would hand the second one the account it made for the first, and every
         // payout meant for it would go there. Refused before the provider is asked anything.
         if (! is_int($key) && ! is_string($key)) {
@@ -165,7 +165,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
     }
 
     /**
-     * The key that keeps a retry from producing a SECOND connected account.
+     * The key that keeps a retry from producing a second connected account.
      *
      * ## The window this closes
      *
@@ -173,7 +173,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
      * intervene: a network timeout after the account already exists, a database failure on the write, and —
      * the one that made this visible — an application whose error handler turns warnings into exceptions.
      * The provider's SDK emits a `stripe-notice` response header through `trigger_error()`, so on such an
-     * install the very first `createAccount()` throws AFTER the account was created.
+     * install the very first `createAccount()` throws after the account was created.
      *
      * All three end the same way: an account at the provider that no local row names. The natural response
      * is to try again — and without a key that creates another one. Nothing looks wrong at any point.
@@ -183,7 +183,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
      *
      * ## Why a derived key rather than a random one
      *
-     * A random key protects nothing here: the retry is a NEW call, in a new process, with a new key. The
+     * A random key protects nothing here: the retry is a new call, in a new process, with a new key. The
      * key has to be a function of the merchant, so that the second attempt asks the same question and the
      * provider answers with the account it already made.
      *
@@ -222,7 +222,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
     /**
      * What Stripe is still waiting for on this merchant's account.
      *
-     * ## A LIVE read, and it has to be
+     * ## a live read, and it has to be
      *
      * The local row carries the three capability flags, kept current by `account.updated`. It carries no
      * requirement list, and adding one would be a copy of a list that changes every time the merchant
@@ -230,7 +230,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
      *
      * ## `currently_due` and `eventually_due` are different questions
      *
-     * The first is what blocks the account NOW; the second is what will block it once a threshold is
+     * The first is what blocks the account now; the second is what will block it once a threshold is
      * crossed — a volume, a date. Reporting only the first tells a merchant they are finished when they
      * are finished for today, which is the answer that produces a surprised hold later.
      *
@@ -254,7 +254,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
         $account = $this->stripe->accounts->retrieve($row->account_reference);
         $requirements = $account->requirements ?? null;
 
-        // Only the entries that ARE strings, and non-string entries are dropped rather than coerced. A
+        // Only the entries that are strings, and non-string entries are dropped rather than coerced. A
         // requirement key is a string in every version of this API; something else in that position means
         // the shape changed, and printing `Array` or `1` as a thing a merchant must go and do is worse
         // than printing one item fewer.
@@ -283,12 +283,12 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
      * What the provider says about this merchant's account right now.
      *
      * The same `accounts->retrieve()` the requirements report already makes, reading the other half of the
-     * answer. It builds a REFERENCE and writes nothing: the row is updated by the one writer both this and
+     * answer. It builds a reference and writes nothing: the row is updated by the one writer both this and
      * the webhook go through, so "only a provider report lifts a flag" stays a single rule in a single
      * place.
      *
      * The local `deauthorized_at` is carried onto the reference deliberately. The provider does not know
-     * the merchant disconnected from THIS platform — it will happily report every flag true — and dropping
+     * the merchant disconnected from this platform — it will happily report every flag true — and dropping
      * the field here would make a refresh the one way to make a disconnected merchant receivable again.
      */
     public function capabilitiesFor(Model $merchant): ?MerchantAccountReference

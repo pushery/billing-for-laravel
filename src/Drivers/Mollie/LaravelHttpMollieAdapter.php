@@ -22,7 +22,7 @@ use Mollie\Api\Utils\Factories;
  * The SDK picks its own transport when none is given — Guzzle if the class is there, raw cURL otherwise.
  * Both work, and both are invisible to the application:
  *
- * - `Http::preventStrayRequests()` in an application's own suite did NOT catch a Mollie call. That is the
+ * - `Http::preventStrayRequests()` in an application's own suite did not catch a Mollie call. That is the
  *   single assurance the method exists to give, and this package was the exception to it.
  * - Global `Http` middleware — logging, tracing, a proxy, header enrichment — saw every outbound request
  *   except this one.
@@ -37,10 +37,10 @@ use Mollie\Api\Utils\Factories;
  * `illuminate/http` is already required, and this package already reaches for the `Http` facade in four
  * other places. The pattern was ours everywhere except at the one client that talks to a payment provider.
  *
- * ## What is deliberately NOT caught
+ * ## What is deliberately not caught
  *
  * Only {@see ConnectionException} is translated. `Http::preventStrayRequests()` raises a
- * `StrayRequestException`, which extends `RuntimeException` and NOT `ConnectionException` — so it travels
+ * `StrayRequestException`, which extends `RuntimeException` and not `ConnectionException` — so it travels
  * up untouched, which is the whole point: catching it here would restore exactly the blindness this class
  * removes, while looking like careful error handling.
  *
@@ -56,8 +56,14 @@ final readonly class LaravelHttpMollieAdapter implements HttpAdapterContract
      *                                         client factory states: it is how the "nothing to report" path
      *                                         becomes reachable in a test. Nothing shipped passes anything
      *                                         else, and this is not a seam for changing what is reported.
+     * @param  int|null  $timeout  seconds until a request gives up; null keeps the application's default
+     * @param  int|null  $connectTimeout  seconds until a connection gives up; null keeps the application's default
      */
-    public function __construct(private array $versionPackages = ['illuminate/http', 'laravel/framework']) {}
+    public function __construct(
+        private array $versionPackages = ['illuminate/http', 'laravel/framework'],
+        private ?int $timeout = null,
+        private ?int $connectTimeout = null,
+    ) {}
 
     public function factories(): Factories
     {
@@ -79,15 +85,24 @@ final readonly class LaravelHttpMollieAdapter implements HttpAdapterContract
             $headers[$name] = implode(', ', $values);
         }
 
+        $http = Http::withHeaders($headers)
+            // Off on purpose: an error status is an answer from Mollie, and its body is what the SDK
+            // builds its exceptions from. Letting Laravel throw here would replace "this field is
+            // wrong" with a transport failure carrying none of that.
+            ->withOptions(['http_errors' => false]);
+
+        if ($this->timeout !== null) {
+            $http->timeout($this->timeout);
+        }
+
+        if ($this->connectTimeout !== null) {
+            $http->connectTimeout($this->connectTimeout);
+        }
+
         try {
-            $response = Http::withHeaders($headers)
-                // Off on purpose: an error STATUS is an answer from Mollie, and its body is what the SDK
-                // builds its exceptions from. Letting Laravel throw here would replace "this field is
-                // wrong" with a transport failure carrying none of that.
-                ->withOptions(['http_errors' => false])
-                ->send($request->getMethod(), (string) $request->getUri(), [
-                    'body' => (string) $request->getBody(),
-                ]);
+            $response = $http->send($request->getMethod(), (string) $request->getUri(), [
+                'body' => (string) $request->getBody(),
+            ]);
         } catch (ConnectionException $unreachable) {
             // Retryable. Laravel raises this for any transport failure that brought back no response, a
             // timeout or a dropped connection after sending as well as a refused one, so Mollie may have
@@ -120,10 +135,10 @@ final readonly class LaravelHttpMollieAdapter implements HttpAdapterContract
      */
     public function version(): ?string
     {
-        // Both names, and the second is not a fallback for tidiness. `laravel/framework` REPLACES every
+        // Both names, and the second is not a fallback for tidiness. `laravel/framework` replaces every
         // `illuminate/*` split, so in a tree where the full framework is installed — which is every
         // application, and this package's own test tree through Testbench — Composer answers for the split
-        // with a null VERSION even though it reports it as installed. Asking only for the split therefore
+        // with a null version even though it reports it as installed. Asking only for the split therefore
         // reports nothing precisely where the component is most certainly present.
         //
         // The Composer check sits inside the loop rather than above it, which is about reachability rather

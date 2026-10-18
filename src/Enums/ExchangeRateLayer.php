@@ -17,7 +17,7 @@ namespace Pushery\Billing\Enums;
  * A single frozen rate per sale cannot express that. It would force one of the three to be re-derived
  * later, at whatever the rate is then — which is how a correction reverses an amount nobody ever declared.
  *
- * So a sale carries one frozen rate PER LAYER, and this names the layers. It is jurisdiction-free on
+ * So a sale carries one frozen rate per layer, and this names the layers. It is jurisdiction-free on
  * purpose: which rule fills which layer is the profile's business, and a consumer elsewhere uses the same
  * three words for their own rules.
  */

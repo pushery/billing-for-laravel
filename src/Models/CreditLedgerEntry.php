@@ -24,7 +24,7 @@ use Pushery\Billing\ValueObjects\Money;
  * may quietly rewrite is not explained at all — it merely looks it, which is worse than an unexplained
  * balance because it invites trust. So the model refuses every update and every delete, without exception.
  *
- * Deliberately WITHOUT the {@see BillingEvent::purging()} door, and the difference is worth stating
+ * Deliberately without the {@see BillingEvent::purging()} door, and the difference is worth stating
  * because the two models otherwise look alike. A host can take a single audit row out through the model,
  * inside `purging()`. Nothing takes one of these entries out on its own, because the balance is their sum.
  * They outlive the owner as booking records: the table is listed in {@see OwnerScopedTables::RETAINED}, the eraser
@@ -75,7 +75,7 @@ class CreditLedgerEntry extends Model
      *
      * The reference is minted from the entry's own id rather than from the source it points at. Two reasons,
      * and the second is the load-bearing one: the source is optional (a proration credit has one only when
-     * the reading could name ONE paid invoice for the period it returns consideration from), and an
+     * the reading could name one paid invoice for the period it returns consideration from), and an
      * append-only row's id is the one identifier that cannot later be edited to point somewhere else. `GH-`
      * for Guthaben, which fits the field's alphabet and leaves a reader of the batch somewhere to go.
      *

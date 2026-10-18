@@ -13,9 +13,9 @@ use Pushery\Billing\Models\ExchangeRateRecord;
  *
  * ## Why one central-bank observation becomes two rows
  *
- * The store keys a rate by the RULE it answers under, and the central bank's daily reference rate answers
+ * The store keys a rate by the rule it answers under, and the central bank's daily reference rate answers
  * two of them: the rate at the tax point, and the rate at a period end. They are the same published figure
- * — what differs is which DAY each rule tells you to ask for, and that is the reader's business, not the
+ * — what differs is which day each rule tells you to ask for, and that is the reader's business, not the
  * publisher's.
  *
  * Writing both here rather than teaching the reader to fall back between them is the deliberate half. A

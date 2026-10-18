@@ -11,21 +11,21 @@ use Pushery\Billing\Exceptions\InvalidInvoiceCorrection;
  * A provider-neutral snapshot of an invoice correction at the moment it was issued — the accounting
  * document that corrects a finalized invoice when money goes back or an earlier invoice was wrong. It
  * carries everything the package needs to persist a compliant record and render an EN 16931 correcting
- * document from it, WITHOUT going back to the provider.
+ * document from it, without going back to the provider.
  *
- * This is deliberately NOT called a "credit note": that term is reserved for the self-billing document
+ * This is deliberately not called a "credit note": that term is reserved for the self-billing document
  * (§ 14 Abs. 2 S. 5 UStG, type code 389), which is a different thing entirely. A correction is one of two
  * roles ({@see InvoiceCorrectionKind}): a Cancellation (Storno, type code 381) or an Amendment
  * (Rechnungsberichtigung, type code 384). The role — not a boolean — is what an e-invoice writer selects
  * the type code on.
  *
- * The amounts are POSITIVE magnitudes: a correction is not a negative invoice, it is a document whose
+ * The amounts are positive magnitudes: a correction is not a negative invoice, it is a document whose
  * nature inverts the meaning. A negative amount is refused at construction rather than passed through. Its
  * own number and provider id identify the correction; the `credits*` fields point at the invoice it
  * corrects (BG-3 preceding-invoice reference) and set the accounting direction — and for an Amendment that
- * reference is MANDATORY, so an amendment built without one is refused here rather than rendered as an
+ * reference is mandatory, so an amendment built without one is refused here rather than rendered as an
  * invalid 384. The buyer is the same buyer as the corrected invoice's and is filled from the frozen
- * original when the snapshot does not carry it. The lines and totals are the correction's OWN, so a partial
+ * original when the snapshot does not carry it. The lines and totals are the correction's own, so a partial
  * correction (one line, not the whole invoice) is represented faithfully.
  *
  * @phpstan-import-type BuyerSnapshot from InvoiceSnapshot

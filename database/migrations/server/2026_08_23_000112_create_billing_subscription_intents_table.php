@@ -14,11 +14,11 @@ use Pushery\Billing\Support\BillingSchema;
  *
  * A provider with no synchronous setup call establishes a mandate through a first payment the customer
  * completes on the provider's own page. The mandate then arrives over the webhook — carrying the customer,
- * the mandate id and the payment, and nothing about what the customer was trying to BUY. Without a record
+ * the mandate id and the payment, and nothing about what the customer was trying to buy. Without a record
  * of the intention there is no way to turn that mandate into the subscription it was for: the tier is
  * chosen before the redirect and known nowhere afterwards.
  *
- * ## Why it is keyed on the PAYMENT and not on the customer
+ * ## Why it is keyed on the payment and not on the customer
  *
  * The two look interchangeable and are not. Establishing a mandate is also what happens when a customer
  * merely adds a second payment method — same event, same customer, no subscription intended. Keyed on the
@@ -60,7 +60,7 @@ return new class extends Migration
             // The sweep an operator runs asks "what is still open for this owner", so the index leads with
             // the owner and carries the claim state.
             //
-            // NAMED, and the name is not decoration. Left to the framework this index is called
+            // Named, and the name is not decoration. Left to the framework this index is called
             // `billing_subscription_intents_owner_type_owner_id_claimed_at_index` -- 65 characters, one
             // over MySQL's limit for an identifier. PostgreSQL accepts it and silently truncates to 63;
             // MySQL refuses the whole ALTER with error 1059. So the generated name is a migration that

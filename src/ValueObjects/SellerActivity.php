@@ -20,8 +20,8 @@ use Pushery\Billing\Enums\TaxArchetype;
  * The settlement document freezes `tax_archetype`, and {@see SettlementGrossInflowCounter} selects it off
  * exactly those rows to split a period by it, so a caller does not need their own catalog for it.
  *
- * What is genuinely the CONSUMER's is the product catalog itself — which product carries which archetype.
- * What the package holds is what a settled document FROZE, which is a different and narrower thing: the
+ * What is genuinely the consumer's is the product catalog itself — which product carries which archetype.
+ * What the package holds is what a settled document froze, which is a different and narrower thing: the
  * answer as it stood when the money moved, immune to a later reclassification of the product.
  *
  * ## A voluntary payment carries a second archetype, and the rule needs both
@@ -41,13 +41,13 @@ final readonly class SellerActivity
         /** What the seller was paid over that period. */
         public Money $compensation,
         /**
-         * Says this WAS commissioned when the archetype cannot say so — a commission the catalog never
+         * Says this was commissioned when the archetype cannot say so — a commission the catalog never
          * classified. It can only ever widen the answer; see {@see individuallyCommissioned()} for why it
          * is not simply the old boolean back.
          */
         public bool $commissionedRegardless = false,
         /**
-         * What a voluntary payment was paid ON, for an archetype that has no answers of its own.
+         * What a voluntary payment was paid on, for an archetype that has no answers of its own.
          *
          * Null for every ordinary sale, and null is right there: an archetype that answers for itself needs
          * no reference and must not be given one. It is null for a tip too when the document predates the
@@ -74,7 +74,7 @@ final readonly class SellerActivity
      *
      * ## An unresolved delegation stays unresolved
      *
-     * A tip with no reference returns the TIP, not a substitute. That is deliberately not the reference's
+     * A tip with no reference returns the tip, not a substitute. That is deliberately not the reference's
      * absence being read as "sold alone": every tip settled before this column existed is in that state, and
      * both ways of resolving it are wrong on real data. Answering "standardized" would clear a reporting
      * duty on no evidence; answering "commissioned" would file a seller whose tips were on downloads. The
@@ -100,11 +100,11 @@ final readonly class SellerActivity
     /**
      * Whether it was commissioned for one buyer, rather than sold off the shelf.
      *
-     * DERIVED from the archetype, which already says it, with one flag that can only ever widen the answer.
+     * Derived from the archetype, which already says it, with one flag that can only ever widen the answer.
      *
-     * An ordinary boolean sitting BESIDE the archetype would be one fact written twice, statable in
+     * An ordinary boolean sitting beside the archetype would be one fact written twice, statable in
      * contradiction, with nothing to catch it, and the direction that contradiction falls is the costly one:
-     * the reporting rule asks this FIRST and returns on it, so an activity carrying `CustomOneToOne` with the
+     * the reporting rule asks this first and returns on it, so an activity carrying `CustomOneToOne` with the
      * boolean left at its default would classify as standardized, and a seller who has to be reported would
      * not be. A default that decides a reporting duty is the wrong kind of default.
      *
@@ -115,7 +115,7 @@ final readonly class SellerActivity
      * "this was commissioned" is a statement somebody makes; saying "this was not" is what a forgotten
      * argument looks like, and the two must not have the same power.
      *
-     * The match lives HERE and not on the enum, and that is not where it was first written. An accessor on
+     * The match lives here and not on the enum, and that is not where it was first written. An accessor on
      * `TaxArchetype` reads better and is wrong: the archetypes are a fact about commerce and what follows
      * from one is a jurisdiction's answer, so an answer on the enum is one a consumer elsewhere cannot
      * replace without replacing the fact. `ProductTaxonomyTest` holds that line and caught this. Beside

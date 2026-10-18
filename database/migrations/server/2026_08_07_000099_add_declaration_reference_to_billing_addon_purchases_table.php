@@ -11,11 +11,11 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## Why the purchase has to hold it
  *
- * The declarations are recorded BEFORE the buyer leaves for the provider, so at that moment the purchase
+ * The declarations are recorded before the buyer leaves for the provider, so at that moment the purchase
  * has no reference of any kind — the package mints its own key and sends it along as opaque metadata. What
  * comes back on the webhook is a session id, and the row is written under that.
  *
- * Those are two different strings. Without this column the receipt, which knows the PAYMENT id, has no path
+ * Those are two different strings. Without this column the receipt, which knows the payment id, has no path
  * to a declaration recorded under a minted key: `WithdrawalConsentLedger::forPayment()` walks
  * payment reference -> purchase -> `reference`, and `reference` is the session. The lookup answers null,
  * and null on that path reads as "the buyer declared nothing" — the one answer that is both wrong and
@@ -30,7 +30,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## Why there is no index
  *
- * Nothing looks a purchase up BY this column. It is read off a row already found by its payment reference,
+ * Nothing looks a purchase up by this column. It is read off a row already found by its payment reference,
  * which is the indexed path. An index here would cost writes on every purchase to serve no query.
  */
 return new class extends Migration

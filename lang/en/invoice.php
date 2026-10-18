@@ -8,6 +8,7 @@ return [
     'invoice' => 'Invoice',
     'correction' => 'Invoice correction',
     'corrects' => 'Corrects :number',
+    'reinstates' => 'Charges :number again',
     'number' => 'Invoice number :number',
     'issued' => 'Issued :date',
     'from' => 'From',

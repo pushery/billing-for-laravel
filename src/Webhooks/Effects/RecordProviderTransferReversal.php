@@ -12,14 +12,14 @@ use Pushery\Billing\Models\MerchantCharge;
  *
  * ## Set, never add
  *
- * The event carries the provider's CUMULATIVE figure for the transfer, so the column is set to it. Adding
+ * The event carries the provider's cumulative figure for the transfer, so the column is set to it. Adding
  * would double-count a redelivery, which is the ordinary case; and a dedup on the transfer id would freeze
  * the journal at the first reversal, which is wrong the other way — a transfer can be reversed twice, and
  * the second event carries the higher total.
  *
  * ## It never lowers a figure the platform already booked
  *
- * The platform's own refund and chargeback paths write this column too. A provider report that states LESS
+ * The platform's own refund and chargeback paths write this column too. A provider report that states less
  * than what is already recorded is a disagreement, and resolving it is not this effect's job — which ledger
  * wins is a separate, open question. Writing the smaller number would quietly put money back on a creator's
  * available balance on the strength of a webhook, so the larger figure stands and the disagreement is left

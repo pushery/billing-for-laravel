@@ -6,6 +6,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\BillingSchema;
+use Pushery\Billing\Support\TableLookup;
 
 /**
  * What an erasure request needs in order to be honest.
@@ -15,11 +16,15 @@ use Pushery\Billing\Support\BillingSchema;
  * all, so it was simultaneously the package's largest store of personal data and the one an erasure could
  * not even find. With an owner on it, an erasure can scrub exactly that customer's payloads.
  *
- * (2) An invoice and a purchase get `owner_erased_at`. They are NOT deleted with the owner: a valid invoice
+ * (2) An invoice and a purchase get `owner_erased_at`. They are not deleted with the owner: a valid invoice
  * must carry the buyer's name and address (§14 UStG), and invoices must be kept for years (§147 AO, §14b
  * UStG) — a right to erasure yields to a legal retention obligation (GDPR Art. 17(3)(b)). So they are
  * unlinked from the owner and kept, and the retention clock (billing:prune) removes them when the law no
  * longer requires them. Cascading them away would turn a compliance gap into a compliance disaster.
+ *
+ * Payments-only mode has neither table and builds the owner of a delivery in a migration of its own,
+ * `add_the_owner_to_billing_webhook_events_table`. An installation that started in that mode and switches to full
+ * mode later runs this one with the owner already in place, so this one adds it only where it is missing.
  *
  * Server-only.
  */
@@ -27,16 +32,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('billing_webhook_events', function (Blueprint $table): void {
-            BillingSchema::nullableMorphs($table, 'owner');
-        });
+        if (! Schema::hasColumn(TableLookup::qualified('billing_webhook_events'), 'owner_type')) {
+            Schema::table('billing_webhook_events', function (Blueprint $table): void {
+                BillingSchema::nullableMorphs($table, 'owner');
+            });
+        }
 
         foreach (['billing_invoices', 'billing_addon_purchases'] as $retained) {
             Schema::table($retained, function (Blueprint $table): void {
                 $table->timestamp('owner_erased_at')->nullable()->index();
 
                 // The owner link has to become optional, or the row cannot outlive the owner — and these
-                // rows MUST outlive them: the law requires the invoice to be kept, and to keep carrying the
+                // rows must outlive them: the law requires the invoice to be kept, and to keep carrying the
                 // buyer's name and address while it is.
                 BillingSchema::hostType($table, 'owner_type')->nullable()->change();
                 // Through the helper, not spelled out: `unsignedBigInteger` here would cast the column
@@ -53,7 +60,7 @@ return new class extends Migration
             $table->dropMorphs('owner');
         });
 
-        // Deliberately asymmetric: this drops owner_erased_at but does NOT restore owner_type/owner_id to
+        // Deliberately asymmetric: this drops owner_erased_at but does not restore owner_type/owner_id to
         // NOT NULL. Once an erasure has run, a retained invoice legitimately carries a null owner_id, so
         // re-imposing NOT NULL on rollback would fatal on exactly the rows this migration exists to keep.
         // A rollback therefore leaves the owner columns nullable; up() is idempotent (a repeated

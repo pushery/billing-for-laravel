@@ -6,7 +6,7 @@ namespace Pushery\Billing\Enums;
 
 /**
  * Who is the seller of record — the party the buyer legally transacts with — on a routed marketplace sale.
- * The package does NOT decide this: the choice turns on what is sold and on the platform's role, and getting
+ * The package does not decide this: the choice turns on what is sold and on the platform's role, and getting
  * it wrong ships a receipt that names the wrong party. This enum makes the choice nameable, and the resolver
  * and its guards make it enforceable.
  *
@@ -35,7 +35,7 @@ enum SellerOfRecordPosture: string
     case PlatformIntermediary = 'platform_intermediary';
 
     /**
-     * Whether choosing this posture for an ELECTRONIC supply requires the Art. 9a rebuttal to be asserted.
+     * Whether choosing this posture for an electronic supply requires the Art. 9a rebuttal to be asserted.
      * Only `SellerOfRecord` names a party other than the platform for an electronic supply, so only it has to
      * clear the rebuttal; the other two are consistent with the presumption.
      */

@@ -15,7 +15,7 @@ use Pushery\Billing\ValueObjects\Money;
  * Resolves a coupon code against the config-defined `billing.coupons` map. The whole map is read and
  * indexed by code rather than reached through a dotted config path, so a code is matched literally
  * and can never be split on a dot. Anything invalid — an unknown code, an expired one, or a
- * malformed entry — resolves to null. Resolving is ALL this does: no package path applies the
+ * malformed entry — resolves to null. Resolving is all this does: no package path applies the
  * resolved Discount to a charge, a subscription or an invoice. An app that offers coupons resolves
  * the code here and applies the result itself (Discount::applyTo).
  *

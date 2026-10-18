@@ -25,8 +25,8 @@ use Pushery\Billing\ValueObjects\MerchantTierRow;
  *
  * ## Why the package memoizes rather than asking hosts to
  *
- * The repository is implemented by the HOST, so the package cannot make its queries cheap. What it can do is
- * stop asking the same question repeatedly. Wrapping here means a naive implementation is correct AND fast,
+ * The repository is implemented by the host, so the package cannot make its queries cheap. What it can do is
+ * stop asking the same question repeatedly. Wrapping here means a naive implementation is correct and fast,
  * instead of correct and quietly expensive — and a host that already caches loses nothing but a hash lookup.
  *
  * ## Lifetime

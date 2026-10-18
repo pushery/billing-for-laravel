@@ -7,11 +7,11 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * What a voluntary payment was paid ON — the one fact a tip has none of its own.
+ * What a voluntary payment was paid on — the one fact a tip has none of its own.
  *
  * The taxonomy says a tip delegates every consequence to the thing it accompanied, whether it is reportable
  * included. That reference reached the classifier, decided the place of supply and the rate band, and then
- * ended with the request: only the RESULTS were frozen on the document. Which is enough for the two
+ * ended with the request: only the results were frozen on the document. Which is enough for the two
  * consequences the document itself states, and not enough for the one asked later.
  *
  * Reportability is asked later, by a run over a whole period, from the documents. With nothing recording

@@ -36,7 +36,7 @@ use Pushery\Billing\Support\LocalBillingEngine;
  * ## It does not charge anything
  *
  * It returns the credit the abandoned attempt spent and puts the cycle in the state an ordinary refusal
- * leaves it in. The next scheduled run reopens it, reprices it and collects it — through the SAME order, so
+ * leaves it in. The next scheduled run reopens it, reprices it and collects it — through the same order, so
  * the charge carries the idempotency key the abandoned attempt used rather than a fresh one.
  */
 final class ReleaseAbandonedClaimCommand extends Command
@@ -76,7 +76,7 @@ final class ReleaseAbandonedClaimCommand extends Command
         // provider and is scripting the cleanup of several.
         //
         // Asked BEFORE eligibility, which costs one prompt on an order that then turns out not to be a
-        // claim — and buys the thing that matters more: exactly ONE place decides, and it decides from the
+        // claim — and buys the thing that matters more: exactly one place decides, and it decides from the
         // row as it stands after the operator has answered. A version that checked here as well read the
         // caller's copy of the row, so its second look could never disagree with its first: a branch that
         // reads as protection, cannot be entered, and would have to be covered by a test that proves
@@ -86,7 +86,7 @@ final class ReleaseAbandonedClaimCommand extends Command
         }
 
         if (! $engine->releaseAbandonedClaim($order)) {
-            // `fresh()`, not `refresh()`: the latter is findOrFail underneath and THROWS when the row is
+            // `fresh()`, not `refresh()`: the latter is findOrFail underneath and throws when the row is
             // gone. On the one command whose job is to explain a refusal clearly, a stack trace is the
             // worst possible answer — and a vanished row is a refusal like any other, not a crash.
             $this->components->error($this->whyNot($order->fresh() ?? $order));

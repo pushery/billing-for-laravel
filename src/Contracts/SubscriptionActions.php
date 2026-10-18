@@ -33,7 +33,7 @@ interface SubscriptionActions
     /**
      * Cancel at period end (enters the grace period). The optional survey carries the owner's reason for
      * leaving; a driver passes it to the provider's native cancellation-feedback field where one exists. It
-     * is purely informational — a cancellation NEVER depends on it, and a null survey is the normal case.
+     * is purely informational — a cancellation never depends on it, and a null survey is the normal case.
      */
     public function cancel(Model $billable, ?CancellationSurvey $survey = null, ?MerchantScope $merchant = null, ?string $type = null): void;
 

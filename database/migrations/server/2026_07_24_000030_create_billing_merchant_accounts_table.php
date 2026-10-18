@@ -10,7 +10,7 @@ use Pushery\Billing\Support\BillingSchema;
 /**
  * A merchant's account at the payment provider, and the capabilities the provider has confirmed for it.
  *
- * The capability flags are CACHED here rather than read live, because they arrive asynchronously — the
+ * The capability flags are cached here rather than read live, because they arrive asynchronously — the
  * provider announces a finished verification by webhook, minutes or days after the merchant finished the
  * form. Reading them live on every routed charge would put a network call on the money path and still not
  * be current. Cached and refreshed by webhook, they are at worst stale, and stale is safe here: all three
@@ -27,7 +27,7 @@ return new class extends Migration
     {
         Schema::create('billing_merchant_accounts', function (Blueprint $table): void {
             $table->id();
-            // The morph is NOT nullable, unlike the one on a retained invoice, because this row does not
+            // The morph is not nullable, unlike the one on a retained invoice, because this row does not
             // outlive its merchant: a provider account reference is an operational key, not a financial
             // record, so the merchant axis of the erasure map purges it outright.
             BillingSchema::morphs($table, 'merchant');

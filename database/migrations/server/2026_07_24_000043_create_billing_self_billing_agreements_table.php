@@ -10,13 +10,13 @@ use Pushery\Billing\Support\BillingSchema;
 /**
  * A creator's standing agreement that the platform may settle them by self-billing.
  *
- * A self-billed document is only an invoice if both sides agreed to the arrangement BEFORE it — a document
+ * A self-billed document is only an invoice if both sides agreed to the arrangement before it — a document
  * issued without that agreement is not an invoice, carries no input-tax effect, and cannot be healed after
  * the fact; the only cure is re-issuing once the agreement exists. So the agreement is a real record with a
  * real date, not a checkbox in a UI: a job or a console command that never saw the UI must still be refused.
  *
- * It is a FRAMEWORK agreement — one record covers every future settlement, not one per transaction — and it
- * is versioned by appending, never by editing. A changed clause is a NEW row; the old one stays exactly as
+ * It is a framework agreement — one record covers every future settlement, not one per transaction — and it
+ * is versioned by appending, never by editing. A changed clause is a new row; the old one stays exactly as
  * it stood, because it is the evidence for which wording was in force when a past document was produced.
  * `accepted_at` is the ex-ante anchor a document is checked against; it is emphatically not `created_at`,
  * which only records when the row was written. `revoked_at` terminates the arrangement going forward and
@@ -35,7 +35,7 @@ return new class extends Migration
     {
         Schema::create('billing_self_billing_agreements', function (Blueprint $table): void {
             $table->id();
-            // The creator IS the merchant, and the morph follows the merchant erasure axis exactly —
+            // The creator is the merchant, and the morph follows the merchant erasure axis exactly —
             // merchant_type/merchant_id/merchant_erased_at — so the eraser can retain-and-stamp this row
             // rather than delete it, the same as the tax standing and the routed charge.
             BillingSchema::nullableMorphs($table, 'merchant');
@@ -49,7 +49,7 @@ return new class extends Migration
             // The proof protocol: what was shown, in which language, confirmed from which source.
             $table->json('evidence')->nullable();
             // Termination of the framework going forward. Null is a live agreement; a set value sends every
-            // LATER supply to the fallback lane while leaving earlier documents untouched.
+            // later supply to the fallback lane while leaving earlier documents untouched.
             $table->timestamp('revoked_at')->nullable();
 
             $table->timestamps();

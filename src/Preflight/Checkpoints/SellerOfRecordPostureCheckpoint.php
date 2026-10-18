@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\CheckpointOutcome;
  *
  * The posture decides who the buyer contracts with and who owes the VAT, and the resolver refuses one that
  * is unknown, outside the opt-in whitelist, or that names the merchant for an electronic supply without a
- * genuine rebuttal. Every one of those refusals happens on the FIRST routed sale otherwise — mid-checkout,
+ * genuine rebuttal. Every one of those refusals happens on the first routed sale otherwise — mid-checkout,
  * with money already in flight. This asks the resolver the same question before anything is sold.
  *
  * It asks through the bound resolver rather than re-reading the config, so a consumer who replaced the

@@ -20,10 +20,10 @@ use RuntimeException;
  * Sends the dunning notice on a failed payment. The effect itself is pure — resolve the owner, notify.
  * The once-per-invoice guarantee lives in the delivery machinery (HandleWebhookEffect claims, runs and
  * marks in one transaction), which is what lets a failed send be retried instead of being lost: with
- * "notified" recorded BEFORE sending, an SMTP hiccup would mean the notice was never sent and never would
+ * "notified" recorded before sending, an SMTP hiccup would mean the notice was never sent and never would
  * be.
  *
- * It dedups on the INVOICE, not the delivery: a provider mints a fresh event id for every retry of the
+ * It dedups on the invoice, not the delivery: a provider mints a fresh event id for every retry of the
  * same failing invoice, so deduping on the event id would mail the customer once per retry.
  */
 final readonly class SendDunningNotice implements DedupesOnReference
@@ -45,7 +45,7 @@ final readonly class SendDunningNotice implements DedupesOnReference
 
         $this->notifier->paymentFailed($owner, $event->amount, $event->reference);
 
-        // The toast rides with the mail, under the SAME once-per-invoice claim — never on its own schedule.
+        // The toast rides with the mail, under the same once-per-invoice claim — never on its own schedule.
         // Dunning is the one message a customer must not receive twice, and a second delivery path with its
         // own dedup would be a second chance to get that wrong. Both leave only once the run commits.
         $this->toasts->notify($owner, 'billing::account.toast.payment_failed', ToastLevel::Danger);
@@ -57,7 +57,7 @@ final readonly class SendDunningNotice implements DedupesOnReference
         ], AuditSource::Webhook);
     }
 
-    /** Once per failing INVOICE — never once per provider retry of it. */
+    /** Once per failing invoice — never once per provider retry of it. */
     public function dedupReference(BillingDomainEvent $event): string
     {
         if (! $event instanceof PaymentFailed) {

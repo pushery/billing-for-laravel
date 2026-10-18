@@ -18,13 +18,13 @@ use RuntimeException;
  * goods bought for 400 carried tax on 100. Correcting on the price would hand back five times what was ever
  * paid — and it would look like an ordinary refund the whole way through.
  *
- * ## A partial refund is NOT proportional, and this is the part worth reading twice
+ * ## A partial refund is not proportional, and this is the part worth reading twice
  *
  * The instinct is to reduce the margin by the refunded share: refund a fifth of the price, correct a fifth
  * of the margin. That is wrong, and it is wrong in the direction that under-corrects.
  *
  * The margin is the sale price less what the seller paid for the goods. A partial refund lowers the sale
- * price; it does not lower what the seller paid, which already happened. So the margin falls by the FULL
+ * price; it does not lower what the seller paid, which already happened. So the margin falls by the full
  * refunded amount, not by a share of it — until it reaches zero, at which point the seller is selling at or
  * below cost and there is no margin left to tax.
  *

@@ -37,7 +37,7 @@ use Pushery\Billing\Contracts\WebhookVerifier;
  * driver sets its `webhookUrl` on payments and on nothing else. Anything else is refused before it is
  * recorded, so a made-up id writes no row of its own.
  *
- * Fetching back is the WEAKER defense: it lets anybody who can reach the endpoint drive processing and API
+ * Fetching back is the weaker defense: it lets anybody who can reach the endpoint drive processing and API
  * calls against the account by posting real ids. A signature throws a forged event away before anything
  * happens, which is why a request that carries one is never let through on its shape.
  */
@@ -117,7 +117,7 @@ final readonly class MollieWebhookVerifier implements WebhookVerifier
     /**
      * The configured signing secrets, as a list.
      *
-     * A list rather than one string because rotation is a period where BOTH are live. Without that, an
+     * A list rather than one string because rotation is a period where both are live. Without that, an
      * operator has to choose between rotating a secret and losing webhooks, and what they choose is not
      * rotating.
      *
@@ -127,14 +127,14 @@ final readonly class MollieWebhookVerifier implements WebhookVerifier
     {
         $configured = $this->secrets ?? Config::get('billing.mollie.webhook_secret');
 
-        // A COMMA-SEPARATED string is the only rotation an env file can express, and env is the channel
+        // A comma-separated string is the only rotation an env file can express, and env is the channel
         // this config actually reads (`config/billing.php` calls `env()` for one string). So the array
         // branch below was reachable only by hand-editing the published config, and the rotation this
         // docblock promises was, through the normal channel, not reachable at all.
         //
         // Worse than absent: the obvious attempt broke everything. Mollie's own package documents a
         // comma-separated list, so an operator who knows that writes `old,new` here -- and before this
-        // split that became ONE secret literally named "old,new", matching no signature Mollie ever
+        // split that became one secret literally named "old,new", matching no signature Mollie ever
         // produces. Every webhook was then refused, starting at the moment of rotation, under time
         // pressure. Splitting hands both halves to the same normalization the array branch already had.
         if (is_string($configured)) {

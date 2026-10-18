@@ -24,11 +24,11 @@ use Pushery\Billing\ValueObjects\TaxContext;
 final readonly class EuOssTaxCalculator implements TaxCalculator
 {
     /*
-     * THE RATES LIVE IN ONE PLACE: the shipped snapshot, loaded through {@see ShippedTaxRates} once per boot.
+     * The rates live in one place: the shipped snapshot, loaded through {@see ShippedTaxRates} once per boot.
      *
      * The file carries a header and a digest whose stated purpose is the edit nobody sees — a digit changed
      * inside `vendor/`, invisible in every diff, repricing every invoice to a country — and the published
-     * documentation tells the reader that pricing STOPS when that digest disagrees. A copy of the rates held
+     * documentation tells the reader that pricing stops when that digest disagrees. A copy of the rates held
      * here as a `private const array` would be a money path that never goes near that guard: the guard real,
      * its test green, and every price taken from the copy.
      *
@@ -39,8 +39,8 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
      */
 
     /**
-     * The assigned ISO 3166-1 alpha-2 codes that are NOT in the rate table above — i.e. every country
-     * outside the EU VAT area. Membership here is what makes a zero rate a DELIBERATE answer ("this supply
+     * The assigned ISO 3166-1 alpha-2 codes that are not in the rate table above — i.e. every country
+     * outside the EU VAT area. Membership here is what makes a zero rate a deliberate answer ("this supply
      * is outside the EU VAT area") instead of a fallthrough that also swallows broken codes.
      *
      * This is an identity list, not a market list: it says a code denotes a real country, nothing about
@@ -68,7 +68,7 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
 
     /**
      * @param  ?string  $sellerCountry  the seller's ISO country (config billing.company.country), for the cross-border test
-     * @param  ?TaxRateMatrix  $matrix  a configured rate table keyed by country AND supply category; absent
+     * @param  ?TaxRateMatrix  $matrix  a configured rate table keyed by country and supply category; absent
      *                                  by default, and absent means the built-in standard-rate table answers
      *                                  exactly as it always did
      */
@@ -78,13 +78,13 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
         /**
          * The shipped, digest-checked rate table this calculator prices from.
          *
-         * Nullable for the convenience of a caller with no container — and null does NOT mean "fall back to a
+         * Nullable for the convenience of a caller with no container — and null does not mean "fall back to a
          * second copy of the numbers", because there is no second copy any more. It means "load the same file
          * the singleton would have handed you", so every path ends at one table behind one digest.
          */
         ?ShippedTaxRates $shipped = null,
         /**
-         * The operator's rate HISTORY as dated intervals, where they configured one.
+         * The operator's rate history as dated intervals, where they configured one.
          *
          * Null on almost every installation, and inert when it is: the tax point on the context is then
          * carried and ignored, so a caller that started supplying one sees the answer it always got.
@@ -117,7 +117,7 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
      *
      * Exposed for exactly one caller: the conformity probe that asks whether these numbers still match what
      * the publisher says. The table stays private — a reader could otherwise price a supply from it directly
-     * and bypass every refusal `calculate()` makes — and this returns a converted COPY, so nothing can reach
+     * and bypass every refusal `calculate()` makes — and this returns a converted copy, so nothing can reach
      * in and edit the constant that answers on every invoice.
      *
      * @return array<string, int>
@@ -158,17 +158,17 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
         }
 
         // The configured matrix answers first where it covers the country, because it is the only source
-        // that knows the SUPPLY as well as the destination. Where it does not cover a country the built-in
+        // that knows the supply as well as the destination. Where it does not cover a country the built-in
         // table still does — a partial matrix must not turn a country the calculator has always priced into
         // an unknown one, which is a refusal rather than a smaller table.
-        // The DATED table answers first, and only when both halves are present: the caller knows when the
+        // The dated table answers first, and only when both halves are present: the caller knows when the
         // supply was taxed, and the operator has taken responsibility for that country by putting it in the
         // history. The law binds the rate to the tax point rather than to the moment of lookup (Art. 93 VAT
         // Directive), so where both are known there is no other defensible answer.
         //
-        // A country the history does NOT carry falls through, for the same reason a partial matrix falls
+        // A country the history does not carry falls through, for the same reason a partial matrix falls
         // through: opting into intervals for one member state says nothing about the others, and turning
-        // them into refusals would be a smaller table read as an unknown one. Within a country it DOES
+        // them into refusals would be a smaller table read as an unknown one. Within a country it does
         // carry, a tax point in a gap is a refusal — `intervalAt()` throws rather than reaching for the
         // nearest rate, because an invention with a date on it cannot be told apart from a fact.
         $rateBps = $this->history instanceof DatedTaxRateTable
@@ -181,7 +181,7 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
 
         // "No rate for this code" has two causes that produce the same number but mean opposite things: a
         // supply outside the EU VAT area is correctly zero-rated, a broken code is a data defect that would
-        // under-declare VAT. They are separated BEFORE anything can return a zero — including the reverse
+        // under-declare VAT. They are separated before anything can return a zero — including the reverse
         // charge below, which would otherwise zero-rate an unrecognized country on a validated VAT id.
         if ($rateBps === null && $coverage === RateCoverage::Covered) {
             throw UnknownTaxCountry::coveredWithoutRate($country);
@@ -191,8 +191,8 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
             throw UnknownTaxCountry::code($context->countryCode);
         }
 
-        // The reverse charge is a CROSS-BORDER intra-EU mechanism (Art. 196): a validated business in a
-        // DIFFERENT EU country than the seller self-accounts for the VAT (0%). A DOMESTIC (same-country) B2B
+        // The reverse charge is a cross-border intra-EU mechanism (Art. 196): a validated business in a
+        // different EU country than the seller self-accounts for the VAT (0%). A domestic (same-country) B2B
         // supply owes the normal domestic VAT — zero-rating it would silently under-charge every home-country
         // business. When the seller country is unknown, we cannot prove it is cross-border, so we do not
         // zero-rate (never under-charge).

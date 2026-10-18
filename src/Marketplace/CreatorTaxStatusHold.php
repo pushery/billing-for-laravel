@@ -23,7 +23,7 @@ use Throwable;
  * Assume the opposite and the document understates a real liability and forfeits a deduction. The two
  * errors point in opposite directions, so neither default is the conservative one and holding is.
  *
- * BOTH locks, not one. Holding only the payout would be the more dangerous half-fix: buyers' money would
+ * Both locks, not one. Holding only the payout would be the more dangerous half-fix: buyers' money would
  * keep arriving, each transaction creating an obligation to settle that cannot be settled without a
  * standing — a growing backlog instead of a stop, and every day of it harder to unwind.
  *
@@ -111,7 +111,7 @@ final readonly class CreatorTaxStatusHold
         }
 
         // The rollout date, checked before the switches and only outside such a profile. The switches say
-        // WHAT is held; this says from when. With no date the answer is "not yet" -- deliberately, because
+        // what is held; this says from when. With no date the answer is "not yet" -- deliberately, because
         // the day this starts is the day every merchant who has not declared stops selling, and on an
         // established marketplace that is a decision with a date on it rather than a flag flip.
         $from = $this->enforcedFrom();

@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 
 /**
- * An onboarding implementation that can ASK the provider what a merchant's capabilities are right now.
+ * An onboarding implementation that can ask the provider what a merchant's capabilities are right now.
  *
  * ## What was missing
  *
@@ -30,8 +30,8 @@ use Pushery\Billing\ValueObjects\MerchantAccountReference;
  *
  * ## It reports. It does not decide.
  *
- * The answer goes through the same single writer the webhook uses, so the invariant that only a PROVIDER
- * REPORT lifts a flag stays intact — and a deauthorization still overrides every flag the provider raises,
+ * The answer goes through the same single writer the webhook uses, so the invariant that only a provider
+ * report lifts a flag stays intact — and a deauthorization still overrides every flag the provider raises,
  * because that is the platform's own position rather than the provider's.
  */
 interface ReportsMerchantCapabilities

@@ -12,7 +12,7 @@ use Pushery\Billing\Contracts\IdentifiesCustomer;
  * ## Why this is its own event beside PaymentSucceeded
  *
  * The same provider message already maps to `PaymentSucceeded` (dunning recovery reads it) and to an
- * invoice snapshot (the document is persisted). Both are about the PLATFORM's own relationship with the
+ * invoice snapshot (the document is persisted). Both are about the platform's own relationship with the
  * buyer, and both fire for every payment there is.
  *
  * This one exists to be narrow. Its handler reaches the provider, so an effect hung on `PaymentSucceeded`

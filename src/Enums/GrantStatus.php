@@ -7,7 +7,7 @@ namespace Pushery\Billing\Enums;
 /**
  * Whether a grant still grants.
  *
- * There is no soft delete here, and that is the point: a withdrawn grant is REVOKED, with a reason and a
+ * There is no soft delete here, and that is the point: a withdrawn grant is revoked, with a reason and a
  * date, because "why can this person no longer read what they bought" is a question somebody will ask and a
  * deleted row cannot answer. Retention and the document trail are separate concerns with their own rules.
  */

@@ -123,4 +123,29 @@ return [
         'cta' => 'Confirmar o pagamento',
     ],
 
+    'direct_debit_announced' => [
+        'subject' => 'O teu próximo débito direto',
+        'intro' => ':payee vai cobrar :amount na tua conta por débito direto SEPA a :date.',
+        'recurring' => 'Depois disso, o mesmo valor é cobrado em cada data de vencimento da tua subscrição. Se o valor mudar, serás avisado antes da cobrança.',
+        'account' => 'Conta terminada em :account.',
+        'mandate' => 'Referência do mandato: :reference.',
+        'creditor' => 'Identificador do credor: :creditor.',
+        'outro' => 'Não tens de fazer nada.',
+        'cta' => 'Ver os teus métodos de pagamento',
+    ],
+
+    'cancellation_received' => [
+        'subject' => 'Recebemos o teu cancelamento',
+        'intro' => 'Confirmamos o cancelamento que declaraste, com todo o seu conteúdo e a data e hora em que nos chegou.',
+        'outro' => 'Guarda este e-mail. É o teu comprovativo do cancelamento e do momento em que nos chegou.',
+        'cta' => 'Ver o teu cancelamento',
+    ],
+
+    'withdrawal_received' => [
+        'subject' => 'Recebemos a tua livre resolução',
+        'intro' => 'Confirmamos a livre resolução que declaraste, com todo o seu conteúdo e a data e hora em que nos chegou.',
+        'outro' => 'Guarda este e-mail. É o teu comprovativo da livre resolução e do momento em que nos chegou.',
+        'cta' => 'Ver a tua livre resolução',
+    ],
+
 ];

@@ -39,7 +39,7 @@ use Throwable;
  *
  * ## Two clocks, and only one of them can be stopped
  *
- * The first turns the buyer's silence into consent after a while, and a dispute STOPS it — letting it run
+ * The first turns the buyer's silence into consent after a while, and a dispute stops it — letting it run
  * would auto-release money the buyer has actively objected to, which is the single outcome the arrangement
  * exists to prevent. The second cannot be stopped by anything, because the provider will not delay a payout
  * forever: past its limit the money goes out regardless, so a decision has to exist before then or the
@@ -73,7 +73,7 @@ final readonly class BuyerProtectionClock
          * How the money actually reaches the seller when a hold is released.
          *
          * Nullable because a driver may not move shares at all — a destination-charge installation never
-         * opens a hold in the first place, so it never needs this. Where it IS null and a release happens
+         * opens a hold in the first place, so it never needs this. Where it is null and a release happens
          * anyway, the state stops at `ReleasePending`: the platform has decided, the money has not moved,
          * and saying so is the honest outcome. Marking it `Released` would record a payment nobody made.
          */
@@ -124,7 +124,7 @@ final readonly class BuyerProtectionClock
             'merchant_id' => $this->merchantKey($merchant),
             'currency' => $charge->currency,
             'charge_minor' => $charge->minorUnits,
-            // The commission, taken off at the moment the hold OPENS rather than only when it is released.
+            // The commission, taken off at the moment the hold opens rather than only when it is released.
             //
             // There is no default of zero here, because a zero would be quiet twice over. A release pays out
             // `charge_minor - platform_fee_minor`, so every released hold would hand the merchant the buyer's
@@ -169,7 +169,7 @@ final readonly class BuyerProtectionClock
     }
 
     /**
-     * The buyer says something is wrong, which STOPS the confirmation clock.
+     * The buyer says something is wrong, which stops the confirmation clock.
      *
      * A dispute raised on the last day would otherwise be overtaken by an auto-release hours later, and the
      * objection would have changed nothing.
@@ -216,7 +216,7 @@ final readonly class BuyerProtectionClock
      * Move every hold whose time has come, and return what changed.
      *
      * Two passes rather than one, because the two clocks answer different questions and a hold can be past
-     * both. The decision pass runs LAST so that a hold which is both unconfirmed and out of time settles
+     * both. The decision pass runs last so that a hold which is both unconfirmed and out of time settles
      * rather than merely becoming due — being past the second deadline is the stronger fact.
      *
      * @return list<BuyerProtectionHold>
@@ -321,7 +321,7 @@ final readonly class BuyerProtectionClock
      */
     private function settleAsRelease(BuyerProtectionHold $hold): ?BuyerProtectionHold
     {
-        // RELEASE PENDING, before the money moves. The state existed and nothing ever set it, and this is
+        // Release pending, before the money moves. The state existed and nothing ever set it, and this is
         // the moment it describes: the platform has decided, the provider has not confirmed. A row that went
         // straight to `Released` would claim a payment that had not happened yet — and if the transfer
         // throws, that claim is what an operator would be left reading.
@@ -342,7 +342,7 @@ final readonly class BuyerProtectionClock
         $moved = $this->payOut($hold);
 
         // `ReleasePending` is left behind only when the transfer actually happened — or when there was
-        // nothing to transfer. If `payOut()` THROWS, the state stays pending and the exception travels: that
+        // nothing to transfer. If `payOut()` throws, the state stays pending and the exception travels: that
         // is the one case the state was declared for and never reached, and it is exactly the case an
         // operator has to see. A row that said `Released` after a failed transfer would be a payment claimed
         // and not made.
@@ -463,13 +463,13 @@ final readonly class BuyerProtectionClock
     /**
      * Instruct the provider to move the seller's share.
      *
-     * Keyed on the CHARGE row, the same idempotency rule the immediate lane already documents — so a sweep
+     * Keyed on the charge row, the same idempotency rule the immediate lane already documents — so a sweep
      * that runs twice over one hold instructs one transfer. The key has to be the sale rather than the hold
      * because the two lanes must not be able to pay for the same sale twice between them.
      */
     private function payOut(BuyerProtectionHold $hold): bool
     {
-        // Nothing to move, so the release is COMPLETE rather than stuck. An unrouted sale has no merchant to
+        // Nothing to move, so the release is complete rather than stuck. An unrouted sale has no merchant to
         // pay: the platform kept the money and the protection period simply ended. Reporting that as
         // "decided but not paid" would leave a hold hanging forever over a payment nobody was owed.
         if ($hold->merchant_type === null || $hold->merchant_id === null) {
@@ -497,7 +497,7 @@ final readonly class BuyerProtectionClock
 
         $destination = $this->accounts->accountFor($merchant);
 
-        // A merchant with no account at the provider. There is nobody to transfer TO, and the hold must not
+        // A merchant with no account at the provider. There is nobody to transfer to, and the hold must not
         // hang on it — the money is the platform's problem to resolve, not a state machine's.
         if (! $destination instanceof MerchantAccountReference) {
             return true;
@@ -506,7 +506,7 @@ final readonly class BuyerProtectionClock
         $charge = MerchantCharge::model()::query()->where('charge_reference', $hold->charge_reference)->first();
 
         // Moved already, by the retry of a failed transfer or by the release of a withheld share. Both move the
-        // SALE, under its own key, and a hold released after them must not instruct a second transfer: the key
+        // sale, under its own key, and a hold released after them must not instruct a second transfer: the key
         // only protects inside the provider's replay window, and a sale is paid once.
         if ($charge instanceof MerchantCharge && $charge->settlement_state !== SettlementState::Pending) {
             return true;
@@ -619,7 +619,7 @@ final readonly class BuyerProtectionClock
             return null;
         }
 
-        // The one outcome that NEEDS somebody to hear it: the package has deliberately not decided, and if
+        // The one outcome that needs somebody to hear it: the package has deliberately not decided, and if
         // nothing is listening the hold sits in that state indefinitely with a buyer's money in it.
         $this->announce(new BuyerProtectionResolutionRequired(
             $hold->charge_reference,

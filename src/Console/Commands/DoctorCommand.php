@@ -39,7 +39,9 @@ use Pushery\Billing\Contracts\SuspensionNotifier;
 use Pushery\Billing\Contracts\TaxDisclosurePolicy;
 use Pushery\Billing\Contracts\TrialNotifier;
 use Pushery\Billing\Contracts\UsageNotifier;
+use Pushery\Billing\Drivers\Stripe\StripeMarketplaceWebhookEventMapper;
 use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
+use Pushery\Billing\Drivers\Stripe\StripeWebhookEventMapper;
 use Pushery\Billing\Enums\BuyerAudience;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Enums\TaxArchetype;
@@ -61,6 +63,7 @@ use Pushery\Billing\Preflight\Profiles\GermanSellerStanding;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\BillingSchema;
 use Pushery\Billing\Support\NoBusinessBuyers;
+use Pushery\Billing\Support\PaymentsModeSchema;
 use Pushery\Billing\Support\TableLookup;
 use Pushery\Billing\Tax\DatabaseExchangeRateSource;
 use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
@@ -76,8 +79,8 @@ use Throwable;
  * Checks that the Stripe API version the package is pinned to matches what the provider will actually render
  * webhook payloads in — because the pin alone is not enough.
  *
- * The package pins the version it SENDS on outbound calls (see StripeServiceProvider). But a webhook payload
- * is rendered in the version of the ENDPOINT that receives it (or, when the endpoint has none, the account's
+ * The package pins the version it sends on outbound calls (see StripeServiceProvider). But a webhook payload
+ * is rendered in the version of the endpoint that receives it (or, when the endpoint has none, the account's
  * default) — a setting that lives at Stripe, not in this codebase. So an endpoint pinned to an older version,
  * or left on the account default while the account drifts, delivers payloads in a shape the mapper was not
  * written for. The mapper reads fields defensively, so the failure is silent: a real billing event just
@@ -171,7 +174,7 @@ final class DoctorCommand extends Command
             return self::SUCCESS;
         }
 
-        // One running verdict rather than a code recomposed at each exit. An exit assembled from a SUBSET of
+        // One running verdict rather than a code recomposed at each exit. An exit assembled from a subset of
         // the findings — the Stripe-unreachable one, say — would fail the command on an aged rate table while
         // Stripe answers and pass it while Stripe is down. That is the direction that hides: a green doctor
         // during an outage reads as "the tax data is fine".
@@ -185,7 +188,11 @@ final class DoctorCommand extends Command
 
         // Before the first `migrate` no table exists, and that is when this command is run to check what has to
         // be right first. The checks that read a table are skipped then, so the run reaches the ones behind them.
-        $migrated = ! $this->reportMissingTables();
+        //
+        // Payments-only mode has the two tables PaymentsModeSchema names, and the checks that read the tables of a
+        // SaaS billing have nothing to read there.
+        $paymentsOnly = $drivers->paymentsOnly();
+        $migrated = ! $this->reportMissingTables($paymentsOnly);
 
         $failing = $this->reportRateTableAge($config) || $failing || ! $migrated;
 
@@ -193,7 +200,7 @@ final class DoctorCommand extends Command
 
         $this->reportDistanceSaleThresholdAge($thresholds);
 
-        if ($migrated) {
+        if ($migrated && ! $paymentsOnly) {
             $failing = $this->reportExchangeRateSeriesAge($config) || $failing;
         }
 
@@ -218,7 +225,7 @@ final class DoctorCommand extends Command
         // Folded into $failing rather than carried alongside it: verdict() exists precisely because a
         // check held separately has to be remembered at every exit, and forgetting one is invisible —
         // the command still prints the warning, it just stops counting it.
-        if ($migrated) {
+        if ($migrated && ! $paymentsOnly) {
             $failing = $this->reportStrandedOrders() || $failing;
 
             $failing = $this->reportUnmovedMerchantShares($unmoved) || $failing;
@@ -253,15 +260,24 @@ final class DoctorCommand extends Command
         }
 
         $drift = 0;
+        $gaps = 0;
         $checked = 0;
 
         foreach ($endpoints->data as $endpoint) {
             $checked++;
             $version = is_string($endpoint->api_version) ? $endpoint->api_version : null;
             $url = $endpoint->url !== '' ? $endpoint->url : $endpoint->id;
+            $missing = $this->eventTypesMissingAt($config, $url, $endpoint->offsetExists('enabled_events') ? $endpoint->enabled_events : null);
+
+            if ($missing !== []) {
+                // A selection without one of these loses what hangs off it, and nothing else says so: an event that
+                // never arrives produces nothing at all.
+                $this->components->error("{$url} does not receive ".count($missing).' event type(s) the package handles: '.implode(', ', $missing).'.');
+                $gaps++;
+            }
 
             if ($version === null) {
-                // No pinned version on the endpoint: its payloads follow the ACCOUNT's default version, which
+                // No pinned version on the endpoint: its payloads follow the account's default version, which
                 // can move under you. Pin it to match, or a later account-wide bump silently changes the shape.
                 $this->components->warn("{$url} has no pinned version; it follows the account default. Pin it to {$pinned}.");
                 $drift++;
@@ -276,7 +292,9 @@ final class DoctorCommand extends Command
                 continue;
             }
 
-            $this->components->info("{$url} matches.");
+            if ($missing === []) {
+                $this->components->info("{$url} matches.");
+            }
         }
 
         if ($checked === 0) {
@@ -285,9 +303,17 @@ final class DoctorCommand extends Command
             return $this->verdict($failing);
         }
 
+        if ($gaps > 0) {
+            $this->components->error("{$gaps} of {$checked} webhook endpoint(s) miss event types the package handles.");
+        }
+
         if ($drift > 0) {
             $this->components->error("{$drift} of {$checked} webhook endpoint(s) do not match the pinned version.");
 
+            return $this->verdict(true);
+        }
+
+        if ($gaps > 0) {
             return $this->verdict(true);
         }
 
@@ -297,23 +323,61 @@ final class DoctorCommand extends Command
     }
 
     /**
+     * The event types an endpoint of this package does not receive, in the order of the list it is held against.
+     *
+     * The endpoint's address says which list that is: the platform's own path, or the path of the connected
+     * accounts. An endpoint at any other address is not this package's to judge, one subscribed to every event
+     * misses nothing, and an endpoint that does not say which events it receives makes no claim to check.
+     *
+     * @return list<string>
+     */
+    private function eventTypesMissingAt(Repository $config, string $url, mixed $enabled): array
+    {
+        if (! is_array($enabled) || in_array('*', $enabled, true)) {
+            return [];
+        }
+
+        $path = trim((string) parse_url($url, PHP_URL_PATH), '/');
+        $platform = $config->get('billing.webhook_path');
+        $marketplace = $config->get('billing.marketplace.webhook.path');
+        $platform = trim(is_string($platform) ? $platform : 'billing/webhook', '/');
+        $marketplace = trim(is_string($marketplace) ? $marketplace : 'billing/webhook/marketplace', '/');
+
+        $expected = match ($path) {
+            $platform => StripeWebhookEventMapper::EVENT_TYPES,
+            $marketplace => StripeMarketplaceWebhookEventMapper::EVENT_TYPES,
+            default => [],
+        };
+
+        $named = [];
+
+        foreach ($enabled as $type) {
+            if (is_string($type)) {
+                $named[] = $type;
+            }
+        }
+
+        return array_values(array_diff($expected, $named));
+    }
+
+    /**
      * A provider key from the wrong world.
      *
-     * The expensive direction is a TEST key in production, and it is expensive because everything works:
+     * The expensive direction is a test key in production, and it is expensive because everything works:
      * checkouts complete, webhooks arrive, invoices are issued, screens look right. No money moves. Nothing
      * throws, so the first report comes from the bank reconciliation, days later.
      *
      * The other direction is cheaper and still worth saying: a live key outside production charges real
      * cards from a staging environment.
      *
-     * WARNED, NOT FAILED, and that is a decision rather than timidity. A test key in a production-like
+     * Warned, not failed, and that is a decision rather than timidity. A test key in a production-like
      * environment is legitimate more often than not -- an acceptance system, a demo tenant, a sandbox
      * deployment that is `production` to Laravel and a playground to everyone else. A check that refuses
      * those gets switched off, and then it protects nothing on the day it would have mattered. The same
      * reasoning keeps it out of the boot path: this is a question for whoever is looking, not a reason to
      * stop an application from starting.
      *
-     * Only the ACTIVE driver's key is read. Judging a key the install does not use would report a finding
+     * Only the active driver's key is read. Judging a key the install does not use would report a finding
      * nobody can act on -- and a package configured for Mollie routinely carries a stale Stripe key.
      */
     private function reportCredentialEnvironment(Repository $config): void
@@ -404,7 +468,7 @@ final class DoctorCommand extends Command
      * the provider reads a 500, and `billing.webhooks.tries` does nothing. The connection is
      * `billing.webhooks.connection`, or the application's default when that is null.
      *
-     * WARNED, NOT FAILED: a local or test environment runs `sync` on purpose, and only its operator knows
+     * Warned, not failed: a local or test environment runs `sync` on purpose, and only its operator knows
      * which environment this is.
      */
     private function reportSynchronousWebhookEffects(Repository $config): void
@@ -429,7 +493,7 @@ final class DoctorCommand extends Command
      * whose VAT id a register confirmed is still named by that id and its country. A business customer
      * without one is named by nothing, which is not a document a business can file.
      *
-     * WARNED, NOT FAILED: an install that only sells to consumers is right to bind nothing, and only its
+     * Warned, not failed: an install that only sells to consumers is right to bind nothing, and only its
      * operator knows which install this is. A provider that issues its own documents names the buyer itself,
      * so the question is only asked where the package raises the invoice.
      */
@@ -545,7 +609,7 @@ final class DoctorCommand extends Command
     /**
      * Report every work an active consumer-rights profile does not actually cover.
      *
-     * The withdrawal gate needs TWO conditions and reads like it needs one. `billing.consumer_rights.profile`
+     * The withdrawal gate needs two conditions and reads like it needs one. `billing.consumer_rights.profile`
      * arms it; a **classified archetype** on the work is what gives it something to act on. `ContentGrants`
      * returns on a null type before the profile is ever read, so a work nobody classified is provided with no
      * consent recorded — no exception, no log line, and the same profile refusing the purchase next to it.
@@ -738,13 +802,13 @@ final class DoctorCommand extends Command
      *
      * There are two ways to make this package answer for a jurisdiction, and they do not talk to each other.
      * One is `billing.tax_profile`. The other is binding your own implementation of a contract in the
-     * container. Set the first and forget the second and the install is a HYBRID: a foreign profile deciding
+     * container. Set the first and forget the second and the install is a hybrid: a foreign profile deciding
      * some questions while the shipped country's reading decides the rest — a valid-looking object with two
      * jurisdictions inside it, and nothing anywhere saying so.
      *
      * That is the failure this reports. Not "you must replace these" — the extension path is deliberately
      * the developer's, and inheriting a reading can be a perfectly deliberate choice. The failure is
-     * inheriting one WITHOUT KNOWING, because a silent hybrid produces documents that are wrong in a way
+     * inheriting one without knowing, because a silent hybrid produces documents that are wrong in a way
      * only a specialist reads.
      *
      * Phrased against the shipped default rather than against a country name, so it keeps working when
@@ -753,7 +817,7 @@ final class DoctorCommand extends Command
      */
     private function reportProfileInheritance(): void
     {
-        // Read from the RESOLVED profile, never from the config string. `billing.tax_profile` only accepts a
+        // Read from the resolved profile, never from the config string. `billing.tax_profile` only accepts a
         // key the package ships — an unknown one is refused outright — so a foreign jurisdiction never arrives
         // that way. It arrives as a container binding of `JurisdictionProfile`, which takes precedence over
         // the config entirely. A check written against the string would have been watching a door nobody uses.
@@ -822,15 +886,21 @@ final class DoctorCommand extends Command
      * query exception: the checks behind it never speak, and the output names a table where it should name
      * the step that was skipped.
      *
+     * In payments-only mode the tables are the two the mode creates ({@see PaymentsModeSchema}).
+     *
      * @return bool whether a table is missing
      */
-    private function reportMissingTables(): bool
+    private function reportMissingTables(bool $paymentsOnly): bool
     {
         $missing = [];
 
-        foreach ([Order::resolve(), MerchantCharge::resolve(), ExchangeRateRecord::resolve(), Subscription::resolve()] as $model) {
-            if (! TableLookup::exists($model->getTable(), $model->getConnectionName())) {
-                $missing[] = $model->getTable();
+        if ($paymentsOnly) {
+            $missing = array_values(array_filter(PaymentsModeSchema::TABLES, static fn (string $table): bool => ! TableLookup::exists($table)));
+        } else {
+            foreach ([Order::resolve(), MerchantCharge::resolve(), ExchangeRateRecord::resolve(), Subscription::resolve()] as $model) {
+                if (! TableLookup::exists($model->getTable(), $model->getConnectionName())) {
+                    $missing[] = $model->getTable();
+                }
             }
         }
 
@@ -875,12 +945,12 @@ final class DoctorCommand extends Command
     /**
      * The configured host key type against what the tables actually hold.
      *
-     * `billing.schema.host_key_type` is read when a table is CREATED. Turning it on afterwards therefore
+     * `billing.schema.host_key_type` is read when a table is created. Turning it on afterwards therefore
      * changes nothing about tables that already exist, and the two disagree silently until the next write
      * to one of them fails — at which point the error names a bigint column and says nothing about a
      * setting. This is where that costs a line of output instead of an afternoon.
      *
-     * Read from the DATABASE rather than from the migration: the column type is precisely the thing nobody
+     * Read from the database rather than from the migration: the column type is precisely the thing nobody
      * had looked at.
      */
     private function reportHostKeyTypeMismatch(): bool
@@ -935,7 +1005,7 @@ final class DoctorCommand extends Command
     }
 
     /**
-     * Report cycles that were CLAIMED and never collected.
+     * Report cycles that were claimed and never collected.
      *
      * The local engine claims a due cycle by committing its order before it calls the provider — the claim
      * has to survive the call, or a second run bills the same cycle twice. The cost of that ordering is a
@@ -952,14 +1022,14 @@ final class DoctorCommand extends Command
      * handles it; here it means nobody does.
      *
      * This reports rather than repairs, and that is deliberate. Retaking the claim is not obviously safe —
-     * the process may have died AFTER the provider was called and before the reference was written, and a
-     * retry would then charge a second time. That decision is open; being able to SEE the state is not a
+     * the process may have died after the provider was called and before the reference was written, and a
+     * retry would then charge a second time. That decision is open; being able to see the state is not a
      * decision, and it is what was missing.
      *
      * ## Two shapes, and the `payment_reference` is what tells them apart
      *
-     * The filter below is `whereNull('payment_reference')`, and it is narrow ON PURPOSE: a processing order
-     * that HAS one is a charge in flight, which is now an ordinary state rather than a fault. A bank debit
+     * The filter below is `whereNull('payment_reference')`, and it is narrow on purpose: a processing order
+     * that has one is a charge in flight, which is now an ordinary state rather than a fault. A bank debit
      * is accepted at once and settles days later, so the cycle is held open until the provider says which
      * way it went.
      *
@@ -1070,7 +1140,7 @@ final class DoctorCommand extends Command
     /**
      * Which rate table would actually answer a sale, and the day it was last known good.
      *
-     * The point of asking it this way: a check that read only the CONFIGURED table would return in silence
+     * The point of asking it this way: a check that read only the configured table would return in silence
      * when there is none — which is the default. The one installation that runs entirely on the package's own
      * shipped rates would be the one installation the age check never spoke about, and a shipped rate can
      * drift by two points for a year before anybody notices.
@@ -1083,13 +1153,13 @@ final class DoctorCommand extends Command
      */
     private function answeringRateTable(Repository $config): array
     {
-        // The DATE comes from the table the factory actually built, not from a second reading of the
+        // The date comes from the table the factory actually built, not from a second reading of the
         // settings it was built from. Those two agreed — but only because this method reproduced the
         // factory's precedence by hand, in another file, where a third source added there would never
         // arrive here. The failure that produces is the one this command exists to prevent: an operator
         // told the age of a table that is not the one being calculated with.
         //
-        // Only the LABEL is still derived here, because a matrix does not carry where it came from and
+        // Only the label is still derived here, because a matrix does not carry where it came from and
         // giving it one would put a diagnostic's vocabulary into the calculation path.
         $answering = Container::getInstance()->make(TaxCalculatorFactory::class)->answeringRateMatrix();
 
@@ -1146,16 +1216,16 @@ final class DoctorCommand extends Command
      * ## The failure this ends
      *
      * The import runs daily. When a publisher is down for one currency the command reports it, skips that
-     * currency, and returns SUCCESS anyway — there is no error accumulator and the schedule entry has no
+     * currency, and returns success anyway — there is no error accumulator and the schedule entry has no
      * failure hook. Every exit-code monitor therefore sees green while a series quietly stops growing.
      *
-     * Nothing read the newest `rate_date` anywhere in the package, so the first VISIBLE effect was an invoice
+     * Nothing read the newest `rate_date` anywhere in the package, so the first visible effect was an invoice
      * that could not be issued: the lookup walks forward at most `FORWARD_LIMIT_DAYS`, and past that it finds
      * no row and refuses the document. A warning that arrives then is not a warning, it is the incident.
      *
      * ## Why the limit is not simply the forward window
      *
-     * 14 days is where it BREAKS. Reporting at the breaking point is the same as not reporting, so the
+     * 14 days is where it breaks. Reporting at the breaking point is the same as not reporting, so the
      * configured limit defaults well under it — three days is two missed daily imports plus a weekend. The
      * forward window is still the ceiling: a limit set above it would let the doctor stay green while the
      * money path is already refusing documents, so the effective limit is the lower of the two.
@@ -1184,7 +1254,7 @@ final class DoctorCommand extends Command
         $failing = false;
 
         foreach ($currencies as $currency) {
-            // Matched on the TO side, which is the direction the config documents: the key lists the
+            // Matched on the to side, which is the direction the config documents: the key lists the
             // currencies money is received in, and rates are stored as the publisher writes them — euro to
             // each of these — never turned around.
             $newest = ExchangeRateRecord::model()::query()->where('to_currency', $currency)->max('rate_date');

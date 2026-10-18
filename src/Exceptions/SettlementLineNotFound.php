@@ -21,7 +21,7 @@ use RuntimeException;
  * by both. That is the error class this package refuses to emit, and the one nobody notices until a
  * reconciliation months later.
  *
- * A per-transaction settlement is NOT this case. Its single line names no charge because the header is the
+ * A per-transaction settlement is not this case. Its single line names no charge because the header is the
  * line, and its readers take the header as they always have — so this is raised only where a document
  * covers a period.
  *

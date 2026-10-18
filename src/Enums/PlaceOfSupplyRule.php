@@ -8,8 +8,8 @@ namespace Pushery\Billing\Enums;
  * Which side of a sale decides where it is taxed.
  *
  * Two rules, and the distinction is the only content classification that still changes an outcome: a
- * supply taxed where the BUYER is follows their country's rate and reports into that country, while one
- * taxed where the SELLER is carries the platform's own rate wherever the buyer happens to be.
+ * supply taxed where the buyer is follows their country's rate and reports into that country, while one
+ * taxed where the seller is carries the platform's own rate wherever the buyer happens to be.
  *
  * A third answers a sale made in person. Goods handed over at a point of sale are supplied where it is,
  * whoever buys them, so neither the buyer's country nor the buyer's registration moves that place.

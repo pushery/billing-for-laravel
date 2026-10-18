@@ -10,9 +10,9 @@ use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
- * One verified provider webhook delivery, unique per (provider, ACCOUNT REFERENCE, event_id) so a
+ * One verified provider webhook delivery, unique per (provider, account reference, event_id) so a
  * redelivery is recognized rather than re-processed. It keeps the raw payload, which is what makes a
- * delivery REPLAYABLE: an effect that failed can be re-driven from the stored payload without asking the
+ * delivery replayable: an effect that failed can be re-driven from the stored payload without asking the
  * provider to redeliver.
  *
  * The account is part of the identity, and it was added after the fact — the index started as

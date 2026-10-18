@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Reversal columns for the one-time add-on ledger: the provider PAYMENT reference (a PaymentIntent —
+ * Reversal columns for the one-time add-on ledger: the provider payment reference (a PaymentIntent —
  * distinct from the checkout-session `reference` that is the credit dedup key) so a refund webhook can
  * find the purchase it undoes, and the cumulative reversed amount so two partial refunds each claw back
  * only their delta. A separate migration (never edit the create migration — it is published, and a

@@ -21,7 +21,7 @@ use Pushery\Billing\ValueObjects\PaymentMethod;
 use RuntimeException;
 
 /**
- * Stored payment methods under Mollie, where a method IS a local mandate row.
+ * Stored payment methods under Mollie, where a method is a local mandate row.
  *
  * Stripe answers these questions by asking Stripe, which enforces ownership on the package's behalf.
  * Mollie's mandates are established by a first payment and mirrored locally, so every question here is
@@ -37,7 +37,7 @@ use RuntimeException;
  * - Removing the DEFAULT promotes another usable mandate. Otherwise the account keeps methods but has no
  *   default, the engine finds nothing to charge, and a subscriber with a perfectly good second card is
  *   dunned for having removed their first.
- * - Removing the LAST one is refused while a subscription is still being charged. It would not end the
+ * - Removing the last one is refused while a subscription is still being charged. It would not end the
  *   subscription — it would just make the next cycle fail — so the screen is told to say so instead.
  *
  * And removal withdraws the mandate at Mollie before the row goes, which is what removing a method means under
@@ -169,7 +169,7 @@ final readonly class MolliePaymentMethods implements PaymentMethods
     /**
      * The billable's mandate with this reference, or an exception.
      *
-     * Scoped to the owner in the QUERY rather than fetched and then compared, so there is no window in
+     * Scoped to the owner in the query rather than fetched and then compared, so there is no window in
      * which the wrong row is in hand — and no chance of a comparison that reads the right field of the
      * wrong record.
      */

@@ -7,7 +7,7 @@ namespace Pushery\Billing\Enums;
 /**
  * Which of the three place-evidence sources spoke.
  *
- * It exists so a subdivision can be read from the source that settled the COUNTRY, rather than from
+ * It exists so a subdivision can be read from the source that settled the country, rather than from
  * whichever source happened to know a state. Those are different answers whenever the sources disagree, and
  * a state taken from a source the country did not come from describes a different place than the sale.
  *

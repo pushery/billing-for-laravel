@@ -34,7 +34,7 @@ use Pushery\Billing\ValueObjects\TransferResult;
 use Throwable;
 
 /**
- * Take a routed payment AND write down what was routed, as one operation.
+ * Take a routed payment and write down what was routed, as one operation.
  *
  * ## Why this exists at all
  *
@@ -60,17 +60,17 @@ use Throwable;
  * after settlement would leave the most interesting window unrecorded: the one where an operator asks what
  * is in flight. The row starts `pending` and is moved by the settlement path, never by this method.
  *
- * A FAILED charge writes nothing. There is no payment to attribute, and a failed row would be counted by
+ * A failed charge writes nothing. There is no payment to attribute, and a failed row would be counted by
  * every reader that looks at the table without also filtering a state it has no reason to expect.
  *
- * The split is recorded as it was decided HERE, not recomputed later: the fee policy can change, and a
+ * The split is recorded as it was decided here, not recomputed later: the fee policy can change, and a
  * reversal that recomputed the merchant's share from today's rate would claw back a figure the sale was
  * never made under.
  */
 final readonly class RoutedPayment
 {
     /**
-     * The DRIVER is taken, not its rails, so the provider name and the rails that produced the reference
+     * The driver is taken, not its rails, so the provider name and the rails that produced the reference
      * can never drift apart. A hardcoded provider here would attribute every charge to one processor and
      * make the ledger's own uniqueness claim — provider plus reference — quietly wrong the day a second
      * driver exists.
@@ -84,7 +84,7 @@ final readonly class RoutedPayment
          * Required, not optional, and that is the whole point of adding it. An optional gate defaults to
          * absent, absent reads as "no objection", and a money gate whose default answer is yes is not a
          * gate. Both sibling paths — `StripeCheckout` and `StripeOneTimeCharge` — take it as a required
-         * dependency and refuse on it; this method, the ONLY place in the package that calls
+         * dependency and refuse on it; this method, the only place in the package that calls
          * `PaymentRails::charge()`, took nothing and refused nothing.
          */
         private CanReceiveMoney $receiving,
@@ -92,14 +92,14 @@ final readonly class RoutedPayment
          * The tax-standing gate, run beside the receiving one and before any provider call.
          *
          * Required for the same reason, with one difference worth naming: this gate's shipped default
-         * refuses EVERYBODY, because a merchant nobody has declared for is `Unclarified`. What keeps that
+         * refuses everybody, because a merchant nobody has declared for is `Unclarified`. What keeps that
          * from stopping an established marketplace on upgrade is the hold's own enforcement date, not an
          * optional dependency here — an optional gate would default to absent, and absent reads as "no
          * objection", which is not a gate at all.
          */
         private CreatorTaxStatusHold $taxStanding,
         /**
-         * The charge-type/posture pairing check, run on the routing this method is HANDED.
+         * The charge-type/posture pairing check, run on the routing this method is handed.
          *
          * Both sibling paths already do this — `StripeOneTimeCharge` and `StripeCheckout` each call
          * `assertCompatible` before assembling anything — and this path, the only one in `src/` that reaches
@@ -110,7 +110,7 @@ final readonly class RoutedPayment
          * path except through here" — but `ChargeRouting`'s constructor is public and this method accepts one
          * from its caller, so the ordinary path went around it. That resolver has no call site in `src/` at
          * all, and it is named here in prose rather than with its class name on purpose: the register that
-         * finds unreferenced classes scans the shipped tree for the NAME, so writing it would clear a class
+         * finds unreferenced classes scans the shipped tree for the name, so writing it would clear a class
          * that still has no caller.
          *
          * Checked rather than re-derived, deliberately: the pairing is the part that is unsafe to accept on
@@ -151,7 +151,7 @@ final readonly class RoutedPayment
          * How the merchant's share is moved on the lane where the provider does not move it.
          *
          * Optional, and the type is what carries the answer: a driver either can do this or it cannot, and
-         * a destination-charge install never needs it. Absent, a separate-transfer sale throws BEFORE any
+         * a destination-charge install never needs it. Absent, a separate-transfer sale throws before any
          * money is charged rather than charging the buyer and then discovering there is no way to pay the
          * merchant.
          */
@@ -176,7 +176,7 @@ final readonly class RoutedPayment
     /**
      * Whether this sale's share waits instead of moving now.
      *
-     * Both halves have to be true: the operator asked for it, AND a clock exists to hold it. Holding without
+     * Both halves have to be true: the operator asked for it, and a clock exists to hold it. Holding without
      * a clock would be money stopped by nothing, which is worse than not holding at all.
      */
     private function protectionHolds(): bool
@@ -195,7 +195,7 @@ final readonly class RoutedPayment
      *                             receipt would go on being skipped for every caller not yet updated —
      *                             silently, and for exactly the sales that already work.
      * @param  Money  $gross  what the buyer pays
-     * @param  PlatformFee  $fee  the platform's cut, taken on the transaction's NET — see `record()`
+     * @param  PlatformFee  $fee  the platform's cut, taken on the transaction's net — see `record()`
      * @param  int  $taxBps  the tax on the buyer's side, in basis points, which is what separates the two.
      *                       Required rather than defaulted: a default of zero would silently keep charging
      *                       the commission on the gross for every caller that had not been updated, which
@@ -226,7 +226,7 @@ final readonly class RoutedPayment
         ?string $destinationCountry = null,
         ?string $destinationSubdivision = null,
     ): ChargeResult {
-        // The archetype is REQUIRED and NULLABLE, which looks like a contradiction and is the point. Required
+        // The archetype is required and nullable, which looks like a contradiction and is the point. Required
         // so it cannot be forgotten — a default would make "unclassified" the quiet normal case within a
         // release or two. Nullable so that passing nothing raises `ProductNotClassified`, the package's own
         // refusal with its own explanation, rather than a TypeError that says only which argument was the
@@ -234,21 +234,21 @@ final readonly class RoutedPayment
         //
         // This is where "no sale without a classification" stops being documentation. The classifier refused
         // correctly and unreachably: the archetype arrived as an argument, no record in this package carries
-        // one, and nothing obliged a consumer to ask at all. Enforcing it HERE rather than by adding a column
+        // one, and nothing obliged a consumer to ask at all. Enforcing it here rather than by adding a column
         // is the decided answer (2026-07-28) — the catalog stays the consumer's, and the obligation lives at
         // the seam they already have to come through.
         //
-        // It is a GATE first, and it earns that on its own by refusing two distinct states — no archetype at
-        // all, and a voluntary payment that never said what it was paid on. A SALE OF NOTHING IS NOT A SALE,
+        // It is a gate first, and it earns that on its own by refusing two distinct states — no archetype at
+        // all, and a voluntary payment that never said what it was paid on. A sale of nothing is not a sale,
         // and this is the first thing asked because everything after it assumes there is money.
         //
-        // What comes back is KEPT. The classification already works out where the supply is taxed and which
+        // What comes back is kept. The classification already works out where the supply is taxed and which
         // rate band it falls in; discarding that answer would leave the receipt below without those
         // characteristics, or deriving them a second time, from a second source, at a later moment. Two
         // derivations of one fact diverge, and the second one would run after the sale, when the
         // configuration it reads may already have moved.
         //
-        // Kept on the DOCUMENT rather than on the charge row: `billing_merchant_charges` has no column for
+        // Kept on the document rather than on the charge row: `billing_merchant_charges` has no column for
         // any of it, and the document is what a buyer and an authority are shown.
         $classification = $this->classifier->classify($archetype, $soldAlongside);
         //
@@ -287,7 +287,7 @@ final readonly class RoutedPayment
             throw ReceiveEligibilityDenied::forMerchant();
         }
 
-        // The second gate, and it asks about the merchant's TAX standing rather than their ability to be
+        // The second gate, and it asks about the merchant's tax standing rather than their ability to be
         // paid. A sale on behalf of somebody whose taxation nobody knows produces a settlement document
         // stating a treatment that nothing supports, and the two ways of guessing fail in opposite
         // directions -- so there is no safe default and the hold is the conservative answer.
@@ -303,7 +303,7 @@ final readonly class RoutedPayment
 
         $sellers->assertTaxStandingEstablished($merchant);
 
-        // Third gate, and the only one about the SHAPE of the payment rather than about the merchant. An
+        // Third gate, and the only one about the shape of the payment rather than about the merchant. An
         // incompatible pairing decides who carries a dispute, and the provider accepts it without complaint
         // — so nothing surfaces until a chargeback lands on the wrong party, months later, once.
         // Resolved once and reused below, where it decides which document this sale produces. Asking twice
@@ -313,7 +313,7 @@ final readonly class RoutedPayment
 
         $this->pairing->assertCompatible($routing->type, $posture);
 
-        // Fourth gate, and it pairs the posture with WHO sells WHAT: goods of a seller established outside the
+        // Fourth gate, and it pairs the posture with who sells what: goods of a seller established outside the
         // Union are never recorded as an intermediation, because the law treats the platform as their supplier.
         // The reasons and the two limits are on SellerSaleGate.
         $sellers->assertPostureCarriesTheSupply($merchant, $posture, $archetype);
@@ -360,9 +360,9 @@ final readonly class RoutedPayment
         // The provider first. A row written before the charge would describe a payment that may never
         // happen, and the reversal caps would then be willing to give back money nobody ever took.
         //
-        // A separate transfer's CHARGE is an ordinary platform charge -- the platform is the merchant of
+        // A separate transfer's charge is an ordinary platform charge -- the platform is the merchant of
         // record and takes the whole payment; the merchant's share moves in a second call below. So the
-        // routing is deliberately NOT passed there. Handing it to the rails would ask them to serve a lane
+        // routing is deliberately not passed there. Handing it to the rails would ask them to serve a lane
         // they cannot serve alone, and they correctly refuse: the transfer can only be made once the payment
         // has actually succeeded, which is after `charge()` has already returned.
         $result = $this->driver->rails()->charge(
@@ -378,7 +378,7 @@ final readonly class RoutedPayment
 
         $charge = $this->record($merchant, $result, $gross, $fee, $platformFee, $taxBps, $routing->type, $posture, $archetype);
 
-        // A settled payment is settled NOW, from what the provider just said — not later, from a webhook
+        // A settled payment is settled now, from what the provider just said — not later, from a webhook
         // re-deriving it. The result already carries the transfer reference on a destination charge,
         // because the provider creates the transfer as the payment settles. Waiting for a webhook to
         // restate that would leave every routed sale pending until a delivery that adds nothing.
@@ -391,9 +391,9 @@ final readonly class RoutedPayment
             return $result;
         }
 
-        // BUYER PROTECTION, and the one place in the payment path where it can act at all.
+        // Buyer protection, and the one place in the payment path where it can act at all.
         //
-        // With it on, the share does NOT move now: a hold opens instead, and the money stays with the
+        // With it on, the share does not move now: a hold opens instead, and the money stays with the
         // provider until the protection period ends one way or the other. That is precisely what the
         // shipped documentation has been promising — "funds stay with the payment provider throughout;
         // what is delayed is the transfer to the seller" — while the transfer in fact happened here,
@@ -441,7 +441,7 @@ final readonly class RoutedPayment
             }
         }
 
-        // A share that failed to move is KEPT, not thrown. The buyer's payment has gone through, so an exception
+        // A share that failed to move is kept, not thrown. The buyer's payment has gone through, so an exception
         // here would reach a caller holding a charged buyer, and a caller that retries charge() without an
         // idempotency key would charge them a second time, while the row left behind would read `pending` with
         // no failure on it, indistinguishable from a payment still clearing, and nothing would ever move it.
@@ -535,7 +535,7 @@ final readonly class RoutedPayment
             return;
         }
 
-        // Read ONCE and reused below. Two calls to now() can land either side of a midnight or a second
+        // Read once and reused below. Two calls to now() can land either side of a midnight or a second
         // boundary, and this document would then state a sale date and a delivery date that disagree about
         // when the same instant was.
         $soldOn = CarbonImmutable::now();
@@ -556,7 +556,7 @@ final readonly class RoutedPayment
             chargeReference: $charge->charge_reference,
             characteristics: new SupplyTaxCharacteristics(
                 archetype: $archetype,
-                // WHAT the two cells above were derived from, kept beside the answers rather than discarded with
+                // What the two cells above were derived from, kept beside the answers rather than discarded with
                 // the request. The document states where the supply is taxed; only this says why — and the one
                 // consequence a tip's reference decides that no document states, whether the seller behind it has
                 // to be reported, is asked months later by a run that has nothing but these rows to read.
@@ -569,24 +569,24 @@ final readonly class RoutedPayment
                 // BT-72, the date the supply actually happened. For a one-time sale that is the moment it was
                 // sold: there is no stretch of time, and the buyer has what they paid for as soon as they pay.
                 //
-                // Absent where the treatment is DEFERRED, and that is the same answer as the two cells above
+                // Absent where the treatment is deferred, and that is the same answer as the two cells above
                 // rather than a separate rule. A multi-purpose voucher has been paid for and nothing has been
                 // supplied — stating a delivery date for it would date a supply that has not occurred, and
                 // whichever period that lands in is one an authority could be shown.
                 deliveredOn: $classification->placeOfSupply->isDeferred() ? null : $soldOn,
                 // WHERE the buyer was, supplied for the same reason `buyerIsDomestic` already is: the package
                 // has no second opinion about that, and the place evidence lives in the consuming application.
-                // The subdivision comes from what the evidence SETTLED on -- never from a raw signal, and never
+                // The subdivision comes from what the evidence settled on -- never from a raw signal, and never
                 // from the country when the evidence named no subdivision. Left null it counts as `unknown`,
                 // which is an honest answer; guessed, it would raise a threshold in a state nobody sold into.
                 destinationCountry: $destinationCountry,
                 destinationSubdivision: $destinationSubdivision,
             ),
-            // WHOSE charge reference the line above is. It is the same driver that produced it — taken from
+            // Whose charge reference the line above is. It is the same driver that produced it — taken from
             // the driver rather than named here, so the reference and the provider recorded beside it can
             // never come from two different places.
             //
-            // Both of these arrived on separate branches, appended to the SAME parameter position, and this
+            // Both of these arrived on separate branches, appended to the same parameter position, and this
             // call once passed them positionally. Which value bound to which parameter was going to be
             // decided by whoever resolved that conflict, and two nulls in the wrong slots are caught by
             // nothing. Named arguments take the decision away from the merge.
@@ -597,7 +597,7 @@ final readonly class RoutedPayment
     /**
      * The settled answer in a classification cell, or null where the sale has not settled one.
      *
-     * A cell is only readable when it is FIXED, and `TaxonomyCell::value()` REFUSES on the other two kinds
+     * A cell is only readable when it is fixed, and `TaxonomyCell::value()` refuses on the other two kinds
      * rather than handing back a default. That refusal is the point of the type, and it is why this reads
      * the kind before the value instead of catching something.
      *
@@ -607,7 +607,7 @@ final readonly class RoutedPayment
      *   actually arrive null: `ProductClassifier::classify()` merges the delegated cells with the
      *   classification of the reference, so a tip on a download is taxed where a download is. That merge is
      *   the whole reason a tip's receipt can state a place of supply at all.
-     * - **Deferred** — a multi-purpose voucher has no answer YET, because nothing has been bought with it.
+     * - **Deferred** — a multi-purpose voucher has no answer yet, because nothing has been bought with it.
      *   Writing one at issue would state a treatment that redemption may contradict, and a document cannot
      *   be re-stated.
      *
@@ -625,17 +625,17 @@ final readonly class RoutedPayment
     }
 
     /**
-     * Move the merchant's share on the lane where the provider does not move it for us, and keep the WHOLE answer.
+     * Move the merchant's share on the lane where the provider does not move it for us, and keep the whole answer.
      *
      * On a destination charge the transfer is part of the payment. On a separate transfer it is a second
      * call, and if nobody makes it the merchant is simply never paid while every signal looks healthy -- a
      * successful result, no exception, and a null transfer reference indistinguishable from one still
      * settling. And the separate transfer is the DEFAULT charge type, so this is the common path.
      *
-     * The idempotency key is the charge ROW's id, not the amount. A retry that recomputed the share even
+     * The idempotency key is the charge row's id, not the amount. A retry that recomputed the share even
      * slightly differently would produce a second key and a second transfer; the row id cannot move.
      *
-     * The AMOUNT comes off the row for the same reason the key does. Splitting the gross a second time here
+     * The amount comes off the row for the same reason the key does. Splitting the gross a second time here
      * would be the same arithmetic in a second place, and the day the basis changed, the two places would
      * have to change together or the merchant would be transferred a share the ledger says they were not
      * paid. Reading what was written down cannot drift from what was written down.
@@ -704,7 +704,7 @@ final readonly class RoutedPayment
     private function record(Model $merchant, ChargeResult $result, Money $gross, PlatformFee $fee, Money $platformFee, int $taxBps, ChargeType $chargeType, SellerOfRecordPosture $posture, ?TaxArchetype $archetype): MerchantCharge
     {
         // What the merchant receives is still the whole payment less the commission -- the buyer's tax
-        // travels WITH the merchant's share, because on this lane it is the merchant who owes it. Computed
+        // travels with the merchant's share, because on this lane it is the merchant who owes it. Computed
         // as the difference rather than as a second split, so the two sides sum back to the payment exactly.
         $merchantNet = $gross->minus($platformFee);
 
@@ -719,20 +719,20 @@ final readonly class RoutedPayment
             // configuration to work from, so a platform that raises its rate would claw old sales back at
             // the new one — and both figures would look entirely plausible.
             policy: $fee,
-            // And WHICH LANE it took, for the same reason and with a sharper edge. The two reverse in
+            // And which lane it took, for the same reason and with a sharper edge. The two reverse in
             // completely different ways, and a refund reading the lane off today's configuration would be
             // wrong silently in both directions: a destination charge read as a separate transfer reverses
             // nothing and leaves the merchant a share of a refunded sale, while the reverse reading sends a
             // flag that does nothing and looks like it worked.
             chargeType: $chargeType,
-            // And the BASE, which is the third frozen term and needed for exactly the same reason as the
+            // And the base, which is the third frozen term and needed for exactly the same reason as the
             // first two: a partial clawback recomputes the commission on what remains of the sale, and
             // without the rate it would have to derive the remainder's net from today's configuration.
             commissionTaxBps: $taxBps,
-            // And WHO SOLD, for the small-business turnover: a creator who supplies the buyer counts the whole
+            // And who sold, for the small-business turnover: a creator who supplies the buyer counts the whole
             // price less their tax, one who supplies the platform counts the payout.
             sellerPosture: $posture,
-            // And WHAT was sold. Under intermediation this row is the only record of the sale, so it is what a
+            // And what was sold. Under intermediation this row is the only record of the sale, so it is what a
             // count of a seller's sales of goods reads.
             taxArchetype: $archetype,
         );

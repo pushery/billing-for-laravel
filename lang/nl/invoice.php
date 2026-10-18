@@ -8,6 +8,7 @@ return [
     'invoice' => 'Factuur',
     'correction' => 'Factuurcorrectie',
     'corrects' => 'Corrigeert :number',
+    'reinstates' => 'Herfacturering van :number',
     'number' => 'Factuurnummer :number',
     'issued' => 'Uitgegeven op :date',
     'from' => 'Van',

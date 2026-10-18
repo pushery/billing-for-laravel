@@ -13,7 +13,7 @@ use Pushery\Billing\Support\BillingSchema;
  * ## Why this cannot live where the other announcement marker lives
  *
  * The lapsed-attestation sweep marks `hold_announced_at` on the status record it announced. That works
- * because such a merchant HAS a record — an attestation that ran out is a row with a date in it.
+ * because such a merchant has a record — an attestation that ran out is a row with a date in it.
  *
  * The merchants this warns have no record at all. Never declaring is exactly what puts them in the state
  * that blocks, so there is no row of theirs to mark, and creating one would be worse than saying nothing: a
@@ -22,7 +22,7 @@ use Pushery\Billing\Support\BillingSchema;
  *
  * ## Why the fact belongs on its own
  *
- * "This merchant has been told the deadline is coming" is a fact about the TELLING, not about their tax
+ * "This merchant has been told the deadline is coming" is a fact about the telling, not about their tax
  * standing — the same reasoning the existing marker's docblock gives for keeping it beside the series
  * rather than in it, one step further. A merchant who later declares gets a status record; this row stays,
  * because it records that a message was sent, and that stays true.
@@ -43,7 +43,7 @@ return new class extends Migration
             $table->id();
             BillingSchema::hostType($table, 'merchant_type');
             BillingSchema::hostKey($table, 'merchant_id');
-            // The deadline the merchant was warned ABOUT, not just when. An operator who moves the date
+            // The deadline the merchant was warned about, not just when. An operator who moves the date
             // forward has changed what the warning said, and the old one no longer describes the new
             // deadline — so the pair is what identifies a warning, and a moved date warns again.
             $table->date('deadline');

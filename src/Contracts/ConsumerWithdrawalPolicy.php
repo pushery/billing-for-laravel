@@ -12,7 +12,7 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  * A jurisdiction's consumer-withdrawal rules, behind two questions.
  *
  * The rules are consumer law, not tax law, and the two do not move together — an operator can run one
- * country's VAT and another's consumer regime. So this is its OWN profile, bound separately from the tax
+ * country's VAT and another's consumer regime. So this is its own profile, bound separately from the tax
  * profile, and off by default: a consumer who has not opted in sees no extra checkout step and no changed
  * receipt.
  *

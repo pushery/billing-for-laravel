@@ -15,7 +15,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  *
  * ## Who writes this row
  *
- * The PACKAGE does, through `VoucherLedger` -- issuing, redeeming and expiring are all money movements and
+ * The package does, through `VoucherLedger` -- issuing, redeeming and expiring are all money movements and
  * all belong to it. `expired_at` is set by property assignment rather than in a create payload, which is
  * worth knowing for any scan that looks for writers: the array form is not the only one.
  *

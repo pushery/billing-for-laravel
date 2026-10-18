@@ -14,7 +14,7 @@ use Illuminate\Support\Carbon;
  * outage any more, it is lost revenue accruing quietly: past the provider's acceptance window a meter event
  * is not retro-billed at all.
  *
- * This fires once the OLDEST pending rollup is older than `billing.metering.stall_hours`, so somebody finds
+ * This fires once the oldest pending rollup is older than `billing.metering.stall_hours`, so somebody finds
  * out from an alert rather than from an invoice.
  */
 final readonly class UsageBacklogStalled implements BillingDomainEvent

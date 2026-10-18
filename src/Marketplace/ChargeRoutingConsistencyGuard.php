@@ -19,7 +19,7 @@ use Pushery\Billing\Exceptions\InconsistentChargeRoutingForPosture;
  * each other can be set to disagree, and the result is not an exception anybody sees. It is a receipt and a
  * settlement describing different transactions, and it surfaces in an audit.
  *
- * It runs when a transaction is resolved, BEFORE any money moves. A guard at document time would be
+ * It runs when a transaction is resolved, before any money moves. A guard at document time would be
  * refusing after the payment had already gone the wrong way.
  *
  * The table lives in configuration because the reading is a legal one and jurisdictions differ; the guard
@@ -48,7 +48,7 @@ final readonly class ChargeRoutingConsistencyGuard
     /**
      * The postures a charge type may be used with.
      *
-     * An unreadable or missing entry permits NOTHING rather than everything. A typo in this table would
+     * An unreadable or missing entry permits nothing rather than everything. A typo in this table would
      * otherwise open the one combination it exists to close, and it would do so silently — the guard would
      * still run, still pass, and still be reported as protecting the line.
      *

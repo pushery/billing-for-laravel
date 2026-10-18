@@ -7,7 +7,7 @@ namespace Pushery\Billing\Events;
 use Pushery\Billing\Contracts\IdentifiesCustomer;
 
 /**
- * A payment cannot complete until the CARDHOLDER confirms it — the bank asked for Strong Customer
+ * A payment cannot complete until the cardholder confirms it — the bank asked for Strong Customer
  * Authentication (3-D Secure). This is a different problem from a failed payment: nothing is wrong with
  * the card, the subscription just cannot start (or renew) until the customer taps "confirm" at their bank.
  * Left unprompted the subscription silently sits `incomplete` and the customer thinks they subscribed.

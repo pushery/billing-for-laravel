@@ -17,7 +17,7 @@ use Pushery\Billing\Models\CreatorTaxStatusRecord;
  *
  * It has to run out. The commonest threshold in this area is a statement about a year that has not ended
  * yet, so a declaration made in March says nothing about the following January; and the platform cannot
- * answer the question on the merchant's behalf, because it only ever sees what was sold HERE. An expiry is
+ * answer the question on the merchant's behalf, because it only ever sees what was sold here. An expiry is
  * therefore not hygiene, it is the only way the question gets asked again at all.
  *
  * The founding year is collected with it and validated rather than derived. When the business started and

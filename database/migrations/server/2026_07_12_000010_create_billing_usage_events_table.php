@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\BillingSchema;
 
 /**
- * The usage outbox: every unit of usage that will be billed, recorded locally BEFORE anyone tries to
+ * The usage outbox: every unit of usage that will be billed, recorded locally before anyone tries to
  * hand it to a provider. A usage event is money, so it may be neither lost (a provider outage must not
  * silently drop revenue) nor billed twice (a retry must not double-charge). Both hang on this table:
  *
@@ -28,7 +28,7 @@ return new class extends Migration
             $table->id();
             BillingSchema::morphs($table, 'owner');
             $table->string('meter_key');
-            // The PROVIDER's meter name, stamped when the usage is recorded rather than looked up when
+            // The provider's meter name, stamped when the usage is recorded rather than looked up when
             // it is flushed: an owner who changes tier between the two must still have the usage they
             // already incurred billed the way it was incurred.
             $table->string('provider_meter')->nullable();
@@ -48,7 +48,7 @@ return new class extends Migration
             // Set on the source rows when the flusher coalesces a period's usage into one rollup event,
             // so a unit is reported once even though it was recorded a thousand times.
             $table->unsignedBigInteger('rolled_up_into')->nullable();
-            // A rollup is retried with ITS OWN identifier and is never coalesced again. Folding an
+            // A rollup is retried with its own identifier and is never coalesced again. Folding an
             // already-attempted rollup into a fresh one would report the same units under a new
             // identifier — which is exactly how a provider bills them twice.
             $table->boolean('is_rollup')->default(false);

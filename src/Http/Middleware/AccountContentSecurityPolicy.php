@@ -12,7 +12,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Emits a scoped Content-Security-Policy on the account-hub responses only, so the active driver's
- * payment element (js.stripe.com and friends) can load HERE and nowhere else in the host app. The
+ * payment element (js.stripe.com and friends) can load here and nowhere else in the host app. The
  * policy starts from a self-only, Livewire/Alpine-safe base, then whitelists the driver's origins and
  * any extra sources the host configures.
  *

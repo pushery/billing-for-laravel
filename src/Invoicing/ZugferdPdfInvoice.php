@@ -15,9 +15,9 @@ use Pushery\Billing\Models\InvoiceRecord;
  * {@see ZugferdCiiInvoice}; the source PDF is the consuming app's own rendered invoice.
  *
  * A conformant PDF/A-3 (OutputIntent, XMP, the embedded-file spec) needs a real PDF toolchain, so this is an
- * OPTIONAL capability the lean core does not carry: install `horstoeko/zugferd` (a `suggest` dependency) to
+ * optional capability the lean core does not carry: install `horstoeko/zugferd` (a `suggest` dependency) to
  * use it. Without it, {@see embed()} throws a clear {@see MissingPdfEmbedder} instead of fataling — a
- * consumer who needs the hybrid PDF opts in, everyone else ships the CII XML alone. The class is NOT final so
+ * consumer who needs the hybrid PDF opts in, everyone else ships the CII XML alone. The class is not final so
  * the embedder-availability check ({@see embedderInstalled()}) is an overridable seam, which is how the
  * absent-library path stays testable.
  */

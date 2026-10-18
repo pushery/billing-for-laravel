@@ -152,13 +152,13 @@ class MerchantCharge extends Model
     /**
      * The document that settled this charge, whichever shape the settlement took.
      *
-     * It answered only the COLLECTIVE shape once, and the per-transaction path was left to the opposite
+     * It answered only the collective shape once, and the per-transaction path was left to the opposite
      * direction — `settled_charge_reference` on the document. One fact reachable two ways is how a reader
      * ends up covering half the installations: a lookup from the charge found only collective settlements, a
      * lookup from the document only single ones, and neither could tell which half it was missing. Both
      * paths write this column now ({@see linkToSettlement()}), so the direction is one.
      *
-     * Null therefore says nothing has claimed this charge. It does NOT say the charge is unsettled;
+     * Null therefore says nothing has claimed this charge. It does not say the charge is unsettled;
      * `settlement_state` answers that, and the two are separate facts on purpose — a charge whose money
      * moved before any document was raised is a real state, and it is the one case the DAC7 fee figure
      * cannot place by a document.
@@ -177,7 +177,7 @@ class MerchantCharge extends Model
      * rule lives on the model for the reason `InvoiceRecord::scopePlacedIn()` does: a second caller needed
      * the same answer, and two copies of a narrowing rule are two chances to narrow differently.
      *
-     * Narrowed by the merchant AS WELL AS the provider and reference. The pair is unique per installation,
+     * Narrowed by the merchant as well as the provider and reference. The pair is unique per installation,
      * not globally — two creators can be settled in the same month and two drivers can mint one reference —
      * and a run that matched on the pair alone could mark a stranger's sale as settled by a document that
      * never mentioned them.
@@ -273,7 +273,7 @@ class MerchantCharge extends Model
      */
     public function reversibleMinor(): int
     {
-        // What MOVED, where the provider said so, and only otherwise what was owed. The two differ whenever
+        // What moved, where the provider said so, and only otherwise what was owed. The two differ whenever
         // a provider moves less than it was asked to, and reading the ceiling off the owed amount lets the
         // package try to claw back money that never reached the merchant — on a lost dispute the platform
         // is then out of pocket for the difference.
@@ -287,11 +287,11 @@ class MerchantCharge extends Model
     /**
      * The amount the commission is taken on, for a payment of this sale's shape.
      *
-     * The take rate is a NET rate — it applies to the transaction's net, not to what the buyer paid. On
+     * The take rate is a net rate — it applies to the transaction's net, not to what the buyer paid. On
      * 119.00 at 19% with a 10% rate that is 10.00 rather than 11.90, and the 1.90 between them is the
      * platform's commission on the buyer's tax, which was never the platform's money to keep.
      *
-     * Called with the WHOLE payment to reconstruct the original split, and with what remains of it to
+     * Called with the whole payment to reconstruct the original split, and with what remains of it to
      * recompute a partial clawback — which is why the rate is frozen rather than the base amount: a base
      * amount cannot answer for a remainder, and scaling one would be a second calculation of the same fact.
      *
@@ -308,7 +308,7 @@ class MerchantCharge extends Model
     }
 
     /**
-     * What this sale was worth to the merchant BEFORE their own tax and after the commission — the section-19
+     * What this sale was worth to the merchant before their own tax and after the commission — the section-19
      * basis under the commission chain, and only there. {@see self::smallBusinessTurnover()} decides which basis a
      * sale is counted on.
      *
@@ -384,10 +384,10 @@ class MerchantCharge extends Model
      * is precisely why the terms are stored rather than derived. A row written before the columns existed
      * genuinely does not know, and saying so is the only honest thing left.
      *
-     * The rounding residual is NOT part of what is frozen: it decides who absorbs a sub-cent remainder on a
+     * The rounding residual is not part of what is frozen: it decides who absorbs a sub-cent remainder on a
      * split that has already happened, and re-splitting a completed sale is not something this reconstruction
-     * does. It is used to recompute what a SMALLER sale would have paid out, where the residual rule of the
-     * day applies — and that rule is READ, passed as the third argument. Left to the constructor's default,
+     * does. It is used to recompute what a smaller sale would have paid out, where the residual rule of the
+     * day applies — and that rule is read, passed as the third argument. Left to the constructor's default,
      * an installation that hands the odd minor unit to the creator would reconstruct every uneven sale a
      * minor unit off the one it corrects, and nothing would be red: the arms above this one all divide
      * exactly, and on an even split all three directions agree.
@@ -398,7 +398,7 @@ class MerchantCharge extends Model
             return null;
         }
 
-        // The direction this sale was PRICED under, not the one configured today. Only a row written before
+        // The direction this sale was priced under, not the one configured today. Only a row written before
         // the column existed reaches the fallback, and it takes the one the settlement side takes:
         // `RoundingResidual::forReconstruction()` says why that guess is still the right one.
         return new PlatformFee(

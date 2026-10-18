@@ -18,7 +18,7 @@ use Pushery\Billing\ValueObjects\PlausibilityFinding;
  * is exactly why it is checked. A rule whose job is to be silent tells you when a change upstream stopped
  * being true, and this one is cheap: the roster is already in memory.
  *
- * Two DIFFERENT sellers who happen to resolve to the same record — the same morph pair reached through two
+ * Two different sellers who happen to resolve to the same record — the same morph pair reached through two
  * classes, say after a morph-map rename — land here too, which is the same problem seen from the other end.
  */
 final readonly class DuplicateSellerRule implements ReportingPlausibilityRule

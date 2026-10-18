@@ -20,13 +20,13 @@ use Pushery\Billing\ValueObjects\MovedShare;
  * `CollectiveAccountReconciler` compares the exported booking batch against the rows that produced it, which
  * is a real check across a real seam — it catches a document the export drops, an account resolved
  * differently, a direction marker written the wrong way round, and it runs on every batch this package
- * emits. It is NOT superseded by this class and must not be read as such: what it cannot see is the
+ * emits. It is not superseded by this class and must not be read as such: what it cannot see is the
  * provider, because it is still the package against itself. A denormalized balance against
  * the signed sum of its own entries can only disagree under concurrency or a partial failure, so run
  * serially it passes forever — and a criterion that always passes is indistinguishable from one that is not
  * wired up.
  *
- * Two ledgers that CAN disagree is the marketplace's canonical failure, and it is quiet: a reversal raised in
+ * Two ledgers that can disagree is the marketplace's canonical failure, and it is quiet: a reversal raised in
  * the provider's dashboard, a transfer the provider adjusted, a webhook that never arrived. Every total on
  * our side still adds up. The merchant's does not.
  *
@@ -37,16 +37,16 @@ use Pushery\Billing\ValueObjects\MovedShare;
  *
  * ## Which side wins
  *
- * The provider is authoritative for what MOVED; this package is authoritative for what was OWED. A drift is
+ * The provider is authoritative for what moved; this package is authoritative for what was owed. A drift is
  * therefore repaired by correcting the local row — never by transferring again to match the journal, which
- * would move real money to settle a bookkeeping argument. This reconciler only ever READS; it writes no row
+ * would move real money to settle a bookkeeping argument. This reconciler only ever reads; it writes no row
  * and moves no money, so that decision stays with a human who can see the case.
  *
  * ## The fee entries this depends on, and why they had to come first
  *
  * A comparison that did not know about the provider's own processing and dispute fees would find a
  * difference on every single sale, which is the shape of alarm that gets muted. Those are recorded
- * separately (`ProviderFee`) and are deliberately NOT part of this comparison: they are charged to the
+ * separately (`ProviderFee`) and are deliberately not part of this comparison: they are charged to the
  * platform, not deducted from the transfer, so subtracting them here would invent a drift instead of
  * finding one.
  */
@@ -116,8 +116,8 @@ final readonly class ProviderJournalReconciler
         // about. `transfer_moved_minor` first, because a transfer that moved a different amount than was
         // owed is exactly the case being looked for.
         //
-        // NULL IS NOT ZERO, and reading it as zero is the mass false alarm this whole design exists to
-        // avoid. A destination charge moves the merchant's share as part of the PAYMENT and makes no
+        // Null is not zero, and reading it as zero is the mass false alarm this whole design exists to
+        // avoid. A destination charge moves the merchant's share as part of the payment and makes no
         // transfer call, so no figure is ever reported — while the provider still creates a transfer off
         // the charge, whose reference the row carries. Every such row, and every row settled before the
         // column existed, would report a drift of the full transfer value. The model states it in as many

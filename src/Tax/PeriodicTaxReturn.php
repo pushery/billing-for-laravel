@@ -18,25 +18,25 @@ use Pushery\Billing\ValueObjects\TaxReturnLine;
  *
  * ## Aggregated from the sales, never recomputed from a table
  *
- * Every line's rate is the one the SALE carried, read from its own frozen column. Looking the rate up again
+ * Every line's rate is the one the sale carried, read from its own frozen column. Looking the rate up again
  * at reporting time would use whatever the table says that day, and a country that changed its rate between
  * the sale and the filing would have every one of its sales re-rated — a return that reconciles with itself
  * and with nothing that was ever invoiced. For the same reason the amounts are the sales' own rounded
  * figures summed, not a rate applied to a summed base: a second rounding path would differ by cents that
  * nobody could trace back to a document.
  *
- * ## A correction belongs to the period it is DECLARED in
+ * ## A correction belongs to the period it is declared in
  *
  * It carries the period it corrects and is never written back into it. That return was filed; a file that
  * changes after filing is not a filing. So a refund of an earlier quarter appears here, in this quarter, as
  * a negative line naming the earlier one.
  *
- * ## The window runs from the DUE DATE
+ * ## The window runs from the due date
  *
  * A correction is only allowed for so long, and the clock starts when the original return was due — not when
  * its period ended. Those are a month apart, and using the wrong one moves the boundary by exactly that
  * month, in the direction that lets through a correction which is already out of time. Past the window the
- * export REFUSES rather than dropping the line or folding it into the current period: a correction that
+ * export refuses rather than dropping the line or folding it into the current period: a correction that
  * vanishes is indistinguishable from one that was never owed, and one folded in is a misdeclaration.
  *
  * ## No deductions, ever
@@ -77,7 +77,7 @@ final readonly class PeriodicTaxReturn
             // same country and rate, and it would return 20000: two different units added as though they were
             // one, on a document that goes to a tax authority.
             //
-            // The same reasoning is already applied one line down, where a reissue is skipped HERE rather
+            // The same reasoning is already applied one line down, where a reissue is skipped here rather
             // than only in the caller's query, "so no caller can hand this a list that double-counts". That
             // argument does not stop at reissues. A mixed batch is the other way to hand it a wrong sum.
             $currency ??= $sale->currency;

@@ -81,7 +81,7 @@ final class SubscriptionOverview extends AccountScreen
         return $this->view('billing::livewire.subscription-overview', [
             'state' => $state,
             // Post-checkout the state is "activating" until the webhook lands, so a bounded poll refreshes
-            // until it settles, then stops (never a permanent poll). NOT conditional on broadcasting: a
+            // until it settles, then stops (never a permanent poll). Not conditional on broadcasting: a
             // broadcast notifies the owner rather than re-rendering this screen, so a poll gated on it would
             // leave the activating state with no refresh at all.
             // {@see PollsWhileActivating}, which states the rule and the reason for both screens.
@@ -89,8 +89,8 @@ final class SubscriptionOverview extends AccountScreen
             // The next-invoice preview is the one live provider read on this screen. Only an active or
             // subscription-backed trialing state has a next invoice, so skip the call entirely for every other
             // state (it could only answer null) — and degrade it to a notice rather than 500 when it is made.
-            // ON ONE LINE, and not a style choice -- do not fold it back. php-code-coverage 14
-            // counts the CONTINUATION line of a multi-line ternary as executable and never records it
+            // On one line, and not a style choice -- do not fold it back. php-code-coverage 14
+            // counts the continuation line of a multi-line ternary as executable and never records it
             // as hit, so this file measured 97.5% with `: null` as its only gap. Measured both ways on
             // the same tests: folded 97.5%, one line 100.0%, with identical behavior.
             'preview' => $state->hasUpcomingInvoice() ? $this->orDegrade(fn () => Container::getInstance()->make(UpcomingInvoice::class)->preview($this->owner())) : null,
@@ -100,7 +100,7 @@ final class SubscriptionOverview extends AccountScreen
             // The one trial CTA for this state (null unless trialing), so a trialing owner sees exactly one
             // next step and no other state CTA competes with it.
             'trial' => Container::getInstance()->make(TrialCallouts::class)->for($this->owner(), $state, $this->subscription()?->trial_ends_at),
-            // When access ends (grace) or ended, from the LOCAL subscription column — never a provider call.
+            // When access ends (grace) or ended, from the local subscription column — never a provider call.
             'endsAt' => $this->subscription()?->ends_at,
             // Whether the grace period can be taken back. A cancellation to a date inside the period cannot: the
             // rest of the period may have been refunded, so the screen shows the date and no resume button.
@@ -135,7 +135,7 @@ final class SubscriptionOverview extends AccountScreen
      * package's own is one click, and a consumer whose acceptance asks for a confirmation step should not
      * have to fork the view to get one.
      *
-     * PRIVATE on purpose. A public method on a Livewire component is a callable ACTION, and this is a
+     * Private on purpose. A public method on a Livewire component is a callable action, and this is a
      * question rather than an act -- the view renders from $confirmingCancel and never calls it. Public, it
      * would have to be classified as money-initiating or not, which is a question it has no business
      * answering.
@@ -154,7 +154,7 @@ final class SubscriptionOverview extends AccountScreen
     public function cancel(): void
     {
         // The confirmation step, when the install asked for one. It arms rather than cancels, and the guard
-        // sits HERE rather than in the view: a Livewire action is callable from the client whatever the
+        // sits here rather than in the view: a Livewire action is callable from the client whatever the
         // markup shows, so a check that lived only in Blade would be advice rather than behavior.
         if ($this->cancelRequiresConfirmation() && ! $this->confirmingCancel) {
             $this->confirmingCancel = true;
@@ -186,7 +186,7 @@ final class SubscriptionOverview extends AccountScreen
     /**
      * Build the optional cancellation survey from the form input. No reason chosen → null, and the
      * cancellation proceeds regardless: a survey that could stop someone leaving is a dark pattern. A chosen
-     * reason is validated for SHAPE only (a known enum value), so a tampered value is a 422, not a stored
+     * reason is validated for shape only (a known enum value), so a tampered value is a 422, not a stored
      * junk row; "other" additionally requires a detail, surfaced as a 422 rather than the DTO's 500.
      */
     private function cancellationSurvey(): ?CancellationSurvey

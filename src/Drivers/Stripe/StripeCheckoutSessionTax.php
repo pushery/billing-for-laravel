@@ -22,10 +22,10 @@ use Stripe\StripeClient;
  * items, beside the exact base and the exact tax, and the call has to ask for those taxes. So the call
  * buys the difference between a document and no document.
  *
- * ## `effective_percentage`, NEVER `percentage` — and the difference is silent
+ * ## `effective_percentage`, never `percentage` — and the difference is silent
  *
  * Stripe's own field documentation separates them, and this lane is exactly the case where they
- * diverge. `percentage` is the statutory rate and "includes the statutory tax rate of NON-TAXABLE
+ * diverge. `percentage` is the statutory rate and "includes the statutory tax rate of non-taxable
  * jurisdictions"; `effective_percentage` is the rate the tax was actually calculated at, given the
  * product's taxability and whether the user is registered to collect taxes in the corresponding
  * jurisdiction — and it is the one defined for `automatic_tax`, which is the only setting that reaches
@@ -51,7 +51,7 @@ use Stripe\StripeClient;
  * - **A provider that cannot be reached.** A failed read is loud and leaves the sale exactly as
  *   visible as it was; a fallback computation would be a plausible figure nobody questions.
  *
- * ## A 429 is NOT one of those refusals, and the hierarchy is why
+ * ## A 429 is not one of those refusals, and the hierarchy is why
  *
  * Stripe makes `RateLimitException` a subclass of `InvalidRequestException`, which is itself an
  * `ApiErrorException`. So the ordinary "could not read it" catch below would also swallow the one

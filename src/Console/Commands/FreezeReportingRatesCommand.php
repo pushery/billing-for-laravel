@@ -21,7 +21,7 @@ use Pushery\Billing\Tax\FreezeReportingRates;
  *
  * ## It names a quarter rather than two dates
  *
- * The one-stop-shop period IS a calendar quarter, so asking for `--year` and `--quarter` says what is meant
+ * The one-stop-shop period is a calendar quarter, so asking for `--year` and `--quarter` says what is meant
  * and makes a half-open range impossible to express. Two free dates would let somebody file a period that
  * does not exist, and the resulting figures would look entirely normal.
  */
@@ -42,7 +42,7 @@ final class FreezeReportingRatesCommand extends Command
         $quarter = is_numeric($quarter) ? (int) $quarter : null;
 
         if ($quarter === null) {
-            // The quarter BEFORE the current one, because the current one cannot be closed. Defaulting to
+            // The quarter before the current one, because the current one cannot be closed. Defaulting to
             // "now" would make the bare command always throw, which teaches nothing and looks like a bug.
             $previous = $now->subQuarterNoOverflow();
             $year = $previous->year;

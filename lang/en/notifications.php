@@ -123,4 +123,29 @@ return [
         'cta' => 'Confirm your payment',
     ],
 
+    'direct_debit_announced' => [
+        'subject' => 'Your next direct debit',
+        'intro' => ':payee will collect :amount from your account by SEPA direct debit on :date.',
+        'recurring' => 'After that, the same amount is collected on each due date of your subscription. If the amount changes, you will be told before it is collected.',
+        'account' => 'Account ending in :account.',
+        'mandate' => 'Mandate reference: :reference.',
+        'creditor' => 'Creditor identifier: :creditor.',
+        'outro' => 'There is nothing you need to do.',
+        'cta' => 'View your payment methods',
+    ],
+
+    'cancellation_received' => [
+        'subject' => 'We received your cancellation',
+        'intro' => 'This confirms the cancellation you declared, with its full content and the date and time it reached us.',
+        'outro' => 'Keep this email. It is your record of the cancellation and of when it reached us.',
+        'cta' => 'Open your cancellation',
+    ],
+
+    'withdrawal_received' => [
+        'subject' => 'We received your withdrawal',
+        'intro' => 'This confirms the withdrawal you declared, with its full content and the date and time it reached us.',
+        'outro' => 'Keep this email. It is your record of the withdrawal and of when it reached us.',
+        'cta' => 'Open your withdrawal',
+    ],
+
 ];

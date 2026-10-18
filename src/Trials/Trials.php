@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
 
 /**
- * The generic trial: a free trial an owner is on WITHOUT a subscription — "try Pro for 14 days, no card".
+ * The generic trial: a free trial an owner is on without a subscription — "try Pro for 14 days, no card".
  *
  * It lives on the owner's own `trial_ends_at` column (the same one Cashier reserves), not a subscription
  * row, because there is no subscription yet. The state presenter reads it through {@see ownerSnapshot()} so
@@ -82,7 +82,7 @@ final readonly class Trials
     }
 
     /**
-     * The driver-neutral snapshot for an owner with NO subscription, from which the presenter reads the
+     * The driver-neutral snapshot for an owner with no subscription, from which the presenter reads the
      * generic-trial / churned / none state. This is the path that was missing: nothing built a
      * no-subscription snapshot, so the presenter's generic-trial branch could never be reached for a real
      * owner.

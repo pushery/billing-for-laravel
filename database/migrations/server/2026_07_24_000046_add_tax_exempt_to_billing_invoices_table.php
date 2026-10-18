@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Whether the supply on this document is EXEMPT — frozen, because it decides how the document reads to a
+ * Whether the supply on this document is exempt — frozen, because it decides how the document reads to a
  * tax authority.
  *
  * A tax-free supply is not one thing. An exempt supply (a small business, § 19) is EN 16931 category E and

@@ -18,10 +18,10 @@ namespace Pushery\Billing\Enums;
  */
 enum RoundingResidual: string
 {
-    /** The leftover minor unit joins the bps PORTION (the first bucket of the split). */
+    /** The leftover minor unit joins the bps portion (the first bucket of the split). */
     case ToPortion = 'to_portion';
 
-    /** The leftover minor unit joins the REMAINDER (the second bucket of the split). */
+    /** The leftover minor unit joins the remainder (the second bucket of the split). */
     case ToRemainder = 'to_remainder';
 
     /**
@@ -53,7 +53,7 @@ enum RoundingResidual: string
      *
      * A value neither direction can honor lands on `ToPortion` rather than throwing. This rebuilds something
      * that already happened, and refusing to answer would make an old charge unreadable over a setting that
-     * has nothing to do with it. The resolver that PRICES a sale does throw, because a sale not yet made can
+     * has nothing to do with it. The resolver that prices a sale does throw, because a sale not yet made can
      * still be stopped.
      */
     public static function forReconstruction(mixed $configured): self

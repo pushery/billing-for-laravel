@@ -8,8 +8,8 @@ namespace Pushery\Billing\Enums;
  * Why a grant was taken back.
  *
  * The reason belongs in its own column rather than in free text, because these are not interchangeable
- * stories about the same event. A statutory WITHDRAWAL is a right the buyer exercised; a REFUND is a
- * commercial decision the platform made; a CHARGEBACK is neither, it was imposed. They are answered to
+ * stories about the same event. A statutory withdrawal is a right the buyer exercised; a refund is a
+ * commercial decision the platform made; a chargeback is neither, it was imposed. They are answered to
  * differently by an auditor, and free text cannot be counted.
  */
 enum RevokeReason: string
@@ -20,8 +20,8 @@ enum RevokeReason: string
     /**
      * The buyer exercised a statutory right of withdrawal.
      *
-     * Its own case, not a flavor of Refund. Without the extinguishing flow, EVERY refund inside the
-     * statutory window is a CLAIM rather than goodwill — so which of the two happened is the difference
+     * Its own case, not a flavor of Refund. Without the extinguishing flow, every refund inside the
+     * statutory window is a claim rather than goodwill — so which of the two happened is the difference
      * between a decision the platform made and one it had no say in.
      */
     case Withdrawal = 'withdrawal';

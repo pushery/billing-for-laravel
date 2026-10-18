@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Which SUBDIVISION of the destination country a sale was made into.
+ * Which subdivision of the destination country a sale was made into.
  *
  * ## What it is for
  *
@@ -17,17 +17,17 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## Why it is a column beside the country and not a lookup
  *
- * The country is already frozen on the document, because a document has to keep saying what the supply WAS
+ * The country is already frozen on the document, because a document has to keep saying what the supply was
  * after the buyer has moved. The subdivision is the same claim at a finer grain and decays the same way,
  * so it is kept on the same terms — written once, frozen, and erased with the document rather than
  * separately.
  *
  * A join to the place evidence would have been the alternative, and it is worse in the way that matters:
- * the evidence is keyed on a reference the CONSUMER chooses, so a counter built on that join would answer
+ * the evidence is keyed on a reference the consumer chooses, so a counter built on that join would answer
  * correctly on an installation whose references happen to line up and silently answer `unknown` on one
  * whose do not.
  *
- * ## What is deliberately NOT stored
+ * ## What is deliberately not stored
  *
  * The signals it was derived from — above all a raw IP. Those live in the place evidence under its own
  * retention, and duplicating one here would create a second copy of a personal datum with its own lifetime.
@@ -41,7 +41,7 @@ return new class extends Migration
             $table->string('destination_subdivision', 3)->nullable()->after('destination_country');
 
             // The pair, in the order a counter reads it: every question about a subdivision is a question
-            // about a subdivision OF a country, and `NY` alone is not one.
+            // about a subdivision of a country, and `NY` alone is not one.
             $table->index(['destination_country', 'destination_subdivision'], 'billing_invoices_destination_idx');
         });
     }

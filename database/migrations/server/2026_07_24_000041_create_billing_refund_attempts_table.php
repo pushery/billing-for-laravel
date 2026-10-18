@@ -7,16 +7,16 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * One row per attempt to reverse money, written BEFORE the provider is called.
+ * One row per attempt to reverse money, written before the provider is called.
  *
  * This is what makes a locally started refund idempotent, and the reason it exists at all is that the
  * obvious alternative is unsafe. A cumulative key works for the webhook path because the provider sends
  * the running total and a redelivery carries the same one. An admin refund has no external total, so
  * computing it locally is a read-modify-write: the call times out, the operator retries, the local total
- * has not moved, a NEW key is derived — and the buyer is refunded twice while the merchant's transfer is
+ * has not moved, a new key is derived — and the buyer is refunded twice while the merchant's transfer is
  * reversed twice.
  *
- * The provider's idempotency key therefore derives from THIS row's stable id, minted before anything
+ * The provider's idempotency key therefore derives from this row's stable id, minted before anything
  * leaves the process, and never from recomputed mutable state. A retry of the same intent finds the same
  * row and sends the same key; the provider collapses it.
  *
@@ -37,7 +37,7 @@ return new class extends Migration
             $table->string('currency', 3);
 
             // What this attempt takes back from the merchant and returns of the platform's own commission.
-            // Stored beside the buyer's refund rather than derived from it, because they are NOT
+            // Stored beside the buyer's refund rather than derived from it, because they are not
             // proportional: a fee with a fixed component makes the merchant's share of a half refund more
             // than half of their payout, and a figure recomputed later would use whatever the fee policy
             // says then rather than what it said when the refund was decided.

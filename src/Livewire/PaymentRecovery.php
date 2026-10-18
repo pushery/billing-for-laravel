@@ -47,11 +47,11 @@ final class PaymentRecovery extends AccountScreen
         return $this->view('billing::livewire.payment-recovery', [
             'needsRecovery' => $pastDue,
             // While recovery is in flight, poll (bounded) until the provider's retry / 3-D Secure settles the
-            // state. It runs WHETHER OR NOT realtime is on, and that is deliberate: a broadcast notifies the
+            // state. It runs whether or not realtime is on, and that is deliberate: a broadcast notifies the
             // owner, it does not re-render this screen, so gating the poll on realtime would leave the
             // transition with no refresh at all. {@see PollsWhileActivating} for the full reasoning.
             'poll' => $this->activationPoll($recovering),
-            // Incomplete is a DIFFERENT problem from past-due: the payment needs the cardholder to
+            // Incomplete is a different problem from past-due: the payment needs the cardholder to
             // confirm it (3-D Secure), not a new card. The banner already prompts "confirm payment";
             // without this branch the recovery screen answered "all good" to the same owner.
             'needsConfirmation' => $incomplete,

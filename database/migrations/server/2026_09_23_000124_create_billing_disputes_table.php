@@ -11,7 +11,7 @@ use Pushery\Billing\Support\BillingSchema;
  * Every dispute a provider opened, as the package heard about it.
  *
  * The card networks measure a seller by how many of its payments are disputed, and they count a dispute when it
- * is OPENED, whatever its outcome. The package recorded only the lost ones, on the correction they cause, so the
+ * is opened, whatever its outcome. The package recorded only the lost ones, on the correction they cause, so the
  * count a network acts on could not be read anywhere. This table is that count's source, and `DisputeRates` reads
  * it against the payments of the same window.
  *

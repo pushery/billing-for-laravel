@@ -28,7 +28,7 @@ final readonly class SettlementTransaction
         public CarbonImmutable $supplyDate,
         public ?string $description = null,
         /**
-         * The period this transaction COUNTS IN, where that is not the period it was supplied in.
+         * The period this transaction counts in, where that is not the period it was supplied in.
          *
          * A third question, kept apart from the two the supply date already answers. Both chain legs must
          * land in the same period: where the buyer's side was taxed on receipt — a term paid up front — the
@@ -45,22 +45,22 @@ final readonly class SettlementTransaction
          * Optional, and absent is the ordinary case: a caller settling something that never went through the
          * routed ledger has no charge to name, and every caller written before this one names none.
          *
-         * Both halves or neither. A charge reference is unique only PER PROVIDER — the charge table says so
+         * Both halves or neither. A charge reference is unique only per provider — the charge table says so
          * with a composite unique key — so a bare reference could attach this transaction to another driver's
          * sale, and the document would then record that it settled a charge it never mentioned.
          */
         public ?string $chargeProvider = null,
         public ?string $chargeReference = null,
         /**
-         * WHAT was sold, frozen onto the LINE this transaction becomes.
+         * What was sold, frozen onto the line this transaction becomes.
          *
          * A collective document settles a month into one record, so its header cannot state an archetype: a
          * creator who sold a download and a commissioned piece in the same month has no single one, and
          * writing either would make the document say something false about the other half. The line does
          * have exactly one, which is why these belong here.
          *
-         * That the per-transaction engine keeps them on its HEADER is not a different rule — there the
-         * header IS the line, so the distinction cannot show. Collective settlement is the case that
+         * That the per-transaction engine keeps them on its header is not a different rule — there the
+         * header is the line, so the distinction cannot show. Collective settlement is the case that
          * reveals them as line-level facts.
          *
          * Optional, because only the caller knows what was sold and a run must not invent it. Absent means
@@ -75,7 +75,7 @@ final readonly class SettlementTransaction
     }
 
     /**
-     * The same transaction, taking its counted period from the tax point that decided the OTHER leg.
+     * The same transaction, taking its counted period from the tax point that decided the other leg.
      *
      * ## The gap this closes, and it is not ergonomics
      *
@@ -84,7 +84,7 @@ final readonly class SettlementTransaction
      * buyer's document and then did not offer — so the drift the field exists to prevent is a matter of
      * remembering, and the failure is silent in the expensive direction: leave it out and `countedOn()`
      * falls back to the supply date, the run settles in the month of supply, and the engine's own refusal
-     * says nothing, because the transaction WAS handed to the month it claims.
+     * says nothing, because the transaction was handed to the month it claims.
      *
      * That refusal only ever caught the smaller mistake — a consumer who filled the field in and then
      * grouped by the other date. The larger one, never filling it in, had no arm at all.
@@ -101,7 +101,7 @@ final readonly class SettlementTransaction
      *
      * ## Why the period is recorded only when it actually differs
      *
-     * Comparing `Y-m` is not a shortcut — it is the SAME expression `CollectiveSelfBillingEngine` uses to
+     * Comparing `Y-m` is not a shortcut — it is the same expression `CollectiveSelfBillingEngine` uses to
      * accept or refuse a transaction, so the derivation cannot disagree with the check about what a period
      * is. Where the two dates fall in one month there is nothing to carry, and recording it anyway would
      * make every ordinary transaction look like the special case, costing `null` the meaning the field's

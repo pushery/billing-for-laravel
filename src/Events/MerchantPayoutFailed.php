@@ -9,7 +9,7 @@ namespace Pushery\Billing\Events;
  *
  * ## Why this is a different question from a transfer
  *
- * A TRANSFER moves money from the platform's balance to the merchant's connected balance; a PAYOUT moves it
+ * A transfer moves money from the platform's balance to the merchant's connected balance; a payout moves it
  * from there to their bank. A payout fails on its own terms — a wrong IBAN, a closed account, a bank that
  * refuses it — with nothing wrong about the transfer that fed it. The journal knew what the platform had
  * sent and, since the provider-reversal event, what had been taken back. It did not know whether any of it
@@ -28,7 +28,7 @@ namespace Pushery\Billing\Events;
  * payout bundles many transfers, so it has no 1:1 relation to any recorded sale, and attributing it to one
  * would be exactly the wrong attribution.
  *
- * ## Attributed to the MERCHANT, never to a charge
+ * ## Attributed to the merchant, never to a charge
  *
  * For the same reason. The connected account is the only honest subject of this event.
  */

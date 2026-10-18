@@ -48,7 +48,7 @@ return new class extends Migration
             $table->char('to_currency', 3);
             $table->bigInteger('rate_scaled');
 
-            // The date the PUBLISHER stated, and the rule that made this the correct rate. Both travel with
+            // The date the publisher stated, and the rule that made this the correct rate. Both travel with
             // the number because "which rate did you use" is the easy question and "why was that the right
             // rate" is the one an audit asks first.
             $table->date('rate_date');

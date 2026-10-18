@@ -10,9 +10,10 @@ namespace Pushery\Billing\Drivers\Stripe;
  * page that adds a card), the customer portal on `https://billing.stripe.com`, and the onboarding of a connected
  * account on `https://connect.stripe.com`.
  *
- * A Stripe account with a custom domain gets Checkout and the portal on that domain instead, which the
- * application lists in `billing.redirect_hosts`. A session that carries `on_behalf_of` stays on
- * `checkout.stripe.com` either way.
+ * A Stripe account with a custom domain gets Checkout and the portal on that domain instead. The install's own
+ * account lists it in `billing.redirect_hosts`, and a payment account names its own in
+ * `PaymentAccount::$redirectHosts`, which only that account's checkout accepts. A session that carries
+ * `on_behalf_of` stays on `checkout.stripe.com` either way.
  */
 final class StripeHostedPages
 {

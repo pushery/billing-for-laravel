@@ -9,16 +9,17 @@ use Illuminate\Console\ConfirmableTrait;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Support\BillingEraser;
+use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\OwnerScopedTables;
 
 /**
  * Erases one owner's billing data — the operational half of a right-to-erasure request (GDPR Art. 17).
  *
- * This command is the COMPLETE path, and the documented one. A model observer would look more convenient,
+ * This command is the complete path, and the documented one. A model observer would look more convenient,
  * but a mass delete (`User::query()->where(...)->delete()`) fires no model events at all, so an app relying
  * on one would under-erase silently and never know.
  *
- * It does NOT delete the invoices. The law requires them to be kept, and to carry the buyer's name and
+ * It does not delete the invoices. The law requires them to be kept, and to carry the buyer's name and
  * address while they are — see BillingEraser.
  */
 final class EraseOwnerCommand extends Command
@@ -32,7 +33,7 @@ final class EraseOwnerCommand extends Command
 
     protected $description = "Erase an owner's billing data, retaining the records the law requires";
 
-    public function handle(Repository $config, BillingEraser $eraser): int
+    public function handle(Repository $config, BillingEraser $eraser, BillingManager $manager): int
     {
         $model = $config->get('billing.customer.model');
 
@@ -52,6 +53,15 @@ final class EraseOwnerCommand extends Command
 
         if ($this->option('dry-run') === true) {
             $this->components->info('Dry run: nothing was erased.');
+
+            // Payments-only mode keeps the webhook deliveries and nothing else, so their payloads are all an erasure
+            // reaches there.
+            if ($manager->paymentsOnly()) {
+                $this->line('Would scrub the stored webhook payloads.');
+
+                return self::SUCCESS;
+            }
+
             $this->line('Would purge: '.implode(', ', OwnerScopedTables::PURGED));
             $this->line('Would scrub the stored webhook payloads.');
             $this->line('Would KEEP, unlinked (the law requires it): '.implode(', ', OwnerScopedTables::RETAINED));

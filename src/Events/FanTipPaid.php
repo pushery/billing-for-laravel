@@ -20,7 +20,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * ## What travels, and why each piece cannot be re-derived later
  *
- * A tip has no treatment of its own: it is taxed by what it was paid ON, and the archetype that says so
+ * A tip has no treatment of its own: it is taxed by what it was paid on, and the archetype that says so
  * is known when the session opens and nowhere afterwards. The same holds for whether the buyer is
  * domestic — a fact about the buyer that this package deliberately never invents — and for the merchant
  * the tip is destined to. All three are written into the session's metadata before the redirect and come
@@ -38,16 +38,16 @@ final readonly class FanTipPaid implements BillingDomainEvent, IdentifiesCustome
         public Money $amount,
         public string $reference,
         public ?string $paymentReference,
-        /** What the tip was paid ON — a tip on commissioned work and a tip on a download are placed differently. */
+        /** What the tip was paid on — a tip on commissioned work and a tip on a download are placed differently. */
         public TaxArchetype $soldAlongside,
         /** The merchant the tip is destined for, as the package recorded it when the session opened. */
         public string $merchantReference,
         /**
          * Whether the small-value rules of the seller's own country apply — or null where nobody could say.
          *
-         * NULLABLE, AND THAT IS THE CORRECTION. It was a plain `bool`, and the session opener never wrote the
+         * Nullable, and that is the correction. It was a plain `bool`, and the session opener never wrote the
          * key it is read from: every real tip arrived `false`, under a reader comment calling that the
-         * conservative direction. Conservative is the right instinct about an ABSENT value and the wrong
+         * conservative direction. Conservative is the right instinct about an absent value and the wrong
          * word for one nothing could produce — a listener reading `false` was told a fact about the buyer
          * that nobody had established.
          *

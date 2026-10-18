@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\MerchantAccountReference;
 /**
  * The onboarding of a driver that does not route money: there is none.
  *
- * It REFUSES rather than returning an empty account, and the difference is the point. An empty
+ * It refuses rather than returning an empty account, and the difference is the point. An empty
  * MerchantAccountReference would be a merchant with an account id nobody can pay, carried onward until a
  * charge is addressed to it; the refusal names the actual problem — the driver has no receiving side —
  * at the moment somebody first asks for one.

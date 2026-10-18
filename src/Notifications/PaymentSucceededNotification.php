@@ -25,7 +25,7 @@ final class PaymentSucceededNotification extends BillingNotification
          * The buyer's pre-purchase declarations, when this payment had any.
          *
          * The receipt is where the law wants them repeated on a durable medium, and the right of withdrawal
-         * ends ONLY once that confirmation exists. A declaration collected, recorded, and never confirmed
+         * ends only once that confirmation exists. A declaration collected, recorded, and never confirmed
          * leaves the right standing — which is the most expensive failure on this path, because everything
          * about it looks like success: the ledger holds the consent, the gate lets the provision through,
          * and the buyer can still withdraw for fourteen days.
@@ -43,7 +43,7 @@ final class PaymentSucceededNotification extends BillingNotification
             ->line(Lang::get('billing::notifications.payment_succeeded.intro'))
             ->line(LocalizedMoney::format($this->amount).' · '.$this->invoiceReference);
 
-        // The WORDING, not a link to it. A receipt pointing at "our withdrawal policy" confirms nothing:
+        // The wording, not a link to it. A receipt pointing at "our withdrawal policy" confirms nothing:
         // the linked text changes and the purchase does not, so what would arrive years later is whatever
         // the page says then. Both or neither -- one of the two reads as a complete confirmation and is not.
         if ($this->consent instanceof WithdrawalConsent && $this->consent->hasWording()) {

@@ -10,7 +10,7 @@ use Illuminate\Database\Schema\ColumnDefinition;
 use Illuminate\Support\Facades\Config;
 
 /**
- * How this package types its references to the HOST's models.
+ * How this package types its references to the host's models.
  *
  * ## The problem this exists for
  *
@@ -33,7 +33,7 @@ use Illuminate\Support\Facades\Config;
  * would offer a freedom nobody wants and produce installations where half the schema cannot join to the
  * other half.
  *
- * References to this package's OWN models stay `bigint` and are not routed through here — the credit
+ * References to this package's own models stay `bigint` and are not routed through here — the credit
  * ledger's `source` names an order or an add-on purchase, both of which this package keys itself, and it is
  * declared with `nullableNumericMorphs()`, because a plain `nullableMorphs()` follows the framework's default
  * into a uuid column under `Schema::morphUsingUuids()`.
@@ -50,7 +50,7 @@ use Illuminate\Support\Facades\Config;
  *
  * ## Changing it later is a data migration, not a setting change
  *
- * This is read when a table is CREATED. Flipping it on an installation whose tables already exist changes
+ * This is read when a table is created. Flipping it on an installation whose tables already exist changes
  * nothing about those tables, and the mismatch surfaces at the next insert rather than at boot. `billing:doctor`
  * reports it, which is the cheapest place to find out.
  */
@@ -93,13 +93,13 @@ final class BillingSchema
      * The length the type half is capped at when the id half stops being an integer.
      *
      * MySQL caps an index key at 3072 bytes and utf8mb4 counts four bytes per character, so a default-length
-     * `varchar(255)` costs 1020 bytes of that budget. Several tables here put a morph pair inside a COMPOSITE
-     * unique index, and with a `bigint` id those indexes fit — `billing_usage_counters` fits with FOUR BYTES
+     * `varchar(255)` costs 1020 bytes of that budget. Several tables here put a morph pair inside a composite
+     * unique index, and with a `bigint` id those indexes fit — `billing_usage_counters` fits with four bytes
      * to spare (1020 + 8 + 1020 + 1020 = 3068). Widening the id to a 36-character UUID pushes it to 3204 and
      * MySQL refuses to create the index, so the whole migration fails.
      *
      * 191 characters is far more than a class name or a morph alias needs and brings the same index to 2948.
-     * It is applied ONLY on the uuid/ulid path: the integer path stays byte-identical to
+     * It is applied only on the uuid/ulid path: the integer path stays byte-identical to
      * `Blueprint::numericMorphs()`, so no existing installation's schema changes shape because this helper appeared.
      *
      * Found by the MySQL mirror. SQLite and PostgreSQL both create the index without complaint.
@@ -147,7 +147,7 @@ final class BillingSchema
     }
 
     /**
-     * The TYPE half of a host reference, at the same width the pair was created with.
+     * The type half of a host reference, at the same width the pair was created with.
      *
      * Its own method for one reason, and it is the reason the invoices index broke: a hand-written
      * `string('owner_type')->nullable()->change()` re-declares the column at the DEFAULT 255, undoing the
@@ -165,13 +165,13 @@ final class BillingSchema
     /**
      * The id half alone, for a table that declares its morph columns by hand.
      *
-     * `billing_access_grants` does that because its unique index needs explicit string LENGTHS — four
+     * `billing_access_grants` does that because its unique index needs explicit string lengths — four
      * default-length strings overrun MySQL's 3072-byte index key. It still has to follow the host's key
      * type, so the id column comes from here rather than being spelled `unsignedBigInteger` beside it.
      *
-     * The definition is RETURNED so a caller can chain, which the erasure migration needs: it makes an
+     * The definition is returned so a caller can chain, which the erasure migration needs: it makes an
      * existing owner column nullable with `->nullable()->change()`. Spelled `unsignedBigInteger` there, that
-     * one line would have cast a uuid column back to bigint — a migration that UNDOES the setting, on a
+     * one line would have cast a uuid column back to bigint — a migration that undoes the setting, on a
      * table that already holds data. That is not hypothetical; it is what this method was written after.
      */
     public static function hostKey(Blueprint $table, string $column): ColumnDefinition

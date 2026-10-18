@@ -14,7 +14,7 @@ use Pushery\Billing\Models\NumberSequence;
  * a transaction under a row lock, so two concurrent callers never receive the same number and the counter
  * only ever moves forward.
  *
- * The promise is UNIQUENESS, and gap-freedom only where the caller keeps it. The counter moves inside the
+ * The promise is uniqueness, and gap-freedom only where the caller keeps it. The counter moves inside the
  * caller's transaction on the same connection, so a number drawn in a transaction that rolls back goes back
  * with it, and a caller that draws its number in the transaction that writes its document leaves no gap when
  * that write fails. A number drawn outside such a transaction, or committed before its document fails, stays

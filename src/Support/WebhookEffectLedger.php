@@ -15,20 +15,20 @@ use Pushery\Billing\Webhooks\RepeatableEffect;
  * Tracks whether an effect has already done its work for a given reference — the dedup that keeps
  * at-least-once provider delivery from running an effect twice, and the record of what still owes work.
  *
- * THE ORDER IS THE DESIGN: claim → run → mark handled, all inside ONE transaction (see
+ * The order is the design: claim → run → mark handled, all inside one transaction (see
  * HandleWebhookEffect). A claim that is never marked rolls back with the effect that failed, so the work
- * is re-claimable and the provider's retry (or a replay) does it again. Recording the claim as DONE
+ * is re-claimable and the provider's retry (or a replay) does it again. Recording the claim as done
  * before running the effect is how a payment-failure notice gets lost forever: the marker survives, the
  * mail does not, and no retry will ever send it.
  *
- * A HANDLED run is never re-claimed. A FAILED or still-PENDING one is: pending means a worker died
+ * A handled run is never re-claimed. A failed or still-PENDING one is: pending means a worker died
  * mid-run without committing, which is indistinguishable from never having run.
  */
 final class WebhookEffectLedger
 {
     /**
      * Claim the right to run $effect for $reference, returning false when it is already handled. Call
-     * this INSIDE the transaction that also runs the effect and marks it handled.
+     * this inside the transaction that also runs the effect and marks it handled.
      */
     public function claim(string $provider, string $reference, string $effect, ?int $deliveryId = null): bool
     {
@@ -96,7 +96,7 @@ final class WebhookEffectLedger
     }
 
     /**
-     * Record that the run failed. Called OUTSIDE the rolled-back transaction — the claim rolled back with
+     * Record that the run failed. Called outside the rolled-back transaction — the claim rolled back with
      * it, so this writes the failure fresh, and it is what an operator (and `billing:webhooks:replay`)
      * looks for.
      *

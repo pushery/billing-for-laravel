@@ -12,7 +12,7 @@ use RuntimeException;
  *
  * ## Why this is a refusal and not a warning
  *
- * The statutory check happens BEFORE the report, and the difference is what a failure costs. A check folded
+ * The statutory check happens before the report, and the difference is what a failure costs. A check folded
  * into the export runs after numbers have been drawn and files written, so a failure leaves half a run
  * behind and an operator holding artifacts they cannot use and must not keep. A refusal here produces
  * nothing at all — the period is exactly as it was, and what the operator has instead is a list they can

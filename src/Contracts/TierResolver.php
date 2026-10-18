@@ -11,7 +11,7 @@ use Pushery\Billing\ValueObjects\TierIdentity;
 /**
  * Resolve a billable to its tier identity. The package binds ColumnTierResolver by default (it reads
  * the denormalized tier column); an app that does not keep a tier column rebinds this to
- * SubscriptionTierResolver, which maps the active price back to a tier. Implementations MUST be
+ * SubscriptionTierResolver, which maps the active price back to a tier. Implementations must be
  * fail-safe to the configured zero-tier — a resolver never implies access on its own, and any doubt
  * resolves to zero rather than granting entitlements.
  *

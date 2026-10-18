@@ -16,9 +16,9 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * It sits outside the suspension ladder so the ladder can be pointed at somebody else's storage without being
  * rewritten. The section below is the reason the reading looks the way it does rather than the obvious way.
  *
- * ## ONE row's clock — this merchant's — and no ordering, because there is nothing to order
+ * ## one row's clock — this merchant's — and no ordering, because there is nothing to order
  *
- * The two earlier versions both read ACROSS rows. First the newest, which let a fresh row with no clock
+ * The two earlier versions both read across rows. First the newest, which let a fresh row with no clock
  * reset the ladder outright: a fan two rungs deep walked back to zero by subscribing to anybody. Then the
  * earliest, which fixed the reset by making the longest-standing debt govern every merchant at once.
  *

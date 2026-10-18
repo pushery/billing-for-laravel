@@ -13,7 +13,7 @@ use Illuminate\Support\Carbon;
  *
  * ## Why this is its own object
  *
- * The reminder speaks INSIDE the window and the expiry acts at its END, so the two select complementary
+ * The reminder speaks inside the window and the expiry acts at its END, so the two select complementary
  * halves of one comparison: `delinquent_since > cutoff` and `delinquent_since <= cutoff`. That only holds if
  * both compute the same cutoff. Spelled twice, the halves drift apart the first time the floor or the
  * subtraction is touched — and the drift is invisible in the direction that matters, because a gap sends

@@ -7,15 +7,15 @@ namespace Pushery\Billing\Exceptions;
 use RuntimeException;
 
 /**
- * A PARTIAL reversal was asked for on a routed sale whose commission terms were never recorded.
+ * A partial reversal was asked for on a routed sale whose commission terms were never recorded.
  *
- * A partial clawback is a DIFFERENCE: what the merchant holds now, less what they would have been paid on
+ * A partial clawback is a difference: what the merchant holds now, less what they would have been paid on
  * what is left of the sale. The second half needs the rate and the flat amount the sale was priced under,
  * and a row written before those columns existed does not have them.
  *
  * Refused rather than approximated, and the alternative is worth naming because it looks reasonable:
  * reading today's configuration would produce a figure, the figure would balance, and it would be the
- * amount a DIFFERENT sale owed. That is exactly the mistake the frozen columns exist to prevent, arrived at
+ * amount a different sale owed. That is exactly the mistake the frozen columns exist to prevent, arrived at
  * one layer up.
  *
  * A FULL reversal of the same row is fine and is not refused. With nothing left of the sale there is no

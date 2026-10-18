@@ -12,7 +12,7 @@ use Pushery\Billing\Models\Coupon;
  *
  * ## Why the package does this and not the application
  *
- * {@see Coupon}'s own docblock says the CONSUMING APPLICATION writes that row, and it is right: a discount
+ * {@see Coupon}'s own docblock says the consuming application writes that row, and it is right: a discount
  * is a commercial decision and its catalog belongs to whoever runs the business. The provider object is a
  * different thing. It is a provider operation, it needs the driver's client, and the application has no seam
  * to reach it through — exactly the split the price side already makes with

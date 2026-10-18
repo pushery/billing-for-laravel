@@ -36,4 +36,13 @@ enum OrderItemType: string
      * that states that category state no other (BR-O-11), so the fee cannot share an invoice with a cycle.
      */
     case LateFee = 'late_fee';
+
+    /**
+     * What a change inside a period collected in advance adds to that period: a dearer tier or more seats, from the
+     * change to the period's end.
+     *
+     * It stands in an order of its own, charged at the change, because the period's own order was paid when the
+     * period began. It is the price of the supply for those days and taxed as the period is.
+     */
+    case Proration = 'proration';
 }

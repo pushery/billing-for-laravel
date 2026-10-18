@@ -20,7 +20,7 @@ enum UsRegimeActivationTrigger: string
     /**
      * The platform's own turnover or transaction count is closing on a region's limit.
      *
-     * Measured across ALL sellers, not per seller: where a marketplace is treated as the facilitator, the
+     * Measured across all sellers, not per seller: where a marketplace is treated as the facilitator, the
      * limit is the platform's, and "no single seller is anywhere near it" is the reflex that gets a platform
      * registered late.
      */

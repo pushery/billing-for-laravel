@@ -21,17 +21,17 @@ use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
- * Turns the provider's connected-account events — account lifecycle AND per-merchant subscriptions — into
+ * Turns the provider's connected-account events — account lifecycle and per-merchant subscriptions — into
  * neutral ones, and only ever runs behind the merchant endpoint.
  *
  * It is a separate class rather than more branches on the shipped mapper because those branches would change
- * what EXISTING installations do. A single-merchant app already receives `account.updated` and its own
+ * what existing installations do. A single-merchant app already receives `account.updated` and its own
  * subscription events today; they fall through to nothing on the platform mapper and are ignored. Recognizing
  * them there would make every such app start emitting domain events and running effects on the next deploy,
  * with no config change and nothing announcing it.
  *
  * A connected-account `customer.subscription.*` is a creator's own subscription. It is resolved to the local
- * merchant that owns the firing account, and mapped to the neutral SubscriptionStateChanged carrying BOTH the
+ * merchant that owns the firing account, and mapped to the neutral SubscriptionStateChanged carrying both the
  * merchant scope (which keys the local per-merchant row) and the account reference (which scopes the owner
  * lookup). An account with no local merchant on file cannot be attributed, so nothing is emitted.
  *
@@ -41,6 +41,25 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  */
 final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceWebhookEventMapper
 {
+    /**
+     * Every event type this mapper answers, which is what the endpoint for the connected accounts has to receive.
+     *
+     * Held against each such endpoint by `billing:doctor`, and against the arms of {@see self::map()} by
+     * `StripeEventTypesAreListedTest`.
+     *
+     * @var list<string>
+     */
+    public const array EVENT_TYPES = [
+        'account.application.deauthorized',
+        'account.updated',
+        'charge.dispute.closed',
+        'charge.dispute.created',
+        'customer.subscription.created',
+        'customer.subscription.deleted',
+        'customer.subscription.updated',
+        'payout.failed',
+    ];
+
     public function __construct(
         private StripeSubscriptionMapper $subscriptions,
         private MerchantAccountDirectory $accounts,
@@ -59,7 +78,7 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
             return;
         }
 
-        // The account the event is ABOUT. On a connected-account delivery the provider names it at the top
+        // The account the event is about. On a connected-account delivery the provider names it at the top
         // level; the object's own id is the same account for `account.*`, and the top level is the field
         // that stays correct for every other event type this endpoint may carry later.
         $account = $payload['account'] ?? ($object['id'] ?? null);
@@ -76,7 +95,7 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
             'customer.subscription.deleted' => $this->subscriptionEvents($object, $this->strictAccount($payload), $this->int($payload, 'created')),
             'charge.dispute.created' => $this->disputeOpenedEvents($object, $account),
             'charge.dispute.closed' => $this->disputeClosedEvents($object, $account),
-            // Whether the money ARRIVED, which is a different question from whether it was sent. Only the
+            // Whether the money arrived, which is a different question from whether it was sent. Only the
             // failure: the success is the ordinary case and the provider's own dashboard already shows it,
             // while the failure is the one somebody has to answer for. Read here, on the merchant endpoint: a
             // connected account's payout is that account's object, so Stripe delivers its events here, while a
@@ -89,7 +108,7 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
     /**
      * A payout the provider could not deliver to the merchant's bank.
      *
-     * Attributed to the ACCOUNT, never to a charge: a payout bundles many transfers, so it has no 1:1
+     * Attributed to the account, never to a charge: a payout bundles many transfers, so it has no 1:1
      * relation to a recorded sale, and picking one would be a wrong attribution that reads as a right one.
      *
      * A body with no payout id is dropped rather than recorded under a blank. The id is what makes a
@@ -195,12 +214,12 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
     /**
      * A decided dispute on a merchant's own charge.
      *
-     * Only a LOST one moves anything. A won dispute leaves the money where it is, and emitting for it would
+     * Only a lost one moves anything. A won dispute leaves the money where it is, and emitting for it would
      * claw back a merchant's earnings over a case they won — the single most expensive way to be wrong here.
      * An open dispute is not decided at all: the amount that will be corrected is not known until the
      * outcome is, so an event now would correct a base that may never change.
      *
-     * The provider's dispute fee is carried as its OWN dimension rather than netted off the amount. It is a
+     * The provider's dispute fee is carried as its own dimension rather than netted off the amount. It is a
      * service the provider supplied to the platform, not a deduction from what the buyer paid; folded in, it
      * would silently shrink the turnover being corrected by the fee on every disputed sale.
      *
@@ -243,7 +262,7 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
             // would arrive looking alike, so the correction could only ever take one branch, and it would take
             // the one that also corrects a merchant who delivered.
             reason: DisputeReason::fromProvider(is_string($object['reason'] ?? null) ? $object['reason'] : null),
-            // The dispute's OWN id. Everything else here is about the charge, correctly — the correcting
+            // The dispute's own id. Everything else here is about the charge, correctly — the correcting
             // documents and the clawback act on the sale. The fee does not: it is charged per dispute, and a
             // charge can carry more than one, so claiming it on the charge reference would silently lose the
             // second one.
@@ -252,7 +271,7 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
     }
 
     /**
-     * The firing account STRICTLY from the top level. A subscription event's object id is the subscription,
+     * The firing account strictly from the top level. A subscription event's object id is the subscription,
      * not the account, so the outer object-id fallback must never reach the subscription path.
      *
      * @param  array<array-key, mixed>  $payload

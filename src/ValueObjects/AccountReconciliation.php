@@ -7,7 +7,7 @@ namespace Pushery\Billing\ValueObjects;
 /**
  * The month-end comparison between a sub-ledger and the collective account it stands behind.
  *
- * A difference here is a FAULT, not a note: the two are the same obligation counted twice, so they agree or
+ * A difference here is a fault, not a note: the two are the same obligation counted twice, so they agree or
  * one of them is wrong. Which is why this carries the difference as a figure rather than a flag — a report
  * that says "does not reconcile" and nothing more sends somebody looking through a month of documents.
  *

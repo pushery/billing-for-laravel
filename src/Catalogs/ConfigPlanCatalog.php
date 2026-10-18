@@ -15,8 +15,8 @@ use Pushery\Billing\ValueObjects\TierIdentity;
 
 /**
  * The purchasable-plan catalog and the anti-price-injection guarantee: the client submits a tier
- * KEY, and the price is resolved here from config — never a price id from the client. A plan is a
- * first-class local concept (amount + interval) that MAY carry a provider-price mapping.
+ * key, and the price is resolved here from config — never a price id from the client. A plan is a
+ * first-class local concept (amount + interval) that may carry a provider-price mapping.
  */
 final readonly class ConfigPlanCatalog implements PlanCatalog
 {
@@ -49,7 +49,7 @@ final readonly class ConfigPlanCatalog implements PlanCatalog
     public function providerPriceFor(string $tierKey): ?string
     {
         // Delegates to the resolver so a per-provider price map resolves to the active driver's id, not
-        // just a scalar. The tier KEY is the client's input; the price never is (anti-price-injection).
+        // just a scalar. The tier key is the client's input; the price never is (anti-price-injection).
         return $this->prices->forTier($tierKey);
     }
 

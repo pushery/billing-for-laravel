@@ -24,7 +24,7 @@ use Pushery\Billing\Preflight\CheckpointRegistry;
  * ## The package never declares the waiver, and never assumes it away either
  *
  * The declaration is a statement of intent an operator makes to an authority, binding for years. This cannot
- * make it and cannot prove it, so it is configuration. What it CAN do is refuse to guess: with no monitor
+ * make it and cannot prove it, so it is configuration. What it can do is refuse to guess: with no monitor
  * configured and no waiver declared, a cross-border sale is taxed at the destination anyway. That is the
  * expensive direction and the safe one — charging the seller's rate where the buyer's was owed
  * under-declares in a country nobody is registered in, and surfaces as an assessment years later.
@@ -32,7 +32,7 @@ use Pushery\Billing\Preflight\CheckpointRegistry;
  * ## The crossing sale is already over the line
  *
  * The sale that takes the total past the limit is itself taxed at the destination — it is not the last one
- * under the old rule but the first one under the new. An implementation that switched from the NEXT sale
+ * under the old rule but the first one under the new. An implementation that switched from the next sale
  * would mis-tax exactly one transaction per seller per year, in the year an auditor looks hardest.
  *
  * ## One direction only

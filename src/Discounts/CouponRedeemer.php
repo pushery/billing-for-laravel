@@ -20,14 +20,14 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * The cap check and the count increment run inside one transaction with the coupon row locked
  * (SELECT ... FOR UPDATE), so two owners racing for the last remaining redemption cannot both win — one
  * commits, the other sees the cap reached. The per-owner limit is enforced a second way, by the unique
- * (coupon, owner) index: even if two of the SAME owner's requests interleave, the database rejects the
+ * (coupon, owner) index: even if two of the same owner's requests interleave, the database rejects the
  * second insert, so a double-apply can never grant the discount twice. (On SQLite row locking is a no-op,
  * so the concurrency guarantee is proven on PostgreSQL and MySQL; the sequential limits hold everywhere.)
  */
 final readonly class CouponRedeemer
 {
     /**
-     * @param  ?MerchantScope  $merchant  the scope of the SALE; null is the platform, the single-seller case
+     * @param  ?MerchantScope  $merchant  the scope of the sale; null is the platform, the single-seller case
      *
      * @throws CouponUnavailable when the coupon is inactive, expired, exhausted, already redeemed here, or
      *                           was issued by a different seller

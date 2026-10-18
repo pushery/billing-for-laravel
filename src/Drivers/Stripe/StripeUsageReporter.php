@@ -15,8 +15,8 @@ use Stripe\StripeClient;
  * subscription and put it on the cycle's invoice.
  *
  * The identifier we minted at record time is passed straight through as Stripe's own `identifier`, so a
- * replayed report is deduped by Stripe rather than billed twice. Note HOW Stripe dedups: it does not
- * quietly accept the replay, it REJECTS it with `duplicate_meter_event`. That rejection means the usage
+ * replayed report is deduped by Stripe rather than billed twice. Note how Stripe dedups: it does not
+ * quietly accept the replay, it rejects it with `duplicate_meter_event`. That rejection means the usage
  * is already billed, so it is swallowed here as the success it is — the alternative is a flusher that
  * retries a report which can never succeed and then reports perfectly-billed revenue as lost.
  *
@@ -27,7 +27,7 @@ use Stripe\StripeClient;
  * flusher holds usage stamped ahead, fails usage of a period whose invoice has closed, and escalates rather
  * than retrying forever.
  *
- * The value crosses the wire RAW. Stripe's price does the packaging (`transform_quantity`) and the
+ * The value crosses the wire raw. Stripe's price does the packaging (`transform_quantity`) and the
  * allowance (a graduated first tier priced at zero) — doing either here as well would bill the customer
  * for a fraction of what they used, or hand them the free allowance twice.
  */
@@ -56,12 +56,12 @@ final readonly class StripeUsageReporter implements UsageReporter
                 ],
             ]);
         } catch (RateLimitException $e) {
-            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // A 429 is transient and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. It must reach UsageFlusher, which retries the
             // rollup -- swallowed, this usage is never billed and nothing says so.
             throw $e;
         } catch (InvalidRequestException $e) {
-            // Stripe does not dedup a replayed identifier silently — it REJECTS it with
+            // Stripe does not dedup a replayed identifier silently — it rejects it with
             // `duplicate_meter_event`. That rejection is the success case: it means Stripe already holds
             // this usage and has billed it. Treating it as a failure would retry a report that can never
             // succeed, and then declare perfectly-billed revenue lost.
@@ -81,11 +81,11 @@ final readonly class StripeUsageReporter implements UsageReporter
     }
 
     /**
-     * What Stripe has actually AGGREGATED for this customer and meter in the window — the second source of
+     * What Stripe has actually aggregated for this customer and meter in the window — the second source of
      * truth a reconcile compares our ledger against.
      *
-     * Stripe addresses a meter's summaries by its ID, while everything else here speaks the meter's EVENT
-     * NAME (the identifier usage is reported under), so the name is resolved to an id first. An event name
+     * Stripe addresses a meter's summaries by its ID, while everything else here speaks the meter's event
+     * name (the identifier usage is reported under), so the name is resolved to an id first. An event name
      * with no active meter behind it answers null: that is a configuration fault for `billing:meters:check`
      * to report, not a usage drift.
      */
@@ -103,11 +103,11 @@ final readonly class StripeUsageReporter implements UsageReporter
 
         // Stripe requires the window to align to minute boundaries and rejects a second-precise timestamp
         // outright. A subscription cycle's start and end are second-precise, so one of them has to move --
-        // and BOTH ENDS MOVE THE SAME WAY.
+        // and both ends move the same way.
         //
         // Flooring the start and ceiling the end would widen the window by under a minute, and "under a
-        // minute" is an argument about the SIZE of the widening, not about where it reaches. Cycles touch --
-        // `current_period_end` IS the next `current_period_start` -- so the widening reaches into the neighbor
+        // minute" is an argument about the size of the widening, not about where it reaches. Cycles touch --
+        // `current_period_end` is the next `current_period_start` -- so the widening reaches into the neighbor
         // by definition. Stripe's start_time is inclusive and its end_time exclusive, so consecutive windows
         // would overlap by exactly the minute containing the boundary, and every meter event in it would be
         // aggregated into both. The reconcile compares each against a ledger that splits the cycles cleanly,
@@ -115,11 +115,11 @@ final readonly class StripeUsageReporter implements UsageReporter
         //
         // Ceiling both ends makes the windows tile: this cycle's end_time is the next one's start_time,
         // exactly. One minute of boundary usage is still attributed to the neighboring cycle -- that is
-        // unavoidable under a minute-aligned API and a second-precise anchor -- but it is attributed ONCE,
+        // unavoidable under a minute-aligned API and a second-precise anchor -- but it is attributed once,
         // and always to the same side.
         //
         // Ceiling rather than flooring, and the direction is the argument: a floored start would reach
-        // BACKWARDS, into a period that may already be closed and reconciled and whose number somebody has
+        // backwards, into a period that may already be closed and reconciled and whose number somebody has
         // filed. Reaching forward lands in a period that is still open.
         $summaries = $this->stripe->billing->meters->allEventSummaries($meterId, [
             'customer' => $customerReference,
@@ -136,7 +136,7 @@ final readonly class StripeUsageReporter implements UsageReporter
         return (int) round($total);
     }
 
-    /** The id of the ACTIVE meter reporting under this event name, or null when there is none. */
+    /** The id of the active meter reporting under this event name, or null when there is none. */
     private function meterId(string $meterName): ?string
     {
         foreach ($this->stripe->billing->meters->all(['status' => 'active', 'limit' => 100])->data as $meter) {

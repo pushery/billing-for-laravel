@@ -107,7 +107,7 @@
             @endif
         </div>
 
-        {{-- A SECOND REGION, POLITE, AND DELIBERATELY NOT THE ONE ABOVE. What the batch left unbooked is
+        {{-- A second region, polite, and deliberately not the one above. What the batch left unbooked is
              not a failure direction: the file is correct and complete about everything it does book, and
              an unbookable grant is an open question about the chart of accounts. Putting it in the
              assertive region would rank it with a refusal; leaving it out of a live region entirely would

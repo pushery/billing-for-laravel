@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Enums;
 
 /**
- * WHY somebody can reach a work right now — the answer to the second half of "does P have access, and
+ * Why somebody can reach a work right now — the answer to the second half of "does P have access, and
  * through what".
  *
  * ## Why this is not GrantSource
@@ -15,14 +15,14 @@ namespace Pushery\Billing\Enums;
  * cancellation, a row saying somebody owns what they only ever rented.
  *
  * The way out is that these are two different questions. `GrantSource` is a COLUMN — how a row came to
- * exist, written once and never recomputed. This is an ANSWER — computed per read, never stored, and one of
+ * exist, written once and never recomputed. This is an answer — computed per read, never stored, and one of
  * its cases has no row behind it at all. Sharing one type would have made the impossible case reachable
  * exactly where it does the damage: on the write side.
  *
  * ## Ownership wins over a subscription
  *
  * When both say yes, this names ownership. Not because it is "more true", but because it is the stronger
- * claim to report: it survives the subscription ending, and a screen that said SUBSCRIPTION would tell the
+ * claim to report: it survives the subscription ending, and a screen that said subscription would tell the
  * reader their access ends with their plan when it does not.
  *
  * ## It says nothing about who sold anything

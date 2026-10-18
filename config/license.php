@@ -10,7 +10,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | The licensing surface, deliberately separate from billing.php (pricing): what
-    | each tier actually UNLOCKS. Two kinds of grant per tier —
+    | each tier actually unlocks. Two kinds of grant per tier —
     |
     |   - "features": boolean unlocks (does this tier get the feature at all).
     |   - "limits":   numeric ceilings (null means unlimited / not capped).

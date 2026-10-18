@@ -13,7 +13,7 @@ use Pushery\Billing\Models\DocumentDelivery;
  * The record of a settlement document reaching the person it settles with.
  *
  * A document in a database is not a delivered document. What delivers it is that the recipient can reach it
- * AND has been told it is there — and the only thing that can ever evidence either is a record written when
+ * and has been told it is there — and the only thing that can ever evidence either is a record written when
  * it happened. Without one there is no answer to "when did they get it", which is the question every dispute
  * about a deduction date or an objection window turns on.
  *
@@ -60,7 +60,7 @@ final readonly class DocumentDeliveryLog
     }
 
     /**
-     * Whether this document has been delivered: within reach AND its recipient told.
+     * Whether this document has been delivered: within reach and its recipient told.
      *
      * Both, because either alone is not delivery — a document nobody was told about is one nobody knows to
      * look for, and a notification about a document that is not there yet points at nothing.
@@ -74,7 +74,7 @@ final readonly class DocumentDeliveryLog
     }
 
     /**
-     * When the document became delivered: the later of the FIRST time it was within reach and the FIRST time
+     * When the document became delivered: the later of the first time it was within reach and the first time
      * its recipient was told.
      *
      * The first of each, because a document is delivered once. A reminder sent later, or the document put

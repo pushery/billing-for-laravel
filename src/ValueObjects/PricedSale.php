@@ -38,7 +38,7 @@ final readonly class PricedSale
      * target that does not divide evenly cannot be hit. Only the creator-first order lands on it exactly,
      * at the cost of that cent on every uneven sale.
      *
-     * The consequence is a rule for whoever builds the screen: show the RESULTING payout. Treating the
+     * The consequence is a rule for whoever builds the screen: show the resulting payout. Treating the
      * input as a promise makes an off-by-one-cent look like a bug and invites somebody to "fix" it by
      * rounding a second time, which is how the sale stops adding up.
      */

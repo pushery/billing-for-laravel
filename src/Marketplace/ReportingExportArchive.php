@@ -35,7 +35,7 @@ use Pushery\Billing\Tax\FilingCalendar;
  *
  * Rendered content comes IN. That is not indifference, it is the seam: which format a jurisdiction reports
  * in is the profile's business, and an archive that could render would have to be taught every format it is
- * ever asked to keep. It records WHICH format and WHICH version, so a reader years later needs neither the
+ * ever asked to keep. It records which format and which version, so a reader years later needs neither the
  * renderer nor the release that produced the bytes in order to know what they are looking at.
  *
  * ## It files nothing
@@ -83,12 +83,12 @@ final readonly class ReportingExportArchive
     /**
      * Whether a period would produce today exactly what a stored run produced.
      *
-     * Compared by FINGERPRINT rather than field by field, and that is the difference between a real check
+     * Compared by fingerprint rather than field by field, and that is the difference between a real check
      * and a reassuring one. A field comparison only ever asks about the fields somebody thought to compare;
      * the bytes are what was reported, so they are what has to match.
      *
      * A mismatch is not an error. It is the ordinary consequence of a late correction — but it is a fact
-     * somebody has to see BEFORE filing, rather than learn afterwards from an authority.
+     * somebody has to see before filing, rather than learn afterwards from an authority.
      */
     public function matchesStored(ReportingExportRecord $stored, string $contents): bool
     {

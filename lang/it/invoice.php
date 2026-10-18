@@ -8,6 +8,7 @@ return [
     'invoice' => 'Fattura',
     'correction' => 'Nota di variazione',
     'corrects' => 'Rettifica :number',
+    'reinstates' => 'Nuovo addebito di :number',
     'number' => 'Numero fattura :number',
     'issued' => 'Emessa il :date',
     'from' => 'Da',

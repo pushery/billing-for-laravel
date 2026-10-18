@@ -15,7 +15,7 @@ use Pushery\Billing\Support\RetentionHoldGate;
  *
  * {@see PruneBillingCommand} deletes on age: a window passes, the row goes. That is the storage-limitation
  * duty (GDPR Art. 5(1)(e)) and it is not optional. But a second duty can point the other way at the same
- * moment — litigation, a supervisory-authority request, a copyright dispute — and it is the HOST that knows
+ * moment — litigation, a supervisory-authority request, a copyright dispute — and it is the host that knows
  * about it, because it is the host that received the letter. Without this seam a host has exactly two
  * positions, and both breach something: leave the pruner on and lose evidence it was ordered to preserve,
  * or switch it off and over-retain everything else. Neither is a policy.
@@ -32,7 +32,7 @@ use Pushery\Billing\Support\RetentionHoldGate;
  *
  * ## Fail-closed
  *
- * An implementation that cannot answer must throw. The pruner then deletes NOTHING from that table and the
+ * An implementation that cannot answer must throw. The pruner then deletes nothing from that table and the
  * run reports failure — see {@see RetentionHoldGate}. A hold seam that fell back to
  * "nothing is held" when it broke would be worse than no seam at all: it would delete exactly the records it
  * was installed to protect, at exactly the moment it was least able to say so.
@@ -43,7 +43,7 @@ use Pushery\Billing\Support\RetentionHoldGate;
 interface RetentionHold
 {
     /**
-     * The subset of these records that may NOT be destroyed, however old they are.
+     * The subset of these records that may not be destroyed, however old they are.
      *
      * `$recordType` is the TABLE the records live in — the same name the retention matrix uses for its
      * rules — so a host can key its holds to something stable rather than to a class name that may be

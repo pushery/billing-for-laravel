@@ -18,7 +18,7 @@ use Pushery\Billing\Exceptions\DocumentRoleViolatesRegime;
  * settles no creator. A correction draws from its own series but belongs wherever the original it corrects
  * belongs, so it inherits the original's permission.
  *
- * This is the ROLE half of the belief that a document must match its sale; the WHO half — whether a receipt
+ * This is the ROLE half of the belief that a document must match its sale; the who half — whether a receipt
  * names the platform or the merchant — is the seller-vs-posture guard on the record itself. Kept pure and
  * regime-keyed so it can sit inside the record's creation guard, where no second caller (a job, a console
  * command, consumer code) can route around it. A jurisdiction whose roles differ binds its own profile; the

@@ -13,7 +13,7 @@ use Pushery\Billing\Support\BillingSchema;
  * A provider fee is a service the provider supplied — where they are established abroad, one the recipient
  * owes the tax on — and a booking of it needs something to book. Until now the only place a dispute fee
  * appeared was in flight, on the event that reported it; nothing held it afterwards, so nothing could post
- * it and nobody could reconcile it. It is deliberately NOT netted off the amount it accompanies: folded in,
+ * it and nobody could reconcile it. It is deliberately not netted off the amount it accompanies: folded in,
  * it would shrink the turnover being corrected and leave every figure adding up.
  *
  * Unique on the provider and the reference it was charged against, so a redelivered webhook books the fee

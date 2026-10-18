@@ -56,7 +56,7 @@ class RefundAttempt extends Model
     protected $casts = [
         'amount_minor' => 'integer',
         'transfer_reversal_minor' => 'integer',
-        // Also deliberately NOT defaulted. Null means nobody compared what the provider actually moved
+        // Also deliberately not defaulted. Null means nobody compared what the provider actually moved
         // against what was asked for; zero means somebody did and nothing was missing.
         'transfer_reversal_short_minor' => 'integer',
         'fee_refund_minor' => 'integer',

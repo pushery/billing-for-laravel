@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Schema;
  * ## Why it also matters after the sale
  *
  * `reversibleMinor()` is the ceiling on clawing money back from a merchant, and it was read off what was
- * OWED. Where the provider moved less, the package would try to reverse money that never reached them — and
+ * owed. Where the provider moved less, the package would try to reverse money that never reached them — and
  * on a lost dispute the platform is the one out of pocket for the difference.
  *
  * ## Why nullable rather than defaulted to the net

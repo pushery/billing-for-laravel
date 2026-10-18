@@ -14,7 +14,7 @@ namespace Pushery\Billing\Enums;
  * A buyer who never received what they paid for has a claim against the supply itself. The consideration is
  * handed back, both legs of the chain are corrected, and the merchant's own turnover moves with it.
  *
- * A FRAUDULENT charge is a different event wearing the same shape. The supply happened, the merchant
+ * A fraudulent charge is a different event wearing the same shape. The supply happened, the merchant
  * delivered, and the money is lost to a stolen card rather than returned to a customer. Correcting the
  * merchant-side document there would reduce the turnover of somebody who supplied exactly what they
  * promised — the platform's loss written onto the merchant's tax return.
@@ -22,8 +22,8 @@ namespace Pushery\Billing\Enums;
  * ## Unknown is not an error case, it is the safe one
  *
  * A provider adds reason codes over time, and an unrecognized code must not decide a tax treatment by
- * accident. Unknown maps to the branch that corrects BOTH legs — the conservative direction, because a
- * correction wrongly made is visible on a document somebody receives, while a correction wrongly SKIPPED is
+ * accident. Unknown maps to the branch that corrects both legs — the conservative direction, because a
+ * correction wrongly made is visible on a document somebody receives, while a correction wrongly skipped is
  * silence, and silence is what nobody finds.
  */
 enum DisputeReason: string

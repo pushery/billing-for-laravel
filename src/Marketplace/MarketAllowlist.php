@@ -12,17 +12,17 @@ use Pushery\Billing\Exceptions\MarketNotOpen;
 /**
  * The countries an operator has said they are registered in — and a refusal for every other one.
  *
- * This is a gate that has to close BEFORE the money moves. A sale into a country where nobody is registered
+ * This is a gate that has to close before the money moves. A sale into a country where nobody is registered
  * cannot be repaired by any document issued afterwards: the tax has arisen, the registration has not, and
  * the only remedies are retroactive registration or a voluntary disclosure. Every other guard in this
  * package can afford to run at document time; this one cannot.
  *
  * Two behaviors that look contradictory and are not:
  *
- * - As a FEATURE it is opt-in. With no list configured there is no gate and nothing changes, because a gate
+ * - As a feature it is opt-in. With no list configured there is no gate and nothing changes, because a gate
  *   that defaulted to closed would stop every existing consumer at their next sale. That is not a guard, it
  *   is an outage.
- * - WITHIN the feature it is fail-closed. Once a list exists, anything not explicitly open is refused —
+ * - Within the feature it is fail-closed. Once a list exists, anything not explicitly open is refused —
  *   including a country the evidence could not resolve. "We could not tell where they are" is not a reason
  *   to sell somewhere unknown; it is the clearest reason not to.
  *
@@ -148,7 +148,7 @@ final readonly class MarketAllowlist
      * the calculator returns a number, and the number is zero. Checked at boot rather than at the sale, so
      * it surfaces on a deploy instead of on somebody's invoice.
      *
-     * Only checked against a LOCAL rate table. When the rates come from the provider there is nothing here
+     * Only checked against a local rate table. When the rates come from the provider there is nothing here
      * to compare against, and pretending otherwise would be a guard that reports on a subject it cannot
      * see. The limit is stated rather than hidden.
      *

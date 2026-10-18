@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\ContentVersion;
  * with no version to hand over yet. That is a state the model already expresses, so nothing has to special-
  * case the absence.
  *
- * It exists because the seam was documented and left UNBOUND, which meant resolving it threw — a contract a
+ * It exists because the seam was documented and left unbound, which meant resolving it threw — a contract a
  * reader could find and a consumer could not use. Same failure class the register's other seams were built
  * to avoid, introduced by the same hand in the same run.
  */

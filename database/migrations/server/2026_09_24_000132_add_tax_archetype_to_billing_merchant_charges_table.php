@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * What kind of thing a routed sale sold, frozen onto the sale.
  *
- * The amounts say what moved and the purpose says through which lane, but nothing said WHAT was sold. Under
+ * The amounts say what moved and the purpose says through which lane, but nothing said what was sold. Under
  * intermediation that is the only record of the sale this package writes: no buyer document is issued, so a
  * count of a seller's sales of goods had nothing to read. Written by the lanes that know it at the moment of
  * sale, and deliberately not backfilled: an older row carries no archetype because nothing recorded one, and

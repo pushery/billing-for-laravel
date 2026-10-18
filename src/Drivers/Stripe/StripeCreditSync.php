@@ -13,12 +13,12 @@ use Stripe\StripeClient;
  * Pushes a package credit change onto the Stripe customer balance, so the credit actually reduces the
  * customer's next Stripe invoice instead of only sitting in the local ledger.
  *
- * SIGN. Stripe's customer balance is the opposite of the package's: a POSITIVE Stripe balance is money the
- * customer OWES (added to the next invoice), a NEGATIVE balance is credit (subtracted from it). The package
+ * Sign. Stripe's customer balance is the opposite of the package's: a positive Stripe balance is money the
+ * customer owes (added to the next invoice), a negative balance is credit (subtracted from it). The package
  * ledger is positive-is-credit. So a package credit of +500 is pushed to Stripe as -500, and a clawed-back
  * credit of -500 as +500 — this inverts the delta.
  *
- * IDEMPOTENCY. The reference is sent as the Idempotency-Key in the request OPTIONS (the third argument),
+ * Idempotency. The reference is sent as the Idempotency-Key in the request OPTIONS (the third argument),
  * never in the params — Cashier's applyBalance() merges options into the params, so a key passed there
  * becomes a request-body field and a network retry double-credits. Calling the SDK directly, like
  * StripeLateFees, is what puts the key in the header where it dedups. A customer with no Stripe customer

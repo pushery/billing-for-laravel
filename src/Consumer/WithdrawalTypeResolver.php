@@ -24,7 +24,7 @@ use Pushery\Billing\ValueObjects\UnitGrant;
  *
  * Two places need the answer and they sit at opposite ends of the purchase: the checkout, which must refuse
  * to send a buyer to the provider without the declarations their purchase requires, and the grant effect,
- * which must refuse to provide the work without them. Both answers have to be the SAME answer — a checkout
+ * which must refuse to provide the work without them. Both answers have to be the same answer — a checkout
  * that decided no declarations were needed and a grant that then refused to provide would take money for
  * something the buyer can never receive.
  *
@@ -40,7 +40,7 @@ use Pushery\Billing\ValueObjects\UnitGrant;
  * taxonomy fixes the withdrawal of every archetype, a voucher's among them: buying one is refundable in the ordinary
  * way, whatever its tax waits for. A taxonomy of your own may leave it open.
  *
- * Null means UNCLASSIFIED, never "no right applies". What a caller does with that is the caller's decision,
+ * Null means unclassified, never "no right applies". What a caller does with that is the caller's decision,
  * and the two callers make opposite ones on purpose — see {@see PurchaseDeclarations::assertMayCheckout()}.
  */
 final readonly class WithdrawalTypeResolver
@@ -79,9 +79,9 @@ final readonly class WithdrawalTypeResolver
      * The withdrawal type a subscription to this tier carries, or null when the taxonomy fixes none.
      *
      * A tier is a subscription unless its catalog says otherwise, so an unset archetype is not unclassified here
-     * the way it is for an add-on: `TaxArchetype::Subscription` IS the classification, and the explicit
+     * the way it is for an add-on: `TaxArchetype::Subscription` is the classification, and the explicit
      * `archetype` key refines it for a tier that sells something whose right ends differently. Null still means
-     * UNCLASSIFIED, and it is reached where the taxonomy itself leaves the withdrawal answer open.
+     * unclassified, and it is reached where the taxonomy itself leaves the withdrawal answer open.
      */
     public function forTier(string $tierKey): ?WithdrawalType
     {

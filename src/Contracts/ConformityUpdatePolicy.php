@@ -11,9 +11,9 @@ use Carbon\CarbonInterface;
  *
  * ## Two axes, and this is the one nobody chooses
  *
- * A buyer's updates come on two independent axes. ENRICHMENT — new editions, added material — is what the
+ * A buyer's updates come on two independent axes. Enrichment — new editions, added material — is what the
  * creator sells, and `UpdatePolicy` governs it: they may promise everything, a window, or nothing at all.
- * CONFORMITY — a defect fix, a security patch, keeping the thing working on current systems — is what the
+ * Conformity — a defect fix, a security patch, keeping the thing working on current systems — is what the
  * seller owes, and no product setting reaches it.
  *
  * Keeping them apart is the whole point of this contract existing. A single "updates" flag would make a

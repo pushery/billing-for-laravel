@@ -24,7 +24,7 @@ use Pushery\Billing\Enums\ExchangeRateLayer;
  * ## Only the document layer, deliberately
  *
  * A sale carries more than one lawful conversion — see {@see ExchangeRateLayer}.
- * This names the rule for the layer the SETTLEMENT DOCUMENT is issued under, which is the one the package
+ * This names the rule for the layer the settlement document is issued under, which is the one the package
  * produces and can therefore be responsible for. The reporting layer belongs to whoever files the return
  * and the payout layer to whoever moves the money; a profile that answered for all three here would be
  * claiming authority over documents this package never writes.

@@ -14,11 +14,11 @@ use Pushery\Billing\Enums\TaxExemptionReason;
  *
  * These are the honest parts of "how is this creator's link taxed": which document to issue, whether it
  * states tax, how much, whether the tax burden reverses onto the recipient instead, what the creator is
- * paid, whether the supply is EXEMPT, and why it is. The document engine renders from this; it never
+ * paid, whether the supply is exempt, and why it is. The document engine renders from this; it never
  * re-decides it.
  *
  * `exempt` is the one field a downstream step could not reconstruct: a small business's supply and a
- * standard-rated supply whose tax statement is merely WITHHELD pending validation look identical here — both
+ * standard-rated supply whose tax statement is merely withheld pending validation look identical here — both
  * state no tax on a self-billed invoice — yet one is exempt (rendered EN 16931 category E, with a reason)
  * and the other is a taxable supply not yet stated (not exempt). Only the tax decision knows which, so it
  * says so, rather than leaving the writer to guess exempt from the absence of tax.
@@ -30,7 +30,7 @@ use Pushery\Billing\Enums\TaxExemptionReason;
  * The invariants are enforced here rather than trusted to every caller, because each is a hard line a wrong
  * document would cross silently: a tax statement can appear only on a self-billed invoice; a supply cannot
  * both state its own tax and reverse the burden onto the recipient; and an exempt supply states no tax and
- * does not reverse-charge — exemption is a THIRD, distinct answer to how the link is taxed.
+ * does not reverse-charge — exemption is a third, distinct answer to how the link is taxed.
  */
 final readonly class InboundTaxTreatment
 {
@@ -42,9 +42,9 @@ final readonly class InboundTaxTreatment
         public Money $payoutAmount,
         public bool $exempt = false,
         /**
-         * WHY the supply is relieved, where it is.
+         * Why the supply is relieved, where it is.
          *
-         * `exempt` says THAT a relief applies; this says which one, and the document needs both. Without it
+         * `exempt` says that a relief applies; this says which one, and the document needs both. Without it
          * the issuer freezes "exempt" and the renderer has nothing to name, so BT-120 falls back to a generic
          * phrase that claims a relief without stating its ground — and the column is frozen, so nobody can
          * heal the document afterwards.

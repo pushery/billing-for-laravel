@@ -30,7 +30,7 @@ return new class extends Migration
             BillingSchema::nullableMorphs($table, 'owner', 'billing_vouchers_owner_index');
             $table->string('currency', 3);
             $table->integer('face_value_minor');
-            // What is left. It only ever goes DOWN — there is deliberately no path that raises it.
+            // What is left. It only ever goes down — there is deliberately no path that raises it.
             $table->integer('remaining_minor');
             $table->string('instrument_type', 32);
             $table->timestamp('issued_at');

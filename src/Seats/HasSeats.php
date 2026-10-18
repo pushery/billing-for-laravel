@@ -12,11 +12,11 @@ use Pushery\Billing\Contracts\ProvidesSeats;
 /**
  * A reference implementation of {@see ProvidesSeats} for a team-owner model.
  *
- * The package does NOT own the membership table — that is the app's auth domain — so this trait reads seats
+ * The package does not own the membership table — that is the app's auth domain — so this trait reads seats
  * from a configurable relation (`billing.seats.membership_relation`, default `members`) rather than a table
  * it ships. A project with no teams adopts nothing and runs no migration.
  *
- * Only ACTIVE members occupy a seat: a pending invite is not a person you pay for. When the relation is not
+ * Only active members occupy a seat: a pending invite is not a person you pay for. When the relation is not
  * already scoped to active members, set `billing.seats.active_status_column` and the trait filters on it.
  * The count is a COUNT query, never a hydrate-then-count, so a thousand-member team costs one small query.
  *
@@ -37,7 +37,7 @@ trait HasSeats
     }
 
     /**
-     * The query for this owner's ACTIVE members. Override this to express a membership model the config
+     * The query for this owner's active members. Override this to express a membership model the config
      * cannot (a pivot status, a soft-deleted scope); the default reads the configured relation and applies
      * the optional active-status filter.
      */

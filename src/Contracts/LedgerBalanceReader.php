@@ -8,9 +8,9 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
- * A READ-ONLY view of what a party has earned on the marketplace — and nothing more.
+ * A read-only view of what a party has earned on the marketplace — and nothing more.
  *
- * This is the supervisory-law-harmless half of the payout decision: it lets a creator SEE
+ * This is the supervisory-law-harmless half of the payout decision: it lets a creator see
  * their balance without the platform ever holding, moving, or being able to move the money. It is a pure
  * aggregate projection over the routed-charge record (`billing_merchant_charges`) — no state table of its
  * own, so the balance can never drift from the charges it sums. Every value it returns is a {@see Money},

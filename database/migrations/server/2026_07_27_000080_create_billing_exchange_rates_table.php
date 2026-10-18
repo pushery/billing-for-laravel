@@ -26,11 +26,11 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## What `rate_date` means, and the trap behind it
  *
- * It is the date the PUBLISHER stated, never the day the row was written. Fetched on a Saturday, a central
+ * It is the date the publisher stated, never the day the row was written. Fetched on a Saturday, a central
  * bank's daily file answers HTTP 200 carrying Friday's data — no error, no 404, the real date inside the
  * document. An importer that stamped the clock would book a rate for a day the bank never published.
  *
- * For a monthly average the date is the FIRST day of the month it covers. That is a storage convention and
+ * For a monthly average the date is the first day of the month it covers. That is a storage convention and
  * not a claim about that day: a monthly rate has no single day, and picking the first one keeps the column
  * one type and one meaning instead of two.
  *

@@ -12,14 +12,14 @@ use Pushery\Billing\Proration\CreditBalanceProrationStrategy;
  * One movement of an owner's credit balance, in the form the books need it.
  *
  * The balance is a multi-purpose voucher in law: money held against a promise, with neither
- * the place of supply nor the rate known when it is taken. So a paid top-up is NOT revenue — it is a
+ * the place of supply nor the rate known when it is taken. So a paid top-up is not revenue — it is a
  * liability — and the supply happens later, when the balance pays for something.
  *
- * AND THAT IS WHERE THE VOUCHER ANALOGY STOPS. A voucher redemption IS the sale, so it books against
+ * And that is where the voucher analogy stops. A voucher redemption is the sale, so it books against
  * revenue. A credit redemption pays an invoice that already exists — `OrderInvoiceIssuer` raised it on the
  * local lane, `PersistInvoice` persisted the provider's on the other — and that invoice has already booked
  * revenue against a receivable. Booking the redemption against revenue a second time would count the
- * turnover twice. It settles the RECEIVABLE.
+ * turnover twice. It settles the receivable.
  *
  * The reason travels with the movement rather than being reduced to a sign here: a debit that spends credit
  * and a debit that takes it back are the same number and different books.
@@ -35,7 +35,7 @@ final readonly class CreditMovement
     ) {}
 
     /**
-     * How much of a SPEND came out of credits nobody paid for — null where the question does not arise.
+     * How much of a spend came out of credits nobody paid for — null where the question does not arise.
      *
      * A balance is fungible and a spend is one entry against the mixed total, so the two halves have to be
      * separated before either can be booked: a paid top-up is money held against a promise, a proration
@@ -43,7 +43,7 @@ final readonly class CreditMovement
      * append-only log, which is why this arrives already computed rather than being asked here — the answer
      * needs the owner's whole history, and this object deliberately holds no Eloquent model.
      *
-     * Null is read as none, and that is safe only because the batch computes the split for EVERY spend it
+     * Null is read as none, and that is safe only because the batch computes the split for every spend it
      * exports. A movement built anywhere else describes a grant or a reversal, where there is nothing to
      * split — the question does not arise rather than being answered with a zero.
      */
@@ -69,7 +69,7 @@ final readonly class CreditMovement
     /**
      * Whether this movement produces a booking row at all.
      *
-     * IT LIVES HERE BECAUSE TWO PLACES ASK IT — the export, to decide whether to emit, and the period
+     * It lives here because two places ask it — the export, to decide whether to emit, and the period
      * batch, to count what it emitted. Held in both, they would eventually disagree, and the disagreement
      * would surface as a confirmation line stating a number of bookings the file does not contain.
      *
@@ -91,7 +91,7 @@ final readonly class CreditMovement
      * method exists rather than a `match` at the call site: unused time on a swapped plan becomes spendable
      * balance with **no payment and no credit note** ({@see CreditBalanceProrationStrategy}),
      * so booking it as a liability would create one against nothing. Leaving it out is not an omission —
-     * what it IS in the books (a reduction of the original taxable base under § 17 UStG, or something else)
+     * what it is in the books (a reduction of the original taxable base under § 17 UStG, or something else)
      * is an open question, and the monthly batch reports the amount instead of inventing an answer.
      */
     public function booksAgainstMoney(): bool

@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\BillingSchema;
 
 /**
- * The redemption ledger: WHO redeemed WHICH coupon, and against which subscription. It is the source of truth
+ * The redemption ledger: who redeemed which coupon, and against which subscription. It is the source of truth
  * behind a coupon's max-redemptions and per-owner limits — the unique index (coupon, owner) makes a second
  * redemption of the same coupon by the same owner impossible at the database level, so a double-apply race
  * cannot grant the discount twice.

@@ -11,7 +11,7 @@ use Pushery\Billing\ValueObjects\CheckpointOutcome;
  * One point on the go-live checklist: a single, named condition that is either satisfied before the
  * marketplace switch is flipped, or is not.
  *
- * A checkpoint must be CHEAP and PURE — a read of configuration, of container bindings, of the active
+ * A checkpoint must be cheap and pure — a read of configuration, of container bindings, of the active
  * driver's shape. It must not open a socket, query a provider or touch the database. The reason is that the
  * same checklist runs in two places: as an operator command, and at boot on every request that starts the
  * framework with the marketplace on. A checkpoint that reaches over the network would turn a provider
@@ -47,7 +47,7 @@ interface GoLiveCheckpoint
      *
      * Waivable is for a point whose subject is the operator's own jurisdiction or contract — the package
      * cannot know that a consumer's country has no equivalent obligation, so it must not be the final word.
-     * Structural points are NOT waivable: a marketplace whose driver cannot route money does not become
+     * Structural points are not waivable: a marketplace whose driver cannot route money does not become
      * able to route money because someone put its key in a list.
      */
     public function isWaivable(): bool;

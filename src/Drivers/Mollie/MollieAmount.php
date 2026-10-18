@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\Money;
  * work from the currency's minor-unit exponent, so a zero-decimal currency renders without a point and a
  * three-decimal one keeps all three.
  *
- * What lives HERE is only the provider's shape. Putting a `toMollie()` on the value object every driver
+ * What lives here is only the provider's shape. Putting a `toMollie()` on the value object every driver
  * shares would name one provider in the neutral core — the same leak `ArchTest` refuses for imports, one
  * layer down, and it would invite an `toAdyen()` beside it until the core knew every driver by name.
  *
@@ -39,7 +39,7 @@ final readonly class MollieAmount
     }
 
     /**
-     * The same, from the shape a RESOURCE carries.
+     * The same, from the shape a resource carries.
      *
      * Two methods rather than one that guesses, because the SDK genuinely uses two shapes: a request
      * carries the typed `Money` data object, while a response's `amount` is the decoded JSON — a plain

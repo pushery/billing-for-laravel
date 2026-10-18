@@ -7,12 +7,12 @@ namespace Pushery\Billing\Enums;
 /**
  * Why an owner's credit balance moved.
  *
- * The balance is a running total and says only WHAT somebody has. Every movement carries one of these, so
+ * The balance is a running total and says only what somebody has. Every movement carries one of these, so
  * the balance can always be taken apart into the events that produced it — which is what a support agent
  * needs when a customer disputes a figure, and what an auditor needs when the balance is the only trace a
  * refund or a proration left behind.
  *
- * EVERY CASE HERE HAS A PRODUCER. That is deliberate and worth keeping: a reason nobody writes reads as a
+ * Every case here has a producer. That is deliberate and worth keeping: a reason nobody writes reads as a
  * movement class the system supports, so a caller picks it, and the value quietly means "somebody once
  * planned this" rather than "this happened". Add a case together with the code that writes it, never ahead
  * of it — the local billing engine will bring its own when it offsets an order against a balance.
@@ -41,9 +41,17 @@ enum CreditReason: string
     case AddonReversal = 'addon_reversal';
 
     /**
+     * A reversal given back, because the chargeback that caused it was taken back by the bank.
+     *
+     * Written by AddonRefunds as a credit. A separate case rather than a top-up for the reason AddonReversal is: the
+     * customer bought nothing new, and a report that counted it as a sale would show the add-on sold twice.
+     */
+    case AddonReversalUndone = 'addon_reversal_undone';
+
+    /**
      * Credit spent against a due billing cycle, so the customer is charged only the remainder.
      *
-     * Written by the local billing engine. It is the one movement that makes the balance go DOWN for a
+     * Written by the local billing engine. It is the one movement that makes the balance go down for a
      * reason the customer asked for — the other debit, a reversal, happens to them. Keeping the two apart
      * is what lets a support agent tell "they used their credit" from "we took it back".
      */
@@ -53,7 +61,7 @@ enum CreditReason: string
      * A charge offset given back because the cycle it was spent on was never collected.
      *
      * Written by the local billing engine when the provider refuses the remainder. The credit is spent
-     * BEFORE the charge on purpose — deciding a figure and debiting it after a provider round trip lets two
+     * before the charge on purpose — deciding a figure and debiting it after a provider round trip lets two
      * cycles for the same owner spend the same balance twice — so a refusal has to return it, and this is
      * the entry that says so.
      *
@@ -64,7 +72,7 @@ enum CreditReason: string
     case ChargeOffsetReturned = 'charge_offset_returned';
 
     /**
-     * Credit the PROVIDER applied to an invoice it raised, brought back onto this ledger.
+     * Credit the provider applied to an invoice it raised, brought back onto this ledger.
      *
      * A driver with a customer balance mirrors a credit onto the provider so it reduces the next invoice
      * automatically. The provider then spends it on its own, and this is the entry that tells the ledger —
@@ -85,7 +93,7 @@ enum CreditReason: string
      * becomes spendable balance with no payment and no credit note, so booking it as a liability
      * would create one against nothing.
      *
-     * IT LIVES ON THE REASON BECAUSE TWO PLACES ASK IT. {@see CreditMovement::booksAgainstMoney()}
+     * It lives on the reason because two places ask it. {@see CreditMovement::booksAgainstMoney()}
      * asks it of a movement about to be booked, and {@see CreditConsumption::unpaidShare()} asks it
      * of a credit a spend consumed, to size the correction that spend owes. Held in both, the two
      * would eventually disagree about one case — and the case they would disagree about is the one

@@ -16,7 +16,7 @@ use Stripe\StripeClient;
 /**
  * Mints a Stripe price for a merchant-defined tier, on the merchant's own connected account.
  *
- * The price is created ON the connected account, so it belongs to the creator and is charged and paid out
+ * The price is created on the connected account, so it belongs to the creator and is charged and paid out
  * through them — never on the platform. Idempotency rides on a deterministic lookup key built from the tier,
  * the amount and the interval: the provisioner asks the account for a price with that key before creating
  * one, so re-provisioning an unchanged tier returns the price it already has rather than a second identical

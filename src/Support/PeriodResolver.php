@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\BillingPeriod;
 /**
  * Which billing cycle a moment of usage belongs to.
  *
- * The cycle is the SUBSCRIPTION's, mirrored from the provider — an owner who renews on the 31st does
+ * The cycle is the subscription's, mirrored from the provider — an owner who renews on the 31st does
  * not have a calendar month, and bucketing their usage by one would bill part of it in the wrong cycle
  * (and, at a month boundary, into a cycle the provider has already invoiced). Only when there is no
  * subscription cycle to follow — no subscription at all, or a provider that has not told us one — does
@@ -51,7 +51,7 @@ final readonly class PeriodResolver
         if ($start instanceof CarbonInterface && $end instanceof CarbonInterface && $end > $start) {
             $period = new BillingPeriod($this->key($start), $start->utc(), $end->utc());
 
-            // The stored cycle is the CURRENT one. Usage stamped outside it (a late flush of last
+            // The stored cycle is the current one. Usage stamped outside it (a late flush of last
             // cycle's events, a back-dated correction) belongs to its own cycle, not to this one.
             if ($period->contains($moment)) {
                 return $period;

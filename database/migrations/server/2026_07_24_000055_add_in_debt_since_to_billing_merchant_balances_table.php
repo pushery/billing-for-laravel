@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * Not derivable from anything already on the row. `updated_at` moves every time the balance changes, so it
  * answers "when did this last move", which is the opposite of the question: a debt that has been paid down
- * twice looks NEWER than one nobody has touched, and it is the untouched one that is the receivable.
+ * twice looks newer than one nobody has touched, and it is the untouched one that is the receivable.
  *
  * Set when the balance crosses into debt from anywhere else, and cleared the moment it is settled — so a
  * merchant who runs up a second debt starts a second clock rather than inheriting the first one's age.

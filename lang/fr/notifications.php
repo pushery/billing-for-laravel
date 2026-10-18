@@ -123,4 +123,29 @@ return [
         'cta' => 'Confirmer le paiement',
     ],
 
+    'direct_debit_announced' => [
+        'subject' => 'Ton prochain prélèvement',
+        'intro' => ':payee prélèvera :amount sur ton compte par prélèvement SEPA le :date.',
+        'recurring' => 'Ensuite, le même montant sera prélevé à chaque échéance de ton abonnement. Si le montant change, tu seras prévenu avant le prélèvement.',
+        'account' => 'Compte se terminant par :account.',
+        'mandate' => 'Référence du mandat : :reference.',
+        'creditor' => 'Identifiant créancier : :creditor.',
+        'outro' => 'Tu n\'as rien à faire.',
+        'cta' => 'Voir tes moyens de paiement',
+    ],
+
+    'cancellation_received' => [
+        'subject' => 'Nous avons reçu ta résiliation',
+        'intro' => 'Nous te confirmons la résiliation que tu as déclarée, avec tout son contenu ainsi que la date et l’heure auxquelles elle nous est parvenue.',
+        'outro' => 'Conserve cet e-mail. Il atteste ta résiliation et le moment où elle nous est parvenue.',
+        'cta' => 'Voir ta résiliation',
+    ],
+
+    'withdrawal_received' => [
+        'subject' => 'Nous avons reçu ta rétractation',
+        'intro' => 'Nous te confirmons la rétractation que tu as déclarée, avec tout son contenu ainsi que la date et l’heure auxquelles elle nous est parvenue.',
+        'outro' => 'Conserve cet e-mail. Il atteste ta rétractation et le moment où elle nous est parvenue.',
+        'cta' => 'Voir ta rétractation',
+    ],
+
 ];

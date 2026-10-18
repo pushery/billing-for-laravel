@@ -91,7 +91,7 @@ final readonly class RatePlausibility
     /**
      * Whether a proposal may be written down at all.
      *
-     * A notable jump does NOT block: it is information for the person reviewing, not grounds for refusal.
+     * A notable jump does not block: it is information for the person reviewing, not grounds for refusal.
      *
      * @param  array{implausible: list<string>, vanished: list<string>, notable: list<string>}  $assessment
      */

@@ -8,7 +8,7 @@ use InvalidArgumentException;
 use Pushery\Billing\Enums\SettlementDocumentType;
 
 /**
- * What a buyer refund changes on BOTH links of a commission-chain sale — the outbound supply to the buyer
+ * What a buyer refund changes on both links of a commission-chain sale — the outbound supply to the buyer
  * and the inbound supply from the creator — as one answer, computed in one pass.
  *
  * The reason this is one object rather than two calls is the failure it exists to prevent. A refund that
@@ -17,7 +17,7 @@ use Pushery\Billing\Enums\SettlementDocumentType;
  * related steps that a caller may sequence — they are one event seen from two sides, and separating them is
  * how the second one goes missing.
  *
- * Every amount here is a POSITIVE magnitude describing a REDUCTION, the same rule the correcting document
+ * Every amount here is a positive magnitude describing a reduction, the same rule the correcting document
  * follows: a correction is not a negative invoice, it is a document whose nature inverts the meaning. A
  * caller that wants signed figures negates them itself, at the point where the sign has a meaning.
  *
@@ -26,7 +26,7 @@ use Pushery\Billing\Enums\SettlementDocumentType;
  * than folded into `inboundInputTax`: an amount that reverses is not an amount that was deducted, and adding
  * it to the deduction would understate the liability correction by its full value.
  *
- * `inboundDocument` is the document type the ORIGINAL creator-side document had, or null when the creator's
+ * `inboundDocument` is the document type the original creator-side document had, or null when the creator's
  * standing was never established and no document was ever issued. It is what tells the document layer
  * whether a creator-side correction is due at all, and which series it draws from — never re-derived from
  * today's standing, which may have moved since the supply.

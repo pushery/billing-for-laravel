@@ -21,14 +21,14 @@ use Pushery\Billing\ValueObjects\ReportingPeriod;
  * to make sure the day does not arrive unannounced. It had no caller: nothing asked it, so nothing was
  * announced, and the day arrived exactly as unannounced as before.
  *
- * A calendar answers about a day. A warning has to look FORWARD, which is the small thing that was missing:
+ * A calendar answers about a day. A warning has to look forward, which is the small thing that was missing:
  * this walks the days inside the notice window and asks the calendar about each.
  *
  * ## Once per obligation, and that is the whole point
  *
- * The last period's return and the annual seller report fall due on the SAME date. A sweep that remembered
+ * The last period's return and the annual seller report fall due on the same date. A sweep that remembered
  * "the 31st is announced" would silence the second one — the precise failure the calendar was written to
- * prevent. So the marker is keyed on the obligation AND the date, and two announcements for one day are the
+ * prevent. So the marker is keyed on the obligation and the date, and two announcements for one day are the
  * correct shape rather than a duplicate.
  *
  * ## It warns; nothing here files

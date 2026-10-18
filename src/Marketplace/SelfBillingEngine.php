@@ -34,9 +34,9 @@ use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
  * Settles one creator's supply into the platform: it resolves what document to issue, guards it, and draws
  * its number — the orchestration the whole credit-note chain hangs from.
  *
- * The engine does NOT re-decide the tax. That is the input-side matrix's job ({@see InboundTaxMatrix}); the
+ * The engine does not re-decide the tax. That is the input-side matrix's job ({@see InboundTaxMatrix}); the
  * engine consumes its treatment and turns it into a numbered, guarded plan. What it adds is the ORDER and
- * the PRECONDITIONS the matrix cannot express on its own:
+ * the preconditions the matrix cannot express on its own:
  *
  *  - the creator's standing is read at the SUPPLY date, so a later status change does not rewrite a past
  *    settlement;
@@ -120,7 +120,7 @@ final readonly class SelfBillingEngine
             return;
         }
 
-        // Asked in the PUBLISHED direction: the bank states how many units of the sale's currency one unit
+        // Asked in the published direction: the bank states how many units of the sale's currency one unit
         // of the reporting currency buys, and a rate is never turned around to answer the other way.
         $this->exchangeRates->assertObtainable(
             strtoupper($reporting),
@@ -154,7 +154,7 @@ final readonly class SelfBillingEngine
     }
 
     /**
-     * @param  CarbonImmutable  $supplyDate  the TAX POINT of the outbound side — never "today", and never
+     * @param  CarbonImmutable  $supplyDate  the tax point of the outbound side — never "today", and never
      *                                       the moment this credit happens to be issued.
      *
      * The two chain links are one transaction seen twice, so they belong to the same period. Where the
@@ -163,7 +163,7 @@ final readonly class SelfBillingEngine
      * instead splits the pair: outbound tax in January, input tax spread across the year, and an offset
      * nobody notices until an accountant cannot make two periods agree.
      *
-     * It is not a presentational choice. This date resolves the creator's status, both guards, AND the YEAR
+     * It is not a presentational choice. This date resolves the creator's status, both guards, and the year
      * of the allocated document number — and a document number's year is frozen the moment it is drawn.
      */
     public function settle(
@@ -181,19 +181,19 @@ final readonly class SelfBillingEngine
             return $plan;
         }
 
-        // HERE, and not in plan(), and the difference is the whole rule. Under a REVERSE CHARGE the archetype
+        // Here, and not in plan(), and the difference is the whole rule. Under a reverse charge the archetype
         // decides which category the document carries -- `K` with VATEX-EU-IC for an intra-Community supply of
         // goods, `AE` for a service -- and those name different provisions and different obligations for the
         // recipient. Left null, `EnInvoiceTaxCategory` reads "not goods" and prints AE: right for a digital
         // supply, a wrong statement of the provision for every other, arrived at without ever being asked.
         //
-        // plan() is also what the monthly COLLECTIVE run calls, once per transaction, and a collective
+        // plan() is also what the monthly collective run calls, once per transaction, and a collective
         // document deliberately carries no archetype -- it covers many supplies and a creator who sold a
         // download and a commissioned work in the same month has no single one. There the absence is the
         // answer. Refusing in plan() would refuse every reverse-charged collective settlement, on every
         // install, for a value they are right not to carry.
         //
-        // settle() is the single-supply path by construction: it is plan plus ONE number, which is precisely
+        // settle() is the single-supply path by construction: it is plan plus one number, which is precisely
         // what the collective run must not do. So one document, one supply, one archetype -- and the refusal
         // still lands before allocate(), because a burnt number in a gapless series is not recoverable.
         //
@@ -204,7 +204,7 @@ final readonly class SelfBillingEngine
         }
 
         // The number is drawn only now that the plan's guards have passed, so a refused settlement never
-        // consumes one — and from the SUPPLY year, so a document dated into December keeps that year's series.
+        // consumes one — and from the supply year, so a document dated into December keeps that year's series.
         return SettlementOutcome::document(
             $plan->series,
             $this->numbers->allocate($plan->series, $supplyDate->year),
@@ -216,7 +216,7 @@ final readonly class SelfBillingEngine
      * Everything settle() decides EXCEPT drawing a number: the treatment, the document series, and the guards.
      *
      * The monthly collective run ({@see CollectiveSelfBillingEngine}) plans every transaction of a creator's
-     * month this way and draws a SINGLE number for the whole document — so the plan must run the guards (each
+     * month this way and draws a single number for the whole document — so the plan must run the guards (each
      * line's tax must clear the disclosure whitelist, each supply date must be covered by the agreement) but
      * must not consume a number per line. settle() is this plus one number.
      */
@@ -241,7 +241,7 @@ final readonly class SelfBillingEngine
             return SettlementOutcome::hold();
         }
 
-        // THE RATE CHECK BELONGS TO THE CURRENCY, NOT TO THE DOCUMENT TYPE, so it does not sit inside the
+        // The rate check belongs to the currency, not to the document type, so it does not sit inside the
         // self-billed branch below. A settlement note in SEK converts exactly as a self-billed invoice in SEK
         // does -- `converts()` asks only `billing.currency` against the amount's -- so a check inside the
         // branch would let the note reach `issue()`, draw a number, write the row, and only then fail on the
@@ -251,7 +251,7 @@ final readonly class SelfBillingEngine
         // says: "failing after the number is exactly the case the guard exists to prevent". A burnt number in
         // a series that has to be gapless is not recoverable by retrying.
         //
-        // It runs BEFORE the branch, so no future document type can be added past it by accident.
+        // It runs before the branch, so no future document type can be added past it by accident.
         $this->assertExchangeRateObtainable($transactionNet, $supplyDate);
 
         if ($treatment->document === SettlementDocumentType::SelfBilledInvoice) {
@@ -265,12 +265,12 @@ final readonly class SelfBillingEngine
         }
 
         // A plain settlement note to a party who issues no invoice (a private individual): no agreement is
-        // required and it states no tax, so neither of THOSE two guards applies. The rate check above does.
+        // required and it states no tax, so neither of those two guards applies. The rate check above does.
         return SettlementOutcome::planned(DocumentSeries::SettlementNote, $treatment);
     }
 
     /**
-     * Settle the supply AND persist the resulting document — the parties reversed, the platform the buyer of
+     * Settle the supply and persist the resulting document — the parties reversed, the platform the buyer of
      * the creator's supply, the creator the seller.
      *
      * A hold persists nothing and returns null. Otherwise the document carries the treatment's amounts (the
@@ -318,11 +318,11 @@ final readonly class SelfBillingEngine
             'total_minor' => $treatment->payoutAmount->minorUnits,
             'reverse_charge' => $treatment->reverseChargeToRecipient,
             'tax_exempt' => $treatment->exempt,
-            // WHY it is relieved, where it is. `tax_exempt` says only THAT a relief applies, and BT-120 then
-            // fell back to a generic phrase naming no statute — on a document the PLATFORM raises in the
+            // Why it is relieved, where it is. `tax_exempt` says only that a relief applies, and BT-120 then
+            // fell back to a generic phrase naming no statute — on a document the platform raises in the
             // creator's name, and on a column that is frozen, so nobody could heal it afterwards.
             'tax_exemption_reason' => $treatment->exemptionReason,
-            // The characteristics of the CREATOR's supply, frozen the same way the amounts are. This
+            // The characteristics of the creator's supply, frozen the same way the amounts are. This
             // document is the one where goods-versus-services actually changes what is rendered: a
             // reverse-charged supply takes `AE` as a service and `K` with VATEX-EU-IC as goods, and the
             // renderer decides that from `tax_archetype` alone. With nothing writing the column every
@@ -337,7 +337,7 @@ final readonly class SelfBillingEngine
             'sold_alongside_archetype' => $characteristics->soldAlongside,
             'place_of_supply_rule' => $characteristics->placeOfSupply,
             'tax_rate_category' => $characteristics->rateCategory,
-            // The rate the document STATES, and only where it states one. Readers take the rate from this
+            // The rate the document states, and only where it states one. Readers take the rate from this
             // column: the DATEV export tells a 7% input from a 19% one by it, and a correction copies it
             // onto its own line. Left empty on a document that states tax, a reduced-rate settlement booked
             // to the standard input account and its correction stated tax at 0%. A document that states no
@@ -347,7 +347,7 @@ final readonly class SelfBillingEngine
             // it although the document states nothing, and the export picks the reduced reverse-charge
             // account from it.
             'supply_rate_bps' => $supplyRateBps,
-            // BT-72. Not a new argument here: a settlement documents ONE supply and this method is already
+            // BT-72. Not a new argument here: a settlement documents one supply and this method is already
             // told when it happened -- the same date it dates the document to. Asking for it twice would be
             // two places for one fact, and the second one would eventually disagree.
             'delivered_on' => $supplyDate,
@@ -363,19 +363,19 @@ final readonly class SelfBillingEngine
             // Which routed transaction this settles. Without it the document is unreachable from the sale:
             // a refund knows the charge, and the correction it owes would have to find this document by
             // matching amounts and dates — a guess — or not at all.
-            // WHOSE reference that is. The charge table is unique on the pair, so a settlement that stored
+            // Whose reference that is. The charge table is unique on the pair, so a settlement that stored
             // only the reference cannot be matched back to its charge once a second driver exists -- and the
             // DAC7 fee figure that has to be derived from exactly that join would then read more than one row.
             'provider' => $provider,
             'settled_charge_reference' => $settledChargeReference,
             // The terms this sale was priced under. A correction recomputes the merchant's share on what
-            // REMAINS, and reading the rate from configuration then would use whatever it says that day —
+            // remains, and reading the rate from configuration then would use whatever it says that day —
             // quietly shrinking every historical clawback after a rate cut, and over-collecting after a
             // rise, with the document still adding up. Both parts, because a fixed component is charged
             // once and is not halved by a half refund.
             'commission_bps' => $commission->bps,
             'commission_flat_minor' => $commission->flatMinor,
-            // …including WHICH SIDE kept the odd minor unit. Without it a correction has to assume a
+            // …including which side kept the odd minor unit. Without it a correction has to assume a
             // direction, and on an installation that hands the cent the other way it comes back one cent off
             // the sale it corrects — on every uneven split, silently.
             'commission_residual' => $commission->residual,
@@ -392,9 +392,9 @@ final readonly class SelfBillingEngine
         ]);
 
         // The rate this document was converted at, frozen onto it now that there is a document to carry it.
-        // Its availability was already proved in plan(), before the number was drawn, for EVERY document
+        // Its availability was already proved in plan(), before the number was drawn, for every document
         // type — the check sits ahead of the branch there precisely so this sentence is true. It lived
-        // INSIDE the self-billed branch once, and then this claim was false for a settlement note: the
+        // inside the self-billed branch once, and then this claim was false for a settlement note: the
         // number was drawn, the row was written, and the freeze failed. Which is exactly the case the
         // guard exists to prevent, and a burnt number in a gapless series is not fixed by retrying.
         $this->freezeExchangeRate($record, $transactionNet, $supplyDate);
@@ -426,7 +426,7 @@ final readonly class SelfBillingEngine
      *
      * The caller has canceled the original, or is about to in the same transaction, and has worked out the
      * treatment under the standing now in force at the supply date. What stays the same is everything about
-     * the SUPPLY: its date, what was sold, the payout, the commission it was priced under and the charge it
+     * the supply: its date, what was sold, the payout, the commission it was priced under and the charge it
      * settles. What changes is what the document says about tax, and the document itself.
      *
      * ## Dated the day it is issued, numbered in that year

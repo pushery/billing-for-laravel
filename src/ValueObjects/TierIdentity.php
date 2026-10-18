@@ -10,7 +10,7 @@ namespace Pushery\Billing\ValueObjects;
  * this; it absorbs the enum-vs-string split (one app's tier() returns an enum, another's a string)
  * so neither app's existing signature has to change.
  *
- * A TierIdentity NEVER implies access on its own: callers combine it with the subscription state.
+ * A TierIdentity never implies access on its own: callers combine it with the subscription state.
  *
  * The `level` is a comparable rank — the tier's position in the catalog's configured order, low to high — so
  * a content gate can ask "at least this tier" without knowing the catalog. It defaults to 0 and is appended

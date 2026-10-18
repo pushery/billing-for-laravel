@@ -25,7 +25,7 @@ use Pushery\Billing\Support\InvoiceNumberSequence;
  * and the drift would be invisible, since both halves keep producing perfectly valid numbers. Held here,
  * there is one place to change and no way for the two to disagree.
  *
- * The scope is keyed by YEAR, so the counter restarts every January while the prefix carries the year —
+ * The scope is keyed by year, so the counter restarts every January while the prefix carries the year —
  * the shape a German document series is normally read in.
  */
 final readonly class CreditNoteNumber

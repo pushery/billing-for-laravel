@@ -11,7 +11,7 @@ use Pushery\Billing\Exceptions\InvalidBillingConfig;
 /**
  * How many agreeing sources have to name a country before a sale's place is settled.
  *
- * ONE PLACE, because it was two and the two disagreed. The policy gated the sale on
+ * One place, because it was two and the two disagreed. The policy gated the sale on
  * `billing.tax_evidence.required_signals`; the evidence record was stamped from a second key,
  * `billing.tax_oss.required_signals`, that nothing else read. Both shipped defaulting to 2, so an
  * unconfigured install was accidentally consistent and no test could go red — the divergence appeared only

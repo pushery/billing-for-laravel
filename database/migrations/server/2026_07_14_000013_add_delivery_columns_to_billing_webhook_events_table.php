@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Turns the webhook-event row from a bare idempotency marker into a REPLAYABLE delivery record: the raw
+ * Turns the webhook-event row from a bare idempotency marker into a replayable delivery record: the raw
  * verified payload is kept, so an effect that failed can be re-run from it later without asking the
  * provider to redeliver. The columns are all nullable or defaulted, so existing rows stay valid.
  *

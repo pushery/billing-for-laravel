@@ -28,7 +28,7 @@ final readonly class CountrySignals
         /** Where the connection appeared to be, already resolved to a country and nothing finer. */
         public ?string $ip = null,
         /**
-         * What each of those same three sources said about the SUBDIVISION, where one is carried.
+         * What each of those same three sources said about the subdivision, where one is carried.
          *
          * Trailing and optional because a subdivision is not part of settling a country and never has been:
          * every existing caller keeps working and writes nothing new. It travels beside the countries rather
@@ -42,7 +42,7 @@ final readonly class CountrySignals
      * Which sources named this country, in the evidence's own order.
      *
      * Asked so a resolved subdivision can come from a source that actually named the resolved country. A
-     * subdivision from a source that named a DIFFERENT country describes a different place, and picking one
+     * subdivision from a source that named a different country describes a different place, and picking one
      * anyway is how a nexus counter fills up with states nobody sold in.
      *
      * @return list<SignalSource>
@@ -85,7 +85,7 @@ final readonly class CountrySignals
     /**
      * Every country named, one entry per source that named it.
      *
-     * Deliberately not deduplicated: the evidence standard counts SOURCES, not distinct answers. Three
+     * Deliberately not deduplicated: the evidence standard counts sources, not distinct answers. Three
      * sources agreeing is the strongest position there is, and a deduplicated count would report it as the
      * weakest — one — and refuse the sale.
      *

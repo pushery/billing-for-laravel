@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 
 /**
- * Pull the billable's current provider subscription as the SAME neutral event the webhook produces, or
+ * Pull the billable's current provider subscription as the same neutral event the webhook produces, or
  * null when it has none. This is the return-reconcile seam: after a hosted checkout the customer is
  * redirected back before the webhook may have arrived, so the app reads the provider directly and applies
  * the identical rules — the "I paid but it says Free" gap closes.

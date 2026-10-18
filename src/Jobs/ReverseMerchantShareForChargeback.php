@@ -20,7 +20,7 @@ use Pushery\Billing\ValueObjects\Money;
 use Throwable;
 
 /**
- * Takes the merchant's share back at the provider after a lost dispute, OUTSIDE the transaction that
+ * Takes the merchant's share back at the provider after a lost dispute, outside the transaction that
  * decided to.
  *
  * ## Why this is a job and not part of the effect
@@ -29,7 +29,7 @@ use Throwable;
  * it makes the dedup claim roll back with the effect, so a failure leaves work that can be re-claimed rather
  * than a marker for work nobody did.
  *
- * It also makes "call the provider outside the transaction" IMPOSSIBLE for an ordinary effect. An effect
+ * It also makes "call the provider outside the transaction" impossible for an ordinary effect. An effect
  * opening its own transaction gets a SAVEPOINT, not a commit — so a nested `DB::transaction` reads like the
  * promise and is not one. Every effect that reaches a provider therefore hands the call to a job like this one,
  * or to `DB::afterCommit()` where a lost call is caught up by a scheduled run anyway.
@@ -81,7 +81,7 @@ final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
             return;
         }
 
-        // Resolved from the container the way every other optional marketplace capability is, and NOT from
+        // Resolved from the container the way every other optional marketplace capability is, and not from
         // the driver: `StripeMerchantTransfers` implements both verbs and is bound under the outbound one,
         // so asking the driver would answer about the wrong object. An install that binds no transfers at
         // all -- a destination-charge install, where the provider unwinds the transfer with the refund --
@@ -93,18 +93,18 @@ final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
         // failing every lost dispute into `failRefund` while the creator kept a share the network had already
         // clawed back. Where nothing is bound under the reversal contract, the outbound object answers: the
         // shipped `StripeMerchantTransfers` carries both verbs on one class.
-        // THE MESSAGE BELOW ASKS THE CONTAINER, NOT THE RESOLVED OBJECT, AND THAT IS NOT A DETAIL. A
+        // The message below asks the container, not the resolved object, and that is not a detail. A
         // `$outbound === null` there reads naturally and the analyzer rejects it as always-true: this
-        // package ships ONE implementation of the outbound contract and it happens to carry both verbs, so
+        // package ships one implementation of the outbound contract and it happens to carry both verbs, so
         // from a type's point of view an outbound object that cannot reverse does not exist here. It exists
         // in a consumer, which is the whole subject. `bound()` returns a bool and answers the question the
         // message is actually about -- is a transfers driver installed at all.
-        // THE "NOTHING IS BOUND" CASE IS DECIDED BEFORE ANYTHING IS RESOLVED, and that ordering is what
+        // The "NOTHING IS BOUND" case is decided before anything is resolved, and that ordering is what
         // makes it expressible at all. Asked afterwards -- `$outbound === null`, or a ternary on the
         // binding -- the analyzer rejects it as unreachable, and it is right about the code it can see:
-        // this package ships ONE implementation of the outbound contract and that class carries both
+        // this package ships one implementation of the outbound contract and that class carries both
         // verbs, so a bound-but-incapable driver does not exist inside these files. It exists in a
-        // consumer, which is the entire subject of this contract. Asking the CONTAINER first keeps the two
+        // consumer, which is the entire subject of this contract. Asking the container first keeps the two
         // states apart where the type system has nothing to say about them.
         $outboundIsBound = $container->bound(MovesMerchantShare::class);
 
@@ -131,7 +131,7 @@ final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
             // holding a share of a sale the buyer took back, and an attempt with no ending is the state in
             // which nobody can later say whether it was tried.
             //
-            // TWO MESSAGES, BECAUSE THE TWO STATES NEED DIFFERENT ACTIONS. "Nothing is bound" is a
+            // Two messages, because the two states need different actions. "Nothing is bound" is a
             // destination-charge install and usually correct; "bound, and it cannot reverse" is a
             // capability gap somebody has to close. One sentence covering both is the sentence nobody
             // acts on.
@@ -156,7 +156,7 @@ final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
         );
 
         // The provider's own figure, not the one this job asked for. The answer was discarded here for as
-        // long as the job existed, so the ledger recorded the REQUEST — and a ledger that records its own
+        // long as the job existed, so the ledger recorded the request — and a ledger that records its own
         // request agrees with itself no matter what the provider did.
         $ledger->completeRefund($attempt, $reversal->reversed);
     }

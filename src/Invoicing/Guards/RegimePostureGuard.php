@@ -11,7 +11,7 @@ use Pushery\Billing\Exceptions\RegimeNotPermitted;
 /**
  * A document's supply regime and its seller-of-record posture are one decision seen twice.
  *
- * They are checked at CREATION, the only moment either can be wrong: both columns are frozen afterwards, so
+ * They are checked at creation, the only moment either can be wrong: both columns are frozen afterwards, so
  * a pair that was coherent when the row was written stays coherent forever — and a contradictory one would
  * be immutable from the instant it existed, with no correction available but canceling the document.
  *
@@ -30,7 +30,7 @@ final class RegimePostureGuard
     {
         // Naming the merchant is neither the platform reselling nor the platform arranging, so no regime maps
         // to it and no document chain follows. Answered before the mismatch below, because "this posture has
-        // no regime at all" is a different mistake from "not THAT regime".
+        // no regime at all" is a different mistake from "not that regime".
         if (! $this->hasAnyRegime($posture)) {
             throw RegimeNotPermitted::postureHasNoRegime($posture);
         }

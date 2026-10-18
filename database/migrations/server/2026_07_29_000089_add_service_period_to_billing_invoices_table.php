@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## Why the document needs it when the lines already carry one
  *
- * A line's period says which months THAT line is for. The document's says which months the document is
+ * A line's period says which months that line is for. The document's says which months the document is
  * for, and the two are not the same statement: a reader — an auditor, a tax authority, an accounts-payable
  * system — asks the second question first, and answering it by scanning the lines means every reader has to
  * agree on how to reduce a set of line periods to one. They will not. So it is recorded once, by the party

@@ -19,7 +19,7 @@ use Pushery\Billing\ValueObjects\Money;
  * though: a top-up is money somebody paid, a proration credit is consideration being given back. So
  * before either half can be booked, an offset against the mixed balance has to be split.
  *
- * ## DERIVED, never stored, and that is the load-bearing decision
+ * ## derived, never stored, and that is the load-bearing decision
  *
  * An allocation table would be a second record of something the log already determines completely —
  * and a second record is a record that can disagree with the first. This ledger is append-only for
@@ -73,7 +73,7 @@ final readonly class CreditConsumption
 
         foreach ($entries as $entry) {
             if ($entry->id >= $spend->id) {
-                // The spend consumes what existed BEFORE it. Its own entry and everything after are
+                // The spend consumes what existed before it. Its own entry and everything after are
                 // not available to it, and a later credit is not retroactively spent by an earlier
                 // offset — which is what makes a spend read the same lots whenever it is replayed.
                 break;

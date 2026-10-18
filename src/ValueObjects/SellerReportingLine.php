@@ -10,7 +10,7 @@ use LogicException;
  * One kind of thing a seller sold in a period, with what the reporting rule said about it — or with the
  * fact that nothing could be said.
  *
- * The verdict is NULLABLE, and that is the point of the class rather than a detail of it. A line whose
+ * The verdict is nullable, and that is the point of the class rather than a detail of it. A line whose
  * settlements carry no archetype has no answer available: the rule branches on what was sold, and asking it
  * anyway returns `standardized` for the same reason an empty form returns nothing — not because the sales
  * were standardized, but because the question never reached them.

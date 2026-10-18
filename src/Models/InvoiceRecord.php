@@ -64,6 +64,7 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?string $credited_invoice_number
  * @property ?int $reissue_of_invoice_id
  * @property ?int $restates_invoice_id the settlement this one was issued in place of, after that one was canceled
+ * @property ?int $reinstates_invoice_id the invoice whose credit this one charges again, after a chargeback was reversed
  * @property int $total_minor
  * @property string $currency
  * @property ?string $locale
@@ -139,7 +140,7 @@ class InvoiceRecord extends Model
     protected $fillable = [
         'owner_type', 'owner_id', 'provider', 'provider_id', 'order_id', 'number', 'pdf_path', 'total_minor', 'currency', 'locale',
         'status', 'issued_at', 'due_at', 'credited_invoice_id', 'credited_invoice_number', 'reissue_of_invoice_id', 'restates_invoice_id',
-        'refund_attempt_id', 'correction_key',
+        'reinstates_invoice_id', 'refund_attempt_id', 'correction_key',
         'buyer', 'subtotal_minor',
         'tax_minor', 'reverse_charge', 'tax_exempt', 'tax_exemption_reason', 'buyer_reference', 'vat_note', 'oss', 'destination_country', 'destination_subdivision', 'oss_rate',
         'tax_archetype', 'sold_alongside_archetype', 'place_of_supply_rule', 'tax_rate_category', 'tax_rate_bps', 'supply_rate_bps', 'platform_reporting',
@@ -153,7 +154,7 @@ class InvoiceRecord extends Model
     /**
      * The scalar columns an issued document may never change.
      *
-     * A constant rather than an inline list because there is a THIRD copy of this knowledge — the test that
+     * A constant rather than an inline list because there is a third copy of this knowledge — the test that
      * proves each column is refused — and a third copy that repeats rather than derives is one that rots.
      * It did: `tax_exemption_reason` was missing from the list and from the test at the same time, so the
      * guard against an editable tax characteristic was green while one stayed editable.
@@ -162,9 +163,9 @@ class InvoiceRecord extends Model
      */
     public const array FROZEN_SCALARS = [
         'number', 'total_minor', 'subtotal_minor', 'tax_minor', 'currency', 'reverse_charge', 'tax_exempt',
-        // WHY it was exempt, frozen beside the fact THAT it was. The two were split for a while — the
+        // Why it was exempt, frozen beside the fact that it was. The two were split for a while — the
         // flag frozen, the reason editable — and they are not interchangeable: a reverse-charged
-        // supply IS taxed and an export outside the union is not. Both e-invoice renderers read this
+        // supply is taxed and an export outside the union is not. Both e-invoice renderers read this
         // column as the EN 16931 exemption reason, so an editable one lets a numbered document claim
         // afterwards that it was an export, with every amount on it still adding up.
         'tax_exemption_reason',
@@ -173,7 +174,7 @@ class InvoiceRecord extends Model
         // read back from the product until now, and a product can be reclassified after it has been
         // sold. A correction that re-derived them would reverse an amount nobody ever declared, and
         // report it into a country the original sale never touched — without looking wrong.
-        // …and WHAT a voluntary payment was paid on, for the same reason one step removed: it is the
+        // …and what a voluntary payment was paid on, for the same reason one step removed: it is the
         // input every one of those characteristics was derived from, so an amendable reference would
         // let a settled tip be re-pointed at a different product and silently change whether the
         // seller behind it has to be reported at all.
@@ -183,11 +184,11 @@ class InvoiceRecord extends Model
         // does not adjust a number: it makes every document already issued about it describe a
         // transaction that did not happen. The only correct path is to cancel and re-issue.
         'supply_regime', 'seller_posture', 'settlement_document_type', 'document_series', 'receipt_tier', 'settlement_period',
-        // WHICH months the document is for. Frozen with the amounts, because it is the same kind of
+        // Which months the document is for. Frozen with the amounts, because it is the same kind of
         // claim: moving a period on an issued document silently re-declares the supply into another
         // return, and the totals stay perfectly consistent while doing it. Cancel and re-issue.
         'service_period_start', 'service_period_end', 'delivered_on',
-        // …and WHOSE reference that is. The two are one key, and freezing half of it froze nothing:
+        // …and whose reference that is. The two are one key, and freezing half of it froze nothing:
         // an update could re-point a numbered tax document at another payment provider while the
         // reference it belongs to stayed put.
         'provider',
@@ -197,7 +198,7 @@ class InvoiceRecord extends Model
         // first-document be written for a charge that already has one — undoing the constraint from
         // inside the application, which is the one direction a database cannot defend itself in.
         'charge_claim_key',
-        // WHICH cycle raised this document. Same class as the claim key, and it holds the same unique
+        // Which cycle raised this document. Same class as the claim key, and it holds the same unique
         // index: a locally raised invoice carries the order it was raised from, and that pairing is what
         // makes a redelivered cycle return the document it already wrote instead of drawing a second
         // number. An editable link would hand that slot back — and, worse, re-point a numbered tax
@@ -215,6 +216,9 @@ class InvoiceRecord extends Model
         // claims no charge of its own, and a link that could be moved afterwards would re-point a numbered
         // document at a supply it never replaced.
         'restates_invoice_id',
+        // Which invoice this one charges again. It decides what that invoice stands credited at, so a link that could be
+        // moved afterwards would hand a credited amount back to one invoice and take it from another.
+        'reinstates_invoice_id',
         'commission_bps', 'commission_flat_minor', 'commission_residual',
         // The language the document is written in. The readable document renders in it, so a document whose
         // language could change would read differently to everybody who had already been given it.
@@ -274,8 +278,8 @@ class InvoiceRecord extends Model
         // 19.00 drift, and the rate on a frozen tax document must round-trip byte-for-byte.
         'oss_rate' => 'decimal:2',
         'status' => InvoiceStatus::class,
-        // NOT the plain 'datetime' cast: this package targets a non-UTC (German) app, and the framework
-        // default re-reads a stored instant in the APP timezone, shifting an invoice's frozen issue instant
+        // Not the plain 'datetime' cast: this package targets a non-UTC (German) app, and the framework
+        // default re-reads a stored instant in the app timezone, shifting an invoice's frozen issue instant
         // by the UTC offset on every round-trip. UtcDateTime keeps the instant exact — same as the
         // Subscription model does for its provider timestamps.
         'issued_at' => UtcDateTime::class,
@@ -316,7 +320,7 @@ class InvoiceRecord extends Model
     /**
      * What this document was converted at, one row per conversion layer.
      *
-     * The direction that matters: a correction asks what the document WAS booked at, and reads these rows
+     * The direction that matters: a correction asks what the document was booked at, and reads these rows
      * rather than converting again. Re-deriving would reverse an amount nobody ever declared, and the
      * difference would be a currency movement rather than anything either party did.
      *
@@ -345,11 +349,11 @@ class InvoiceRecord extends Model
     }
 
     /**
-     * GoBD immutability: an issued invoice's CONTENT must not change once recorded. The status (the payment
+     * GoBD immutability: an issued invoice's content must not change once recorded. The status (the payment
      * state — open → paid → …) may still transition, and the buyer / credited-invoice links are allowed to
      * reconcile (a credit note persisted before its original is stored later backfills the original's frozen
      * buyer and local id). But the number, the amounts, the currency, the tax treatment, the issue date and
-     * the line items are frozen: any code path that dirties one of them on an EXISTING row is rejected.
+     * the line items are frozen: any code path that dirties one of them on an existing row is rejected.
      */
     #[Override]
     protected static function booted(): void
@@ -359,11 +363,11 @@ class InvoiceRecord extends Model
         // whose edge cases do not get written, and the ungiven edge cases are the ones that come back as
         // defects.
         //
-        // Registered HERE rather than in an observer so no second caller — a job, a console command,
+        // Registered here rather than in an observer so no second caller — a job, a console command,
         // consumer code writing its own document — can route around them. What moved is where the rules
-        // LIVE, not where they are enforced.
+        // live, not where they are enforced.
 
-        // The regime and the posture are one decision seen twice, checked at CREATION because that is the
+        // The regime and the posture are one decision seen twice, checked at creation because that is the
         // only moment either can be wrong: both columns are frozen afterwards.
         self::creating(static function (self $invoice): void {
             $regime = $invoice->supply_regime;
@@ -401,7 +405,7 @@ class InvoiceRecord extends Model
         });
 
         // The document's ROLE against the sale's regime. Keyed on the regime rather than the posture: a
-        // self-billed invoice names the CREATOR as seller, which reads as "not the platform", so the posture
+        // self-billed invoice names the creator as seller, which reads as "not the platform", so the posture
         // is not a clean key for a creator-facing document's role.
         self::creating(static function (self $invoice): void {
             $regime = $invoice->supply_regime;
@@ -442,10 +446,10 @@ class InvoiceRecord extends Model
     /**
      * Whether this document was produced here rather than hydrated from a provider's invoice.
      *
-     * DERIVED on purpose, and the absence of a column is the design. `provider_id` is written by exactly
+     * Derived on purpose, and the absence of a column is the design. `provider_id` is written by exactly
      * two writers, both webhook effects mirroring a provider's own invoice ({@see PersistInvoice},
      * {@see PersistInvoiceCorrection}); the four issuers that produce a document here never set it. So
-     * "locally generated" is not a second fact about a row — it IS `provider_id === null`, and a stored
+     * "locally generated" is not a second fact about a row — it is `provider_id === null`, and a stored
      * boolean would be a copy that can disagree with the thing it copies. This package has paid for that
      * shape twice already, and both times the copy was the one that answered.
      *
@@ -525,7 +529,7 @@ class InvoiceRecord extends Model
      * Whether this row is an invoice correction — a document that corrects another invoice, rather than a
      * charge. It is identified by a reference to what it corrects (the local row or the provider's own
      * number), which drives the accounting direction (DATEV books it "H", not "S") and the e-invoice type
-     * code (381/384, not 380). A correction carries POSITIVE amounts; the correction's nature — not a sign —
+     * code (381/384, not 380). A correction carries positive amounts; the correction's nature — not a sign —
      * is what inverts the meaning, exactly as EN 16931 and a DATEV Haben booking require.
      */
     public function isCorrection(): bool
@@ -534,10 +538,28 @@ class InvoiceRecord extends Model
     }
 
     /**
+     * The number of the invoice this one charges again, where it charges a credited amount again.
+     *
+     * Such a document is an invoice, not a correction: it is booked "S" and carries type code 380. It names the invoice
+     * whose supply it states again, in the e-invoice's preceding-invoice reference (BG-3) and on the page, so a reader
+     * does not take it for a second charge for the same sale.
+     */
+    public function reinstatedInvoiceNumber(): ?string
+    {
+        if ($this->reinstates_invoice_id === null) {
+            return null;
+        }
+
+        $number = static::model()::query()->whereKey($this->reinstates_invoice_id)->value('number');
+
+        return is_string($number) ? $number : null;
+    }
+
+    /**
      * Whether the recipient wrote this document on the supplier's behalf — a Gutschrift in the settlement
      * sense, not a correction.
      *
-     * Here rather than in the XML writers' shared concern because BOTH halves of a hybrid document need it and they
+     * Here rather than in the XML writers' shared concern because both halves of a hybrid document need it and they
      * are rendered by different code. It lived only in the trait, so the machine-readable half said 389 and
      * the half a person opens said nothing — one file contradicting itself, with the conformance-checked
      * half being the correct one, which is why no validator ever complained.
@@ -554,7 +576,7 @@ class InvoiceRecord extends Model
      * its own number, and the receipt they already hold is not touched — reaching back to change an issued
      * document is what a numbered series exists to prevent.
      *
-     * Which leaves two documents over one sale. Everything that SUMS documents has to skip this one, or the
+     * Which leaves two documents over one sale. Everything that sums documents has to skip this one, or the
      * sale is counted twice and tax is declared that was never taken. That is the only thing this predicate
      * is for, and every aggregate in the package asks it.
      */
@@ -566,7 +588,7 @@ class InvoiceRecord extends Model
     /**
      * When the document this one corrects was issued, or null when it corrects nothing reachable.
      *
-     * A correction belongs to a return period, and WHICH period is decided by the ORIGINAL's date, not its
+     * A correction belongs to a return period, and which period is decided by the original's date, not its
      * own: that is what "correcting the second quarter" means. Reading it from the corrected row rather than
      * carrying a copy is deliberate — a copy is a second place for the date to live, and a correction whose
      * copy drifted would be declared against a quarter it does not correct.
@@ -594,7 +616,7 @@ class InvoiceRecord extends Model
     /**
      * Whether this document's invoice effect is void for an accounting period that starts on the given day.
      *
-     * The objection works EX NUNC — from the taxation period of the objection forward — so a period that
+     * The objection works ex nunc — from the taxation period of the objection forward — so a period that
      * starts on or after the first day of the objection's month is void, and any earlier period (the one the
      * document was originally booked in) is untouched. That is what keeps the objection from rewriting a past
      * declaration: the input booked before it stands, and only the current and following periods drop it.
@@ -622,7 +644,7 @@ class InvoiceRecord extends Model
      * Whoever the document was issued to or for — the creator on a settlement, the buyer on a receipt.
      *
      * A relation rather than a hand-rolled morph lookup, because the correction path has to reach the
-     * creator's STANDING and a second resolution of the same two columns is a second place it can be
+     * creator's standing and a second resolution of the same two columns is a second place it can be
      * resolved differently.
      *
      * @return MorphTo<Model, $this>
@@ -663,10 +685,10 @@ class InvoiceRecord extends Model
      *
      * A collective settlement carries a month, so its header states no archetype, no commission and no
      * rate — a month has one of none of those. The line does. A per-transaction settlement keeps them on
-     * its header because there the header IS the line, which is why that case answers null here and its
+     * its header because there the header is the line, which is why that case answers null here and its
      * readers fall back to the header without a special case.
      *
-     * Matched on the provider AND the reference, never the reference alone: it is unique only per provider,
+     * Matched on the provider and the reference, never the reference alone: it is unique only per provider,
      * so a second driver's identical reference would hand back a stranger's line.
      *
      * Typed as an arbitrary-keyed array rather than a string-keyed one, which is what a JSON column can
@@ -696,9 +718,9 @@ class InvoiceRecord extends Model
     }
 
     /**
-     * Narrow to the documents a counting period CONTAINS — the one place that rule lives.
+     * Narrow to the documents a counting period contains — the one place that rule lives.
      *
-     * A document that corrects nothing is placed by its own date. A CORRECTION is placed by the configured
+     * A document that corrects nothing is placed by its own date. A correction is placed by the configured
      * attribution: either by its own date, or by the date of the document it credits, which pulls it back
      * into the period whose figure it undoes. The second is the shipped default.
      *
@@ -706,7 +728,7 @@ class InvoiceRecord extends Model
      *
      * Two queries need it: the counter and the reporting run's roster. A roster filtering on `issued_at` alone
      * would, under the shipped attribution, enter a seller whose only activity in a year was a correction of
-     * an older settlement and then give them a row of ZEROS, because the counters place that correction in the
+     * an older settlement and then give them a row of zeros, because the counters place that correction in the
      * previous year.
      *
      * A row of zeros is not an empty answer. It states that a seller received nothing, which is a claim

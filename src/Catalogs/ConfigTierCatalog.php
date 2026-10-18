@@ -33,8 +33,8 @@ final readonly class ConfigTierCatalog implements SuppliesBuyerAudiences, Suppli
     /**
      * What kind of subscription this tier sells, from `billing.tiers.<key>.archetype`.
      *
-     * An UNSET key answers null, and the withdrawal resolver reads that as a plain subscription, which is what a
-     * tier is. An unreadable value REFUSES for the reason the add-on catalog gives: a typo resolved to null would
+     * An unset key answers null, and the withdrawal resolver reads that as a plain subscription, which is what a
+     * tier is. An unreadable value refuses for the reason the add-on catalog gives: a typo resolved to null would
      * hand the caller a classification somebody believed they had changed.
      */
     public function archetypeFor(string $key): ?TaxArchetype

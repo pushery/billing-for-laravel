@@ -12,7 +12,7 @@ use Pushery\Billing\ValueObjects\MeteredComponent;
 use Pushery\Billing\ValueObjects\MeterPriceFacts;
 
 /**
- * Verifies that what the package believes about metered billing is what the PROVIDER actually has.
+ * Verifies that what the package believes about metered billing is what the provider actually has.
  *
  * Two classes of silent failure, both invisible until an invoice looks wrong:
  *
@@ -20,7 +20,7 @@ use Pushery\Billing\ValueObjects\MeterPriceFacts;
  *    reported into nothing fails on the far side, and the miss surfaces — if ever — as a suspiciously small
  *    invoice a month later.
  *
- * 2. The PRICE disagrees with the config. This one matters more than it looks: the free allowance lives in
+ * 2. The price disagrees with the config. This one matters more than it looks: the free allowance lives in
  *    the provider's price (a graduated first tier costing nothing up to it), and the `included` value in
  *    config only drives the gauge the customer sees. If they disagree, nothing breaks — the customer is just
  *    given a different number of free units than the interface promised them.
@@ -99,7 +99,7 @@ final class CheckMetersCommand extends Command
             $problems++;
         }
 
-        // THE ONE THAT HIDES. The allowance is the price's; `included` only drives the gauge.
+        // The one that hides. The allowance is the price's; `included` only drives the gauge.
         if ($component->included !== null && $facts->firstTierUpTo !== null && $facts->firstTierUpTo !== $component->included) {
             $this->components->error(
                 "Price '{$price}' ({$component->key}) gives away {$facts->firstTierUpTo} free unit(s), but the tier promises {$component->included} — the customer is billed on a different allowance than the one they are shown."

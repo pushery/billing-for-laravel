@@ -76,7 +76,7 @@ class TaxIdVerification extends Model
     }
 
     /**
-     * Never through the model, inside `purging()` or not. The erasure axis holds this table as RETAINED:
+     * Never through the model, inside `purging()` or not. The erasure axis holds this table as retained:
      * unlinked when its owner is erased, and removed by query once the retention window has passed.
      */
     protected static function appendOnlyDeletion(): AppendOnlyDeletion

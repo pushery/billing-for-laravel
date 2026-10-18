@@ -18,7 +18,7 @@ use Pushery\Billing\Models\InvoiceRecord;
  *
  * The sharpest of them was `XRechnungInvoice::taxCategory()`: three consecutive `bool` parameters, two with
  * defaults. Swapping two of those compiles, runs, and writes an EN 16931 category element with the wrong
- * category or without its reason text — the class of error a conformant validator rejects at the RECIPIENT,
+ * category or without its reason text — the class of error a conformant validator rejects at the recipient,
  * not here.
  *
  * ## Why it carries the bands and the totals too
@@ -29,14 +29,14 @@ use Pushery\Billing\Models\InvoiceRecord;
  * beside them.
  *
  * The two renderers read this rule the same way today by coincidence, not by construction. Correct it in one
- * and the other keeps the old reading, and the resulting defect is FORMAT-SPECIFIC: it shows up in whichever
+ * and the other keeps the old reading, and the resulting defect is format-specific: it shows up in whichever
  * of XRechnung or ZUGFeRD nobody happens to be looking at. That divergence is not hypothetical in this
  * package — the two Stripe purchase lanes drifted apart on exactly this shape.
  *
  * ## What it is not
  *
  * Not a renderer, and not a tax decision. Every value here is read off a document that was already issued and
- * frozen; nothing is computed about what the tax OUGHT to be. `EnInvoiceTaxCategory::for()` remains the place
+ * frozen; nothing is computed about what the tax ought to be. `EnInvoiceTaxCategory::for()` remains the place
  * that decides a category, and its `bool $exempt` is a genuine decision input rather than state passed
  * through — which is why it keeps its own signature.
  */

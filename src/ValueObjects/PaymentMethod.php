@@ -34,7 +34,7 @@ final readonly class PaymentMethod
     }
 
     /**
-     * The instant the card stops being valid: the LAST second of its expiry month (a card is good
+     * The instant the card stops being valid: the last second of its expiry month (a card is good
      * through the end of the month printed on it). Null when the method carries no expiry (a non-card
      * mandate, or a provider that omitted it).
      */

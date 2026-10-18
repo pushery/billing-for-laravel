@@ -25,7 +25,7 @@ enum MerchantStatus: string
     case Suspended = 'suspended';
 
     /**
-     * The relationship is over. A merchant who disconnected their account is unreachable in BOTH directions
+     * The relationship is over. A merchant who disconnected their account is unreachable in both directions
      * — transfers and reversals — which is why this is not just a stronger suspension: it is the state in
      * which a clawback has become impossible, and somebody owed money has to be able to see that it has.
      *

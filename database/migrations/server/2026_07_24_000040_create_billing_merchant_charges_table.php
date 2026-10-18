@@ -14,7 +14,7 @@ use Pushery\Billing\Support\BillingSchema;
  * the non-reversing branch on a refund, silently, because there is nothing to tell it otherwise — and the
  * money would already be with the merchant.
  *
- * THREE cumulative sums, not one, and that is the whole design. The moment a platform keeps its commission
+ * Three cumulative sums, not one, and that is the whole design. The moment a platform keeps its commission
  * on a refund — a normal policy, the work was done — the buyer gets 1000 back while only 900 is clawed
  * back from the merchant, and the two totals diverge permanently. A single column cannot carry three
  * monotonic sums that move at different speeds; keying a clawback off the refunded total would skip the

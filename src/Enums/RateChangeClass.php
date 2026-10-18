@@ -21,7 +21,7 @@ enum RateChangeClass: string
     /**
      * A confirmed increase — scheduled automatically, announced at once, with a window to veto it.
      *
-     * The default is APPLY, and the asymmetry is the argument. Failing to apply a real increase is the more
+     * The default is apply, and the asymmetry is the argument. Failing to apply a real increase is the more
      * expensive mistake, and it is precisely the mistake that started all of this: undercharging is paid by
      * the platform and discovered at an audit. Overcharging is noticed by the buyer the same day and is
      * correctable.

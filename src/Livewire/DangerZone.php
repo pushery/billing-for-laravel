@@ -68,7 +68,7 @@ final class DangerZone extends AccountScreen
         $credential = $this->credential;
         $this->credential = '';
 
-        // Re-confirm the acting user's identity (throttled) BEFORE the irreversible cancel. On a wrong
+        // Re-confirm the acting user's identity (throttled) before the irreversible cancel. On a wrong
         // secret or a throttle lockout this throws and the cancel never runs.
         $this->confirmIdentity($credential);
 

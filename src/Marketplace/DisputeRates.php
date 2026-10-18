@@ -25,15 +25,15 @@ use Pushery\Billing\ValueObjects\DisputeRate;
  *
  * ## What is counted
  *
- * The NUMERATOR is disputes OPENED in the window, as `RecordOpenedDispute` kept them, whatever their outcome. A
+ * The numerator is disputes opened in the window, as `RecordOpenedDispute` kept them, whatever their outcome. A
  * network counts a case when it is raised, and one the seller later wins still counted.
  *
- * The DENOMINATOR is the number of PAYMENTS that arrived in the window: routed charges that settled, dated by
+ * The denominator is the number of payments that arrived in the window: routed charges that settled, dated by
  * when they settled. Not turnover: one disputed payment of a hundred is the same rate whether the payments were
  * small or large, and a denominator in money would move with prices. A pending or failed charge is not a payment
  * that arrived and is left out. Each subscription cycle is a payment of its own.
  *
- * Both sides are the ROUTED sales, the ones a merchant made. A platform that also sells on its own account has
+ * Both sides are the routed sales, the ones a merchant made. A platform that also sells on its own account has
  * payments this does not see, so for that account the figure is an upper bound on what the network measures.
  */
 final readonly class DisputeRates

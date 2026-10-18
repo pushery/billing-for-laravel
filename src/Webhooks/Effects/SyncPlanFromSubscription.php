@@ -31,10 +31,10 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * `untouchable_tiers`, or a tier's own `untouchable` flag) are never overwritten by the provider.
  *
  * Ordering-safe: the read and the writes commit in one transaction under a row lock, and an out-of-
- * order or retried OLDER event (by the provider event timestamp) is ignored rather than regressing a
+ * order or retried older event (by the provider event timestamp) is ignored rather than regressing a
  * newer state. A redelivery of the latest event is idempotent — it converges on the same values. Two
- * concurrent FIRST deliveries can both read no row (a row that does not exist cannot be locked) and both
- * insert; `insertOrIgnore` makes the loser's insert a NO-OP rather than a unique violation, and it then
+ * concurrent first deliveries can both read no row (a row that does not exist cannot be locked) and both
+ * insert; `insertOrIgnore` makes the loser's insert a no-op rather than a unique violation, and it then
  * re-reads under the lock and orders its own event against whichever row won. Nothing reruns and nothing
  * is dropped — the loser finishes its pass against the winner's row.
  */
@@ -63,7 +63,7 @@ final readonly class SyncPlanFromSubscription
     }
 
     /**
-     * The billable an event is about. A marketplace event names the connected account that ISSUED its
+     * The billable an event is about. A marketplace event names the connected account that issued its
      * customer reference, and a provider customer id is unique only within its account — so the owner is
      * resolved account-scoped, never globally, where the same id under a second merchant would hand back a
      * stranger (their subscription, their tier, their data). A platform event carries no account and uses
@@ -79,7 +79,7 @@ final readonly class SyncPlanFromSubscription
     }
 
     /**
-     * Apply the event to a KNOWN owner, resolved outside this effect. The webhook path finds the owner
+     * Apply the event to a known owner, resolved outside this effect. The webhook path finds the owner
      * from the event's customer reference; the return-reconcile already has the authenticated owner in
      * hand and calls this directly — so it works even on an install that has not wired billing.customer,
      * where the reference-based lookup would find nobody. Same rules either way.
@@ -92,7 +92,7 @@ final readonly class SyncPlanFromSubscription
     }
 
     /**
-     * Tell the owner's open screens to re-fetch — AFTER the transaction that earned the right to say so.
+     * Tell the owner's open screens to re-fetch — after the transaction that earned the right to say so.
      *
      * Inside it would be wrong in a way nothing would catch: the broadcast leaves the process immediately,
      * a rollback cannot recall it, and the screens would re-fetch state that was never written. On the
@@ -122,7 +122,7 @@ final readonly class SyncPlanFromSubscription
         if (! $subscription instanceof Subscription) {
             // First delivery. insertOrIgnore, not create: two concurrent first deliveries both read no
             // row (a row that does not exist cannot be locked), so both reach here — the loser's insert
-            // must NO-OP rather than raise a unique violation the provider would read as our outage.
+            // must no-op rather than raise a unique violation the provider would read as our outage.
             // This is the codebase's create-race idiom (see UsageRecorder). We then re-read under lock:
             // whoever we find is the row to order against — ourselves if we won, the winner if we lost.
             $this->insertRow($owner, $event);
@@ -130,13 +130,13 @@ final readonly class SyncPlanFromSubscription
         }
 
         // The row is guaranteed to exist now. Order this event against it: an out-of-order or retried
-        // OLDER event (including a lost create-race whose winner is newer) is dropped without touching
+        // older event (including a lost create-race whose winner is newer) is dropped without touching
         // the owner column.
         if (! $subscription instanceof Subscription || $this->isStale($subscription, $event)) {
             return false;
         }
 
-        // A subscription we expired does not come back. Ordering cannot express this — the event is NEWER,
+        // A subscription we expired does not come back. Ordering cannot express this — the event is newer,
         // and applying it is exactly what must not happen — so it is a second, separate refusal.
         if ($this->isRevival($subscription, $event)) {
             return false;
@@ -145,14 +145,14 @@ final readonly class SyncPlanFromSubscription
         $subscription->forceFill($this->attributes($subscription, $event));
 
         // Asked BEFORE the save, never after. `save()` on a model with nothing dirty returns early without
-        // resyncing its change set, so `wasChanged()` keeps answering for the PREVIOUS save — and the second
+        // resyncing its change set, so `wasChanged()` keeps answering for the previous save — and the second
         // delivery of an identical event would report a change that only the first one made.
         $moved = $appeared || $subscription->isDirty();
 
         $subscription->save();
 
-        // The denormalized tier column is the owner's ONE hot-path entitlement value, and a single column
-        // cannot hold a tier per creator. It mirrors the PLATFORM subscription only; a marketplace creator's
+        // The denormalized tier column is the owner's one hot-path entitlement value, and a single column
+        // cannot hold a tier per creator. It mirrors the platform subscription only; a marketplace creator's
         // tier lives on its own row (keyed by merchant_uid, written above) and is read back through the
         // subscription-state reader — never flattened onto the shared column, where the last creator's
         // webhook would clobber the platform plan every entitlement check keys on. A merchant event has
@@ -194,7 +194,7 @@ final readonly class SyncPlanFromSubscription
         // right value: the save above wrote `event tier ?? last known tier`, so an event whose price
         // maps to no tier (a rotated/grandfathered price, a metered-only subscription) keeps the last
         // tier we resolved. Without that fall-back a single past-due blip would pull the owner to the
-        // zero tier and NOTHING would put them back — every later event carries the same unresolvable
+        // zero tier and nothing would put them back — every later event carries the same unresolvable
         // price — and they would keep paying, on free, forever.
         if (is_string($subscription->tier_key)) {
             if ($owner->getAttribute($column) !== $subscription->tier_key) {
@@ -217,7 +217,7 @@ final readonly class SyncPlanFromSubscription
     /** Whether this event is an out-of-order/retried delivery that must not be applied. */
     private function isStale(Subscription $subscription, SubscriptionStateChanged $event): bool
     {
-        // A null event timestamp is maximally-ambiguous ordering: never let it RESURRECT access over a
+        // A null event timestamp is maximally-ambiguous ordering: never let it resurrect access over a
         // currently non-granting state (that would silently un-suspend a delinquent owner). Revocation
         // on a null timestamp still applies — failing toward less access is safe.
         if ($event->occurredAt === null) {
@@ -242,7 +242,7 @@ final readonly class SyncPlanFromSubscription
      * Whether this event would revive a subscription that expired for good.
      *
      * The cure window ends in a decision, not merely in a state: the subscription is over, and a payment
-     * after it is a NEW contract. A provider does not know that — it will happily report the same
+     * after it is a new contract. A provider does not know that — it will happily report the same
      * subscription active again after a retried invoice or a reactivation upstream — so the refusal lives
      * here rather than being hoped for.
      *
@@ -282,16 +282,16 @@ final readonly class SyncPlanFromSubscription
     }
 
     /**
-     * The billable's locked subscription-state row for one merchant scope AND one contract type, or null
+     * The billable's locked subscription-state row for one merchant scope and one contract type, or null
      * when none exists yet.
      *
      * Both are part of the identity: a fan holds one row per creator plus the platform row, so the lock must
      * name which merchant this event is about or a creator's webhook would order against the platform row.
-     * And the same fan may hold two contracts with ONE creator — a subscription and a sponsorship, measured
+     * And the same fan may hold two contracts with one creator — a subscription and a sponsorship, measured
      * in a consumer — which is why the type is named too.
      *
-     * NAMING THE MERCHANT WAS NOT ENOUGH, and the failure was silent rather than refused. With the type
-     * fixed at `default`, the second contract's event locked the FIRST contract's row, found it, and was
+     * Naming the merchant was not enough, and the failure was silent rather than refused. With the type
+     * fixed at `default`, the second contract's event locked the first contract's row, found it, and was
      * written onto it: the row ended up carrying one contract's provider id and the other's state, and the
      * webhook reported success. A null type is the default contract, unchanged for every existing row.
      */
@@ -331,7 +331,7 @@ final readonly class SyncPlanFromSubscription
     }
 
     /**
-     * The raw merchant columns for a first insert. `merchant_uid` is the authoritative NOT-NULL key every
+     * The raw merchant columns for a first insert. `merchant_uid` is the authoritative not-null key every
      * query scopes on; the nullable morph pair is the convenience relation and stays null for the platform.
      * insertOrIgnore bypasses the model's attribute default, so the uid is set explicitly here — a missing
      * one would default to `platform` at the database and silently mis-key a creator's row onto the platform.
@@ -351,7 +351,7 @@ final readonly class SyncPlanFromSubscription
      * The declarations key this row keeps: the event's, or the one on file for the same subscription.
      *
      * An update that carries no key must not erase a known one, the rule every column in attributes() follows.
-     * But only for the SAME provider subscription: a new signup taking the row over is a new purchase, and the
+     * But only for the same provider subscription: a new signup taking the row over is a new purchase, and the
      * previous subscription's declarations do not cover it.
      */
     private function declarationReference(?Subscription $subscription, SubscriptionStateChanged $event): ?string
@@ -370,7 +370,7 @@ final readonly class SyncPlanFromSubscription
     /**
      * When the subscription in the row began: the event's start, the one on file for the same subscription, or now.
      *
-     * The start of the SAME provider subscription never moves, so an event that carries none keeps the known one. A
+     * The start of the same provider subscription never moves, so an event that carries none keeps the known one. A
      * different subscription taking the row over is a new contract and must not inherit the old start, or its
      * withdrawal window would have closed before it began. With no start from the provider, the moment the package
      * first hears of the subscription is the nearest honest answer, and a late one only keeps the window open longer.
@@ -409,7 +409,7 @@ final readonly class SyncPlanFromSubscription
             'tier_key' => $event->tierKey ?? $subscription?->tier_key,
             'delinquent_since' => $delinquentSince,
             // Always null, and that is not the same as "never terminated". A terminated row only reaches
-            // this line when the event carries a DIFFERENT provider subscription — isRevival above dropped
+            // this line when the event carries a different provider subscription — isRevival above dropped
             // every event for the terminated one — so getting here means a new signup has taken the row
             // over, and it starts with a clean slate. Writing the marker away here rather than leaving it
             // is what keeps the new subscription from inheriting the old one's ending.
@@ -428,7 +428,7 @@ final readonly class SyncPlanFromSubscription
             // The subscription trial's end, so the trial banner and the trial CTA can read the days left.
             // Same never-erase rule: an event with no trial end keeps the one we know.
             'trial_ends_at' => $this->moment($event->trialEnd) ?? $subscription?->trial_ends_at,
-            // When a canceled subscription ends. NOT under the never-erase rule, and deliberately: see endsAt().
+            // When a canceled subscription ends. Not under the never-erase rule, and deliberately: see endsAt().
             'ends_at' => $this->endsAt($subscription, $event),
             // The key the buyer's withdrawal declarations were recorded under. Never erased by an event that
             // carries none, like the columns above, and never inherited by a different subscription either.
@@ -461,7 +461,7 @@ final readonly class SyncPlanFromSubscription
      * it named none. A row that ended keeps the moment it ended, from the event when it carries one and from the
      * row otherwise, because the event that ends a subscription does not always say when.
      *
-     * Every other state has no end, and that one IS an erasure. `onGracePeriod()` reads `ends_at` before the
+     * Every other state has no end, and that one is an erasure. `onGracePeriod()` reads `ends_at` before the
      * status, so a row that kept a stale end after the owner took the cancellation back would go on reading as
      * canceled, and a later cancellation to a date would be refused as already ending.
      */

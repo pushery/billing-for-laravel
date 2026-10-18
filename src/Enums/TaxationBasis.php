@@ -32,7 +32,7 @@ enum TaxationBasis: string
     case SmallBusiness = 'small_business';
 
     /**
-     * A reseller of SECOND-HAND GOODS, taxed on the difference between purchase and sale.
+     * A reseller of second-hand goods, taxed on the difference between purchase and sale.
      *
      * The value stays `margin`, and that is the whole reason the goods class is a case here rather than a
      * column beside it: every document ever issued under this basis was a second-hand goods sale, because
@@ -43,7 +43,7 @@ enum TaxationBasis: string
     case Margin = 'margin';
 
     /**
-     * A reseller of WORKS OF ART, taxed on the margin.
+     * A reseller of works of art, taxed on the margin.
      *
      * Its own case because its mandatory statement on the document is its own — Art. 226(14) of the VAT
      * Directive prescribes one phrase per goods class, and a document carrying the wrong one is wrong in
@@ -53,7 +53,7 @@ enum TaxationBasis: string
     case MarginWorksOfArt = 'margin_works_of_art';
 
     /**
-     * A reseller of COLLECTORS' ITEMS AND ANTIQUES, taxed on the margin.
+     * A reseller of collectors' items and antiques, taxed on the margin.
      *
      * The third class the directive names, with its own phrase and `VATEX-EU-J`. Kept together rather than
      * split in two, because the directive itself names them as one class.
@@ -66,9 +66,9 @@ enum TaxationBasis: string
     /**
      * Whether tax is stated on the document at all.
      *
-     * ASKED THROUGH `taxesMarginOnly()` RATHER THAN BY LISTING THE MARGIN CASES, and this line is the
+     * Asked through `taxesMarginOnly()` rather than by listing the margin cases, and this line is the
      * "fifth place" the note below predicts. It read `=== self::Margin` until the directive's other two
-     * goods classes arrived; spelled that way it would have answered NO for a work of art, and a margin
+     * goods classes arrived; spelled that way it would have answered no for a work of art, and a margin
      * document that states no tax at all is a different document from one that states none because the
      * scheme forbids it.
      */

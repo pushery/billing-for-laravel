@@ -11,7 +11,7 @@ use Pushery\Billing\Support\BillingSchema;
  * When a settlement document was made available, when its recipient was told, and when they fetched it.
  *
  * A document sitting in a database is not a delivered one. What makes it delivered is that it reached the
- * recipient's reach AND that they were told — and the only thing that can ever evidence either is a record
+ * recipient's reach and that they were told — and the only thing that can ever evidence either is a record
  * written at the moment it happened. Without one there is no answer to "when did they get it", which is the
  * question every dispute about a deduction date or a objection window turns on.
  *
@@ -19,7 +19,7 @@ use Pushery\Billing\Support\BillingSchema;
  * make a second notification overwrite the first, and a retrieval count a number nobody can audit; separate
  * rows keep every occurrence, which is what an evidentiary log is for.
  *
- * Anchored on the document NUMBER, not only the row id, so the log still says what it is about when it is
+ * Anchored on the document number, not only the row id, so the log still says what it is about when it is
  * produced on its own — the situation it exists for.
  *
  * The merchant morph is nullable and paired with an erasure stamp, exactly like the charges and agreements

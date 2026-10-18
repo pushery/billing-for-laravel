@@ -10,7 +10,7 @@ use InvalidArgumentException;
 /**
  * One billed period of a subscription, with the share of the price that belongs to it.
  *
- * The end is INCLUSIVE — the last day covered, not the first day of the next period. A period stated as
+ * The end is inclusive — the last day covered, not the first day of the next period. A period stated as
  * "1 March to 1 April" claims a day the next one also claims, and a document that says so is wrong in a way
  * that only shows when somebody lines two of them up.
  */

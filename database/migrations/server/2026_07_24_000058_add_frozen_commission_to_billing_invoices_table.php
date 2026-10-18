@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * The commission terms this settlement was priced with.
  *
- * A correction recomputes the merchant's share on what REMAINS of the sale — that is the whole reason it is
+ * A correction recomputes the merchant's share on what remains of the sale — that is the whole reason it is
  * not a proportion — and to do that it needs the terms the sale was priced under. Read from configuration at
  * correction time it would use whatever the rate says today, so a platform that lowered its rate would
  * quietly reduce every historical clawback, and one that raised it would over-collect. Neither shows up

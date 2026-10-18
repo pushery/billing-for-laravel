@@ -14,10 +14,10 @@ use Pushery\Billing\Models\ReportingFiling;
 /**
  * Produce a reporting period's official record — and refuse to, while anything about it is implausible.
  *
- * ## Why this command exists, and what it is NOT
+ * ## Why this command exists, and what it is not
  *
  * `ReportingExport` and `ReportingFilingRegister` had no internal caller, and the unreferenced-class
- * register said in as many words that this was the design rather than a gap: WHEN a return is prepared is
+ * register said in as many words that this was the design rather than a gap: when a return is prepared is
  * the host application's decision, and the package transmits nothing, so it cannot know a period went out.
  * That reasoning stands, and this command does not contradict it.
  *
@@ -28,7 +28,7 @@ use Pushery\Billing\Models\ReportingFiling;
  *
  * ## The plausibility check is not a warning
  *
- * It runs first and it BLOCKS. A period with open findings produces no export at all, because an export is
+ * It runs first and it blocks. A period with open findings produces no export at all, because an export is
  * evidence of what was reported: producing one and then telling somebody not to send it leaves a file that
  * looks exactly like a filed record.
  *
@@ -60,7 +60,7 @@ final class ReportingRunCommand extends Command
         try {
             $record = $export->produce($year, $currency);
         } catch (ReportingNotPlausible $refusal) {
-            // The findings are the output here, not the failure. An operator needs to know WHICH rule is
+            // The findings are the output here, not the failure. An operator needs to know which rule is
             // open before they can clear it, and the exception already names them all — re-wording that
             // would be a second list that drifts from the first.
             $this->components->error($refusal->getMessage());
@@ -82,7 +82,7 @@ final class ReportingRunCommand extends Command
 
         if ($filing instanceof ReportingFiling) {
             // Said out loud, because it changes what the operator does next. A period that is already filed
-            // does not take a second filing — it takes a CORRECTION, which names its predecessor.
+            // does not take a second filing — it takes a correction, which names its predecessor.
             $this->components->warn(sprintf(
                 'This period was already filed on %s. A further submission is a correction, not a filing.',
                 $filing->filed_at->toDateString(),

@@ -17,7 +17,7 @@ use Pushery\Billing\ValueObjects\ServicePeriod;
  * the second, and the difference is not small: on a prepaid year the whole tax is either declared now or
  * eleven months late, and nothing in the documents themselves says which is meant.
  *
- * Both legs of a chained transaction must use the SAME answer. If the sale is taxed on receipt while the
+ * Both legs of a chained transaction must use the same answer. If the sale is taxed on receipt while the
  * merchant's side is taxed period by period, the input tax lags the output tax by up to eleven months —
  * a difference nobody notices and every reconciliation pays for.
  *
@@ -28,7 +28,7 @@ use Pushery\Billing\ValueObjects\ServicePeriod;
  * Which one applies is not a property of a country. In Germany the two are Soll-Versteuerung (supply) and
  * Ist-Versteuerung (receipt), and the second exists only on application and approval by the tax office
  * (§ 20 UStG). Two operators in the same jurisdiction therefore differ, and one of them cannot be
- * derived from a locale, a currency or a tax profile. It is DECLARED, once, by the operator who holds
+ * derived from a locale, a currency or a tax profile. It is declared, once, by the operator who holds
  * the notice -- `billing.tax_point_on_receipt`, whose comment carries who may apply and on what.
  *
  * The distinction is not pedantic: read as a country rule, this would be something a profile could set
@@ -52,7 +52,7 @@ final readonly class TaxPoint
     }
 
     /**
-     * The tax point for a period, WITH the rule that produced it.
+     * The tax point for a period, with the rule that produced it.
      *
      * Preferred over `forPeriod()` everywhere a result is stored or handed on. A bare date cannot be
      * checked afterwards: recomputing it applies today's configuration to a sale made under a different

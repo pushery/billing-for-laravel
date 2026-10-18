@@ -13,7 +13,7 @@ namespace Pushery\Billing\ValueObjects;
  *
  * ## They add up exactly, and that is a property rather than a coincidence
  *
- * The retained value is rounded ONCE and the refund is the difference. Rounding both independently would
+ * The retained value is rounded once and the refund is the difference. Rounding both independently would
  * produce two figures that miss the payment by a cent — on every withdrawal, in a direction nobody chose.
  * `29.75 = 6.94 + 22.81` is not an illustration here; it is the invariant.
  */

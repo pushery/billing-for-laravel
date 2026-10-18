@@ -11,11 +11,11 @@ use Pushery\Billing\Enums\TaxRateCategory;
  * One line of a periodic tax return: what was sold into one country, at one rate, in one period.
  *
  * The origin period is part of the line rather than an optional extra, and that is the whole shape of the
- * thing. A return declares this period's sales AND corrections to earlier ones, and the only difference
+ * thing. A return declares this period's sales and corrections to earlier ones, and the only difference
  * between the two is which period a line belongs to. Leaving it off the line would mean a correction is
  * whatever the exporter happens to remember it is.
  *
- * A correcting line is NEGATIVE and names the period it corrects; a current line names none. A correction is
+ * A correcting line is negative and names the period it corrects; a current line names none. A correction is
  * never written back into the period it corrects — that return has been filed, and a file that changes after
  * it was filed is not a filing.
  */

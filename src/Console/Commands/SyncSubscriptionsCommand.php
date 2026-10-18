@@ -19,7 +19,7 @@ use Throwable;
  * Reconciles every billable's subscription from the provider onto the local row — the bulk version of
  * the return-reconcile that runs after a hosted checkout. Use it to backfill after a webhook outage, or
  * on demand to be sure the local state matches the provider. It applies each pulled subscription through
- * the SAME plan-sync effect the webhook uses, so its recency guard means a sync can never overwrite a
+ * the same plan-sync effect the webhook uses, so its recency guard means a sync can never overwrite a
  * newer webhook state — it only ever moves a stale local row forward.
  *
  * One provider call per billable, so it is a maintenance command, not a hot path. Scope it to one owner

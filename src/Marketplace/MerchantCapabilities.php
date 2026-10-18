@@ -11,19 +11,19 @@ use Pushery\Billing\ValueObjects\MerchantAccountReference;
 /**
  * Applies what the provider has reported about a merchant's account to the local row.
  *
- * The capabilities are the provider's to grant and to withdraw, so this is the ONLY place that writes
+ * The capabilities are the provider's to grant and to withdraw, so this is the only place that writes
  * them: a platform that could raise a flag itself could route money to a merchant nobody verified, and a
  * platform that could not lower one would keep routing to a merchant whose verification lapsed.
  *
  * Reports arrive asynchronously and out of order, and both directions are applied as given rather than
  * merged optimistically — a report that a capability is now false is exactly the report that matters, and
  * treating it as "probably stale" is how money keeps flowing to an account the provider has closed. What is
- * set aside is a report OLDER than the one the row last took, by the provider's own stamp: retried after a
+ * set aside is a report older than the one the row last took, by the provider's own stamp: retried after a
  * failure, an earlier "can be paid" would otherwise undo a later "cannot". Two reports stamped the same
  * second have no order the provider tells, so the second may lower a flag but never raise one. A report
  * without a stamp is applied as given.
  *
- * Unknown accounts are IGNORED rather than created. A report about an account the package never issued
+ * Unknown accounts are ignored rather than created. A report about an account the package never issued
  * belongs to somebody else — another platform on the same provider, or an account created by hand — and
  * materializing a row for it would invent a merchant the application has no record of.
  */

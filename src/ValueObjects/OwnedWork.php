@@ -20,7 +20,7 @@ use Pushery\Billing\Enums\GrantSource;
  *
  * ## `revocable` is not a withdrawal signal
  *
- * It says this access CAN be taken away — by a refund, a chargeback, a legal takedown. It says nothing about
+ * It says this access can be taken away — by a refund, a chargeback, a legal takedown. It says nothing about
  * whether the buyer may still withdraw from the purchase: that turns on the extinguishment flow and the
  * work's own withdrawal type, and pulling both into one field would eventually show "you can still cancel
  * this" for a purchase whose right of withdrawal has validly ended, or the reverse. A screen that needs the
@@ -50,7 +50,7 @@ final readonly class OwnedWork
         public ?MerchantScope $merchant = null,
     ) {}
 
-    /** Whether this line can be opened right now — granted AND the work is there to hand over. */
+    /** Whether this line can be opened right now — granted and the work is there to hand over. */
     public function isDeliverable(): bool
     {
         return $this->decision->isDeliverable();

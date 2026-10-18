@@ -10,9 +10,9 @@ use RuntimeException;
 /**
  * An issued invoice does not change. This refuses the update that would change it.
  *
- * ## Why this one takes the RECORD where its siblings take values
+ * ## Why this one takes the record where its siblings take values
  *
- * A deliberate exception, not an oversight. The rule is not about a value but about a DIFFERENCE: what this
+ * A deliberate exception, not an oversight. The rule is not about a value but about a difference: what this
  * row holds now against what it held when it was loaded. `isDirty()` and `getRawOriginal()` are the seams
  * that answer it, and reproducing them by handing in two snapshots would move the same comparison outside
  * and give a caller the chance to hand in a pair that agrees.
@@ -31,7 +31,7 @@ use RuntimeException;
  * `buyer` is frozen as well, compared the same way, from the moment it names somebody. The recipient's name,
  * address and VAT id are mandatory on the document, and a reverse-charge invoice rests on that VAT id; an
  * issued document is corrected by a document of its own that refers to it, never by rewriting it. A buyer
- * that is still EMPTY may be filled once: a credit note persisted before the invoice it corrects carries no
+ * that is still empty may be filled once: a credit note persisted before the invoice it corrects carries no
  * buyer of its own, and takes the invoice's when that arrives.
  */
 final class ImmutableIssuedInvoiceGuard

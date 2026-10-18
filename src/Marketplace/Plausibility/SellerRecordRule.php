@@ -25,14 +25,14 @@ use Pushery\Billing\ValueObjects\PlausibilityFinding;
  * say so. The first is the dangerous one — a filing cannot be assembled without the records, so "we could
  * not look" and "we looked and it was fine" must not produce the same answer.
  *
- * It is raised ONCE, about the period rather than about each seller: it is one piece of missing wiring, and
+ * It is raised once, about the period rather than about each seller: it is one piece of missing wiring, and
  * a hundred copies of it would bury the findings that are about actual sellers.
  *
  * ## Why only reportable sellers
  *
  * The field basis turns on it. A seller who is not reportable this year is not asked for the identifiers a
  * statute names, and demanding them anyway would be collecting data no law entitles anybody to. That is why
- * `reportable` is asked per LINE and any true answer counts: the fields follow the strictest line.
+ * `reportable` is asked per line and any true answer counts: the fields follow the strictest line.
  */
 final readonly class SellerRecordRule implements ReportingPlausibilityRule
 {

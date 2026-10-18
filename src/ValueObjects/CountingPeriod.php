@@ -12,7 +12,7 @@ use Carbon\CarbonImmutable;
  * ## Why this exists rather than an `int $year`
  *
  * The three counters this package owes are the same machine with different settings, and the settings that
- * differ are the WINDOW and the BASIS. A seam that takes a year can serve exactly one of them: the annual
+ * differ are the window and the basis. A seam that takes a year can serve exactly one of them: the annual
  * threshold monitor. A quarterly reporting counter cannot use it, so it would have to bring its own counting
  * — and two counting systems over one set of transactions drift apart at the first refund, which is the
  * failure the shared seam exists to prevent.

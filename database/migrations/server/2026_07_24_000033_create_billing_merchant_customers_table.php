@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\BillingSchema;
 
 /**
- * Which buyer a customer reference means INSIDE a given merchant account.
+ * Which buyer a customer reference means inside a given merchant account.
  *
  * A provider's customer ids are unique within the account that issued them, not across a platform and all
  * its merchants. The package's existing lookup is global — one column on the billable — which is correct
@@ -33,7 +33,7 @@ return new class extends Migration
             $table->string('customer_reference');
             $table->timestamps();
 
-            // The identity of a customer WITHIN an account. Without the account column this would be the
+            // The identity of a customer within an account. Without the account column this would be the
             // global key that cannot tell two merchants' customers apart.
             $table->unique(
                 ['provider', 'account_reference', 'customer_reference'],

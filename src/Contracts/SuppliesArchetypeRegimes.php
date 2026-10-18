@@ -9,14 +9,14 @@ use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Marketplace\ConfigSupplyRegimeResolver;
 
 /**
- * A jurisdiction profile that says which supply regime a product archetype COMPELS, overriding the
+ * A jurisdiction profile that says which supply regime a product archetype compels, overriding the
  * platform's configured default.
  *
  * ## Why this is asked for rather than known
  *
  * Take goods sold between private people, which can be held to be intermediated on the reasoning that the
  * platform cannot be reselling something it never owned when neither party is in business. The reasoning is
- * sound; the shipped resolver is the wrong place for it. The FACT — that the platform owned nothing — is
+ * sound; the shipped resolver is the wrong place for it. The fact — that the platform owned nothing — is
  * jurisdiction-neutral; the conclusion drawn from it, that this makes the sale an arranged one rather than a
  * resold one, is a legal characterization, and a legal characterization sitting in a neutral core is one
  * jurisdiction's answer wearing the costume of a general one.
@@ -29,7 +29,7 @@ use Pushery\Billing\Marketplace\ConfigSupplyRegimeResolver;
  * ## What a profile that does not implement this means
  *
  * That no archetype compels anything, and the platform's configured default stands. This is deliberately
- * NOT a refusal, and the difference from the exchange-rate seams is worth stating: there, a missing profile
+ * not a refusal, and the difference from the exchange-rate seams is worth stating: there, a missing profile
  * means no rate exists to freeze and the alternative would be inventing one. Here an answer already exists
  * and the operator wrote it — `billing.marketplace.regime.default` is an explicit statement, not a guess.
  * The opt-in allow-list beside it still refuses any regime the platform has not said it operates, so the

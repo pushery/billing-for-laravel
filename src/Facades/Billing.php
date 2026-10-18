@@ -26,7 +26,7 @@ use Pushery\Billing\ValueObjects\Money;
 /**
  * A testing facade for the money-mutating billing seams. Call {@see Billing::fake()} in a test to bind a
  * recording {@see BillingFake} to the Checkout, SubscriptionActions and OneTimeCharge contracts, then
- * assert what the app WOULD have done — `Billing::assertSubscribeStarted($owner, 'pro')`,
+ * assert what the app would have done — `Billing::assertSubscribeStarted($owner, 'pro')`,
  * `Billing::assertSwapped(...)`, `Billing::assertNothingCharged()` — exactly like `Bus::fake()`.
  *
  * Without `fake()` the facade refuses rather than answering: nothing would have recorded what the code under
@@ -102,7 +102,7 @@ final class Billing extends Facade
      * `@shared-bindings:` MerchantOnboarding
      *
      * Both fakes implement `MerchantOnboarding` in full, and both bind it. **Whichever factory is called
-     * LAST owns that binding** for the rest of the test — so a test that calls both and then resolves
+     * last owns that binding** for the rest of the test — so a test that calls both and then resolves
      * `MerchantOnboarding` from the container gets the second one, and assertions against the first see
      * nothing at all.
      *

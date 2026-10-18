@@ -7,7 +7,7 @@ namespace Pushery\Billing\Exceptions;
 use RuntimeException;
 
 /**
- * A seller-of-record posture was resolved that the consumer has NOT opted into, or is not legally available
+ * A seller-of-record posture was resolved that the consumer has not opted into, or is not legally available
  * for the supply — the package refuses it rather than ship a receipt that names the wrong seller.
  *
  * Two fail-closed cases:

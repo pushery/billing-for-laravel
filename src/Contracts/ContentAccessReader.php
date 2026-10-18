@@ -15,19 +15,19 @@ use Pushery\Billing\ValueObjects\OwnedWork;
  *
  * ## The boundary, restated because this is where it is easiest to cross
  *
- * Billing owns the ownership REGISTER and composes the live answer. The consumer owns the content bytes, the
+ * Billing owns the ownership register and composes the live answer. The consumer owns the content bytes, the
  * versions, the mapping from a tier to the works it covers, and the delivery. **This package never stores
  * content and never decides what a tier unlocks** — it cannot, and a package that guessed would hand out
  * somebody else's work.
  *
  * ## Composition is a union, and the union is what makes it correct
  *
- * Access is granted when EITHER a persisted grant says so OR the live subscription view does. The two answer
+ * Access is granted when either a persisted grant says so OR the live subscription view does. The two answer
  * different questions and neither subsumes the other: ownership is permanent and narrow, a subscription is
  * broad and temporary. Requiring both would take a bought work away the day somebody cancels; requiring only
  * the subscription would do the same. The union is the only reading that survives a cancellation.
  *
- * The subscription half is NEVER persisted. It is resolved on every read from the subscription state plus
+ * The subscription half is never persisted. It is resolved on every read from the subscription state plus
  * the consumer's own tier-to-content scope, because the moment it were written down it would be a fact that
  * outlives the state it came from — the exact mistake the register avoids by having no subscription source.
  *
@@ -48,7 +48,7 @@ interface ContentAccessReader
     public function accessFor(Model $principal, ContentReference $content, ?CarbonInterface $on = null): AccessDecision;
 
     /**
-     * Every work this person holds a REGISTERED claim on, keyed by `ContentReference::key()`.
+     * Every work this person holds a registered claim on, keyed by `ContentReference::key()`.
      *
      * Registered, not reachable: a subscription can make thousands of works readable, and enumerating them
      * would mean asking the consumer to list its whole catalog. This is the "my downloads" read — the things

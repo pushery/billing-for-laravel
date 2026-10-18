@@ -20,7 +20,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 /**
  * One person's ownership of one work.
  *
- * Ownership is a FACT, not a state: it outlives the plan that was current when it was bought, the creator's
+ * Ownership is a fact, not a state: it outlives the plan that was current when it was bought, the creator's
  * account, and the work's own publication. That is why this is a row of its own rather than something read
  * from a subscription — and why nothing here is soft-deleted. A grant that stopped granting says so, with a
  * reason and a date, because "why can this person no longer read what they bought" is a question somebody
@@ -28,7 +28,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  *
  * ## Who writes this row
  *
- * The PACKAGE does, through `ContentGrants::grant()`. Some of its columns nonetheless arrive from the
+ * The package does, through `ContentGrants::grant()`. Some of its columns nonetheless arrive from the
  * consuming application rather than being derived here -- `version_pin_ref` is the clearest: which version a
  * buyer was pinned to is a fact about their catalog. That is why an absent pin is answered fail-closed
  * (bounded at the moment of purchase) rather than as "the newest", which would be the opposite of what was
@@ -47,6 +47,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * @property ?Carbon $expires_at
  * @property ?Carbon $revoked_at
  * @property ?RevokeReason $revoked_reason
+ * @property ?Carbon $reinstated_at when a revoked grant was given back; its revocation stays on the row
  * @property ?string $source_reference
  * @property UpdatePolicy $update_policy
  * @property ?string $version_pin_ref
@@ -73,7 +74,7 @@ class AccessGrant extends Model
     protected $fillable = [
         'owner_type', 'owner_id', 'purchaser_type', 'purchaser_id',
         'content_type', 'content_ref', 'source', 'status', 'acquired_at', 'expires_at',
-        'revoked_at', 'revoked_reason', 'source_reference',
+        'revoked_at', 'revoked_reason', 'reinstated_at', 'source_reference',
         'update_policy', 'version_pin_ref', 'update_window_ends_at',
         'conformity_update_until', 'conformity_waiver', 'conformity_waiver_ref', 'withdrawal_window_ends_at',
         'withdrawal_type', 'withdrawal_declaration_ref',
@@ -104,6 +105,7 @@ class AccessGrant extends Model
         'acquired_at' => UtcDateTime::class,
         'expires_at' => UtcDateTime::class,
         'revoked_at' => UtcDateTime::class,
+        'reinstated_at' => UtcDateTime::class,
         'update_window_ends_at' => UtcDateTime::class,
         'conformity_update_until' => UtcDateTime::class,
         'withdrawal_window_ends_at' => UtcDateTime::class,

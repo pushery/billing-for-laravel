@@ -34,7 +34,7 @@ use RuntimeException;
  *
  * ## What each model still answers for itself
  *
- * The MECHANISM is here; the JUDGMENTS stay with the model, because they are statements about that record
+ * The mechanism is here; the judgments stay with the model, because they are statements about that record
  * and not shared code:
  *
  * - which columns may still move (`appendOnlyMutableColumns()`, empty by default — the whole row is frozen),
@@ -42,7 +42,7 @@ use RuntimeException;
  * - whether a caller may delete it through the model at all (`appendOnlyDeletion()`), and what to say when
  *   that is refused.
  *
- * The refusal methods are ABSTRACT on purpose. A default message would be the drift returning by another
+ * The refusal methods are abstract on purpose. A default message would be the drift returning by another
  * door: every model would inherit a sentence that says nothing about why this particular record is frozen,
  * and the reader who hits it would learn nothing.
  */
@@ -109,7 +109,7 @@ trait AppendOnly
     /**
      * Columns that may still change after the row was written. Empty means the whole row is frozen.
      *
-     * The usual reason for an entry is an erasure unlinking a person from a record whose CONTENT does not
+     * The usual reason for an entry is an erasure unlinking a person from a record whose content does not
      * move — which is not an edit of what happened.
      *
      * @return list<string>

@@ -17,7 +17,7 @@ use Pushery\Billing\Preflight\CheckpointRegistry;
  * Selects the tax calculator from config('billing.tax'): the static EU-OSS VAT table, the
  * provider-delegate (Stripe Tax), or the no-op.
  *
- * An unresolvable mode still falls back to the no-op here, but that fallback is a last resort and NOT a
+ * An unresolvable mode still falls back to the no-op here, but that fallback is a last resort and not a
  * safety property: charging no tax is the dangerous direction for a seller, not the safe one, because it
  * under-declares silently. TaxSupportGuard refuses an unresolvable mode at boot so this fallback is never
  * reached in a booted application — see MODES, which is the authority both sides read.
@@ -34,7 +34,7 @@ final readonly class TaxCalculatorFactory
     public const array MODES = ['none', 'eu_oss', 'provider', 'stripe'];
 
     /**
-     * The subset of MODES that hands tax computation to the payment provider, and therefore REQUIRES a
+     * The subset of MODES that hands tax computation to the payment provider, and therefore requires a
      * driver that computes provider tax. 'stripe' is an alias of 'provider' here — it resolves to the same
      * calculator below, so any consumer of this classification must treat the two alike.
      *
@@ -51,7 +51,7 @@ final readonly class TaxCalculatorFactory
         private Repository $config,
         private ?CheckpointRegistry $profiles = null,
         /**
-         * The shipped rate table, resolved ONCE for the application rather than per invoice.
+         * The shipped rate table, resolved once for the application rather than per invoice.
          *
          * Injected rather than looked up so the "read the file once per boot" property is structural: the
          * provider binds a singleton, this passes it through, and nothing on the money path can quietly
@@ -82,7 +82,7 @@ final readonly class TaxCalculatorFactory
     /**
      * The rate table that actually answers for this installation, or null when the shipped calculator does.
      *
-     * Public because something outside has to be able to ASK. `billing:doctor` reports how old the rates
+     * Public because something outside has to be able to ask. `billing:doctor` reports how old the rates
      * are, and without this seam it had to re-derive which table answers — the same precedence written a
      * second time, in a second file, where a third source added here would never reach it. The symptom of
      * that drift is the one the doctor exists to prevent: an operator told the age of a table that is not
@@ -99,7 +99,7 @@ final readonly class TaxCalculatorFactory
     /**
      * The configured country-and-category rate table, or null when none is configured.
      *
-     * A malformed table is REFUSED rather than ignored. Ignoring it would leave the standard rate charged on
+     * A malformed table is refused rather than ignored. Ignoring it would leave the standard rate charged on
      * every reduced-rate supply — the same silent over- or under-charge the configuration exists to prevent,
      * and with no symptom, since a wrong rate looks exactly like a right one on an invoice. The absent case
      * is the only quiet one, because absent means "this jurisdiction has one band" rather than "something
@@ -177,14 +177,14 @@ final readonly class TaxCalculatorFactory
     }
 
     /**
-     * The configured rate HISTORY as dated intervals, or null when the installation has not configured one.
+     * The configured rate history as dated intervals, or null when the installation has not configured one.
      *
      * Null is the ordinary case and means exactly one thing: this installation prices at one table, and a
      * tax point arriving on the money path changes nothing for it. That inertness is deliberate — the tax
      * point now travels on every call whether or not anybody opted in, so reading its mere presence as
      * "consult the intervals" would refuse every sale on every install that never configured any.
      *
-     * A MALFORMED history is refused rather than skipped, for the reason the surrounding table already
+     * A malformed history is refused rather than skipped, for the reason the surrounding table already
      * gives: a skipped history leaves every historic document at today's rate, with no symptom, which is
      * the precise defect it was configured to close. An overlapping pair is refused by the table itself —
      * one supply cannot have two rates, and picking the first match would decide that silently.

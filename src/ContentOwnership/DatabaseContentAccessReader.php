@@ -79,7 +79,7 @@ final readonly class DatabaseContentAccessReader implements ContentAccessReader
         $byContent = $this->groupByContent($rows);
 
         // One batched catalog call for every distinct work, and one subscription read for the whole set —
-        // resolved BEFORE the loop, which is the entire difference between this and an N+1.
+        // resolved before the loop, which is the entire difference between this and an N+1.
         $availability = $this->availabilityOf(
             array_values(array_map(
                 static fn (array $group): ContentReference => $group['content'],
@@ -168,7 +168,7 @@ final readonly class DatabaseContentAccessReader implements ContentAccessReader
     /**
      * The grant to answer with, or null when none of them grants at the moment.
      *
-     * Among granting rows a PERMANENT one wins over a windowed one, and among equals the earliest acquired.
+     * Among granting rows a permanent one wins over a windowed one, and among equals the earliest acquired.
      * Both halves matter: reporting the rental when somebody also owns the work outright would show an end
      * date that does not apply to them, and an unordered pick would make the same call answer differently on
      * two engines whose natural row order differs.
@@ -196,7 +196,7 @@ final readonly class DatabaseContentAccessReader implements ContentAccessReader
     }
 
     /**
-     * The decision for a granting row, with the version RESOLVED rather than described.
+     * The decision for a granting row, with the version resolved rather than described.
      *
      * The grant carries the promise ("updates for a year"); a delivery path needs today's instruction ("hand
      * over the newest one" / "the newest one from before this date"). Resolving here is what keeps that rule
@@ -215,7 +215,7 @@ final readonly class DatabaseContentAccessReader implements ContentAccessReader
     /**
      * Whether any of the person's subscriptions reaches the work at the moment.
      *
-     * The window is checked HERE rather than trusted from the reader: `grantsFor` answers with the grants
+     * The window is checked here rather than trusted from the reader: `grantsFor` answers with the grants
      * that grant access, and `coversInstant` is the separate question of whether the instant asked about
      * falls inside the recorded period. A back-dated access check must not be answered with today's state.
      *

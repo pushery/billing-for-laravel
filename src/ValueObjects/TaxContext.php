@@ -11,8 +11,8 @@ use Pushery\Billing\Enums\TaxRateCategory;
  * The inputs a TaxCalculator needs to determine tax: who the customer is — the country, an optional VAT id,
  * whether they are a business (for EU reverse-charge / OSS handling) — and what was sold.
  *
- * The last three properties are APPENDED and optional, which is the whole design constraint. A rate depends
- * on the destination, the kind of supply AND the moment the supply was taxed, but `TaxCalculator::calculate()`
+ * The last three properties are appended and optional, which is the whole design constraint. A rate depends
+ * on the destination, the kind of supply and the moment the supply was taxed, but `TaxCalculator::calculate()`
  * is a published contract with implementations outside this package: changing its signature would be a fatal
  * error in every one of them. So each further dimension arrives inside the context that was already being
  * passed, and every existing construction keeps working and keeps meaning what it meant.
@@ -23,7 +23,7 @@ final readonly class TaxContext
      * @param  TaxRateCategory  $rateCategory  which band of the destination's rates the supply falls in
      * @param  bool  $hasAudioVisualComponent  any audio or video part of it, however small — this closes the
      *                                         reduced band for the whole supply
-     * @param  ?CarbonImmutable  $taxPoint  WHEN the supply was taxed, where the caller knows it. The law binds
+     * @param  ?CarbonImmutable  $taxPoint  When the supply was taxed, where the caller knows it. The law binds
      *                                      the rate to the tax point rather than to the moment of lookup
      *                                      (Art. 93 VAT Directive), so a document written today for a supply
      *                                      made under a different rate must be able to say which moment it
@@ -84,7 +84,7 @@ final readonly class TaxContext
     }
 
     /**
-     * Whether this is a VALIDATED intra-EU business: flagged business, carrying a VAT id, AND that id proven
+     * Whether this is a validated intra-EU business: flagged business, carrying a VAT id, and that id proven
      * valid (via VIES). The reverse charge zero-rates the supply, so it must never rest on an id that was
      * merely present — a fake, or one that VIES could not confirm, would under-charge VAT.
      */

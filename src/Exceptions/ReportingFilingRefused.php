@@ -42,7 +42,7 @@ final class ReportingFilingRefused extends RuntimeException
     /**
      * There is a correction to file and nothing that it corrects.
      *
-     * A period whose first filing never happened is not corrected — it is FILED, and the two are different
+     * A period whose first filing never happened is not corrected — it is filed, and the two are different
      * acts with different sequence numbers. Producing a correction with no predecessor would put a record
      * into the chain that claims to amend something nobody ever sent.
      */
@@ -65,7 +65,7 @@ final class ReportingFilingRefused extends RuntimeException
     }
 
     /**
-     * A correction has to answer the LATEST filing of its period, never one that is already superseded.
+     * A correction has to answer the latest filing of its period, never one that is already superseded.
      *
      * Two corrections both naming the original would each claim to be the current state of the period, and
      * whichever arrived second would silently drop the first one's changes — the reader has no way to tell

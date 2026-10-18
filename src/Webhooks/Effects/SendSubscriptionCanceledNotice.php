@@ -17,8 +17,8 @@ use Pushery\Billing\Support\BillingEventLog;
 use RuntimeException;
 
 /**
- * Tells the owner their subscription was canceled and — the part that actually matters — WHEN their access
- * ends. It fires on the GRACE state only: canceled but paid through the moment it ends, which is when the
+ * Tells the owner their subscription was canceled and — the part that actually matters — when their access
+ * ends. It fires on the grace state only: canceled but paid through the moment it ends, which is when the
  * customer needs the date. A subscription that has already lapsed (Ended) is past the point of a useful
  * "your access ends on…", and every other state is not a cancellation at all.
  *
@@ -26,7 +26,7 @@ use RuntimeException;
  * no date to give, so nothing is sent rather than a notice whose whole point is missing. Like its siblings the effect is pure — resolve the owner, notify, record — with the
  * once-per-cancellation guarantee in the delivery machinery (claim, run and mark in one transaction).
  *
- * It dedups on the SUBSCRIPTION and its access-end moment, not the delivery: a provider redelivering the
+ * It dedups on the subscription and its access-end moment, not the delivery: a provider redelivering the
  * same cancellation mints a fresh event id, and deduping on that would mail the customer twice. A
  * cancellation later re-scheduled to a different end date is a genuinely different notice.
  */

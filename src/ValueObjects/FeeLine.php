@@ -7,7 +7,7 @@ namespace Pushery\Billing\ValueObjects;
 /**
  * One charged fee, resolved into what it is worth and what tax it carries.
  *
- * A buyer fee is a supply the PLATFORM makes to the buyer, not a part of the item's price and not a slice
+ * A buyer fee is a supply the platform makes to the buyer, not a part of the item's price and not a slice
  * of the seller's turnover. Keeping it as its own line — its own net, its own tax, its own revenue account
  * — is what stops it being netted into either of those, which is where a taxable supply of the platform's
  * own would otherwise disappear.

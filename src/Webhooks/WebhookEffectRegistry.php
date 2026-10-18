@@ -15,15 +15,15 @@ use Pushery\Billing\Models\BillingWebhookEvent;
  * event is dispatched. Effects listen on stable domain events (PaymentSucceeded,
  * SubscriptionStateChanged, …), never on provider strings, so the same effect works for every driver.
  *
- * Effects are registered by CLASS NAME, not as closures, and that is what makes the rest possible: each
- * one is dispatched as its OWN queued job. So an effect that throws does not take the ones after it down
+ * Effects are registered by class name, not as closures, and that is what makes the rest possible: each
+ * one is dispatched as its own queued job. So an effect that throws does not take the ones after it down
  * with it, each retries on its own, and each leaves a record of what it did or still owes.
  *
  * That isolation needs an asynchronous connection. On `sync` the jobs run inline, in the webhook's own
  * request, so one that throws stops the effects after it and the host event, and the provider reads a 500.
  * `billing:doctor` warns about such a connection.
  *
- * Each event is ALSO fired through Laravel's own dispatcher, so a consuming app can Event::listen for a
+ * Each event is also fired through Laravel's own dispatcher, so a consuming app can Event::listen for a
  * domain event or Event::fake it in a test — the package's own effects run either way. The dispatcher is
  * resolved at dispatch time, not injected: this registry is a boot-resolved singleton, and a later
  * Event::fake() swaps the container's dispatcher, so an injected one would be the pre-fake instance.
@@ -69,7 +69,7 @@ final class WebhookEffectRegistry
 
         // A renamed event fires under its former name too, for one deprecation window, so a host that still
         // listens for the old class is not silently dropped. The alias reaches framework listeners only — it
-        // is NOT run through the registered effects above, so the package never persists the same event twice.
+        // is not run through the registered effects above, so the package never persists the same event twice.
         if ($event instanceof HasDeprecatedAlias) {
             Event::dispatch($event->deprecatedAlias());
         }

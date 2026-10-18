@@ -9,7 +9,7 @@ use Pushery\Billing\ValueObjects\Money;
 
 /**
  * Tells the owner a payment went through — the receipt half of the money conversation. The package tells
- * a customer when their money did NOT move (the dunning notice); this is the other side, and it is the
+ * a customer when their money did not move (the dunning notice); this is the other side, and it is the
  * seam an app rebinds when its receipts should go somewhere other than Laravel's mail stack (an
  * accounting system, a document service, its own template).
  *

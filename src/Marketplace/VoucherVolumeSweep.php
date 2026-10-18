@@ -24,16 +24,16 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * A monitor answers when asked. Nobody was asking, and nothing told them to.
  *
- * ## The currencies come from the INSTRUMENTS, not from a list
+ * ## The currencies come from the instruments, not from a list
  *
  * There is no configured currency list here, and adding one would be the wrong shape: it would be a second
  * hand-kept list beside the sales themselves, and the failure of such a list is silent — a currency somebody
  * sells in but forgot to add is a currency nobody is counting, and it looks exactly like a currency under
  * the threshold. Asking which currencies actually carry sales cannot drift.
  *
- * BOTH INSTRUMENTS ARE ASKED, BECAUSE ASKING THE VOUCHERS ALONE IS THE SAME SILENCE ONE TABLE OVER. The
+ * Both instruments are asked, because asking the vouchers alone is the same silence one table over. The
  * figure counts two instruments — vouchers and paid money-credit top-ups. A loop over the currencies some
- * voucher was issued in would give an installation that sells credit and issues no vouchers an EMPTY list:
+ * voucher was issued in would give an installation that sells credit and issues no vouchers an empty list:
  * the monitor would answer correctly for `EUR`, and nothing would ask it. The threshold could be passed by a
  * wide margin with the sweep running green every morning over nothing, which is precisely the state this
  * class is written against. A currency carried by either instrument is visited once.
@@ -128,7 +128,7 @@ final readonly class VoucherVolumeSweep
     /**
      * Every currency either instrument has actually been sold in, once each.
      *
-     * A union rather than two loops: a currency carried by both a voucher and a top-up is ONE figure with one
+     * A union rather than two loops: a currency carried by both a voucher and a top-up is one figure with one
      * threshold, and visiting it twice would announce it twice on the first day and then never again — the
      * marker is written after the first dispatch, so the second visit reads as already announced and the
      * duplicate reaches the recipient rather than the log.
