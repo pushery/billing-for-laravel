@@ -16,7 +16,9 @@ use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Exceptions\RetentionHoldUnavailable;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Models\WebhookEffectRun;
+use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\OwnerScopedTables;
+use Pushery\Billing\Support\PaymentsModeSchema;
 use Pushery\Billing\Support\RetentionHoldGate;
 use Pushery\Billing\Support\RetentionMatrix;
 use Pushery\Billing\Support\StoredDocumentFiles;
@@ -29,24 +31,27 @@ use Pushery\Billing\ValueObjects\RetentionRule;
  *
  * Two things age out:
  *
- * The stored WEBHOOK PAYLOADS. They are the package's largest store of personal data — a Stripe event
+ * The stored webhook payloads. They are the package's largest store of personal data — a Stripe event
  * carries the customer's email, name, billing address and card last four — and they are kept for one reason
  * only: so a failed effect can be re-driven from what the provider already sent. Once the provider itself
  * has stopped redelivering (Stripe gives up after about three days), that reason has expired. Ninety days
- * is a generous default. The delivery ROW stays: it is the dedup that keeps a redelivery from being
+ * is a generous default. The delivery row stays: it is the dedup that keeps a redelivery from being
  * processed twice, and it holds no personal data once the payload is gone.
  *
- * The RETAINED financial rows of erased owners. They outlive the erasure because the law requires them
- * (§14b Abs. 1 UStG n. F. — EIGHT years, the shipped default of 2920 days), and they go once it does not.
+ * The retained financial rows of erased owners. They outlive the erasure because the law requires them
+ * (§14b Abs. 1 UStG n. F. — eight years, the shipped default of 2920 days), and they go once it does not.
  *
  * Eight, not ten, and the difference is the whole point rather than a rounding of it. The ten-year window
- * (§147 AO, §257 HGB) is a SEPARATE obligation covering books and posting batches — it is `audit_days`
+ * (§147 AO, §257 HGB) is a separate obligation covering books and posting batches — it is `audit_days`
  * below, deliberately a different number for a different record class. Retaining an invoice to the book
  * window would keep the buyer's name and address two years past the obligation that justifies holding
  * them at all, which is a storage-limitation breach (GDPR Art. 5(1)(e)), not a safe margin.
  *
  * The shipped config and `RetentionFloorGuard` both say this; this docblock said "about ten years" and
  * was the only place that disagreed — describing the unlawful variant as though it were what runs.
+ *
+ * Payments-only mode keeps the webhook deliveries and nothing else ({@see PaymentsModeSchema}), so there the
+ * payloads are all that ages out.
  */
 final class PruneBillingCommand extends Command
 {
@@ -66,6 +71,7 @@ final class PruneBillingCommand extends Command
         RetentionMatrix $matrix,
         RetentionHoldGate $holds,
         StoredDocumentFiles $files,
+        BillingManager $manager,
     ): int {
         $dryRun = $this->option('dry-run') === true;
 
@@ -100,16 +106,28 @@ final class PruneBillingCommand extends Command
             static fn (Builder $q): int => $dryRun ? $q->count() : $q->update(['payload' => null, 'last_error' => null, 'payload_removed_at' => Carbon::now()]),
         );
 
+        // Payments-only mode keeps no financial record, no audit trail and no filing, so the payloads above are all
+        // it ages out, and the tables the steps below read do not exist there.
+        if ($manager->paymentsOnly()) {
+            $this->components->info(($dryRun ? 'Would prune' : 'Pruned')." {$payloadCount} stored webhook payload(s); payments-only mode keeps no other records.");
+
+            if ($dryRun) {
+                $this->reportRules($matrix, PaymentsModeSchema::TABLES);
+            }
+
+            return $this->holdUnanswered ? self::FAILURE : self::SUCCESS;
+        }
+
         // §147 Abs. 4 AO: the retention clock starts at the END of the year the document was issued, so a
-        // record is kept for the floor counted from that year end — NOT from the raw issue instant. Anchoring
+        // record is kept for the floor counted from that year end — not from the raw issue instant. Anchoring
         // to the year start of (now − floor) is what implements it: an invoice issued in March of a year and
         // one issued that December are kept the same length (to the following year boundary), instead of the
-        // March one being deleted nine months too early. A record is pruned only once BOTH hold: its owner was
+        // March one being deleted nine months too early. A record is pruned only once both hold: its owner was
         // erased, and the statutory window from its issue year has passed.
         $financialFloor = $this->days($config, 'erased_financial_days', 2920);
         $financialCutoff = $this->yearEndCutoff($financialFloor);
 
-        // EVERY axis, not just the buyer's. The statutory window is a property of the document, not of whose
+        // Every axis, not just the buyer's. The statutory window is a property of the document, not of whose
         // name is on it: a merchant's payout statement ages out under the same rule as a buyer's invoice, and
         // iterating the axes means a new one is covered the day it is added rather than the day somebody
         // remembers this loop exists.
@@ -148,7 +166,7 @@ final class PruneBillingCommand extends Command
         }
 
         // The audit ledger. GDPR storage limitation (Art. 5(1)(e)) says personal data is not kept longer
-        // than needed; bookkeeping law (§257 HGB, §147 AO) says booking records ARE kept for years. The
+        // than needed; bookkeeping law (§257 HGB, §147 AO) says booking records are kept for years. The
         // default window is the longer, book-keeping one — check it against your obligations. Deleted by
         // query: the append-only guard reads what is done through a model, and a sweep over years of rows
         // loads none.
@@ -171,7 +189,7 @@ final class PruneBillingCommand extends Command
         $leaving = [self::FILINGS => $leavingFilings];
 
         // The rules nobody was carrying out. A period-scoped document — a produced tax return, a produced
-        // seller-reporting file — names a PERIOD rather than a person, so no erasure axis can reach it: there
+        // seller-reporting file — names a period rather than a person, so no erasure axis can reach it: there
         // is no subject to erase. The matrix declared a window for both and the dry run printed it as "the
         // record of what this run enforces", while the rows sat there forever.
         //
@@ -262,7 +280,7 @@ final class PruneBillingCommand extends Command
             $this->reportRules($matrix);
         }
 
-        // A record that must never have been kept is not pruned here — it is REPORTED. Its duty is
+        // A record that must never have been kept is not pruned here — it is reported. Its duty is
         // discharged where it is processed, so a survivor means a code path did not discharge it, and
         // quietly cleaning up would hide the defect and leave it happening.
         $survivors = $this->immediateSurvivors($matrix);
@@ -286,7 +304,7 @@ final class PruneBillingCommand extends Command
      * The paths that delete by one plain query go through here, and the two that need more (an erasure
      * axis, and the filings of a reporting period) ask the same gate themselves. So no path answers the hold
      * question differently, and a path added later that asks nothing visibly did not ask. When the seam
-     * cannot answer, this deletes NOTHING from that table and marks the run failed: falling back to "nothing
+     * cannot answer, this deletes nothing from that table and marks the run failed: falling back to "nothing
      * is held" would destroy exactly the records the seam exists to protect, at the moment it had lost the
      * ability to object.
      *
@@ -388,12 +406,20 @@ final class PruneBillingCommand extends Command
         return $leaving;
     }
 
-    /** The rule set, as the record of what this run enforces. */
-    private function reportRules(RetentionMatrix $matrix): void
+    /**
+     * The rule set, as the record of what this run enforces.
+     *
+     * @param  list<string>|null  $tables  the tables the run looks after, where it looks after fewer than all
+     */
+    private function reportRules(RetentionMatrix $matrix, ?array $tables = null): void
     {
         $this->newLine();
 
         foreach ($matrix->rules() as $rule) {
+            if ($tables !== null && ! in_array($rule->object, $tables, true)) {
+                continue;
+            }
+
             $window = $rule->days === null ? '—' : $rule->days.' days';
 
             $this->components->twoColumnDetail(
@@ -441,7 +467,7 @@ final class PruneBillingCommand extends Command
      * The first day of the first year that is still inside a window counted from a year's end.
      *
      * A record made before this day has been kept for the whole window. The statutory windows are a number
-     * of YEARS from the end of a year, and configuration states them in days. Counted as days they close
+     * of years from the end of a year, and configuration states them in days. Counted as days they close
      * early: eight years hold two leap days, so 2920 days from the end of a year are over on 30 December
      * of the eighth year, two days before the window is. The whole years are therefore counted as years,
      * and only what is left over as days.

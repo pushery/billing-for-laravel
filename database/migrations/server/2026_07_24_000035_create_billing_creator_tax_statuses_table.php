@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\BillingSchema;
 
 /**
- * A creator's tax standing over TIME, as a series of intervals rather than a column on the creator.
+ * A creator's tax standing over time, as a series of intervals rather than a column on the creator.
  *
  * The difference is the whole design. A single overwritable column answers "what is their status", which
  * is not the question any document ever asks: a document asks what their status was on the day the supply
@@ -38,7 +38,7 @@ return new class extends Migration
 
             $table->string('status');
             $table->timestamp('effective_from');
-            // Null is an OPEN interval — the state that still applies. The ledger closes the interval a new
+            // Null is an open interval — the state that still applies. The ledger closes the interval a new
             // start falls into and opens the new one in one transaction, under a lock on the creator's rows,
             // so its own writes leave one. Nothing in the schema holds that: a correction made by hand can
             // leave two, and every reader takes the newest interval that covers the moment it asks about.
@@ -57,7 +57,7 @@ return new class extends Migration
             // One interval per creator per start moment. Two rows starting at the same instant are two
             // contradictory answers to the same question, and whichever a query returned would be arbitrary.
             //
-            // It is also the READ path — every document asks for one creator's status at one moment, which
+            // It is also the read path — every document asks for one creator's status at one moment, which
             // is exactly this prefix. A separate lookup index over the same three columns would be a second
             // copy of this one: paid for on every write, never chosen by the planner over the unique.
             $table->unique(['merchant_type', 'merchant_id', 'effective_from'], 'billing_creator_tax_statuses_interval_unique');

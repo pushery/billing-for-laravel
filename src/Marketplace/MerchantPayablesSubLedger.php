@@ -39,7 +39,7 @@ final readonly class MerchantPayablesSubLedger
      *
      * A settlement raises the payable by what the merchant is owed. A payout clears it. The two are emitted
      * from one document today, which is why an ordinary transaction nets to zero — and why the cases that do
-     * NOT net (a settlement issued without its payout, a correction) are the ones a reconciliation has to
+     * not net (a settlement issued without its payout, a correction) are the ones a reconciliation has to
      * catch.
      *
      * @param  iterable<InvoiceRecord>  $documents

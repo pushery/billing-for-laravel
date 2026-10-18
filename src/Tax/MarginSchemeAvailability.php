@@ -13,7 +13,7 @@ use RuntimeException;
  *
  * ## Where the platform is the supplier, the margin scheme cannot apply
  *
- * The scheme is available to a reseller for goods that were SUPPLIED TO THEM without deductible tax. Where a
+ * The scheme is available to a reseller for goods that were supplied to them without deductible tax. Where a
  * platform is treated as the supplier of goods it never bought, the leg that would have to be that supply is
  * either outside the union entirely or exempt — and an exempt inbound leg is not one of the acquisitions the
  * scheme lists. So the two are mutually exclusive, and not as a matter of preference.
@@ -22,18 +22,18 @@ use RuntimeException;
  * tax at all, so a platform that reached this state would issue documents that look deliberately silent
  * while owing tax on the full price. Nothing about them reads as wrong.
  *
- * ## Being privately acquired is NOT the disqualifying fact
+ * ## Being privately acquired is not the disqualifying fact
  *
  * This is the part most likely to be implemented backwards, and it was carried as a disputed point for
  * months before the criterion was read properly. The statute does not ask whether an item was once private.
- * It asks whether the item was supplied to the reseller BY SOMEBODY, FOR CONSIDERATION.
+ * It asks whether the item was supplied to the reseller by somebody, for consideration.
  *
  * The case that matters here — a person who tips into trader status and then sells their own belongings,
  * bought years earlier as a consumer — fails that test outright: there is no counterparty and no
  * consideration, so there was no supply to the reseller at all. Not a contested exclusion; simply not the
  * situation the scheme describes.
  *
- * Which also means the opposite must not be inferred: goods bought FROM a private person, for a price, ARE
+ * Which also means the opposite must not be inferred: goods bought FROM a private person, for a price, are
  * within the scheme. That is the ordinary second-hand purchase the scheme exists for, and a rule keyed to
  * "was it private" would wrongly exclude exactly it.
  */

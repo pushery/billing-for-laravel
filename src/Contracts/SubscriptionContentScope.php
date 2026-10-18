@@ -8,15 +8,15 @@ use Pushery\Billing\ValueObjects\ContentReference;
 use Pushery\Billing\ValueObjects\SubscriptionGrant;
 
 /**
- * The consumer's answer to the one question this package must not answer itself: does THIS subscription
- * cover THAT work?
+ * The consumer's answer to the one question this package must not answer itself: does this subscription
+ * cover that work?
  *
  * ## Why it is a seam and not a config table
  *
  * Every plausible rule here is somebody's product decision, and they contradict each other. Does a tier
  * cover the creator's back catalog or only what they publish while you are subscribed? Does a higher tier
  * include the lower one's works? Does a lapsed-then-resumed subscription reach the gap? A package that
- * picked one would be wrong for most consumers and, worse, would be wrong SILENTLY — handing out works
+ * picked one would be wrong for most consumers and, worse, would be wrong silently — handing out works
  * nobody meant to include.
  *
  * So the package supplies the state (which tier, on which merchant, over which window, in which state) and

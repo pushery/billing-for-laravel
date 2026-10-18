@@ -11,7 +11,7 @@ use InvalidArgumentException;
  *
  * ## Why half is refused rather than tolerated
  *
- * A charge reference is unique only PER PROVIDER — the charge table says so with a composite unique key, and
+ * A charge reference is unique only per provider — the charge table says so with a composite unique key, and
  * every lookup in the marketplace lane repeats the point. A transaction that named a bare reference could
  * therefore be matched against a charge belonging to a different driver, and the collective document would
  * then record that it settled a sale it never mentioned.
@@ -26,7 +26,7 @@ use InvalidArgumentException;
  * puts the error at the line that wrote it, while checking it in the engine would report a whole month as
  * unsettleable and leave the caller to find which of its transactions was malformed.
  *
- * Naming NEITHER half stays valid, and that is the ordinary case: the link exists only for callers that
+ * Naming neither half stays valid, and that is the ordinary case: the link exists only for callers that
  * have a routed charge to point at.
  *
  * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping

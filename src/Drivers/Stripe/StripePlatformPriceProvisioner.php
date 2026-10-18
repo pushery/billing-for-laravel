@@ -22,7 +22,7 @@ use Stripe\StripeClient;
  * The lookup key carries the merchant, and that is the whole difference from the twin.
  *
  * On separate connected accounts, `tier + amount + interval` is unique by construction: two creators each
- * have their own account and cannot collide. On ONE shared platform account they can, and the failure would
+ * have their own account and cannot collide. On one shared platform account they can, and the failure would
  * not be an error -- it would be two creators silently sharing a price, so one creator's repricing moves the
  * other's tier. That is the kind of defect that surfaces as a billing dispute rather than as a stack trace.
  *
@@ -32,7 +32,7 @@ use Stripe\StripeClient;
  *
  * No connected account is required here, and that is deliberate rather than an omission. Minting a price on
  * the platform account needs nothing from the merchant, so demanding an account would refuse a tier that
- * could be created and sold perfectly well. Whether the merchant can RECEIVE the money is a different
+ * could be created and sold perfectly well. Whether the merchant can receive the money is a different
  * question, asked at checkout by the receive gate, where it belongs.
  */
 final readonly class StripePlatformPriceProvisioner implements MerchantPriceProvisioner

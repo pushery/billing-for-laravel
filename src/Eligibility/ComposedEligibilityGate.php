@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\CanTransactMoney;
 
 /**
- * A fail-closed eligibility gate: it denies unless at least one check is registered AND every
+ * A fail-closed eligibility gate: it denies unless at least one check is registered and every
  * registered check passes. A project adds its own checks (age, KYC, …) via require(); with none
  * registered the gate denies, so money never moves before eligibility is positively established.
  */

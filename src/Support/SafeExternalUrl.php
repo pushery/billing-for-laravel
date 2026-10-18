@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Log;
  * page, the billing portal — and the package redirects to it as a full-page navigation. That makes the URL
  * a security boundary: it must be a real, navigable web address and nothing else.
  *
- * This gate lets ONLY an absolute http/https URL with a host through, and refuses everything else:
+ * This gate lets only an absolute http/https URL with a host through, and refuses everything else:
  *  - a `javascript:` / `data:` / `vbscript:` scheme — script injection on redirect,
  *  - a scheme-relative `//evil.example` or a bare `/path` or `?query` — an open redirect to an attacker's
  *    origin, or a same-origin bounce that defeats the point of a hosted flow,

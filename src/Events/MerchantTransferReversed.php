@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\Money;
  * stores charges — and, more to the point, without having to work out for itself how much came back. That
  * figure is not a share of what was paid out and cannot be derived by anybody downstream.
  *
- * The provider's dispute fee travels as its OWN amount rather than being netted off the reversal. It is a
+ * The provider's dispute fee travels as its own amount rather than being netted off the reversal. It is a
  * separate service the provider charged the platform for, with its own place in the books; folding it into
  * the reversal would state that the merchant returned more than they did, and would hide a cost the
  * platform actually bore behind a number that looks like a correction.

@@ -41,7 +41,7 @@ final class ViesVatIdValidator implements VatIdValidator
         }
 
         // VIES answers HTTP 200 even for a transient member-state outage, signaling it in `userError`. That
-        // is NOT a verdict on the id, so treat it as Unavailable (conservative) — never Invalid: an outage
+        // is not a verdict on the id, so treat it as Unavailable (conservative) — never Invalid: an outage
         // must neither reject a real business nor, via the caller, grant an unearned zero-rate.
         $userError = $response->json('userError');
         $transient = ['MS_UNAVAILABLE', 'MS_MAX_CONCURRENT_REQ', 'SERVICE_UNAVAILABLE', 'GLOBAL_MAX_CONCURRENT_REQ', 'TIMEOUT', 'SERVER_BUSY'];

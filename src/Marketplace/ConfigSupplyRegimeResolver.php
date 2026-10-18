@@ -20,10 +20,10 @@ use Pushery\Billing\Preflight\CheckpointRegistry;
  * platform that has not said it arranges other people's sales must not start doing so because a product was
  * classified in a way nobody looked at.
  *
- * An archetype may COMPEL a regime, overriding that default — and which archetypes do is a question for the
+ * An archetype may compel a regime, overriding that default — and which archetypes do is a question for the
  * jurisdiction profile, not for this class. Goods sold between private people, for instance, can be held to
  * be intermediated, because the platform cannot be reselling something it never owned when neither party is
- * in business. The fact is neutral; concluding a REGIME from it is a legal characterization, and one sitting
+ * in business. The fact is neutral; concluding a regime from it is a legal characterization, and one sitting
  * in a neutral core would be one jurisdiction's answer wearing the costume of a general one. See
  * {@see SuppliesArchetypeRegimes}, where that answer lives, and why.
  *

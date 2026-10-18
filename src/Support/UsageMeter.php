@@ -12,34 +12,40 @@ use Illuminate\Support\Str;
 use Pushery\Billing\Enums\ReservationState;
 use Pushery\Billing\Models\PrepaidUnits;
 use Pushery\Billing\Models\UsageCounter;
+use Pushery\Billing\Models\UsageGrant;
 use Pushery\Billing\Models\UsageReservation;
 use Pushery\Billing\ValueObjects\UsageHold;
 
 /**
- * Atomic metered-usage accounting, per owner per METER per period.
+ * Atomic metered-usage accounting, per owner per meter per period.
  *
- * WHY THE LOCK IS THE WHOLE FEATURE. A quota check that reads the counter, decides, and writes later
+ * Why the lock is the whole feature. A quota check that reads the counter, decides, and writes later
  * cannot hold a ceiling: two requests read the same number and both pass it. An owner one unit below their
  * limit gets through as many times as they can fire requests in parallel. reserve() closes that by making
- * the check and the claim ONE act under the counter's row lock — it does not ask whether there is room,
- * it TAKES the room.
+ * the check and the claim one act under the counter's row lock — it does not ask whether there is room,
+ * it takes the room.
  *
  * A hold is settled exactly once, keyed on its token, so a retried job cannot spend the same allowance
- * twice or hand it back twice. A hold nobody settles EXPIRES (see expire()): a worker killed between
+ * twice or hand it back twice. A hold nobody settles expires (see expire()): a worker killed between
  * reserving and settling would otherwise hold that allowance for the rest of the billing period, and a
- * leaked hold REFUSES A PAYING CUSTOMER — worse than the oversell it was meant to prevent.
+ * leaked hold refuses a paying customer — worse than the oversell it was meant to prevent.
  *
- * TWO SOURCES OF ALLOWANCE, CONSUMED IN ORDER. The tier's `included` allowance is PER CYCLE and lives in
- * this (period-scoped) counter, so it expires with the cycle. PREPAID units are bought outright, live in a
- * persistent balance, and never expire. Usage draws on `included` FIRST and only then on prepaid — so the
- * free allowance is spent before the units the owner paid for, which is the only order that does not quietly
- * waste their money. Both are defended by the SAME transaction: the prepaid row is locked together with the
+ * Three sources of allowance, consumed in order. The tier's `included` allowance is per cycle and lives in
+ * this (period-scoped) counter, so it expires with the cycle. Grants ({@see UsageGrants}) are given until a
+ * moment and run out then. Prepaid units are bought outright, live in a persistent balance, and never expire.
+ * Usage draws on `included` first, then on the grants, the one that expires first first, and only then on
+ * prepaid — so what expires is spent before what lasts, and the free allowance before the units the owner paid
+ * for, which is the only order that does not quietly waste their money. Both are defended by the same transaction: the prepaid row is locked together with the
  * counter (counter first, prepaid second — always that order, so two requests can never deadlock), because a
  * prepaid unit that two concurrent requests both spend is a unit sold twice.
  *
- * Prepaid is drawn down at SETTLE, not at reserve: what a hold really consumed is only known once the work
+ * Prepaid is drawn down at settle, not at reserve: what a hold really consumed is only known once the work
  * is done. The draw is the delta of this settlement — how much further past `included` the period's usage
- * moved — capped at the balance that is actually there.
+ * moved — capped at the grants and the balance that are actually there.
+ *
+ * A blocking meter can carry a grace: the units a hold may go past the ceiling, so work that is already under way
+ * is not cut off at the last unit. What the grace covers is an overdraft, owed on the balance row until the next
+ * grant pays it off, and an owner never owes more than the grace at once.
  */
 final class UsageMeter
 {
@@ -49,8 +55,9 @@ final class UsageMeter
      * guarantee.
      *
      * @param  ?int  $included  the tier's per-cycle free allowance (null when the meter has none)
-     * @param  bool  $enforce  whether to REFUSE past the allowance (a blocking policy) or always grant
+     * @param  bool  $enforce  whether to refuse past the allowance (a blocking policy) or always grant
      *                         (degrade/fair-use meters are billed past it, not refused)
+     * @param  int  $grace  the units an enforcing hold may go past the ceiling, less the overdraft already owed
      */
     public function reserve(
         Model $owner,
@@ -60,24 +67,30 @@ final class UsageMeter
         ?int $included,
         bool $enforce,
         ?CarbonInterface $expiresAt = null,
+        int $grace = 0,
     ): ?UsageHold {
-        return DB::transaction(function () use ($owner, $meterKey, $period, $amount, $included, $enforce, $expiresAt): ?UsageHold {
+        return DB::transaction(function () use ($owner, $meterKey, $period, $amount, $included, $enforce, $expiresAt, $grace): ?UsageHold {
             $counter = $this->lockedCounter($owner, $meterKey, $period);
             $prepaid = $this->lockedPrepaid($owner->getMorphClass(), $owner->getKey(), $meterKey);
+            $grants = $this->lockedGrants($owner->getMorphClass(), $owner->getKey(), $meterKey);
 
             if ($enforce && $included !== null) {
-                // What the owner can still take: the cycle's UNSPENT free allowance, plus the units they
+                // What the owner can still take: the cycle's unspent free allowance, plus the units they
                 // bought, minus everything already promised to requests in flight.
                 //
                 // Holds are subtracted from the SUM, not from the free part alone. Subtracting them from
                 // `included` only would leave the prepaid balance undefended: with no free allowance at all,
                 // a held unit would reduce nothing, and two concurrent requests would both be handed the same
-                // bought unit — a unit the customer has already PAID for, sold twice.
+                // bought unit — a unit the customer has already paid for, sold twice.
                 //
                 // `used` is not double-counted against prepaid: the free part is capped at `included`, and
-                // whatever went past it has already been taken out of the balance (see drawPrepaid).
-                $prepaidLeft = $prepaid instanceof PrepaidUnits ? max(0, $prepaid->balance) : 0;
-                $available = self::availableFrom($included, $counter->used, $counter->reserved, $prepaidLeft);
+                // whatever went past it has already been taken out of the grants and the balance (see drawAllowance).
+                $prepaidLeft = ($prepaid instanceof PrepaidUnits ? max(0, $prepaid->balance) : 0) + $this->grantsLeft($grants);
+
+                // The grace is what may still be overdrawn, so an overdraft already owed comes off it: an owner who
+                // took the whole grace last week has none left until a grant pays it off.
+                $owed = $prepaid instanceof PrepaidUnits ? max(0, $prepaid->debt) : 0;
+                $available = self::availableFrom($included, $counter->used, $counter->reserved, $prepaidLeft) + max(0, $grace - $owed);
 
                 if ($amount > $available) {
                     return null;
@@ -95,9 +108,10 @@ final class UsageMeter
                 'meter_key' => $meterKey,
                 'period' => $period,
                 'amount' => $amount,
-                // Frozen with the hold: settle() needs the allowance line THIS hold was taken against, so a
-                // tier change between reserving and settling cannot silently move it.
+                // Frozen with the hold: settle() needs the allowance line this hold was taken against, so a
+                // tier change between reserving and settling cannot silently move it. The grace likewise.
                 'included' => $included,
+                'grace' => $enforce && $grace > 0 ? $grace : null,
                 'state' => ReservationState::Pending,
                 'expires_at' => $expiresAt ?? Carbon::now()->addMinutes(15),
             ]);
@@ -112,7 +126,7 @@ final class UsageMeter
      *
      * Idempotent: settling an already-settled hold changes nothing and answers null.
      *
-     * @return ?int the units this settlement drew from the PREPAID balance (0 when it stayed inside the
+     * @return ?int the units this settlement drew from the prepaid balance (0 when it stayed inside the
      *              cycle's free allowance), or NULL when there was no hold of ours left to settle
      */
     public function settle(UsageHold $hold, ?int $used = null): ?int
@@ -127,9 +141,9 @@ final class UsageMeter
     }
 
     /**
-     * Record used units with no hold — the path an app takes when it meters AFTER the fact.
+     * Record used units with no hold — the path an app takes when it meters after the fact.
      *
-     * It deliberately does NOT touch `reserved`: a record that never reserved anything would eat an
+     * It deliberately does not touch `reserved`: a record that never reserved anything would eat an
      * unrelated request's in-flight hold, and the two ways of metering could not be used in the same
      * application. It draws on prepaid exactly as a settle does, so both ways of metering spend the same
      * allowance in the same order.
@@ -141,8 +155,9 @@ final class UsageMeter
         return DB::transaction(function () use ($owner, $meterKey, $period, $amount, $included): int {
             $counter = $this->lockedCounter($owner, $meterKey, $period);
             $prepaid = $this->lockedPrepaid($owner->getMorphClass(), $owner->getKey(), $meterKey);
+            $grants = $this->lockedGrants($owner->getMorphClass(), $owner->getKey(), $meterKey);
 
-            $drawn = $this->drawPrepaid($counter, $prepaid, $amount, $included);
+            $drawn = $this->drawAllowance($counter, $prepaid, $grants, $amount, $included, 0);
 
             $counter->update([
                 'used' => $counter->used + $amount,
@@ -177,14 +192,14 @@ final class UsageMeter
         return $reclaimed;
     }
 
-    /** Units USED on a meter in a period — what the owner is billed for, and what the gauge renders. */
+    /** Units used on a meter in a period — what the owner is billed for, and what the gauge renders. */
     public function used(Model $owner, string $meterKey, string $period): int
     {
         return $this->counterValue($owner, $meterKey, $period, 'used');
     }
 
     /**
-     * Claim the right to warn this owner that this meter is running out, ONCE for this period.
+     * Claim the right to warn this owner that this meter is running out, once for this period.
      *
      * It is a single conditional UPDATE, not a read-then-write: two requests crossing the threshold at the
      * same instant would both see `warned_at IS NULL` and both mail the customer. Only the update that
@@ -207,7 +222,7 @@ final class UsageMeter
     /**
      * The available-allowance sum itself, over numbers the caller has already read.
      *
-     * THE ONE PLACE THIS ARITHMETIC LIVES, and it was three. The gate and the exceeded-quota message each
+     * The one place this arithmetic lives, and it was three. The gate and the exceeded-quota message each
      * computed `max(0, included - used - reserved) + prepaid` while their comments claimed to measure it the
      * way the reservation does — and `reserve()` had its own fourth copy of the correct form, which is how
      * "one place" was written down while two remained.
@@ -222,7 +237,7 @@ final class UsageMeter
         // Holds come off the SUM, not off the free part alone. Subtracted from `included` only, they would
         // leave the prepaid balance undefended: with no free allowance at all the outer max() swallows the
         // hold entirely, so it reduces nothing and two concurrent requests are handed the same bought unit —
-        // a unit the customer has already PAID for, sold twice.
+        // a unit the customer has already paid for, sold twice.
         return max(0, max(0, $included - $used) + $prepaid - $reserved);
     }
 
@@ -231,8 +246,8 @@ final class UsageMeter
      * everything already promised to requests in flight.
      *
      * The two agree until the free allowance runs out, and then they do not: with `included` at zero the
-     * outer `max()` swallows the hold entirely, so it reduces nothing and the BOUGHT units are handed out
-     * twice — the exact case `reserve()` documents as "a unit the customer has already PAID for, sold
+     * outer `max()` swallows the hold entirely, so it reduces nothing and the bought units are handed out
+     * twice — the exact case `reserve()` documents as "a unit the customer has already paid for, sold
      * twice". The cheap pre-check let requests through that the lock then refused, and the refusal named a
      * remainder measured on the other formula.
      *
@@ -246,14 +261,15 @@ final class UsageMeter
             ->where('meter_key', $meterKey)
             ->first();
 
-        $prepaid = $row instanceof PrepaidUnits ? max(0, $row->balance) : 0;
+        $prepaid = ($row instanceof PrepaidUnits ? max(0, $row->balance) : 0)
+            + $this->grantsLeft($this->grantsOf($owner->getMorphClass(), $owner->getKey(), $meterKey, lock: false));
         $held = $this->counterValue($owner, $meterKey, $period, 'reserved');
 
         return self::availableFrom($included ?? 0, $this->used($owner, $meterKey, $period), $held, $prepaid);
     }
 
     /**
-     * Units SPENT on a meter in a period: used plus held. A ceiling has to be measured against this —
+     * Units spent on a meter in a period: used plus held. A ceiling has to be measured against this —
      * allowance promised to a request in flight is not allowance the owner still has.
      */
     public function consumed(Model $owner, string $meterKey, string $period): int
@@ -290,9 +306,10 @@ final class UsageMeter
             );
 
             $prepaid = $this->lockedPrepaid($reservation->owner_type, $reservation->owner_id, $reservation->meter_key);
+            $grants = $this->lockedGrants($reservation->owner_type, $reservation->owner_id, $reservation->meter_key);
 
             $settled = max(0, $used);
-            $drawn = $this->drawPrepaid($counter, $prepaid, $settled, $reservation->included);
+            $drawn = $this->drawAllowance($counter, $prepaid, $grants, $settled, $reservation->included, $reservation->grace ?? 0);
 
             $counter->update([
                 'used' => $counter->used + $settled,
@@ -309,20 +326,26 @@ final class UsageMeter
     }
 
     /**
-     * How much of $amount falls PAST the cycle's free allowance and must therefore come out of prepaid —
-     * and take it out.
+     * How much of $amount falls past the cycle's free allowance and must therefore come out of the grants and the
+     * prepaid balance — and take it out.
      *
      * The delta is what matters, not the total: the period's usage moves from `used` to `used + amount`, and
-     * only the part of that move which lies beyond `included` draws on prepaid. Everything at or below
-     * `included` is free, and is spent first. The draw is capped at the balance that actually exists,
-     * because a non-blocking meter is allowed past its allowance (it is billed, not refused) and would
-     * otherwise push the balance negative.
+     * only the part of that move which lies beyond `included` draws on what lies past it. Everything at or below
+     * `included` is free, and is spent first. Past it the grants pay, the one that expires first first, and then
+     * the bought units. The draw is capped at what actually exists, because a non-blocking meter is allowed past
+     * its allowance (it is billed, not refused) and would otherwise push the balance negative.
      *
-     * A meter with no `included` has no free allowance at all, so prepaid covers it from the first unit.
+     * What neither covers is an overdraft where the hold was taken with a grace: it is added to the owner's debt on
+     * the balance row, which the next grant pays off. Without a grace it stays usage past the allowance.
+     *
+     * A meter with no `included` has no free allowance at all, so the grants and prepaid cover it from the first unit.
+     *
+     * @param  array<int, UsageGrant>  $grants  the owner's unexpired grants on the meter, locked, the earliest expiry first
+     * @return int the units drawn from the grants and the balance together
      */
-    private function drawPrepaid(UsageCounter $counter, ?PrepaidUnits $prepaid, int $amount, ?int $included): int
+    private function drawAllowance(UsageCounter $counter, ?PrepaidUnits $prepaid, array $grants, int $amount, ?int $included, int $grace): int
     {
-        if ($amount <= 0 || ! $prepaid instanceof PrepaidUnits || $prepaid->balance <= 0) {
+        if ($amount <= 0) {
             return 0;
         }
 
@@ -331,10 +354,26 @@ final class UsageMeter
         $after = $before + $amount;
 
         $beyond = max(0, $after - $free) - max(0, $before - $free);
-        $drawn = min($beyond, $prepaid->balance);
+        $drawn = 0;
 
-        if ($drawn > 0) {
-            $prepaid->update(['balance' => $prepaid->balance - $drawn]);
+        foreach ($grants as $grant) {
+            $take = min(max(0, $grant->remaining), $beyond - $drawn);
+
+            if ($take > 0) {
+                $grant->update(['remaining' => $grant->remaining - $take]);
+                $drawn += $take;
+            }
+        }
+
+        if ($drawn < $beyond && $prepaid instanceof PrepaidUnits && $prepaid->balance > 0) {
+            $take = min($prepaid->balance, $beyond - $drawn);
+            $prepaid->update(['balance' => $prepaid->balance - $take]);
+            $drawn += $take;
+        }
+
+        if ($drawn < $beyond && $grace > 0) {
+            $row = $prepaid ?? $this->createdPrepaid($counter->owner_type, $counter->owner_id, $counter->meter_key);
+            $row->update(['debt' => $row->debt + ($beyond - $drawn)]);
         }
 
         return $drawn;
@@ -395,7 +434,7 @@ final class UsageMeter
      * The owner's prepaid balance row for this meter, locked for the caller's transaction — or null when
      * they have none.
      *
-     * Deliberately does NOT create the row: an owner who never bought prepaid units must not get one written
+     * Deliberately does not create the row: an owner who never bought prepaid units must not get one written
      * for them on every single usage record. Locked AFTER the counter, always in that order, so the two
      * rows can never be taken in opposite orders by two requests and deadlock.
      */
@@ -407,5 +446,68 @@ final class UsageMeter
             ->where('meter_key', $meterKey)
             ->lockForUpdate()
             ->first();
+    }
+
+    /**
+     * The owner's unexpired grants on this meter that still hold units, the earliest expiry first — locked for the
+     * caller's transaction after the counter and the balance row, always in that order, so no two requests take them
+     * the other way round.
+     *
+     * @return array<int, UsageGrant>
+     */
+    private function lockedGrants(string $ownerType, mixed $ownerId, string $meterKey): array
+    {
+        return $this->grantsOf($ownerType, $ownerId, $meterKey, lock: true);
+    }
+
+    /** @return array<int, UsageGrant> */
+    private function grantsOf(string $ownerType, mixed $ownerId, string $meterKey, bool $lock): array
+    {
+        $query = UsageGrant::model()::query()
+            ->where('owner_type', $ownerType)
+            ->where('owner_id', $ownerId)
+            ->where('meter_key', $meterKey)
+            ->whereNull('expired_at')
+            ->where('expires_at', '>', Carbon::now())
+            ->where('remaining', '>', 0)
+            ->orderBy('expires_at')
+            ->orderBy('id');
+
+        return ($lock ? $query->lockForUpdate() : $query)->get()->all();
+    }
+
+    /** @param  array<int, UsageGrant>  $grants */
+    private function grantsLeft(array $grants): int
+    {
+        $left = 0;
+
+        foreach ($grants as $grant) {
+            $left += max(0, $grant->remaining);
+        }
+
+        return $left;
+    }
+
+    /**
+     * The owner's balance row, created when an overdraft has to be written and the owner never bought a unit. Locked
+     * like {@see self::lockedPrepaid()}, which deliberately creates nothing on an ordinary record.
+     */
+    private function createdPrepaid(string $ownerType, mixed $ownerId, string $meterKey): PrepaidUnits
+    {
+        $row = PrepaidUnits::model()::query()
+            ->where('owner_type', $ownerType)
+            ->where('owner_id', $ownerId)
+            ->where('meter_key', $meterKey);
+
+        return LockedRow::take($row, [
+            'owner_type' => $ownerType,
+            'owner_id' => is_scalar($ownerId) ? $ownerId : '',
+            'meter_key' => $meterKey,
+            'balance' => 0,
+            'granted_total' => 0,
+            'debt' => 0,
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ]);
     }
 }

@@ -7,14 +7,14 @@ namespace Pushery\Billing\Enums;
 /**
  * The business transactions a DATEV booking can be, each of which resolves to a specific account.
  *
- * This enum is the STRUCTURE the package owns; the account NUMBERS behind each case are values that live in
+ * This enum is the structure the package owns; the account numbers behind each case are values that live in
  * config (a chart of accounts is jurisdiction-specific, and a consumer with a different accountant's frame
  * changes numbers, not code). Keeping the set of transactions here — rather than a single revenue account —
  * is what lets each booking land on the right account, which under DATEV carries its own tax logic (an
  * "Automatikkonto"), instead of one revenue account for every rate, country and document role.
  *
  * The costliest transaction to get wrong is the PSP fee: it is a service supplied by an Irish company
- * (§13b Abs. 1 UStG), booked like an EU input — NOT a bank charge on a money-transfer account, which is the
+ * (§13b Abs. 1 UStG), booked like an EU input — not a bank charge on a money-transfer account, which is the
  * classic audit finding.
  */
 enum DatevTransaction: string
@@ -49,10 +49,10 @@ enum DatevTransaction: string
     /**
      * Creator payout to a German REDUCED-rated business — input VAT 7% (books, e-books, cultural supplies).
      *
-     * Deliberately UNMAPPED in the shipped charts. The package has no account it can confirm for this, and
+     * Deliberately unmapped in the shipped charts. The package has no account it can confirm for this, and
      * an unconfirmed account here is not a cosmetic error: the input VAT lands on the wrong line of the
      * advance return and the amount no longer agrees with the account it sits on. So this case exists in
-     * order to be REFUSED by name — an operator who has agreed an account with their accountant configures
+     * order to be refused by name — an operator who has agreed an account with their accountant configures
      * `creator_input_de_reduced` for their chart and it books.
      *
      * Before this case existed the branch fell through to CreatorInputDeStandard, so a 7% input booked to
@@ -73,7 +73,7 @@ enum DatevTransaction: string
     case CreatorInputEuReverseChargeReduced = 'creator_input_eu_reverse_charge_reduced';
     case CreatorInputThirdCountryReverseChargeReduced = 'creator_input_third_country_reverse_charge_reduced';
 
-    /** The payment-service-provider fee — §13b input, NOT a money-transfer/bank-charge account. */
+    /** The payment-service-provider fee — §13b input, not a money-transfer/bank-charge account. */
     case PspFee = 'psp_fee';
 
     /** Money in transit between the provider and the bank. */
@@ -95,14 +95,14 @@ enum DatevTransaction: string
     case OtherIncome = 'other_income';
 
     /**
-     * A realized exchange GAIN — the euro that appears between collecting a sale and paying it out.
+     * A realized exchange gain — the euro that appears between collecting a sale and paying it out.
      *
      * It has nothing to do with VAT and is not a correction of the sale. The document's rate is frozen at
      * the tax point and stays frozen; the payout happens later at whatever rate the bank gave, and the
      * difference is income of its own. Booking it against the revenue account instead would move a figure
      * a tax return has already stated.
      *
-     * NOT an Automatikkonto: the account derives no VAT from the posting, because there is none to derive.
+     * Not an Automatikkonto: the account derives no VAT from the posting, because there is none to derive.
      */
     case ExchangeGain = 'exchange_gain';
 

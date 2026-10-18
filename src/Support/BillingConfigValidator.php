@@ -8,6 +8,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Dunning\ConfigDunningLadder;
 use Pushery\Billing\Enums\BuyerAudience;
+use Pushery\Billing\Enums\CollectionTiming;
 use Pushery\Billing\Exceptions\InvalidBillingConfig;
 use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
 
@@ -31,6 +32,7 @@ final readonly class BillingConfigValidator
     {
         $this->validateMode();
         $this->validateOwner();
+        $this->validateCollectionTiming();
         $this->validateTiers();
         $this->validateAddons();
         $this->validateDimensionWarnThresholds();
@@ -72,6 +74,23 @@ final readonly class BillingConfigValidator
 
         if (! in_array($owner, ['user', 'team'], true)) {
             throw InvalidBillingConfig::ownerMode(is_string($owner) ? $owner : gettype($owner));
+        }
+    }
+
+    /**
+     * A timing the engine does not know would start every new subscription in advance, the default, whatever the
+     * operator meant by it. An unset or empty value is that default on purpose and passes.
+     */
+    private function validateCollectionTiming(): void
+    {
+        $timing = $this->config->get(CollectionTiming::CONFIG_KEY);
+
+        if ($timing === null || $timing === '') {
+            return;
+        }
+
+        if (! is_string($timing) || CollectionTiming::tryFrom($timing) === null) {
+            throw InvalidBillingConfig::collectionTiming(is_string($timing) ? $timing : gettype($timing));
         }
     }
 

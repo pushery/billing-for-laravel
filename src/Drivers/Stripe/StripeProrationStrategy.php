@@ -18,7 +18,7 @@ use Stripe\SubscriptionItem;
 /**
  * The Stripe proration strategy. Stripe books the proration on its own side when a swap executes, so
  * applySwap does nothing — but the account hub still wants to show the customer what the change will
- * cost BEFORE they commit. previewSwap asks Stripe to preview the invoice that a swap to the new plan
+ * cost before they commit. previewSwap asks Stripe to preview the invoice that a swap to the new plan
  * would raise (create_preview with subscription_details.items = the current item repriced), and returns
  * the net amount due after proration credits.
  *
@@ -28,10 +28,10 @@ use Stripe\SubscriptionItem;
  *
  * "Any read failure" means any: the catch is on `ApiErrorException`, the root of Stripe's hierarchy. It was
  * on `InvalidRequestException` once, which sounds close and is not — a timeout, a rotated key, a 403 and a
- * 5xx all descend from `ApiErrorException` DIRECTLY, so the four failures worth degrading for were the four
+ * 5xx all descend from `ApiErrorException` directly, so the four failures worth degrading for were the four
  * that escaped, while the one Stripe heals by itself (429, which does descend from it) was caught.
  *
- * A degraded preview is LOGGED. Silence would trade a broken screen for an invisible outage, and a rotated
+ * A degraded preview is logged. Silence would trade a broken screen for an invisible outage, and a rotated
  * key is not transient — it stays until somebody notices.
  */
 final readonly class StripeProrationStrategy implements ProrationStrategy
@@ -84,7 +84,7 @@ final readonly class StripeProrationStrategy implements ProrationStrategy
                 ],
             ]);
         } catch (ApiErrorException $e) {
-            // EVERY Stripe read failure, as the class docblock promises, not only `InvalidRequestException`.
+            // Every Stripe read failure, as the class docblock promises, not only `InvalidRequestException`.
             // A timeout, a rotated key, a 403 and a 5xx do not descend from it -- caught by that alone, they
             // would walk past this line and out of the method, and the caller is a Livewire action behind a
             // button. One button would take the whole screen down while the text written for exactly this
@@ -93,7 +93,7 @@ final readonly class StripeProrationStrategy implements ProrationStrategy
             // Logged rather than swallowed, and that is the half that keeps this honest. A 401 is not
             // transient: it stays until somebody notices. Degrading silently would trade a broken screen for
             // an invisible outage, which is the same bargain this package refuses everywhere else -- an
-            // absence must not read as an answer. The screen stays usable AND the operator finds out.
+            // absence must not read as an answer. The screen stays usable and the operator finds out.
             // @rate-limit-deliberate: a 429 lands here too, and swallowing it is right at this one site.
             // The caller is a Livewire action behind a button, on a screen whose entire job is to show an
             // estimate; letting it through would take that screen down over a condition that clears in a

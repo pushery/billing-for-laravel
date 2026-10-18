@@ -15,7 +15,7 @@ use Pushery\Billing\Models\Subscription;
  *
  * ## What expires, and what does not
  *
- * ONE subscription — the one in arrears. The customer's other subscriptions, to other merchants, are
+ * One subscription — the one in arrears. The customer's other subscriptions, to other merchants, are
  * untouched however long this one has been unpaid. That is the whole decision: access is lost to what was
  * not paid for, and to nothing else.
  *
@@ -23,13 +23,13 @@ use Pushery\Billing\Models\Subscription;
  *
  * The reminder sweep takes `delinquent_since > cutoff`, the end of the day `window` days back; this one takes
  * `<=`. The two are complementary halves of one comparison, so on the day a window runs out the customer
- * receives the final message and NOT a reminder as well. Writing the boundary twice with the same operator is
+ * receives the final message and not a reminder as well. Writing the boundary twice with the same operator is
  * how "exactly one message" quietly becomes two, so the operators are opposite by construction rather than by
  * care.
  *
  * ## A period already paid for is not clawed back
  *
- * Arrears concern the period that was NOT paid. If the last paid period still runs, access continues to its
+ * Arrears concern the period that was not paid. If the last paid period still runs, access continues to its
  * end — the subscription is canceled now, and lapses then. The package already has exactly this shape:
  * `ends_at` in the future is "canceled but paid through the period end", which `onGracePeriod()` reads. So
  * expiry sets `ends_at`, and the ordinary case (nothing left paid for) simply sets it to now.
@@ -113,7 +113,7 @@ final readonly class SubscriptionExpirySweep
      *
      * `current_period_end` is the package's only record of the period boundary, and the local engine
      * advances it on a successful charge — so a value in the future is a period the customer has paid for.
-     * A driver that advanced it on invoice CREATION instead would be claiming a period nobody paid for, and
+     * A driver that advanced it on invoice creation instead would be claiming a period nobody paid for, and
      * would grant a remainder it should not; that is a property of the driver, and it is the reason this
      * reads one column rather than inferring the boundary from amounts.
      */

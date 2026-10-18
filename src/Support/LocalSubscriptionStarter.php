@@ -17,6 +17,7 @@ use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Discounts\CouponCodes;
 use Pushery\Billing\Discounts\CouponRedeemer;
+use Pushery\Billing\Enums\CollectionTiming;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Exceptions\CouponUnavailable;
 use Pushery\Billing\Exceptions\SubscriptionNotPermitted;
@@ -36,7 +37,7 @@ use RuntimeException;
  *
  * ## Three shapes, and none of them is the other two
  *
- * A **generic trial** unlocks a tier on the OWNER and creates no subscription at all — there is nothing to
+ * A **generic trial** unlocks a tier on the owner and creates no subscription at all — there is nothing to
  * bill yet and nobody to send anywhere.
  *
  * A **subscription trial that needs no payment method** creates the row immediately, in `trialing`. There
@@ -82,7 +83,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
 
     public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): SubscriptionStart
     {
-        // The key has to be a KEY of the tier map, not a path INTO it. The catalog resolves
+        // The key has to be a key of the tier map, not a path into it. The catalog resolves
         // `billing.tiers.{$key}` through dot notation, so `pro.price_display` reaches a node that is an
         // array — and `find()` therefore says yes to a tier that does not exist. The subscription is then
         // written against it: Active in every report, never billable, sitting permanently due and writing a
@@ -91,12 +92,12 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         // Checked against the catalog's own key set rather than by rejecting dots, because the rule is not
         // "no dots" — it is "one of the keys this install actually sells", and the browser is what supplies
         // the value.
-        // ONE check, not two. `find()` was asked first and its null was treated as the refusal — which is
-        // wrong twice over: it resolves `billing.tiers.{$key}` through DOT NOTATION, so `pro.price_display`
+        // One check, not two. `find()` was asked first and its null was treated as the refusal — which is
+        // wrong twice over: it resolves `billing.tiers.{$key}` through dot notation, so `pro.price_display`
         // reaches a node that happens to be an array and passes, and it is redundant once the key set is
         // consulted, because both read the same configuration. A guard no run can enter is a guard nobody
         // can trust, and the coverage floor is what says so.
-        // FIRST, because everything after it reads the key. Left where it naturally belongs — beside the
+        // First, because everything after it reads the key. Left where it naturally belongs — beside the
         // write that uses it — the guard could never fire: `alreadySubscribed()` passes the key straight
         // into a WHERE, so an exotic one dies inside the query builder several steps earlier, with a
         // message about SQL rather than about the billable. Hoisted, it is both reachable and useful.
@@ -121,8 +122,8 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         // about the subscription trial first would attach one on top of it, which is the double trial the
         // policy's own mode derivation exists to prevent.
         //
-        // ONLY FOR SOMEBODY WHO HAS NOT HAD ONE. `Trials::grant()` is idempotent for a trial that is still
-        // RUNNING — it hands the existing end back — and it is not idempotent for one that has LAPSED: it
+        // Only for somebody who has not had one. `Trials::grant()` is idempotent for a trial that is still
+        // running — it hands the existing end back — and it is not idempotent for one that has lapsed: it
         // writes a fresh end. Called from a buy button that turns Subscribe into an unlimited renewal:
         // press it again after the fourteen days and get fourteen more, as often as you like. Nothing looks
         // wrong, because every call reports success and the customer simply never pays.
@@ -130,7 +131,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         // The column is checked directly rather than through `onGenericTrial()`, which answers "is one
         // running" and is false for exactly the lapsed case this has to catch.
         //
-        // Nor for somebody who had a SUBSCRIPTION trial. That one stands on the subscription row and survives
+        // Nor for somebody who had a subscription trial. That one stands on the subscription row and survives
         // the row being reused, and where a tier's own mode is generic, a generic trial after it would be a
         // second free trial under another name.
         if ($this->policy->mode($tierKey) === TrialMode::Generic
@@ -147,9 +148,9 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
             // would find out when access did not arrive.
         }
 
-        // ONCE PER OWNER, the same rule the generic trial states a few lines above — and it was missing
+        // Once per owner, the same rule the generic trial states a few lines above — and it was missing
         // here, on the shape that costs money. `subscriptionTrialEnabled()` and `endsAt()` are computed
-        // from CONFIG and know nothing about history, so every call handed out a fresh trial. Nothing
+        // from config and know nothing about history, so every call handed out a fresh trial. Nothing
         // refused a second one: `alreadySubscribed()` deliberately lets an owner whose row is `ended` or
         // `incomplete_expired` come back, and both are one button away — `cancelNow()` writes `ended`
         // immediately, and a lapsed card-less trial now writes `incomplete_expired`. So: take the free
@@ -172,7 +173,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
                 $declarationReference,
             );
 
-            // This shape has its subscription NOW, so the coupon is spent now. The redirect shape cannot do
+            // This shape has its subscription now, so the coupon is spent now. The redirect shape cannot do
             // the same -- see `redeemFor()` for why spending one before the mandate lands would cost the
             // customer their single use on a checkout they may abandon.
             $this->redeemFor($billable, $couponCode, $subscription->id);
@@ -181,7 +182,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         }
 
         // Resolved BEFORE the provider is touched, and the order is the whole reason it is its own statement.
-        // As an argument it would be evaluated after `customerFor()`, which WRITES: a misconfigured install
+        // As an argument it would be evaluated after `customerFor()`, which writes: a misconfigured install
         // would create a customer at the provider and only then refuse. That is not free — the account
         // exists, it is now on somebody's dashboard, and the refusal message says nothing about it.
         $returnUrl = $this->returnUrl();
@@ -227,7 +228,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
     /**
      * Whether a subscription started here would actually apply this code.
      *
-     * The package's OWN coupon table is the only catalog this driver can act on, because this driver is the
+     * The package's own coupon table is the only catalog this driver can act on, because this driver is the
      * one that writes the invoice: the discount arrives as a line the cycle adds, and the cycle reads a
      * redemption. The config-defined coupon map that the hosted checkout resolves against is a different
      * set with a different consumer -- the provider applies those, and here there is no provider to apply
@@ -257,7 +258,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
      * answer honestly before the customer commits, and the cycle's check is what keeps the answer true
      * months later, which is a different question.
      *
-     * The exhaustion cap is deliberately NOT checked here. It is a race by nature -- the last redemption
+     * The exhaustion cap is deliberately not checked here. It is a race by nature -- the last redemption
      * can go between this question and the answer -- so the only place it can be enforced truthfully is
      * inside the redeemer's locked transaction, and reporting it here would be a guess dressed as a fact.
      */
@@ -330,9 +331,9 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
             return false;
         }
 
-        // The list lives on the MODEL, because the webhook effect asks the same question when the payment
+        // The list lives on the model, because the webhook effect asks the same question when the payment
         // settles — days later for a bank transfer — and two copies of it would let one side permit what
-        // the other refuses. An ENDED or lapsed row is not one to protect: refusing on it would leave a
+        // the other refuses. An ended or lapsed row is not one to protect: refusing on it would leave a
         // customer who once canceled permanently unable to come back, the direction a guard must never
         // create.
         return ! $existing->isReplaceableByANewSubscription();
@@ -374,12 +375,12 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
 
         // Through `CheckoutUrls`, not a second reading of the same config. That class answers this exact
         // question for every other checkout in the package, and it does one thing this method did not: when
-        // `checkout.success_url` is unset it falls back to the account hub's own checkout-return ROUTE.
+        // `checkout.success_url` is unset it falls back to the account hub's own checkout-return route.
         //
         // Which is the shipped state. The configuration file documents it two blocks above this key — "leave
         // these unset and they default to the account hub's own routes" — and ships `success_url` as a bare
         // `env()` with no default. Re-deriving it here read only the config, found nothing, and threw: on a
-        // stock install the Subscribe button was not degraded, it was IMPOSSIBLE, and the refusal named a
+        // stock install the Subscribe button was not degraded, it was impossible, and the refusal named a
         // configuration the package's own documentation says is optional.
         //
         // The throw stays reachable, from `successUrl()` itself, for the one install where it is honest:
@@ -400,7 +401,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         ?string $declarationReference,
     ): Subscription {
         // updateOrCreate on the UNIQUE KEY, for the same reason the webhook path does it: a subscription is
-        // unique on (owner, type, merchant_uid), and an ENDED row still holds that slot. This method is
+        // unique on (owner, type, merchant_uid), and an ended row still holds that slot. This method is
         // reached only after `alreadySubscribed()` deliberately let such an owner through, so a plain
         // insert would meet the constraint every time somebody came back — and arrive at them as a raw
         // database error on the subscribe button rather than one of the refusals this flow states.
@@ -424,6 +425,9 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
                 // The first cycle runs when the trial ends, not before. A trial that scheduled processing
                 // at its start would bill on day one, which is the one thing a trial promises it will not do.
                 'scheduled_processing_at' => $trialEndsAt,
+                // The timing configured now, recorded for the life of this subscription. Collected in advance, the run
+                // at the trial's end charges the first paid period; in arrears, it closes the free one.
+                'collection_timing' => CollectionTiming::fromConfigured($this->config->get(CollectionTiming::CONFIG_KEY)),
                 // The previous life, cleared. A returning customer whose `ends_at` survived would be
                 // trialing and ending at once, and the presenter reads that as a grace period.
                 'ends_at' => null,

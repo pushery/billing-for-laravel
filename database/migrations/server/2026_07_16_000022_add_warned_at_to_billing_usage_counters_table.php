@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
  * When the owner was warned that this meter is running out, for this period — the once-per-period claim
  * behind the quota-warning notice.
  *
- * It lives on the counter row rather than in a separate ledger because the counter already IS the unique
+ * It lives on the counter row rather than in a separate ledger because the counter already is the unique
  * (owner, meter, period) row, which makes the claim a single conditional UPDATE: whoever flips this from
  * NULL wins and sends the notice. Two requests crossing the threshold at the same instant therefore warn
  * the customer once, not twice — and the next period starts on a fresh row, so they are warned again when

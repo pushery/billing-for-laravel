@@ -23,6 +23,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * @property ?string $granted_meter_key the meter the purchase granted usage units of, if it granted any
  * @property ?int $granted_units how many usage units the purchase granted, if it granted any
  * @property int $reversed_minor
+ * @property int $clawed_back_units how many usage units its reversals clawed back, which a restoration gives back
  * @property ?Carbon $revoked_at
  * @property ?string $revoked_reason
  * @property ?Carbon $created_at
@@ -52,12 +53,14 @@ class AddonPurchase extends Model
      */
     protected $attributes = [
         'reversed_minor' => 0,
+        'clawed_back_units' => 0,
     ];
 
     /** @var array<string,string> */
     protected $casts = [
         'amount_minor' => 'integer',
         'reversed_minor' => 'integer',
+        'clawed_back_units' => 'integer',
         'money_credit' => 'boolean',
         'granted_units' => 'integer',
         'revoked_at' => 'datetime',

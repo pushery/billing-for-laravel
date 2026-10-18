@@ -19,7 +19,7 @@ use Pushery\Billing\ValueObjects\Money;
  * The shipped balance reader: a pure aggregate projection over the routed-charge record.
  *
  * It keeps no state of its own — every answer is a SUM over `billing_merchant_charges` for the party, so the
- * balance can never drift from the charges it is made of. `available` is settled net LESS what has been
+ * balance can never drift from the charges it is made of. `available` is settled net less what has been
  * clawed back (a refund or a lost dispute reverses the merchant's share), so a reversal is netted out rather
  * than double-counted. A failed charge is neither settled nor pending and contributes nothing.
  *
@@ -67,7 +67,7 @@ final readonly class MerchantChargeLedgerBalanceReader implements LedgerBalanceR
      */
     public function heldFor(Model $party, string $currency): Money
     {
-        // The MERCHANT's share, not the price the buyer paid. `availableFor()` and `pendingFor()` subtract this
+        // The merchant's share, not the price the buyer paid. `availableFor()` and `pendingFor()` subtract this
         // from `net_minor`, which is already net of the platform's commission — so subtracting the gross would
         // take the commission out a second time and, where the whole turnover sits under one open hold, drive the
         // balance below zero. The contract says the quantity out loud: "earnings withheld under buyer protection".

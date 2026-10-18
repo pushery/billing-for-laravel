@@ -30,7 +30,7 @@ enum SubscriptionState: string
     case Ended = 'ended';                           // canceled and lapsed
 
     /**
-     * The WireKit badge/callout intent, so status is conveyed by color AND text (never color
+     * The WireKit badge/callout intent, so status is conveyed by color and text (never color
      * alone — accessibility). Maps to WireKit's intent vocabulary.
      */
     public function badgeIntent(): string
@@ -51,7 +51,7 @@ enum SubscriptionState: string
      * A synced past_due/incomplete subscription pulls the tier to zero, so the hot path must know
      * to block rather than silently grant the free allowance.
      *
-     * Paused is deliberately NOT blocking. A pause is something the owner chose, not a debt: it must
+     * Paused is deliberately not blocking. A pause is something the owner chose, not a debt: it must
      * not start the delinquency clock, walk them up the dunning ladder, or mail them about a failed
      * payment they never made.
      */
@@ -69,7 +69,7 @@ enum SubscriptionState: string
     /**
      * Whether this state has a next invoice worth previewing — only a live, subscription-backed paying or
      * trialing subscription does. A generic trial has no subscription at the provider yet, and grace/ended/
-     * paused/past-due have no NEXT invoice coming, so asking the provider for one is a wasted call that can
+     * paused/past-due have no next invoice coming, so asking the provider for one is a wasted call that can
      * only answer null. Gates the one live upcoming-invoice read on the subscription screen.
      */
     public function hasUpcomingInvoice(): bool

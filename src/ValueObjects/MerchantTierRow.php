@@ -12,7 +12,7 @@ use Pushery\Billing\Enums\BillingInterval;
  * A marketplace's creators each define their own tiers as database rows, so the package cannot read them
  * from config — but it still must not read a price the client submitted. This row is the boundary: the host
  * fills it from its own `creator_tiers` table (a schema the host owns, never the package), and the package
- * reads the price ONLY from here. The tier KEY is still the client's input; the amount and the provider
+ * reads the price only from here. The tier key is still the client's input; the amount and the provider
  * price are the merchant's, carried on the row and never anywhere the client can reach.
  *
  * It is the database analog of one `billing.tiers.<key>` config block, and it produces the same value
@@ -22,7 +22,7 @@ use Pushery\Billing\Enums\BillingInterval;
 final readonly class MerchantTierRow
 {
     /**
-     * @param  list<string>  $legacyPrices  provider price ids that still RESOLVE to this tier (a rotated or
+     * @param  list<string>  $legacyPrices  provider price ids that still resolve to this tier (a rotated or
      *                                      grandfathered price) but are never sold anew
      */
     public function __construct(

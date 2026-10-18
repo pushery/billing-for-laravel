@@ -19,25 +19,25 @@ use Illuminate\Support\Facades\Schema;
  *
  * Reference and date look like enough to match on and are not. Several confirmations can land against one
  * charge, each capped against what was still refundable at that moment, so a correction and an attempt can
- * agree on the charge and disagree on which reversal they describe. Matching on the AMOUNT is worse:
+ * agree on the charge and disagree on which reversal they describe. Matching on the amount is worse:
  * `ClawbackCalculator` floors at zero and `completeRefund()` caps every sum against its own ceiling, so
  * two attempts can produce identical figures for different money. A stored id is the only answer that
  * stays right when a sale is refunded twice.
  *
  * ## Why nullable, and why null is an answer rather than a gap
  *
- * Null means no reversal row stands behind this correction — which is the ORDINARY case on two of the
+ * Null means no reversal row stands behind this correction — which is the ordinary case on two of the
  * three paths that correct a chain. A prepaid term cancellation computes an unused portion and issues the
  * documents without opening an attempt at all, and the chargeback effect corrects the chain in a different
  * unit of work from the one that reverses the merchant's share. Only the admin refund path holds the
  * attempt at the moment it corrects.
  *
- * Null therefore does NOT mean "the reversal moved nothing" — that is `fee_refund_minor` on an attempt
+ * Null therefore does not mean "the reversal moved nothing" — that is `fee_refund_minor` on an attempt
  * that exists. The two are different facts, and a default of zero would state the second where only the
  * first is true; the rows it misstated would be exactly the ones somebody later goes looking for. It is
  * the same distinction `transfer_reversal_short_minor` is documented against on the attempt itself.
  *
- * ## What this deliberately does NOT do
+ * ## What this deliberately does not do
  *
  * It does not change where any counter places any figure. The DAC7 fee figure still runs on the money's
  * clock and the value figure on the document's, and this column does not by itself bring them together —

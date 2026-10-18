@@ -27,7 +27,7 @@ final readonly class KeptInvoicePdf
     /**
      * The issued PDF as it was kept, or null when there is none to serve.
      *
-     * Null covers three DIFFERENT situations on purpose, and only one of them is quiet:
+     * Null covers three different situations on purpose, and only one of them is quiet:
      *
      *  - **No path recorded.** Nobody kept a PDF. Nothing to say — this is the shipped default, and no disk
      *    is touched.
@@ -40,7 +40,7 @@ final readonly class KeptInvoicePdf
      * The caller renders where it can in every one of them, deliberately. Refusing would lock an owner out of
      * their own invoice to make a point about an archive they do not control, and the document the package
      * can still produce is worth more to them than a dead link. What must not happen is the substitution
-     * going UNRECORDED — so the divergence is loud in the log and invisible in the response, which is the
+     * going unrecorded — so the divergence is loud in the log and invisible in the response, which is the
      * right way round: the reader gets their invoice, the operator gets the incident.
      */
     public function contents(InvoiceRecord $invoice): ?string

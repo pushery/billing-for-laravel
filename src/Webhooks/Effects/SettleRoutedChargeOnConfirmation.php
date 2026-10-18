@@ -62,7 +62,7 @@ final readonly class SettleRoutedChargeOnConfirmation
         $this->ledger->nameThePayment($charge, $event->paymentReference);
 
         if ($event instanceof RoutedChargeConfirmed) {
-            // A SEPARATE TRANSFER IS NOT SETTLED HERE, because nothing has paid the merchant yet.
+            // A separate transfer is not settled here, because nothing has paid the merchant yet.
             //
             // This settled every confirmed row, and on this lane that was the defect rather than a shortcut: the
             // platform took the whole payment, the share moves only in a second call, and a row settled without
@@ -75,10 +75,10 @@ final readonly class SettleRoutedChargeOnConfirmation
                 return;
             }
 
-            // WITH the transfer the provider named, when it named one — and nothing when it did not.
+            // With the transfer the provider named, when it named one — and nothing when it did not.
             //
             // "The provider has not named one yet" is true of the separate-transfer lane, where the share
-            // moves in a later call the platform makes itself. It is NOT true of a destination charge: the
+            // moves in a later call the platform makes itself. It is not true of a destination charge: the
             // provider creates the transfer as the payment settles and names it in the same payload, and the
             // synchronous path carries it too. Settled without it, a hosted checkout would produce a row that
             // says the money moved and cannot say where to.
@@ -103,7 +103,7 @@ final readonly class SettleRoutedChargeOnConfirmation
     /** The pending routed charge recorded under this reference, or null when there is none. */
     private function pending(string $provider, string $reference): ?MerchantCharge
     {
-        // The pending clause NARROWS the query; it does not enforce anything, and the difference is worth
+        // The pending clause narrows the query; it does not enforce anything, and the difference is worth
         // being explicit about because a mutation removing it survives. Enforcement lives in the ledger,
         // which refuses to settle or fail anything that is not pending — one place owning the state machine
         // rather than two agreeing. Removing this line would change no outcome, only load a row to be told

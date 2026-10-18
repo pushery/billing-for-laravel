@@ -10,7 +10,7 @@ use Pushery\Billing\ValueObjects\QuotaSnapshot;
 /**
  * The one project-specific seam: report an owner's current metered usage as a QuotaSnapshot of 0..N
  * dimensions. An empty snapshot means the tier is unmetered, so the usage panel shows nothing rather
- * than a misleading zeroed gauge. The metering SOURCE stays project-defined; only this shape is fixed.
+ * than a misleading zeroed gauge. The metering source stays project-defined; only this shape is fixed.
  */
 interface UsageProvider
 {

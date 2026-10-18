@@ -13,13 +13,13 @@ use Pushery\Billing\ValueObjects\CountingPeriod;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
- * What BUYERS paid, per subdivision of a destination country — the early warning a national total cannot be.
+ * What buyers paid, per subdivision of a destination country — the early warning a national total cannot be.
  *
  * ## Why this is a third counter and not a view of the other two
  *
  * The package already counts two things and neither of them answers this. The reporting counter measures
- * what reached a SELLER; the small-business monitor measures what a supply was worth to a creator. This one
- * measures what a BUYER paid, which on one 119.00 sale is 119.00 where the other two see 90.00 — different
+ * what reached a seller; the small-business monitor measures what a supply was worth to a creator. This one
+ * measures what a buyer paid, which on one 119.00 sale is 119.00 where the other two see 90.00 — different
  * base, different party, different question.
  *
  * Deriving it would be the tempting shortcut and it is wrong on arithmetic rather than on principle: a
@@ -116,7 +116,7 @@ final readonly class SubdivisionGrossSalesCounter
             $counts[$subdivision] = ($counts[$subdivision] ?? 0) + 1;
         }
 
-        // Sorted so two runs produce the same report, with `unknown` LAST: it is not a place, and sorted
+        // Sorted so two runs produce the same report, with `unknown` last: it is not a place, and sorted
         // among the codes it would sit in the middle of a list a reader scans down.
         $order = static fn (string $a, string $b): int => match (true) {
             $a === self::UNKNOWN => 1,
@@ -133,7 +133,7 @@ final readonly class SubdivisionGrossSalesCounter
     /**
      * The sales in scope: buyer receipts into this country, in this currency, in this window.
      *
-     * A currency is a BUCKET and never converted. Two currencies summed at any rate produce a figure that
+     * A currency is a bucket and never converted. Two currencies summed at any rate produce a figure that
      * was true on the day the rate was read and never again, and a threshold is a legal line rather than an
      * estimate — so a caller asks per currency and gets an answer that means one thing.
      *
@@ -145,7 +145,7 @@ final readonly class SubdivisionGrossSalesCounter
             ->where('document_series', DocumentSeries::BuyerReceipt->value)
             ->where('currency', strtoupper($currency))
             ->where('destination_country', strtoupper($country))
-            // The restatement of a receipt is a SECOND document about one sale, and counting it would state
+            // The restatement of a receipt is a second document about one sale, and counting it would state
             // the buyer paid twice. The same predicate every aggregate in the package asks.
             ->whereNull('reissue_of_invoice_id')
             ->whereNull('credited_invoice_id')

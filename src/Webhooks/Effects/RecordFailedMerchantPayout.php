@@ -23,7 +23,7 @@ use Pushery\Billing\Support\BillingEventLog;
  * What an operator needs is the record that it happened, to whom, for how much, and what the provider said.
  * That is what the audit trail is, and it is already what a support agent reads.
  *
- * ## Idempotent by the payout id, and asserted on the RECORD rather than on a counter
+ * ## Idempotent by the payout id, and asserted on the record rather than on a counter
  *
  * A redelivery states the same payout. Writing it twice would show a support agent two failures where there
  * was one, and "which of these is real" is a question with no answer in the data. So the effect looks for an
@@ -49,7 +49,7 @@ final readonly class RecordFailedMerchantPayout
             return;
         }
 
-        // Recognized by the PAYOUT id rather than by a count, because the question a redelivery raises is
+        // Recognized by the payout id rather than by a count, because the question a redelivery raises is
         // "is this the same failure", and only the id answers it.
         //
         // Read back and compared in PHP rather than with a JSON-path predicate. This package is proven on

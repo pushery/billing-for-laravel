@@ -65,7 +65,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
 
         $currency = $invoice->currency;
         $reference = $invoice->number ?? (string) $invoice->id;
-        // How this document is taxed, derived ONCE — the same call the UBL writer makes. Two readings of
+        // How this document is taxed, derived once — the same call the UBL writer makes. Two readings of
         // one rule drift, and the drift shows up in whichever of the two formats nobody is looking at.
         $treatment = $this->taxTreatmentFor($invoice);
 
@@ -100,7 +100,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
     /**
      * `CarbonInterface` rather than `Carbon`, and that is a fix rather than a widening for its own sake.
      *
-     * The parameter only ever gets formatted. Narrowing it to the MUTABLE Carbon made this renderer reject a
+     * The parameter only ever gets formatted. Narrowing it to the mutable Carbon made this renderer reject a
      * document it had just been handed: a model straight out of `create()` returns the value it was given,
      * not the cast one, so an issuer that works in `CarbonImmutable` produced a document whose `issued_at`
      * was immutable — and rendering it raised a TypeError. Only a document read back from the database
@@ -116,7 +116,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
         // once in the shared trait. The code carries the correcting meaning, so amounts stay positive — a
         // negative total would be non-conformant.
         //
-        // All FOUR are named on purpose; the sibling writer carries the same sentence and the same reason.
+        // All four are named on purpose; the sibling writer carries the same sentence and the same reason.
         // Listing three reads as the complete table, and the one left out was 384 — the code that separates
         // an amendment from a cancellation for the authority reading the document.
         $this->el($doc, $document, 'ram:TypeCode', $typeCode);
@@ -127,7 +127,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
         $date->setAttribute('format', '102');
         $document->appendChild($issue);
 
-        // BT-22: a self-billed document has to SAY it is one. Without the statement it reads as an ordinary
+        // BT-22: a self-billed document has to say it is one. Without the statement it reads as an ordinary
         // invoice issued by the wrong party, and the recipient cannot tell it was written under an
         // arrangement they agreed to. CII puts the note after the issue date; it is absent on everything
         // else, which is what keeps every other document byte-identical.
@@ -260,7 +260,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
         $settlement = $doc->createElement('ram:ApplicableHeaderTradeSettlement');
         $this->el($doc, $settlement, 'ram:InvoiceCurrencyCode', $currency);
 
-        // The exemption reason (BT-120) travels ON the treatment now, derived once for both syntaxes rather
+        // The exemption reason (BT-120) travels on the treatment now, derived once for both syntaxes rather
         // than read again here — which is what guarantees the two renderings of one invoice cannot carry
         // different reason text.
         $invoice = $treatment->invoice;
@@ -269,7 +269,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
             $settlement->appendChild($this->headerTax($doc, $band, $currency, $treatment));
         }
 
-        // BG-14 the period the WHOLE document covers. CII orders ram:BillingSpecifiedPeriod after the tax
+        // BG-14 the period the whole document covers. CII orders ram:BillingSpecifiedPeriod after the tax
         // bands and before the monetary summation, which is the same relative position the LINE-level period
         // takes inside its own settlement — the two are the same term at two levels, not two terms.
         if ($invoice->service_period_start !== null && $invoice->service_period_end !== null) {
@@ -295,9 +295,12 @@ final readonly class ZugferdCiiInvoice implements EInvoice
             $currency,
         ));
 
-        if ($invoice->isCorrection() && $invoice->credited_invoice_number !== null) {
+        // BG-3, as in the UBL half: the invoice a correction corrects, or the one an invoice charges again.
+        $preceding = $invoice->isCorrection() ? $invoice->credited_invoice_number : $invoice->reinstatedInvoiceNumber();
+
+        if ($preceding !== null) {
             $referenced = $doc->createElement('ram:InvoiceReferencedDocument');
-            $this->el($doc, $referenced, 'ram:IssuerAssignedID', $invoice->credited_invoice_number);
+            $this->el($doc, $referenced, 'ram:IssuerAssignedID', $preceding);
             $settlement->appendChild($referenced);
         }
 
@@ -305,7 +308,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
     }
 
     /**
-     * The delivery block (BT-72), which stays EMPTY unless the document records when the supply happened.
+     * The delivery block (BT-72), which stays empty unless the document records when the supply happened.
      *
      * The element itself is always written: CII requires ApplicableHeaderTradeDelivery between the agreement
      * and the settlement whether or not it has content, and an empty one is exactly what this package has
@@ -371,7 +374,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
     /**
      * The document totals (BG-22). CII order: LineTotalAmount, TaxBasisTotalAmount, TaxTotalAmount,
      * GrandTotalAmount, TotalPrepaidAmount, DuePayableAmount. Only TaxTotalAmount carries the currencyID
-     * attribute — a CII rule the other summation amounts must NOT repeat. What was already paid (BT-113) is
+     * attribute — a CII rule the other summation amounts must not repeat. What was already paid (BT-113) is
      * stated where there is any, and the amount due (BT-115) is what remains (BR-CO-16).
      */
     private function monetarySummation(DOMDocument $doc, int $net, int $tax, int $prepaid, string $currency): DOMElement

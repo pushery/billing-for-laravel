@@ -12,7 +12,7 @@ use Pushery\Billing\ValueObjects\MerchantAccountReference;
 /**
  * The shipped directory: merchant accounts live in the package's own table.
  *
- * Both lookups are scoped to the ACTIVE provider. Without that, a marketplace that switched providers —
+ * Both lookups are scoped to the active provider. Without that, a marketplace that switched providers —
  * or runs a second one alongside — would resolve a merchant to an account at the wrong one and address a
  * payment to an identity that provider has never heard of.
  */

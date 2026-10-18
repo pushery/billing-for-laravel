@@ -18,7 +18,7 @@ use Pushery\Billing\Models\UsTaxForm;
  *
  * That split is the whole design. Collecting is safe and has to happen early: a declaration is given at
  * onboarding or it is chased a year later from sellers who have moved or gone quiet, under a filing
- * deadline, and that chase ends in withholding money from people who did nothing wrong. ACTING on a
+ * deadline, and that chase ends in withholding money from people who did nothing wrong. Acting on a
  * declaration — withholding, reporting — is a different matter entirely, and it stays behind the switch
  * until somebody turns the regime on deliberately.
  *

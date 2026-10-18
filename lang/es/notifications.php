@@ -123,4 +123,29 @@ return [
         'cta' => 'Confirmar el pago',
     ],
 
+    'direct_debit_announced' => [
+        'subject' => 'Tu próximo adeudo directo',
+        'intro' => ':payee cargará :amount en tu cuenta mediante adeudo directo SEPA el :date.',
+        'recurring' => 'Después, se cargará el mismo importe en cada fecha de vencimiento de tu suscripción. Si el importe cambia, recibirás un aviso antes del cargo.',
+        'account' => 'Cuenta terminada en :account.',
+        'mandate' => 'Referencia del mandato: :reference.',
+        'creditor' => 'Identificador del acreedor: :creditor.',
+        'outro' => 'No tienes que hacer nada.',
+        'cta' => 'Ver tus métodos de pago',
+    ],
+
+    'cancellation_received' => [
+        'subject' => 'Hemos recibido tu cancelación',
+        'intro' => 'Te confirmamos la cancelación que declaraste, con todo su contenido y la fecha y la hora en que nos llegó.',
+        'outro' => 'Guarda este correo. Es tu constancia de la cancelación y del momento en que nos llegó.',
+        'cta' => 'Ver tu cancelación',
+    ],
+
+    'withdrawal_received' => [
+        'subject' => 'Hemos recibido tu desistimiento',
+        'intro' => 'Te confirmamos el desistimiento que declaraste, con todo su contenido y la fecha y la hora en que nos llegó.',
+        'outro' => 'Guarda este correo. Es tu constancia del desistimiento y del momento en que nos llegó.',
+        'cta' => 'Ver tu desistimiento',
+    ],
+
 ];

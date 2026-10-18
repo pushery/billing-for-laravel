@@ -14,7 +14,7 @@ namespace Pushery\Billing\Enums;
  * Folding availability into `granted` would make the first two look like "you do not own this" — which is a
  * refund conversation, a support ticket, and a lie.
  *
- * So access to a work that is not there is a STATE, not an error. The library screen says "you own this,
+ * So access to a work that is not there is a state, not an error. The library screen says "you own this,
  * it is currently unavailable"; nothing throws.
  *
  * The package never decides this itself. It owns money and ownership; the consumer owns the content, so the

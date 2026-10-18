@@ -18,7 +18,7 @@ enum InvoiceStatus: string
     case Void = 'void';
     case Refunded = 'refunded';
 
-    /** The WireKit badge intent for this status (color AND label — never color alone). */
+    /** The WireKit badge intent for this status (color and label — never color alone). */
     public function badgeIntent(): string
     {
         return match ($this) {

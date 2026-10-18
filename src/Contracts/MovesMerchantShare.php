@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\TransferResult;
  *
  * ## Why this is a separate interface and not a method on an existing one
  *
- * `PaymentRails` and `MarketplaceRails` are both implemented OUTSIDE this package — a consumer registers
+ * `PaymentRails` and `MarketplaceRails` are both implemented outside this package — a consumer registers
  * its own driver through the public extension point. Adding a method to either is a fatal error in code
  * this package does not own and cannot fix. A new interface costs nothing to ignore: a driver either is a
  * `MovesMerchantShare` or it is not, and the type system answers the question before anything runs.
@@ -22,7 +22,7 @@ use Pushery\Billing\ValueObjects\TransferResult;
  *
  * On a destination charge the provider creates the transfer as part of the payment: one call, and the
  * merchant's share is already on its way. On a separate transfer it does not. The platform takes the whole
- * payment, and moving the share is a SECOND call that somebody has to make — and if nobody does, the
+ * payment, and moving the share is a second call that somebody has to make — and if nobody does, the
  * merchant is simply never paid while every signal looks healthy.
  *
  * That was the state of this package until now, on the DEFAULT charge type, which is why the driver refused
@@ -49,7 +49,7 @@ interface MovesMerchantShare
      * a freshly computed amount: a retry that recomputed a slightly different figure would produce a second
      * key and a second transfer, which is the failure this parameter exists to prevent.
      *
-     * A driver that cannot serve this must THROW rather than return a result that says nothing moved —
+     * A driver that cannot serve this must throw rather than return a result that says nothing moved —
      * silence here is a merchant who is never paid.
      */
     public function transferShare(

@@ -9,10 +9,10 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Which filing obligation has been announced, and for which due date.
  *
- * ## The key is the obligation AND the date, never the date alone
+ * ## The key is the obligation and the date, never the date alone
  *
  * That is the whole reason the calendar exists. The last period's return and the annual seller report fall
- * due on the SAME day — different law, different data, one date. A marker keyed on the day would let the
+ * due on the same day — different law, different data, one date. A marker keyed on the day would let the
  * first announcement silence the second, which is precisely the failure the calendar was written to prevent:
  * somebody files "the thing due at the end of January", ticks it off, and learns months later in a letter
  * that the other one was never sent.

@@ -12,8 +12,8 @@ use Pushery\Billing\ValueObjects\MerchantTierRow;
  * An in-memory merchant tier repository, so a consumer can test the marketplace catalogs without standing up
  * their `creator_tiers` table.
  *
- * It exists for fake PARITY: a diverging in-memory double is exactly what would let a cross-merchant
- * price-bleed pass a test and reach production, so this reads a merchant's tiers by the SAME scope uid the
+ * It exists for fake parity: a diverging in-memory double is exactly what would let a cross-merchant
+ * price-bleed pass a test and reach production, so this reads a merchant's tiers by the same scope uid the
  * database implementation keys on. Define a merchant's tiers with `define()`, then hand it to
  * DatabaseMerchantCatalog in place of the host repository.
  */

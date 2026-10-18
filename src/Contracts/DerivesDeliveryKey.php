@@ -12,7 +12,7 @@ use Illuminate\Http\Request;
  * The receiver's default key is the provider's event id, which is the right answer for a provider that
  * posts a signed event body: a redelivery repeats the id, a new occurrence brings a new one. Some
  * providers post no event at all. They ping with a bare resource id and expect the receiver to read the
- * current state back, so the SAME id arrives again every time that resource changes — and under the
+ * current state back, so the same id arrives again every time that resource changes — and under the
  * default key every change after the first would be recognized as a redelivery and dropped. The failure
  * is silent and it is the expensive direction: an `open` payment that later turns `paid` produces one
  * recorded delivery, one effect, and no money booked.
@@ -30,7 +30,7 @@ interface DerivesDeliveryKey
     /**
      * The key a redelivery of this request is recognized by, or null to use the receiver's default.
      *
-     * Implementations that need to read the provider to answer this MUST memoize that read: the receiver
+     * Implementations that need to read the provider to answer this must memoize that read: the receiver
      * calls this immediately before mapping, and mapping needs the same resource. Two round trips per
      * ping is a cost a redelivery storm multiplies.
      */

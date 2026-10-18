@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\TierIdentity;
 /**
  * A merchant's tier catalog, read from the host's rows rather than from config.
  *
- * It implements the SAME TierCatalog every caller already holds — the merchant is fixed at construction, so
+ * It implements the same TierCatalog every caller already holds — the merchant is fixed at construction, so
  * downstream code that asks a catalog about a tier key never learns it is per merchant. A key the merchant
  * has not defined answers exactly as an unknown config key does: no identity, no price, the zero-tier
  * fail-safe upstream. It never falls back to config or to another merchant — a tier is this merchant's or it

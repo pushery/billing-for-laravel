@@ -67,7 +67,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | The account hub emits a scoped CSP so the active driver's payment element
-    | (js.stripe.com and friends) loads on the billing screens ONLY, never across
+    | (js.stripe.com and friends) loads on the billing screens only, never across
     | the rest of your app. It is on by default for the package's own views.
     |
     | If you frame the hub in your own layout with external assets (fonts, a CDN,

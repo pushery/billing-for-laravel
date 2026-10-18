@@ -23,7 +23,7 @@ use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
  *
  * ## Why the net is carried rather than computed from the rate
  *
- * The cycle was priced GROSS: the order total is what the customer was charged, and the tax is the part of
+ * The cycle was priced gross: the order total is what the customer was charged, and the tax is the part of
  * it that belongs to the state. Recomputing the net from the rate loses a minor unit the customer
  * nonetheless paid, and the two figures then no longer add up to the total the document states.
  * `Money::baseFromMarkup()` takes the tax as the remainder, so `net + tax == total` holds exactly.

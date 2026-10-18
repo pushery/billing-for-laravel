@@ -10,7 +10,7 @@ use Pushery\Billing\Enums\TaxRateCategory;
 use Pushery\Billing\Exceptions\UnknownTaxCountry;
 
 /**
- * Which rate applies to a supply, from the destination country AND what was sold — the two-dimensional
+ * Which rate applies to a supply, from the destination country and what was sold — the two-dimensional
  * answer a one-dimensional country table cannot give.
  *
  * A table keyed by country alone can only ever charge one rate per country, so a supply a country taxes at
@@ -21,11 +21,11 @@ use Pushery\Billing\Exceptions\UnknownTaxCountry;
  * ## The reduced band is granted, never assumed
  *
  * A country that grants no reduced band for a supply is charged its standard rate — an absence in the table
- * means "not granted here", which is an answer. What is NOT an answer is an unknown country: that is refused
+ * means "not granted here", which is an answer. What is not an answer is an unknown country: that is refused
  * rather than priced, because every wrong number a missing country could produce is a number that
  * under-declares tax, and none of them look wrong on the invoice.
  *
- * ## The audio-visual gate is hard, and it is an OUTCOME rather than a warning
+ * ## The audio-visual gate is hard, and it is an outcome rather than a warning
  *
  * Any audio or video component closes the reduced band for the whole supply. There is no majority test and
  * no threshold — a rule with a proportion in it is a rule that gets argued over per product, and the

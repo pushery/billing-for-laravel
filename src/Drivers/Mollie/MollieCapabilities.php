@@ -12,11 +12,11 @@ use Pushery\Billing\ValueObjects\DriverCapabilities;
  *
  * Every native flag is false, and that is the whole design rather than a gap: Mollie has no customer
  * portal, no provider-side tax, no metered pricing, no proration and no customer balance, so the package
- * fills each with its own engine. A capability is a promise the PACKAGE keeps, not a description of what a
+ * fills each with its own engine. A capability is a promise the package keeps, not a description of what a
  * provider could do — claiming one the driver does not wire sends a screen looking for a feature that is
  * not there, which is worse than reporting the gap and having it filled locally.
  *
- * The recurring set is DERIVED from the SDK's own `MandateMethod`. Typing the list out would be a factual
+ * The recurring set is derived from the SDK's own `MandateMethod`. Typing the list out would be a factual
  * claim about somebody else's product with nothing holding it true, and it would rot silently the day
  * Mollie adds a method — in the direction that refuses a legitimate mandate.
  */
@@ -48,7 +48,7 @@ final readonly class MollieCapabilities
     }
 
     /**
-     * What this account offers at checkout. Configurable because Mollie enables methods PER ACCOUNT, so a
+     * What this account offers at checkout. Configurable because Mollie enables methods per account, so a
      * fixed list would be wrong for most installs in both directions at once.
      *
      * The fallback is the recurring set rather than an empty list: empty reads as "this account can take

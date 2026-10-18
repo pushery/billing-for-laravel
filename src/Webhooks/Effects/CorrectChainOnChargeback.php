@@ -23,7 +23,7 @@ use RuntimeException;
  *
  * Every part of the answer was built and none of it was reached. `DisputeReason` maps the provider's ground
  * code onto the two corrections a lost dispute can owe; `RoutedRefundCorrector::correct()` takes that reason
- * and hands it all the way into the arithmetic that decides WHICH documents exist. Both had test suites and
+ * and hands it all the way into the arithmetic that decides which documents exist. Both had test suites and
  * neither had a caller: a chargeback ended access and recorded the provider's fee, and issued no correcting
  * document at all.
  *
@@ -31,7 +31,7 @@ use RuntimeException;
  *
  * A chargeback is not one situation. Where the buyer never received what they paid for, the supply was
  * undone — both legs of the chain are corrected, and the creator's settlement goes back with it. Where the
- * payment was disputed as fraudulent or unrecognized, the creator DELIVERED: the consideration simply never
+ * payment was disputed as fraudulent or unrecognized, the creator delivered: the consideration simply never
  * arrived, and it is the platform that carries the loss. Correcting the creator's leg there would take back
  * a settlement they earned, for a failure that was not theirs.
  *
@@ -40,12 +40,12 @@ use RuntimeException;
  *
  * ## The fail-safe direction
  *
- * A missing or unrecognized ground code resolves to `Unknown`, which corrects BOTH legs. That is the
+ * A missing or unrecognized ground code resolves to `Unknown`, which corrects both legs. That is the
  * deliberate direction: it never leaves the outbound side understated, and an over-corrected creator leg is
  * a conversation, whereas an understated tax liability is a filing. A provider that adds a new code
  * therefore degrades into the safe answer rather than into silence.
  *
- * ## Once per DISPUTE, not once per delivery
+ * ## Once per dispute, not once per delivery
  *
  * The document this issues is written unconditionally: `SettlementCorrectionIssuer` creates the record, and
  * nothing downstream asks whether the same correction already exists. `RoutedRefundCorrector` documents
@@ -58,7 +58,7 @@ use RuntimeException;
  * event. The charge is the fallback, because a charge can carry more than one dispute only where the
  * provider names them.
  *
- * ## Why the status is resolved AT THE SUPPLY
+ * ## Why the status is resolved at the supply
  *
  * A correcting document states the taxation of the sale it corrects, not of the day it was written. Reading
  * today's standing would let a creator who has since become a small business receive a correction stating
@@ -112,7 +112,7 @@ final readonly class CorrectChainOnChargeback implements DedupesOnReference
     }
 
     /**
-     * Once per lost DISPUTE — a correcting document is not a thing to issue twice.
+     * Once per lost dispute — a correcting document is not a thing to issue twice.
      *
      * Named with the same expression the clawback and the provider fee use, so all three effects on this
      * event agree about what "the same dispute" means without a shared helper to keep in step.

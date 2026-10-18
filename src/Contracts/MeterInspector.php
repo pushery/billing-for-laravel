@@ -9,7 +9,7 @@ use Pushery\Billing\ValueObjects\MeterPriceFacts;
 /**
  * Reads which usage meters actually exist at the provider — the seam `billing:meters:check` uses to catch
  * a metered tier whose provider meter was never created (or was archived). Nothing else notices that: the
- * boot guard only checks the DRIVER can meter, and reporting usage to a non-existent meter fails silently
+ * boot guard only checks the driver can meter, and reporting usage to a non-existent meter fails silently
  * on the far side, so the miss surfaces as a suspiciously small invoice a month later, if at all.
  */
 interface MeterInspector
@@ -24,7 +24,7 @@ interface MeterInspector
     public function activeMeterEventNames(): array;
 
     /**
-     * What the provider's PRICE says about a metered component — the authority the local config must agree
+     * What the provider's price says about a metered component — the authority the local config must agree
      * with. Null when the price does not exist at the provider (or the driver cannot look one up).
      *
      * The allowance lives in the price, not in config: `included` there only drives the gauge. A price whose

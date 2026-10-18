@@ -24,7 +24,7 @@ use Pushery\Billing\Preflight\CheckpointRegistry;
  *
  * ## What is package code and what is not
  *
- * The five shipped rules are STRUCTURAL: undecided classification, quarters that do not sum to the year, a
+ * The five shipped rules are structural: undecided classification, quarters that do not sum to the year, a
  * seller reported twice, an unfilable seller record, and a charge no settlement document places. None of
  * them names a country, a threshold or a form.
  * What varies by jurisdiction — which fields a record must carry, which identifiers must hold which check —

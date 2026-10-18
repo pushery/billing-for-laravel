@@ -40,7 +40,7 @@ use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 /**
  * The account-hub plan-change screen — the in-app upgrade/downgrade that replaces delegating plan
  * changes to a hosted portal. It offers the plans purchasable from the current tier (resolved from the
- * catalog, never the client) and swaps to the chosen one by its KEY, so a client can never submit a
+ * catalog, never the client) and swaps to the chosen one by its key, so a client can never submit a
  * price. Before committing, the customer can preview what the mid-cycle change will cost: the proration
  * strategy asks the provider for the net amount due (null when it cannot be previewed — the UI degrades
  * rather than showing a wrong figure). Stripe books the proration itself when the swap executes.
@@ -66,7 +66,7 @@ final class ManageSubscription extends AccountScreen
 
     /**
      * A coupon code the visitor types to apply at checkout. Deliberately NOT locked — it is client input,
-     * carried as a CODE (never trusted as an amount) and honored only by the driver that was configured.
+     * carried as a code (never trusted as an amount) and honored only by the driver that was configured.
      */
     public string $couponCode = '';
 
@@ -101,18 +101,18 @@ final class ManageSubscription extends AccountScreen
 
         return $this->view('billing::livewire.manage-subscription', [
             'currentLabel' => CatalogLabel::translate($tiers->label($key)),
-            // When an external merchant of record owns billing (config billing.link_out), the hub links OUT to
+            // When an external merchant of record owns billing (config billing.link_out), the hub links out to
             // its portal instead of offering the in-app checkout below — the app is not the merchant of record.
             'linkOut' => Container::getInstance()->make(LinkOut::class)->url(),
             'canSwap' => $this->hasLiveSubscription(),
             // A downgrade the customer scheduled but that has not taken effect yet: shown as "changes on
             // {date}" with a cancel action, so a pending change is never a surprise on the next invoice.
             'scheduledSwap' => $this->scheduledSwap(),
-            // The "includes an X-day free trial" hint is about the SUBSCRIPTION trial the owner gets on
+            // The "includes an X-day free trial" hint is about the subscription trial the owner gets on
             // subscribing, so it follows subscriptionTrialEnabled — a generic (pre-subscription) trial does
             // not belong on a plan row.
             //
-            // AND WHETHER THIS OWNER WOULD ACTUALLY GET ONE, which the config alone cannot say since the
+            // And whether this owner would actually get one, which the config alone cannot say since the
             // trial became once-per-owner. A returning customer was shown "includes a 14-day free trial",
             // pressed Subscribe, and reached a paid checkout: the screen promising what the starter
             // refuses. Both read one answer now, so the promise and the grant cannot disagree.
@@ -155,7 +155,7 @@ final class ManageSubscription extends AccountScreen
 
     /**
      * The purchasable one-time add-ons (top-ups) — key, label, and formatted price from the catalog. The
-     * client only ever submits a KEY; the price is resolved server-side, mirroring the tier allowlist so a
+     * client only ever submits a key; the price is resolved server-side, mirroring the tier allowlist so a
      * client can never inject a price. Only add-ons with a configured display price are offered, and none at all
      * where the driver binds no way to sell one.
      *
@@ -188,9 +188,9 @@ final class ManageSubscription extends AccountScreen
     }
 
     /**
-     * The one entrance action. An owner who already has a live subscription SWAPS to the tier in-app; an
+     * The one entrance action. An owner who already has a live subscription swaps to the tier in-app; an
      * owner who does not is taken to the hosted checkout to become a subscriber. The mirror guard is the
-     * point: without the hasLiveSubscription() branch, an owner with a subscription could open a SECOND
+     * point: without the hasLiveSubscription() branch, an owner with a subscription could open a second
      * one at the provider (a live money bug — two subscriptions, double-billed).
      */
     public function subscribe(string $tierKey, ?string $declarationReference = null): void
@@ -216,7 +216,7 @@ final class ManageSubscription extends AccountScreen
         $coupon = Str::trim($this->couponCode);
         $coupon = $coupon !== '' ? $coupon : null;
 
-        // BEFORE the provider is asked for anything, for the reasons purchaseAddon() below gives. Silent without
+        // Before the provider is asked for anything, for the reasons purchaseAddon() below gives. Silent without
         // a consumer-rights profile, and a plain subscription passes under a profile that lets one start without
         // declarations; only a tier classified as something whose right ends at provision is refused here.
         Container::getInstance()->make(PurchaseDeclarations::class)
@@ -241,7 +241,7 @@ final class ManageSubscription extends AccountScreen
 
     /**
      * Buy a one-time add-on (a top-up) via the provider's hosted mode:payment checkout. Like subscribe(), the
-     * client submits only the add-on KEY — the catalog resolves the price server-side (anti-price-injection) —
+     * client submits only the add-on key — the catalog resolves the price server-side (anti-price-injection) —
      * and an unknown key is refused before any charge. The hosted URL is scheme-validated before the redirect;
      * a driver with no checkout URL yields nothing (no redirect).
      */
@@ -264,7 +264,7 @@ final class ManageSubscription extends AccountScreen
             throw new NotFoundHttpException;
         }
 
-        // BEFORE the provider is asked for anything. The gate at provision already refuses a work whose
+        // Before the provider is asked for anything. The gate at provision already refuses a work whose
         // right of withdrawal has not been safely extinguished, but by then the buyer has paid — the
         // operator is left refunding a sale the package could have declined for free. Same rule, both ends.
         //
@@ -296,7 +296,7 @@ final class ManageSubscription extends AccountScreen
      * configured driver would actually apply it, 'invalid' otherwise — so the visitor sees the code take
      * before they commit to anything.
      *
-     * ASKED OF THE DRIVER, not of the catalog, and the difference is money. The `DiscountResolver` — the
+     * Asked of the driver, not of the catalog, and the difference is money. The `DiscountResolver` — the
      * config-defined coupon map — resolves a code with no provider mapping that then discounts nothing at the
      * provider, and a driver that bills locally reads a different catalog entirely. Either way, asking the
      * catalog would tell the visitor their code took and then charge them in full, with nothing anywhere
@@ -358,7 +358,7 @@ final class ManageSubscription extends AccountScreen
         // recorded, shown, and cancellable until then — the provider is not touched now; ScheduledSwapRunner
         // performs the swap when the date arrives. An upgrade takes effect immediately.
         //
-        // `$subscription` IS NON-NULL HERE BY CONSTRUCTION, AND NOTHING RESTATES IT. `PeriodEnd` is
+        // `$subscription` is non-null here by construction, and nothing restates it. `PeriodEnd` is
         // reachable only where a subscription was resolved, because the other branch of the ternary
         // above answers `Immediate`. An `instanceof` conjunct saying so was added here and taken
         // straight back out: the analyzer this package pins derives the relationship and reports the
@@ -502,7 +502,7 @@ final class ManageSubscription extends AccountScreen
     }
 
     /**
-     * Guard every in-app money-moving action at the SERVER, not just the view. In external-MoR link-out mode
+     * Guard every in-app money-moving action at the server, not just the view. In external-MoR link-out mode
      * the app is not the merchant of record, so no in-app checkout may run: the Blade view hides the controls,
      * and this refuses a crafted request (`$wire.subscribe(...)`) that would otherwise reach a public Livewire
      * method regardless of whether its button was rendered.

@@ -72,7 +72,7 @@ final readonly class MerchantLiabilityAccounts
                 return [$this->accounts->resolve(DatevTransaction::CreatorLiabilities)->number];
             } catch (DatevTransactionUnresolvable) {
                 // An installation that books no creator liabilities has no payables accounts, and "none" is
-                // the honest answer rather than a failure. The resolver refuses because BOOKING to a default
+                // the honest answer rather than a failure. The resolver refuses because booking to a default
                 // account is a silent accounting error — but nothing is being booked here. This reads the
                 // accounts back to check a file against them, and refusing would take the single-seller
                 // export down over a marketplace setting it has no reason to carry.

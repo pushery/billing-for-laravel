@@ -11,7 +11,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
  * The default merchant catalog for a single-seller install: it hands back the one config-bound tier and plan
- * catalog for ANY scope, merchant or platform alike.
+ * catalog for any scope, merchant or platform alike.
  *
  * Returning the same instance regardless of scope is the whole point — a single-seller app has exactly one
  * catalog, so passing a merchant must change nothing. The scope is accepted to satisfy the seam and

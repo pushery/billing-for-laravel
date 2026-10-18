@@ -92,7 +92,7 @@ final class DatedTaxRateTable
         }
 
         // Falling back to the standard band mirrors what the undated table did: a country that has no reduced
-        // band for this kind of supply taxes it at its standard rate. The fallback is between BANDS of the
+        // band for this kind of supply taxes it at its standard rate. The fallback is between bands of the
         // same moment, never between moments — a missing date is still a refusal.
         if ($category !== TaxRateCategory::Standard) {
             return $this->intervalAt($country, TaxRateCategory::Standard, $taxPoint);
@@ -102,11 +102,11 @@ final class DatedTaxRateTable
     }
 
     /**
-     * Whether the table carries ANY interval for a country, whatever the moment.
+     * Whether the table carries any interval for a country, whatever the moment.
      *
      * Date-blind on purpose, and it is the seam that keeps a partial history from becoming a refusal engine.
      * An operator who configures intervals for one member state has said nothing about the others, so a
-     * country absent here must fall through to the table that has always priced it. A country PRESENT here
+     * country absent here must fall through to the table that has always priced it. A country present here
      * is one the operator has taken responsibility for, and a tax point landing in a gap of it is then a
      * refusal rather than a fallback — which is the whole point of `intervalAt()`.
      */

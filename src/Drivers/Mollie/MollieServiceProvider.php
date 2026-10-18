@@ -15,6 +15,7 @@ use Pushery\Billing\Contracts\AttachesVerifiedVatIds;
 use Pushery\Billing\Contracts\BillingDriver;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\CardPresentPayments;
+use Pushery\Billing\Contracts\CollectsDirectDebits;
 use Pushery\Billing\Contracts\CreditSync;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Contracts\CustomerRegistry;
@@ -43,6 +44,7 @@ use Pushery\Billing\Contracts\UpcomingInvoice;
 use Pushery\Billing\Contracts\UsageReporter;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Contracts\WebhookVerifier;
+use Pushery\Billing\DirectDebit\PreNotifications;
 use Pushery\Billing\Discounts\CouponRedeemer;
 use Pushery\Billing\Discounts\CycleCouponApplier;
 use Pushery\Billing\Drivers\NullBillingEngine;
@@ -62,6 +64,10 @@ use Pushery\Billing\Invoicing\OrderInvoiceIssuer;
 use Pushery\Billing\Invoicing\ProrationCreditCorrectionIssuer;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Proration\ArrearsProrationStrategy;
+use Pushery\Billing\Proration\InAdvanceProrationStrategy;
+use Pushery\Billing\Proration\LocalProrationStrategy;
+use Pushery\Billing\Proration\RestOfPeriod;
+use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\Support\CreditLedger;
@@ -91,7 +97,7 @@ use Throwable;
  *
  * The split matters. `extend()` is unconditional: registering a driver by name costs nothing and must not
  * depend on configuration, or an install resolving `driver('mollie')` explicitly — a marketplace running
- * two providers, a migration in progress — would be told the driver does not exist. The REBINDS below are
+ * two providers, a migration in progress — would be told the driver does not exist. The rebinds below are
  * conditional, because they replace package-wide contracts that Stripe otherwise answers.
  *
  * Nothing here constructs an API client at registration time. The client is a singleton resolved on first
@@ -177,13 +183,17 @@ final class MollieServiceProvider extends ServiceProvider
         // canceling did nothing, swapping did nothing, and neither said so.
         $this->app->bind(SubscriptionActions::class, LocalSubscriptionActions::class);
         // Rebound because the Stripe provider binds its own reader unconditionally, and that one would ask Stripe
-        // about a subscription it never saw. This engine collects a period at its end, which the local reader says.
+        // about a subscription it never saw. The local reader answers from the order that paid the period where it
+        // was collected in advance, and says that nothing was paid where it is collected at its end.
         $this->app->bind(ReadsSubscriptionPayments::class, LocalSubscriptionPayments::class);
         // Without this the local driver kept Stripe's strategy, whose applySwap() is a deliberate no-op
-        // because Stripe books the proration itself. The local engine bills a period when it closes, so a plan
-        // change is priced into that bill: each tier for the days it held. A credit for unused time would give
-        // back days nobody had paid for yet.
-        $this->app->bind(ProrationStrategy::class, ArrearsProrationStrategy::class);
+        // because Stripe books the proration itself. Chosen per subscription by when it is collected: in advance,
+        // the rest of the paid period is charged or credited at once; in arrears, a plan change is priced into the
+        // bill that closes the period, each tier for the days it held.
+        $this->app->bind(ProrationStrategy::class, static fn (Container $app): ProrationStrategy => new LocalProrationStrategy(
+            $app->make(ArrearsProrationStrategy::class),
+            new InAdvanceProrationStrategy(self::restOfPeriod($app), $app->make(PlanCatalog::class), $app->make(BillingEventLog::class)),
+        ));
         $this->app->bind(PaymentMethods::class, MolliePaymentMethods::class);
         $this->app->bind(PaymentCsp::class, MolliePaymentCsp::class);
         // Payment in person, on Mollie's own terminals. Rebound because the Stripe provider binds its reader path
@@ -213,8 +223,9 @@ final class MollieServiceProvider extends ServiceProvider
         // The next invoice, previewed from the engine that will bill it. It is built the way the driver's engine is,
         // so the preview and the order that follows are priced by the same steps.
         $this->app->bind(UpcomingInvoice::class, static fn (Container $app): UpcomingInvoice => new LocalUpcomingInvoice(self::engine($app), 'mollie'));
-        // Seats live on the local subscription, and the cycle bills each quantity for the days it held.
-        $this->app->bind(SeatBilling::class, static fn (): SeatBilling => new LocalSeatBilling('mollie'));
+        // Seats live on the local subscription. In arrears the cycle bills each quantity for the days it held; in
+        // advance a change squares the rest of the paid period at once.
+        $this->app->bind(SeatBilling::class, static fn (Container $app): SeatBilling => new LocalSeatBilling('mollie', self::restOfPeriod($app), $app->make(PlanCatalog::class)));
         // A late fee is an open order of its own here, collected once a cycle of the owner has been paid. It cannot
         // be a line of the cycle: its document is outside the scope of VAT, and that category shares a document
         // with no other.
@@ -243,6 +254,10 @@ final class MollieServiceProvider extends ServiceProvider
         // being able to establish a mandate by redirect, and a consumer replacing one must not silently
         // replace the other.
         $this->app->bind(EstablishesMandateByRedirect::class, MolliePaymentRails::class);
+        // The direct debit mandates an account holder gives on the application's own form, and whether a charge against a
+        // stored mandate is drawn as a direct debit, which the engine announces first. Bound on its own for the same reason
+        // as the redirect half above.
+        $this->app->bind(CollectsDirectDebits::class, MolliePaymentRails::class);
         // Resolving a customer reference on a webhook back to an owner. The shipped directory reads the
         // configured customer model on the configured column and is provider-neutral in what it does; it is
         // bound here as well so the local driver does not depend on another driver's provider having run.
@@ -263,7 +278,7 @@ final class MollieServiceProvider extends ServiceProvider
         // The webhook that finishes what the redirect started. Registered here rather than with the shipped
         // default effects because it only means anything for a driver whose mandates arrive this way.
         //
-        // And the two that finish what the CYCLE started. A charge this driver makes is not always answered
+        // And the two that finish what the cycle started. A charge this driver makes is not always answered
         // while the sweep is still running — a SEPA direct debit is accepted at once and settles days later
         // — so the cycle is held open and closed from here, in whichever direction the money went. Both are
         // registered for the same reason as the one above: they mean something only where the package runs
@@ -341,7 +356,15 @@ final class MollieServiceProvider extends ServiceProvider
             $app->make(ConfigDunningLadder::class),
             MollieCapabilities::make(),
             $app->make(ProrationCreditCorrectionIssuer::class),
+            $app->make(BillingEventLog::class),
+            $app->make(PreNotifications::class),
         );
+    }
+
+    /** What squares a change inside a period collected in advance: this driver's engine and the credit ledger. */
+    private static function restOfPeriod(Container $app): RestOfPeriod
+    {
+        return new RestOfPeriod(self::engine($app), $app->make(CreditLedger::class));
     }
 
     /** Whether Mollie is the driver this installation actually bills through. */
@@ -360,7 +383,7 @@ final class MollieServiceProvider extends ServiceProvider
      * at the first charge — inside a scheduled run, hours later, against a real subscriber, with the error
      * in a log rather than in front of whoever deployed.
      *
-     * A webhook signing secret is deliberately NOT required. The classic ping of every payment carries no
+     * A webhook signing secret is deliberately not required. The classic ping of every payment carries no
      * signature at all, and an account without next-generation webhooks has no secret to configure, so
      * demanding one would refuse to boot every such install. The verifier checks a signature wherever one
      * is configured and arrives.

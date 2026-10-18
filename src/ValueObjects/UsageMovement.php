@@ -17,7 +17,7 @@ use InvalidArgumentException;
  * A period is one row for a month that may hold five top-ups and two hundred sends, and the ordering
  * between them — the part that explains the outcome — is exactly what aggregation removes.
  *
- * ## The delta is ONE signed number, deliberately
+ * ## The delta is one signed number, deliberately
  *
  * An amount plus a direction enum can disagree: `amount: -5, direction: Topup` is representable and
  * means nothing, and every consumer would have to decide which half wins. A sign cannot contradict
@@ -27,7 +27,7 @@ use InvalidArgumentException;
  * ## Zero and blank are refused at construction
  *
  * A movement of zero is not a movement, and a row without a reference is a period row with extra
- * steps — the reference IS the answer this granularity exists to give. Both would render, and both
+ * steps — the reference is the answer this granularity exists to give. Both would render, and both
  * would quietly make the timeline less trustworthy than the aggregate it replaced.
  */
 final readonly class UsageMovement

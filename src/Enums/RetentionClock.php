@@ -35,7 +35,7 @@ enum RetentionClock: string
      *
      * A retention of zero is not a retention, it is an active duty to discard — and a duty nothing enforces
      * is a sentence in a policy document. Its enforcement is at the point of processing; what the retention
-     * run does with it is REPORT a survivor as a defect, because a survivor means some code path did not
+     * run does with it is report a survivor as a defect, because a survivor means some code path did not
      * discard when it should have.
      */
     case Immediate = 'immediate';

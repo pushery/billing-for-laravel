@@ -11,14 +11,14 @@ use Pushery\Billing\Events\SubscriptionStateChanged;
 use Stripe\StripeClient;
 
 /**
- * Reads the billable's current Stripe subscription and maps it — through the SAME StripeSubscriptionMapper
+ * Reads the billable's current Stripe subscription and maps it — through the same StripeSubscriptionMapper
  * the webhook uses — to the neutral event the plan-sync effect applies. This is the return-reconcile: the
  * customer is back from the hosted checkout, and this writes the local row now instead of waiting on the
  * webhook.
  *
- * It reads EVERY subscription the customer has and picks the one that is actually alive, rather than the
+ * It reads every subscription the customer has and picks the one that is actually alive, rather than the
  * one created most recently. Stripe lists newest-first, and customers accumulate dead subscriptions: an
- * abandoned checkout leaves an `incomplete_expired` subscription behind, and it is NEWER than the paying
+ * abandoned checkout leaves an `incomplete_expired` subscription behind, and it is newer than the paying
  * subscription it was never meant to replace. Taking the newest handed the plan-sync effect a lapsed
  * subscription for a paying customer — and a state that grants no access pulls the tier to zero. They
  * would keep paying, on the free tier, until something else moved their subscription.
@@ -60,7 +60,7 @@ final readonly class StripeSubscriptionSync implements SubscriptionSync
             $array = $candidate->toArray();
 
             // A routed subscription (a destination charge) carries transfer_data: it belongs to a merchant,
-            // not the platform plan this reconcile writes, and its OWN webhook syncs it to the merchant's row
+            // not the platform plan this reconcile writes, and its own webhook syncs it to the merchant's row
             // by that same transfer_data. Reconciling it here would stamp a creator's tier onto the platform
             // plan — and picking a "liveliest" across a fan's platform sub and several creator subs is
             // meaningless anyway. The merchant-scoped return reconcile is a separate path; here we skip it.
@@ -92,7 +92,7 @@ final readonly class StripeSubscriptionSync implements SubscriptionSync
     }
 
     /**
-     * How ALIVE a subscription is. A customer can hold several at once — a paying one plus the wreckage of
+     * How alive a subscription is. A customer can hold several at once — a paying one plus the wreckage of
      * an abandoned checkout — and there is one local row to describe them, so the liveliest has to win it.
      */
     private function rank(SubscriptionState $state): int

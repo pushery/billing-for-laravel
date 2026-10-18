@@ -90,7 +90,7 @@ final class ReconcileUsageCommand extends Command
 
     /**
      * Report failed rollups and, with --redrive, reset them to pending. Returns true only when failed
-     * rollups were left UNRESOLVED — a --redrive run has acted on them, so it hands the usage back to the
+     * rollups were left unresolved — a --redrive run has acted on them, so it hands the usage back to the
      * flusher and is not itself a lingering problem.
      */
     private function reportFailed(): bool

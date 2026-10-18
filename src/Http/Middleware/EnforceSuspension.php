@@ -33,7 +33,7 @@ final readonly class EnforceSuspension
     {
         $actor = Auth::user();
 
-        // No merchant is passed, and that is a NAMED gap rather than an oversight.
+        // No merchant is passed, and that is a named gap rather than an oversight.
         //
         // The ladder is scoped per merchant — arrears with one creator withdraw that creator's surfaces and
         // nothing else. This middleware guards a route, and a route does not say which merchant it belongs
@@ -41,7 +41,7 @@ final readonly class EnforceSuspension
         // scope stays null, which `Subscription::forMerchant()` reads as the platform's own row.
         //
         // For a single-seller install that is exactly right and byte-identical to what it always did. For a
-        // marketplace it means this middleware guards the PLATFORM relationship only, and a creator-scoped
+        // marketplace it means this middleware guards the platform relationship only, and a creator-scoped
         // surface needs a caller that knows its merchant. That caller is the content-access layer, not this
         // one — withdrawing a creator's content is a question about the content, not about the route.
         //

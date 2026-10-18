@@ -24,7 +24,7 @@ use Pushery\Billing\ValueObjects\SubscriptionGrant;
  *
  * The risk in a double is that it drifts: a hand-rolled stub that grants access whenever a tier is present
  * would let a consumer ship an ACL that shows paid content to a lapsed subscriber, and their suite would be
- * green. So this delegates every decision to the SAME value object the real reader returns —
+ * green. So this delegates every decision to the same value object the real reader returns —
  * `SubscriptionGrant::grantsAccess()`, `atLeast()` and `coversInstant()` — and only the storage is fake.
  * Define grants with `grant()`; what they then mean is not this class's opinion.
  */

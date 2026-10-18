@@ -18,7 +18,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * ## Who writes this row
  *
- * The CONSUMING APPLICATION. `plan_key` and `preprocessor` name things in their catalog -- which meter a
+ * The consuming application. `plan_key` and `preprocessor` name things in their catalog -- which meter a
  * line is billed on, and which resolver prices it -- so the package reads them and refuses a line it cannot
  * resolve (`CycleAmountUnresolvable`) rather than guessing an amount. Neither having a writer in `src/` is
  * the correct state.

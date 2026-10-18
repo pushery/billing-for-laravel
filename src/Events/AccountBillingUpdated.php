@@ -17,7 +17,7 @@ use Pushery\Billing\Events\Concerns\BroadcastsToOwner;
  * the client re-fetches — so there is nothing sensitive on the wire, and the queued broadcast holds the owner
  * as its key rather than its attributes. A no-op unless realtime is switched on.
  *
- * Fired by the plan sync when a provider event actually MOVES something — a state, a tier, a period. A
+ * Fired by the plan sync when a provider event actually moves something — a state, a tier, a period. A
  * redelivery of an event already applied, or one arriving out of order, changes nothing and broadcasts
  * nothing, so a provider retrying a webhook does not make every open screen re-fetch.
  *

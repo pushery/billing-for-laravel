@@ -63,7 +63,7 @@ final readonly class ConfigSellerOfRecordResolver implements SellerOfRecordResol
     }
 
     /**
-     * The Art. 9a presumption is rebutted only when the platform asserts it AND does none of the three things
+     * The Art. 9a presumption is rebutted only when the platform asserts it and does none of the three things
      * that make the presumption irrebuttable (setting the terms, authorizing the billing, approving the
      * supply). All four must be true — anything else leaves the platform as the deemed supplier.
      */

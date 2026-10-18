@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Pushery\Billing\Webhooks\Effects;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Pushery\Billing\Discounts\CouponCodes;
 use Pushery\Billing\Discounts\CouponRedeemer;
+use Pushery\Billing\Enums\CollectionTiming;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Events\MandateEstablished;
 use Pushery\Billing\Exceptions\CouponUnavailable;
@@ -31,7 +34,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * moment at which the package knows the customer can be charged, and until then there is nothing a
  * subscription could honestly say.
  *
- * ## It matches on the PAYMENT, and that is the whole safety property
+ * ## It matches on the payment, and that is the whole safety property
  *
  * Establishing a mandate is also what happens when somebody merely adds a second payment method. Matched
  * on the customer, that would consume a pending intent and hand them a subscription they never asked for.
@@ -47,7 +50,15 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  */
 final readonly class StartSubscriptionOnMandate
 {
-    public function __construct(private TierInterval $intervals, private CouponRedeemer $coupons) {}
+    public function __construct(
+        private TierInterval $intervals,
+        private CouponRedeemer $coupons,
+        /**
+         * Where the timing of a new subscription is read. Optional, so a caller that builds the effect by hand with
+         * the two collaborators it always needed keeps working, and the container's configuration answers then.
+         */
+        private ?Repository $config = null,
+    ) {}
 
     public function __invoke(MandateEstablished $event): void
     {
@@ -58,7 +69,7 @@ final readonly class StartSubscriptionOnMandate
         }
 
         DB::transaction(function () use ($event): void {
-            // The conditional update IS the claim. Reading first and writing after would let two
+            // The conditional update is the claim. Reading first and writing after would let two
             // simultaneous deliveries both pass the read.
             $claimed = SubscriptionIntent::model()::query()
                 ->where('payment_reference', $event->paymentReference)
@@ -72,7 +83,7 @@ final readonly class StartSubscriptionOnMandate
 
             // `firstOrFail`, not `first` plus a null check. The row was claimed by the UPDATE above, inside
             // this transaction, so it is there — a null would mean something impossible happened, and
-            // returning quietly on it would leave a customer who has PAID with no subscription and nothing
+            // returning quietly on it would leave a customer who has paid with no subscription and nothing
             // anywhere saying so. Failing puts it where a failed job is looked at.
             $intent = SubscriptionIntent::model()::query()
                 ->where('payment_reference', $event->paymentReference)
@@ -90,24 +101,30 @@ final readonly class StartSubscriptionOnMandate
             ? null
             : CarbonImmutable::createFromInterface($intent->trial_ends_at);
 
-        // A trial pushes the FIRST cycle out to its end; without one the period starts now and the engine
+        // A trial pushes the first cycle out to its end; without one the period starts now and the engine
         // charges it on its own schedule. Charging here would take money on a webhook, which is the one
         // place a retry is guaranteed and an amount is not.
-        // The SAME reader the engine advances by, not a second answer to one question. Hardcoded to a
-        // month here, an ANNUAL subscriber's very first period is thirty days long — so the sweep collects
+        //
+        // Collected in advance, that schedule is now: the next run charges the first period, which the customer
+        // has from this moment. Collected in arrears, it is the period's end. A trial is due at its end either way,
+        // because nothing is owed for the free days.
+        $timing = CollectionTiming::fromConfigured(($this->config ?? Container::getInstance()->make(Repository::class))->get(CollectionTiming::CONFIG_KEY));
+        // The same reader the engine advances by, not a second answer to one question. Hardcoded to a
+        // month here, an annual subscriber's very first period is thirty days long — so the sweep collects
         // the annual price again a month after they signed up, before the engine's own reading gets a turn.
         $periodEnd = $trialEndsAt ?? CarbonImmutable::createFromInterface(
             $this->intervals->for($intent->tier_key)->advance($now)
         );
+        $firstRun = $timing === CollectionTiming::InAdvance && ! $trialEndsAt instanceof CarbonImmutable ? $now : $periodEnd;
 
-        // AN INTENT NEVER OVERWRITES A LIVE SUBSCRIPTION, and the check has to be here rather than at the
+        // An intent never overwrites a live subscription, and the check has to be here rather than at the
         // redirect. `LocalSubscriptionStarter::alreadySubscribed()` runs when the customer presses
-        // Subscribe — minutes, or with a bank transfer DAYS, before this. Intents carry no expiry and are
+        // Subscribe — minutes, or with a bank transfer days, before this. Intents carry no expiry and are
         // unique only on the payment reference, so an owner can hold several: press Subscribe on `basic`,
         // wander off, come back and buy `pro`, and the abandoned `basic` payment settling later arrives
         // here with a perfectly valid claim.
         //
-        // With `updateOrCreate` alone that claim WON the row: tier replaced, period restarted, a paid
+        // With `updateOrCreate` alone that claim won the row: tier replaced, period restarted, a paid
         // subscriber moved to the tier they abandoned, dunning state wiped — decided by webhook delivery
         // order, with no failure, no log line and nothing to diagnose it from. The plain `create()` this
         // replaced at least died loudly on the unique constraint.
@@ -123,7 +140,7 @@ final readonly class StartSubscriptionOnMandate
             ->first();
 
         if ($existing instanceof Subscription && ! $existing->isReplaceableByANewSubscription()) {
-            // Claimed and NOT retried, deliberately. Throwing would roll the claim back with the
+            // Claimed and not retried, deliberately. Throwing would roll the claim back with the
             // transaction and the job would return to exactly this state on every attempt until the queue
             // gave up. The customer keeps the subscription they actually have, their mandate is on file
             // (the sibling effect stored it), and the stale intent is spent — what is left is a support
@@ -139,9 +156,9 @@ final readonly class StartSubscriptionOnMandate
             return;
         }
 
-        // updateOrCreate on the UNIQUE KEY, not create. An ENDED row still occupies that slot: the starter
+        // updateOrCreate on the UNIQUE KEY, not create. An ended row still occupies that slot: the starter
         // deliberately lets a customer who once canceled subscribe again, because refusing would leave them
-        // permanently unable to return. A plain insert then dies on the constraint — and dies HERE, after
+        // permanently unable to return. A plain insert then dies on the constraint — and dies here, after
         // the customer has completed a real payment. They would have paid, hold no subscription, and leave
         // nothing behind but a dead-lettered job.
         //
@@ -164,7 +181,7 @@ final readonly class StartSubscriptionOnMandate
                 // The declarations this purchase was made under, and only those: a returning customer's row is
                 // reused, and the previous subscription's declarations do not cover this one.
                 'declaration_reference' => $intent->declaration_reference,
-                // PRESERVED, never nulled — the same shape `SyncPlanFromSubscription` uses for this exact
+                // Preserved, never nulled — the same shape `SyncPlanFromSubscription` uses for this exact
                 // column. `LocalSubscriptionStarter` decides "has this owner had a trial" from it, so a
                 // plain write destroys the evidence the guard reads: the second, trial-LESS subscribe
                 // settles here, sets this to null, and the third one hands out a fresh free trial. One
@@ -176,7 +193,10 @@ final readonly class StartSubscriptionOnMandate
                 'started_at' => $now,
                 'current_period_start' => $now,
                 'current_period_end' => $periodEnd,
-                'scheduled_processing_at' => $periodEnd,
+                'scheduled_processing_at' => $firstRun,
+                // Recorded once, here, and never changed: a reused row is a new subscription and starts with the
+                // timing configured now, whatever the subscription before it was collected by.
+                'collection_timing' => $timing,
                 // The previous life has to be cleared, every field of it. A returning customer whose
                 // `ends_at` survived would be active and ending at once — and the presenter reads that as a
                 // grace period, so they would be shown a cancellation they never made. The dunning fields
@@ -215,7 +235,7 @@ final readonly class StartSubscriptionOnMandate
      *
      * Minutes pass between the redirect and this webhook -- with a bank transfer, days. The coupon may have
      * been deactivated, expired, or spent down to its cap in between, and the redeemer is the only place
-     * those can be answered without a race. So the code is carried and the ENTITLEMENT is re-derived.
+     * those can be answered without a race. So the code is carried and the entitlement is re-derived.
      *
      * ## And it never fails the delivery
      *
@@ -258,7 +278,7 @@ final readonly class StartSubscriptionOnMandate
      * The owner this intent was raised for, resolved back to the consumer's own model.
      *
      * Through the morph map, which is the same shape `LocalBillingEngine::ownerFor()` uses -- and it has to
-     * be, because the redemption written here is looked up by `CycleCouponApplier` with the owner THAT
+     * be, because the redemption written here is looked up by `CycleCouponApplier` with the owner that
      * loads. A redemption keyed on anything else is one the cycle never finds, and the customer is billed
      * in full while a redemption row sits in the table saying otherwise.
      *

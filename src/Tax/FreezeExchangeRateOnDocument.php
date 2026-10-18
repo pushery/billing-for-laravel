@@ -45,8 +45,8 @@ final readonly class FreezeExchangeRateOnDocument
     /**
      * Refuse now if the rate this document will need is not held.
      *
-     * Separate from freezing because of WHEN each has to happen. Freezing needs a document; the refusal has
-     * to come BEFORE one exists — specifically before a document number is drawn, because a number spent on
+     * Separate from freezing because of when each has to happen. Freezing needs a document; the refusal has
+     * to come before one exists — specifically before a document number is drawn, because a number spent on
      * a settlement that then fails is a gap somebody has to explain to an auditor later.
      *
      * The check and the freeze therefore ask the same question twice, deliberately. A database read is a
@@ -92,7 +92,7 @@ final readonly class FreezeExchangeRateOnDocument
             'from_currency' => $rate->fromCurrency,
             'to_currency' => $rate->toCurrency,
             'rate_scaled' => $rate->rateScaled,
-            // The PUBLISHER's date, off the answer rather than off the request. A rate resolved forward to
+            // The publisher's date, off the answer rather than off the request. A rate resolved forward to
             // the next publication day belongs to that day, and that is the day a reviewer looks it up under.
             'rate_date' => $rate->on->toDateString(),
             'basis' => $rate->basis->value,
@@ -107,7 +107,7 @@ final readonly class FreezeExchangeRateOnDocument
      * indistinguishable, in the database, from a rate recorded and read correctly — so until a correction
      * reads it, the table is documentation rather than a guard.
      *
-     * COPIED, not looked up again, and not left off. The three options are not close:
+     * Copied, not looked up again, and not left off. The three options are not close:
      *
      * - Looking the rate up again dates the reversal to the day it was made. The original states one figure,
      *   the reversal another, and the difference is a currency movement that neither party caused. That is

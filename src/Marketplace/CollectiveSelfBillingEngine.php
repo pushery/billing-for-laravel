@@ -23,12 +23,12 @@ use Pushery\Billing\ValueObjects\SettlementTransaction;
 use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 
 /**
- * Settles a creator's whole month into ONE self-billing document, dated to the last day of the month, with a
+ * Settles a creator's whole month into one self-billing document, dated to the last day of the month, with a
  * line per transaction — the collective run behind the monthly credit note.
  *
  * The single date is the point. A per-transaction document would scatter a creator's supplies across the
  * month; dating the collective on the month-end (Ultimo) puts the platform's expense, its input tax and the
- * matching output turnover in the SAME period, which is what § 15 UStG's "supply received AND invoice held"
+ * matching output turnover in the same period, which is what § 15 UStG's "supply received AND invoice held"
  * needs, and makes the document total equal to the month's payout run — reconciliation by construction
  * rather than a search. The 6-month issuance limit is met structurally as a consequence.
  *
@@ -38,8 +38,8 @@ use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
  * exactly as a single one would. A single number is drawn for the whole document. Running the same month
  * twice finds the first document rather than minting a second.
  *
- * Different RATES in one document are fine — the writer breaks VAT down per rate — but a month that spans two
- * VAT CATEGORIES (a creator who crosses the small-business threshold mid-month, exempt before and taxed
+ * Different rates in one document are fine — the writer breaks VAT down per rate — but a month that spans two
+ * VAT categories (a creator who crosses the small-business threshold mid-month, exempt before and taxed
  * after) is refused rather than issued with a document-level category that would misstate half the lines;
  * that month waits for per-line category rendering.
  */
@@ -77,7 +77,7 @@ final readonly class CollectiveSelfBillingEngine
         $currency = null;
 
         foreach ($transactions as $transaction) {
-            // WHICH period this transaction counts in, asked before it is priced.
+            // Which period this transaction counts in, asked before it is priced.
             //
             // A caller groups its transactions by month and hands them over; nothing until now checked that
             // what it handed over actually belongs to the month being settled. That silence is affordable
@@ -126,9 +126,9 @@ final readonly class CollectiveSelfBillingEngine
                 throw CollectiveSettlementSpansCurrencies::make($period, $currency, $transaction->net->currency);
             }
 
-            // The REASON is compared alongside the two booleans, and that is not belt-and-braces. Two
+            // The reason is compared alongside the two booleans, and that is not belt-and-braces. Two
             // standings are relieved under different law while both answering `exempt === true` — a creator
-            // who moved between them mid-month passed this check and produced ONE document naming ONE
+            // who moved between them mid-month passed this check and produced one document naming one
             // relief for lines that had two. The booleans cannot see it; only the reason can.
             if ($exempt === null) {
                 $exempt = $treatment->exempt;
@@ -156,10 +156,10 @@ final readonly class CollectiveSelfBillingEngine
                 'tax_rate' => $treatment->showsTax ? $transaction->supplyRateBps / 100 : 0.0,
                 // The service time the line states — a per-line date, admissible as the supply month too.
                 'service_date' => $transaction->supplyDate->format('Y-m-d'),
-                // WHAT was sold, frozen onto the line rather than onto the header.
+                // What was sold, frozen onto the line rather than onto the header.
                 //
                 // The header cannot state these and says so a few lines below: a month has no single
-                // archetype, and "a column that is sometimes right is worse than an empty one". A LINE has
+                // archetype, and "a column that is sometimes right is worse than an empty one". A line has
                 // exactly one, so this is where they belong — and a correction of this transaction reads
                 // them from here instead of copying nothing from the header.
                 //
@@ -170,12 +170,12 @@ final readonly class CollectiveSelfBillingEngine
                 'sold_alongside_archetype' => $characteristics->soldAlongside?->value,
                 'place_of_supply_rule' => $characteristics->placeOfSupply?->value,
                 'tax_rate_category' => $characteristics->rateCategory?->value,
-                // WHICH routed charge this line settles, as the pair that identifies one.
+                // Which routed charge this line settles, as the pair that identifies one.
                 //
                 // The charge-side link (`billing_merchant_charges.settlement_invoice_id`) reaches the
-                // DOCUMENT. On a per-transaction settlement that is enough, because the document is the
+                // document. On a per-transaction settlement that is enough, because the document is the
                 // transaction. Here it is not: one document carries a month, and a correction of one
-                // transaction has to find ITS line.
+                // transaction has to find its line.
                 //
                 // Without this the only way to pick a line would be to match on the date and the amount,
                 // which is a guess — and two identically priced downloads on one day make it a wrong one.
@@ -183,10 +183,10 @@ final readonly class CollectiveSelfBillingEngine
                 // already declines to invent.
                 'charge_provider' => $transaction->chargeProvider,
                 'charge_reference' => $transaction->chargeReference,
-                // The TERMS this transaction was priced under, and the rate its tax was computed at.
+                // The terms this transaction was priced under, and the rate its tax was computed at.
                 //
                 // These are not documentation. A correction of one transaction recomputes the commission on
-                // what REMAINS of it, and it reads the terms off the document it corrects. A collective
+                // what remains of it, and it reads the terms off the document it corrects. A collective
                 // header states none, so a correction against one would compute with a zero commission and
                 // a zero rate — and produce a document that looks complete and is wrong by both.
                 //
@@ -204,7 +204,7 @@ final readonly class CollectiveSelfBillingEngine
                 // of its own while the platform self-assesses at this one.
                 'supply_rate_bps' => $transaction->supplyRateBps,
                 'tax_minor' => $treatment->taxAmount->minorUnits,
-                // What the buyer paid for THIS transaction, frozen for the same reason the header freezes it
+                // What the buyer paid for this transaction, frozen for the same reason the header freezes it
                 // on a per-transaction settlement: a correction states what is being reversed, and
                 // recomputing the fan gross later would reintroduce the rounding this resolved once.
                 //
@@ -269,7 +269,7 @@ final readonly class CollectiveSelfBillingEngine
             // BT-120's ground, carried from the month's treatments rather than left for the renderer to
             // guess. Every line in this document shares it — the loop above refuses a month that does not.
             'tax_exemption_reason' => $exemptionReason,
-            // The frozen tax characteristics are deliberately NOT set here, and the omission is the answer
+            // The frozen tax characteristics are deliberately not set here, and the omission is the answer
             // rather than the same gap one document over. A collective settlement is one document over many
             // transactions, and the archetype is a fact about each of them: a creator who sold a download and
             // a commissioned work in the same month has no single one. Writing whichever came first would
@@ -279,7 +279,7 @@ final readonly class CollectiveSelfBillingEngine
             // the lines, where the answer actually lives, and the sometimes-right one does not.
             //
             // The consequence belongs to whoever builds the reporting run: grouping by archetype over
-            // settlement DOCUMENTS holds for per-transaction settlements and not for these. Here it is the
+            // settlement documents holds for per-transaction settlements and not for these. Here it is the
             // lines, or the single settlements behind them.
             'supply_regime' => $regime,
             'settlement_document_type' => $series === DocumentSeries::SelfBilledInvoice

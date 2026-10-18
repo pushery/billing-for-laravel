@@ -11,8 +11,8 @@ use Pushery\Billing\Enums\RoundingResidual;
 /**
  * What the platform keeps of a routed sale: a rate, a fixed amount, or both.
  *
- * A GROSS take, not a margin. Under the shipped connected-account type the provider's own processing fee is
- * paid by the PLATFORM — stated on the account as `controller.fees.payer` on the pinned API version — so
+ * A gross take, not a margin. Under the shipped connected-account type the provider's own processing fee is
+ * paid by the platform — stated on the account as `controller.fees.payer` on the pinned API version — so
  * what the platform actually nets is this figure minus that fee. Nothing here
  * subtracts it, and nothing could: the package does not know a consumer's pricing with their provider, and
  * a guessed deduction would put every payout figure out by the size of the guess. See
@@ -22,7 +22,7 @@ use Pushery\Billing\Enums\RoundingResidual;
  * per transaction, and a marketplace that could express only one of them would have to approximate the
  * other and explain the difference to somebody eventually.
  *
- * The split is computed as a WHOLE rather than as two independent roundings, and that is the rule that
+ * The split is computed as a whole rather than as two independent roundings, and that is the rule that
  * keeps a cent from appearing out of nothing. Rounding each side separately on a net of 100.05 at 10% gives
  * a payout of 90.05 and a fee of 10.01 — 100.06 between them, a cent nobody paid. One side is computed and
  * the other is the difference, always.
@@ -57,13 +57,13 @@ final readonly class PlatformFee
     /**
      * Split a payment into what the platform keeps and what the merchant is owed.
      *
-     * The rate applies to the WHOLE amount and the flat part is added to it — not the other way round. The
+     * The rate applies to the whole amount and the flat part is added to it — not the other way round. The
      * difference is not cosmetic: charging the rate on what is left after a fixed amount makes the
      * effective rate depend on the transaction size, so the same stated terms would take a different share
      * of a small sale than of a large one. The order here is the one the commercial terms describe, and the
      * one every worked figure in the specification is computed with.
      *
-     * The payout is the DIFFERENCE rather than a second calculation, so the two always sum back to the
+     * The payout is the difference rather than a second calculation, so the two always sum back to the
      * payment. The rate's own share is taken with the bps primitive, which is where the disclosed rounding
      * direction lives; adding the flat amount afterwards cannot move it.
      *

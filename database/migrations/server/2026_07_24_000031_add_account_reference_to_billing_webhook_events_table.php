@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Schema;
  * redelivery of the first. The event that goes missing is silently gone; nothing retries, because the
  * package believes it already handled it.
  *
- * The column defaults to the EMPTY STRING rather than null, and that is load-bearing. In a unique index
+ * The column defaults to the empty string rather than null, and that is load-bearing. In a unique index
  * every null is distinct from every other, so a nullable account column would stop deduplicating platform
  * deliveries altogether — every redelivery of a platform event would insert a new row and re-run every
  * effect. An empty string is a value, and values collide.

@@ -56,12 +56,12 @@ final readonly class FilingCalendar
             }
         }
 
-        // ONLY where there are sellers to report. The annual report is about what other people earned
+        // Only where there are sellers to report. The annual report is about what other people earned
         // through the platform, so an installation that sells nothing but its own products has no such
         // obligation — and being warned about a duty you do not have is not a harmless extra. It sends
         // somebody looking, once a year, for a filing interface they have no account for.
         //
-        // The periodic return above is deliberately NOT gated with it. That one is the platform's own, it
+        // The periodic return above is deliberately not gated with it. That one is the platform's own, it
         // exists whether or not anybody else sells through the platform, and the two share a date — so a
         // gate hung one line higher would trade a wrong reminder for a missing one, which is the expensive
         // direction.

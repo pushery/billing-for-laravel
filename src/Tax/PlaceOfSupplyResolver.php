@@ -11,7 +11,7 @@ use Pushery\Billing\ValueObjects\SupplyPlacement;
 use Pushery\Billing\ValueObjects\TaxContext;
 
 /**
- * Decides where a supply is taxed, in two stages and in that order: the BUYER first, the product second.
+ * Decides where a supply is taxed, in two stages and in that order: the buyer first, the product second.
  *
  * The order is the whole fix. A product's rule is written for consumers, and a validated business in
  * another country moves the place of supply whatever the product says. Reading the product first gives a
@@ -66,7 +66,7 @@ final readonly class PlaceOfSupplyResolver
      * This is the question the consumer-scheme flag turns on, and it was the one nobody asked: "consumer,
      * taxed at destination, cross-border" is true of a sale to any country on earth. Without this test a
      * sale to a buyer outside the union lands in a return written for members only — which makes the
-     * return's POPULATION wrong rather than one of its numbers, the same failure this class already refuses
+     * return's population wrong rather than one of its numbers, the same failure this class already refuses
      * to commit for a business buyer.
      *
      * The code is resolved first, so a place a member folds into itself for VAT is inside the union as that
@@ -83,7 +83,7 @@ final readonly class PlaceOfSupplyResolver
     {
         $recipient = $this->recipientStatus($context);
 
-        // A sale made in person is placed where it is made, BEFORE the buyer stage and instead of it. A
+        // A sale made in person is placed where it is made, before the buyer stage and instead of it. A
         // business from another member state does not move goods handed over in a shop with its VAT id,
         // and a supply that is not a distance sale belongs in no consumer scheme.
         if ($productRule === PlaceOfSupplyRule::PointOfSale) {
@@ -99,7 +99,7 @@ final readonly class PlaceOfSupplyResolver
         $buyerCountry = UnionMembership::territoryOf($context->countryCode);
         $seller = $this->sellerCountry !== null ? UnionMembership::territoryOf($this->sellerCountry) : null;
 
-        // A validated business in ANOTHER union country. The place moves to them and they account for the
+        // A validated business in another union country. The place moves to them and they account for the
         // tax; the consumer scheme never sees it. Cross-border must be provable — a domestic business
         // supply owes ordinary domestic tax, and zero-rating it would under-charge every home-country
         // business at once.
@@ -142,7 +142,7 @@ final readonly class PlaceOfSupplyResolver
     /**
      * The tax context a calculator should be handed for this sale.
      *
-     * This is where the place rule actually bites, and it bites by choosing WHICH COUNTRY CODE goes in. A
+     * This is where the place rule actually bites, and it bites by choosing which country code goes in. A
      * calculator maps a country to a rate; it has no way to know that a particular product is taxed where
      * the seller is rather than where the buyer is. Deciding that here — rather than teaching the
      * calculator about products — keeps one rule in one place and leaves the rate table alone.
@@ -195,7 +195,7 @@ final readonly class PlaceOfSupplyResolver
      * The country to record as "whose rate was applied", or null when the question does not arise.
      *
      * Null for a supply taxed where the seller is, and that is a correction rather than an omission. The
-     * column means the CUSTOMER's country, and writing the seller's into it would hand every report that
+     * column means the customer's country, and writing the seller's into it would hand every report that
      * reads it by its definition — a cross-border return, a country breakdown, an audit extract — the wrong
      * country for every such sale, without a single test going red. A supply taxed at the seller is simply
      * not one of those sales.
@@ -218,7 +218,7 @@ final readonly class PlaceOfSupplyResolver
         }
 
         // A business that proved its registration. The existing candidate test already requires the id to
-        // be present AND confirmed, so an unvalidated one never reaches here.
+        // be present and confirmed, so an unvalidated one never reaches here.
         //
         // A confirmed registration proves a business, not a union member. A provider asks registers beyond
         // the union's (Stripe confirms a `gb_vat` with the UK's), so the confirmation is followed by the

@@ -15,7 +15,7 @@ use Pushery\Billing\Models\RefundAttempt;
  * ## Why this is its own object
  *
  * Two counters replay refunds — the section-19 basis and the withheld-fee figure — and they place a refund
- * in a window by the SAME rule on purpose. They no longer share a window: one is placed by the money, the
+ * in a window by the same rule on purpose. They no longer share a window: one is placed by the money, the
  * other by the settlement document. That is what separated them, and it is not a reason to also separate
  * this.
  *
@@ -42,7 +42,7 @@ final readonly class ChargeReversals
      * creator on a nightly sweep, and the shape this replaced was two aggregates — so fanning out per row
      * would trade a wrong figure for a slow one rather than fixing anything.
      *
-     * Grouped on the provider AND the reference, never the reference alone: it is unique only per provider,
+     * Grouped on the provider and the reference, never the reference alone: it is unique only per provider,
      * so a second processor issuing the same string would hand its reversals to a stranger's sale. The pair
      * is a composite key rather than a foreign one, which is why this is a grouping rather than a relation.
      *
@@ -74,7 +74,7 @@ final readonly class ChargeReversals
                 ->get();
 
             foreach ($attempts as $attempt) {
-                // The whereIn pair is a cross product, so a row is kept only when BOTH halves belong to the same
+                // The whereIn pair is a cross product, so a row is kept only when both halves belong to the same
                 // charge. Filtering here rather than trusting the query is what keeps the composite key honest.
                 $grouped[$attempt->provider.'|'.$attempt->charge_reference][] = $attempt;
             }

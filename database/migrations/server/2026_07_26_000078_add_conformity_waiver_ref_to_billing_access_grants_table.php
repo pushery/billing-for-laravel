@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * The register already carries `conformity_waiver` as a boolean, and a boolean alone cannot be defended. A
  * waiver of conformity updates is only capable of being valid where it was agreed separately and before the
- * contract — never as a config default or an order-form checkbox — so the ONE thing that makes the flag
+ * contract — never as a config default or an order-form checkbox — so the one thing that makes the flag
  * meaningful is being able to point at the agreement behind it. A `true` with nothing behind it is
  * indistinguishable from a bug that set it.
  *

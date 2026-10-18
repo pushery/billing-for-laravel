@@ -117,6 +117,19 @@ class Order extends Model
     }
 
     /**
+     * Whether this order charges the rest of a period for a change inside it: a subscription behind it, and a
+     * proration line in it.
+     *
+     * Such an order names its subscription and the days it covers, as a cycle does, so this is what keeps the engine
+     * from settling it as one: settling a cycle opens the next period, and this order opens nothing.
+     */
+    public function isProration(): bool
+    {
+        return $this->subscription_id !== null
+            && $this->items()->where('type', OrderItemType::Proration)->exists();
+    }
+
+    /**
      * Whether this order's claim was abandoned: taken, never charged, and old enough that nothing is coming.
      *
      * Three conditions, and each one is load-bearing:

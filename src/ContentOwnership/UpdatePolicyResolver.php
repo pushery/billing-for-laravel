@@ -21,16 +21,16 @@ use Pushery\Billing\ValueObjects\VersionResolution;
  *
  * ## Two jobs, at two different times
  *
- * `policyFor()` runs ONCE, when a grant is created, and its answer is frozen onto the row. `resolutionFor()`
+ * `policyFor()` runs once, when a grant is created, and its answer is frozen onto the row. `resolutionFor()`
  * runs on every read and can answer differently each time. Keeping them in one class is deliberate — they
  * are the two halves of one rule set, and splitting them is how the write side and the read side start
  * disagreeing about what "windowed" means.
  *
  * ## Enrichment only, and the line is a legal one
  *
- * These policies govern NEW content, and the creator chooses them. Conformity updates — a defect fix, a
+ * These policies govern new content, and the creator chooses them. Conformity updates — a defect fix, a
  * security patch — are mandatory, cannot be waived by a product setting, and are a separate strand. So there
- * is deliberately no fifth policy here: `Frozen` freezes what a buyer is ENTITLED to and says nothing about
+ * is deliberately no fifth policy here: `Frozen` freezes what a buyer is entitled to and says nothing about
  * what the seller still owes. A fifth case would be a product setting that reads as waiving an obligation
  * that cannot be waived.
  */
@@ -60,7 +60,7 @@ final readonly class UpdatePolicyResolver
     /**
      * When a windowed sale's update window closes, or null when nobody said.
      *
-     * Asked ONCE, at the moment of sale, and frozen onto the row beside the policy it belongs to — a
+     * Asked once, at the moment of sale, and frozen onto the row beside the policy it belongs to — a
      * creator who shortens their window tomorrow shortens it for future sales, not for one already made.
      *
      * The precedence is the policy's: the work's own answer, then the merchant's default. Reversed, a
@@ -93,7 +93,7 @@ final readonly class UpdatePolicyResolver
     /**
      * What the grant resolves to at this moment.
      *
-     * The windowed case is the only one that moves with the clock, and it moves LAZILY: while the window is
+     * The windowed case is the only one that moves with the clock, and it moves lazily: while the window is
      * open the buyer simply gets the newest version, and the boundary only starts applying once the window
      * has closed. Nothing is written when a window lapses — a job that had to stamp every expired grant
      * would be a job that can be late, and a late job here means handing somebody a version they no longer

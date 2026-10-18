@@ -11,7 +11,7 @@ use Pushery\Billing\Support\TableLookup;
  * Index the referencing side of `billing_reporting_filings.corrects_filing_id`.
  *
  * InnoDB creates an index for a foreign key by itself, so on MySQL this has always been there. PostgreSQL
- * indexes the REFERENCED side — it is a key — and leaves the REFERENCING column bare, which is the half a
+ * indexes the referenced side — it is a key — and leaves the referencing column bare, which is the half a
  * `foreignId()->constrained()` reads as if it covered.
  *
  * What it costs on Postgres: `restrictOnDelete()` has to prove no row references the one being deleted, and
@@ -20,7 +20,7 @@ use Pushery\Billing\Support\TableLookup;
  * a plan property, so nothing turns red and no exception is thrown; the table just gets slower in exact
  * proportion to how many periods have been filed.
  *
- * A NEW migration rather than an edit to the original, which shipped in v0.14.0: editing that one would
+ * A new migration rather than an edit to the original, which shipped in v0.14.0: editing that one would
  * index new installs and leave every existing database exactly as it is.
  *
  * `IF NOT EXISTS` is not used, and the guard is a `hasIndex()` check instead, because the index MySQL
@@ -56,7 +56,7 @@ return new class extends Migration
 
     /**
      * Whether the column already leads an index — under its own name, or under the one InnoDB gave the
-     * foreign key. Asked of the LIVE schema rather than of the engine name: a guard that branched on the
+     * foreign key. Asked of the live schema rather than of the engine name: a guard that branched on the
      * driver would be a claim about what each engine does, and this is a question the catalog can answer.
      */
     private function alreadyIndexed(): bool

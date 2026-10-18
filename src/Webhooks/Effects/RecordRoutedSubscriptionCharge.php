@@ -26,14 +26,14 @@ use Pushery\Billing\ValueObjects\RoutedInvoiceCommission;
  * ## What was missing
  *
  * `RoutedChargeLedger::record()` had a single caller in the package: the one-time hosted lane. A routed
- * SUBSCRIPTION moved real money every cycle and left no row at all, so the sale was invisible to the three
+ * subscription moved real money every cycle and left no row at all, so the sale was invisible to the three
  * things that read that table — the reversal caps, the earnings counter, and the small-business judgment.
  * Each of them answered as though the cycle had not happened, and each answer looked perfectly ordinary.
  *
  * ## Why a subscription cannot be recorded the way a one-time sale is
  *
  * The one-time lane writes its row when the checkout session opens, because at that moment there is exactly
- * one sale with one known amount. A subscription is priced with a RATE — the lane sets
+ * one sale with one known amount. A subscription is priced with a rate — the lane sets
  * `application_fee_percent` and the provider applies it per invoice — so there is no moment at which the
  * figures are known in advance. They exist once per cycle, at the provider.
  *
@@ -45,11 +45,11 @@ use Pushery\Billing\ValueObjects\RoutedInvoiceCommission;
  * ## The local row decides whether to ask at all
  *
  * The paid-invoice payload says nothing about routing: no `transfer_data`, no account, not even a link to
- * the payment. So this asks the SUBSCRIPTION this package already recorded.
+ * the payment. So this asks the subscription this package already recorded.
  * An unrouted one stops here, and stopping here is what keeps three provider calls off every payment on
  * every install that routes nothing.
  *
- * ## A read that fails is LOUD, and that is the whole design
+ * ## A read that fails is loud, and that is the whole design
  *
  * The alternative to reading was computing the commission ourselves from the rate. It is cheaper and it is
  * the wrong trade: two derivations of one fact agree until one of them changes, and when they part the
@@ -57,7 +57,7 @@ use Pushery\Billing\ValueObjects\RoutedInvoiceCommission;
  * going red. A failed read, by contrast, throws — the queue retries it, and a permanent failure surfaces as
  * a failed job rather than as a missing row nobody is looking for.
  *
- * That is why this does NOT return quietly when the provider cannot answer. Returning would hand back
+ * That is why this does not return quietly when the provider cannot answer. Returning would hand back
  * exactly the silence the design pays three provider calls to avoid.
  */
 final readonly class RecordRoutedSubscriptionCharge
@@ -103,7 +103,7 @@ final readonly class RecordRoutedSubscriptionCharge
         $charge = $this->ledger->record(
             $merchant,
             'stripe',
-            // The INVOICE is the reference, one per cycle. A subscription id would collapse every cycle of
+            // The invoice is the reference, one per cycle. A subscription id would collapse every cycle of
             // one subscription onto a single row — `firstOrCreate` would find the first cycle's row for the
             // twelfth cycle's payment and record nothing, with every reversal cap thereafter answering for
             // the wrong month.
@@ -113,7 +113,7 @@ final readonly class RecordRoutedSubscriptionCharge
             // Derived, because net is what remains. A third figure from the provider would be a third thing
             // that can disagree with the other two.
             $commission->net(),
-            // The terms as they stood for THIS cycle. Null when the provider stated none, and null here
+            // The terms as they stood for this cycle. Null when the provider stated none, and null here
             // means "unknown" rather than "no fee" -- a partial clawback refuses on it rather than
             // reconstructing one from today's configuration and clawing an old cycle back at a new rate.
             //
@@ -137,7 +137,7 @@ final readonly class RecordRoutedSubscriptionCharge
             paymentReference: $commission->paymentReference,
         );
 
-        // SETTLED AS IT IS WRITTEN, because nothing is left to happen to this money. The paid invoice is the
+        // Settled as it is written, because nothing is left to happen to this money. The paid invoice is the
         // payment having succeeded, and a destination charge moves the merchant's share with the payment itself.
         //
         // Left pending, the row was invisible exactly where it was written to be seen: the earnings counter and the
@@ -150,7 +150,7 @@ final readonly class RecordRoutedSubscriptionCharge
             Bus::dispatch(new NameTransferOnConfirmation((int) $charge->id));
         }
 
-        // A SEPARATE TRANSFER IS NOT SETTLED HERE, because nothing has paid the merchant yet: the platform took the
+        // A separate transfer is not settled here, because nothing has paid the merchant yet: the platform took the
         // cycle's whole payment. The share moves in a second call once the webhook's transaction commits, funded by
         // the charge behind this invoice and made under the sale's own idempotency key, through the same job a
         // confirmed hosted sale on this lane uses. It settles the row with the transfer, or records why it could not

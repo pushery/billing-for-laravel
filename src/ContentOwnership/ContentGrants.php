@@ -27,7 +27,7 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  *
  * ## The gate sits here, before the row, and never after
  *
- * Creating the row IS provision. Where a consumer-rights profile is active and the work is one whose right
+ * Creating the row is provision. Where a consumer-rights profile is active and the work is one whose right
  * of withdrawal ends on delivery, the buyer's declarations must already be on record — so a missing consent
  * means NO ROW, never "access now, paperwork later". That ordering is the whole protection: once somebody
  * can read the work, the thing the record exists to preserve has already been given away.
@@ -90,7 +90,7 @@ final readonly class ContentGrants
     /**
      * A work one person bought for another.
      *
-     * The consent parameter is the PURCHASER'S, and the name says so because nothing else can. The buyer is
+     * The consent parameter is the purchaser's, and the name says so because nothing else can. The buyer is
      * the one with the contract; the recipient has none with us. Declarations collected from the recipient
      * are worth nothing — the right of withdrawal does not end, and every refund inside the window stays a
      * claim rather than a courtesy. That is the single most expensive way to get a gift flow wrong, and it
@@ -119,7 +119,7 @@ final readonly class ContentGrants
             withdrawalType: $withdrawalType,
             declarationReference: $declarationReference,
             acquiredAt: $acquiredAt,
-            // The PURCHASER'S, because they are the one with the contract. The recipient has none with us,
+            // The purchaser's, because they are the one with the contract. The recipient has none with us,
             // so declarations collected from them are worth nothing — and a window computed from them
             // would be the same mistake wearing a date.
             consent: $purchaserConsent,
@@ -152,13 +152,13 @@ final readonly class ContentGrants
     }
 
     /**
-     * Every work the bundle holds AT THIS MOMENT, one row each.
+     * Every work the bundle holds at this moment, one row each.
      *
      * Materialized rather than expanded on read, and that is what makes the non-additive default true by
      * construction: a work added to the bundle next month has no row for anybody who bought before, because
      * nobody wrote one. There is nothing to remember to switch off.
      *
-     * Calling it again for the same buyer TOPS UP what has since been added — but only where the install has
+     * Calling it again for the same buyer tops up what has since been added — but only where the install has
      * said its bundles work that way. That is the whole meaning of `bundle_additive_default`, and it is a
      * real difference rather than a setting that reads well: with it off, a second call is a no-op and the
      * earlier buyer keeps exactly what the bundle held on the day they bought it.
@@ -179,7 +179,7 @@ final readonly class ContentGrants
 
         $additive = $this->config->get('billing.content_ownership.bundle_additive_default') === true;
 
-        // Whether this buyer already holds part of THIS bundle is the only thing that tells a first purchase
+        // Whether this buyer already holds part of this bundle is the only thing that tells a first purchase
         // apart from a top-up, and the two must behave differently. Counting what this call has written so
         // far would not do it: on a first purchase everything after the first work would look like a top-up.
         // Holds, not held: after a refund ended every grant of an earlier purchase, buying the bundle again is
@@ -228,7 +228,7 @@ final readonly class ContentGrants
     /**
      * Mark grants whose term has passed, so a report can count them.
      *
-     * Cosmetic on purpose, and worth saying out loud: NOTHING depends on this having run. The reader decides
+     * Cosmetic on purpose, and worth saying out loud: nothing depends on this having run. The reader decides
      * from the dates, so a grant whose window closed stops granting at the instant it closes whether or not
      * this ever executes. A sweep that access depended on would be a sweep that can be late, and late here
      * means serving a work somebody no longer paid for.
@@ -288,11 +288,11 @@ final readonly class ContentGrants
         ?string $declarationReference = null,
         ?CarbonInterface $acquiredAt = null,
         /**
-         * The buyer's declarations, threaded through for the WINDOW rather than for the gate.
+         * The buyer's declarations, threaded through for the window rather than for the gate.
          *
          * The gate has already run by the time this is called — that ordering is the point of it — so this
          * is not a second check. What the window needs is a fact the gate does not hand on: whether the
-         * right EXTINGUISHED here, which is what a complete consent on an extinguish-on-delivery sale does.
+         * right extinguished here, which is what a complete consent on an extinguish-on-delivery sale does.
          *
          * Inferring it from "the gate let us through" would work today and would be a rule nobody stated,
          * one gate change away from silently putting a date on a right that no longer exists.
@@ -323,7 +323,7 @@ final readonly class ContentGrants
             // Frozen with the sale, like every other fact a document was made under: a creator who changes
             // their policy tomorrow changes it for future sales, not for one already made.
             'update_policy' => $policy = $this->policies->policyFor($content, $merchant),
-            // The LENGTH of a windowed promise, beside the promise itself. It had no writer at all: the
+            // The length of a windowed promise, beside the promise itself. It had no writer at all: the
             // column existed, the policy was documented, and every windowed grant came out with a null
             // window — which the resolver correctly reads as a broken row and bounds at the moment of
             // purchase. That is what `frozen` does, so two of the four documented values of a shipped
@@ -357,7 +357,7 @@ final readonly class ContentGrants
             $raced = $this->existingGrant($owner, $content, $merchant, locking: true);
 
             // Re-thrown rather than papered over: if the row is not there after a uniqueness violation, some
-            // OTHER constraint fired, and quietly returning something plausible would hide a real defect
+            // other constraint fired, and quietly returning something plausible would hide a real defect
             // behind a retry-handling path.
             if (! $raced instanceof AccessGrant) {
                 throw $collision;
@@ -371,7 +371,7 @@ final readonly class ContentGrants
      * Whether the row already there is the answer to this grant: the one this sale wrote, or one that still stands
      * and covers it.
      *
-     * A row that ended, revoked by a refund or past its term, is no answer to ANOTHER sale. Handed back, a buyer
+     * A row that ended, revoked by a refund or past its term, is no answer to another sale. Handed back, a buyer
      * who paid again stayed locked out, a second rental extended nothing, and a refund of the second purchase found
      * no row. A grant without a reference, a comp, is no sale to recognize, so only a standing row answers it.
      *

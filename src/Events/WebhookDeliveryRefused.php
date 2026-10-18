@@ -11,7 +11,7 @@ use Pushery\Billing\Contracts\IpCountryResolver;
  *
  * ## Why a refusal needs an event at all
  *
- * The refusal itself is correct and has never been in doubt. What was missing is that it existed ONLY as
+ * The refusal itself is correct and has never been in doubt. What was missing is that it existed only as
  * an HTTP status handed back to whoever sent it: no event, no log line, no delivery row. A consumer
  * looking for the moment somebody probed their payment endpoint found nothing, because nothing was ever
  * written — and the failure direction is the quiet one, since the endpoint behaves correctly the whole
@@ -20,7 +20,7 @@ use Pushery\Billing\Contracts\IpCountryResolver;
  * A refused delivery is a security event. It is a misconfiguration, an expired signature, or somebody
  * trying; all three are worth seeing, and the third is worth seeing most.
  *
- * ## What it deliberately does NOT carry
+ * ## What it deliberately does not carry
  *
  * **Not the body.** By definition it did not verify, so it is attacker-controlled input; putting it on an
  * event invites it into logs, queues and audit tables that were sized for trusted data.

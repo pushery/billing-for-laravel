@@ -9,7 +9,7 @@ namespace Pushery\Billing\Drivers\Stripe;
  *
  * Stripe moved the link with `2025-03-31.basil`: an invoice no longer carries `subscription`, it names its
  * subscription under `parent.subscription_details.subscription`. The package pins a later version, so every invoice
- * its own client fetches has that shape. A delivered webhook is rendered in the version of its ENDPOINT, though,
+ * its own client fetches has that shape. A delivered webhook is rendered in the version of its endpoint, though,
  * and an endpoint created before `basil` still sends the old field. Both are read, the pinned shape first.
  *
  * The three readers ask here rather than each reading a field on its own, because none of them could notice the

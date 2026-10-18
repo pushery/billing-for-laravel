@@ -12,7 +12,7 @@ use Pushery\Billing\Enums\BillingInterval;
  *
  * ## Why this is one class rather than a line in each caller
  *
- * Two places decide a period: the effect that creates a subscription writes its FIRST one, and the engine
+ * Two places decide a period: the effect that creates a subscription writes its first one, and the engine
  * advances every one after it. Both had the interval hardcoded to a month, and both were wrong the same way
  * — an annual subscriber was charged the annual price again thirty days later, twelve times a year, off
  * their stored mandate.

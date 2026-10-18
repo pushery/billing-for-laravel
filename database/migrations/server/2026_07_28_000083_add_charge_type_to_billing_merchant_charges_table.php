@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * A refund therefore has to know which one it is looking at. The only other source is today's configuration,
  * and that is exactly the mistake the commission terms beside this column were frozen to avoid: an operator
- * who changes `billing.marketplace.charge_type` would have every OLD sale reversed as though it had been
+ * who changes `billing.marketplace.charge_type` would have every old sale reversed as though it had been
  * made under the new lane. On a destination charge read as a separate transfer, nothing reverses and the
  * merchant keeps a share of a refunded sale. Read the other way, the refund carries a `reverse_transfer`
  * flag that quietly does nothing, and the failure looks like success.

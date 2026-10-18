@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## The sequence column is what makes "filed twice" impossible
  *
- * `correction_sequence` is 0 for the first filing of a period and 1, 2, 3 … for each correction. It is NOT
+ * `correction_sequence` is 0 for the first filing of a period and 1, 2, 3 … for each correction. It is not
  * NULL, so the unique key over (year, currency, sequence) bites on every engine: a second first filing
  * collides at sequence 0, and two people racing to file correction 1 collide at 1.
  *
@@ -53,7 +53,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('export_id')->constrained('billing_reporting_exports')->restrictOnDelete();
 
-            // Denormalized from the export on purpose: the uniqueness rule below is about the PERIOD, and a
+            // Denormalized from the export on purpose: the uniqueness rule below is about the period, and a
             // unique key cannot reach through a foreign key to find one.
             $table->unsignedSmallInteger('period_year');
             $table->string('currency', 3);

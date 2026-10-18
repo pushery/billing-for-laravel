@@ -9,20 +9,20 @@ use Pushery\Billing\Enums\SubscriptionState;
 
 /**
  * The hot-path dunning gate: the blocking subscription state for an owner, or null when nothing
- * blocks. Reads ONLY the local subscription row (via the presenter) — no provider call — so it is
+ * blocks. Reads only the local subscription row (via the presenter) — no provider call — so it is
  * outage-safe and cheap. It exists because a synced past_due/incomplete subscription pulls the tier
  * to zero, which would otherwise silently grant the free allowance; it is decoupled from whatever
  * feature it gates.
  *
- * ## This signature is deliberately NOT merchant-scoped
+ * ## This signature is deliberately not merchant-scoped
  *
  * Arrears are per merchant — a fan behind with one creator keeps the others. Asking that question needs a
  * merchant, and this method has nowhere to put one.
  *
  * An optional parameter appended here would fatal every existing implementation at load time, on the
- * changed declaration. That is a MAJOR break, and the marketplace work ships as MINOR.
+ * changed declaration. That is a major break, and the marketplace work ships as minor.
  *
- * So the scoped question lives on a SEPARATE, optional interface — {@see MerchantScopedDunningGuard} — which
+ * So the scoped question lives on a separate, optional interface — {@see MerchantScopedDunningGuard} — which
  * an implementation may add without any consumer noticing. A caller that needs the scope checks for it;
  * one that does not keeps asking exactly what it always asked.
  */

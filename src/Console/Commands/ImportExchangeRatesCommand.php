@@ -24,7 +24,7 @@ use Pushery\Billing\Tax\ExchangeRateImport;
  *
  * ## Off unless asked, twice
  *
- * `billing.tax_exchange_rates.enabled` has to be on AND `currencies` has to list something. Two switches
+ * `billing.tax_exchange_rates.enabled` has to be on and `currencies` has to list something. Two switches
  * rather than one because they are two decisions: whether to hold rates locally at all, and which
  * currencies you actually settle in. A package that inferred the second would dial out for currencies
  * nobody sells in — and a package that contacts a public service because it happened to be installed is an
@@ -35,7 +35,7 @@ use Pushery\Billing\Tax\ExchangeRateImport;
  * It re-fetches `lookback_days` back rather than yesterday alone. A publisher revises, a run is missed, a
  * machine sleeps through a night. Importing is idempotent, so an overlap costs a few rows rewritten with
  * the same figures — while a one-day window turns any missed run into a permanent hole in the series, and
- * the reader answers a hole with the NEXT publication day's rate, which is a real figure for the wrong date.
+ * the reader answers a hole with the next publication day's rate, which is a real figure for the wrong date.
  *
  * ## One observation, two rules
  *

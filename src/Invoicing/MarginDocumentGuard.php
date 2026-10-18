@@ -17,7 +17,7 @@ use RuntimeException;
  * ## Why stating the tax is worse than merely wrong
  *
  * On an ordinary document a wrong tax figure is a wrong figure. Here it is an additional debt: the seller
- * owes the tax on the margin AND the amount they wrote down, and the buyer cannot deduct either — so the
+ * owes the tax on the margin and the amount they wrote down, and the buyer cannot deduct either — so the
  * money leaves and helps nobody. The failure has no symptom at issue time; it surfaces at an audit, by which
  * point every document of that kind carries it.
  *

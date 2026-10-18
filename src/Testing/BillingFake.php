@@ -30,7 +30,7 @@ use Pushery\Billing\ValueObjects\SubscriptionStart;
  * {@see StartsSubscriptions}, {@see SubscriptionActions}, {@see OneTimeCharge}) and the receiving side
  * ({@see MerchantOnboarding}, and {@see CanReceiveMoney}, which refuses every merchant until
  * `allowMerchantsToReceive()`). Bind it (via {@see Billing::fake()}) and the app's billing
- * flows record their intent instead of talking to a provider, so a consumer's test can assert what WOULD
+ * flows record their intent instead of talking to a provider, so a consumer's test can assert what would
  * have happened — the same convenience as `Bus::fake()` / `Notification::fake()`, but for billing.
  *
  * The subscribe/purchase seams return a harmless fake ClientIntent (a redirect that goes nowhere), so a
@@ -60,7 +60,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     private array $receiveChecks = [];
 
     /**
-     * What the receive gate answers. It defaults to DENY, matching the fail-closed contract it stands in
+     * What the receive gate answers. It defaults to deny, matching the fail-closed contract it stands in
      * for: a fake that permitted by default would let a consumer's test pass over a path production would
      * have refused, which is the one thing a billing fake must never do.
      */
@@ -76,10 +76,10 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null): ClientIntent
     {
         // The type is recorded too, because it is the one argument a consumer cannot verify any other way:
-        // it decides WHICH local row the sale will end up in, and a fake that dropped it would let a screen
+        // it decides which local row the sale will end up in, and a fake that dropped it would let a screen
         // pass its tests while sending every contract to the default row.
         //
-        // The caller's own key for the same reason, one step further out: it decides whether the CONSUMER'S
+        // The caller's own key for the same reason, one step further out: it decides whether the consumer's
         // row can be found again at all, and a fake that dropped it would let a screen pass while sending
         // a business purchase off with no key — which is the case that has no fallback.
         $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => $buyerCountry, 'collectTaxId' => $collectTaxId, 'type' => $type, 'callerReference' => $callerReference];
@@ -127,7 +127,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
 
     public function tip(Model $billable, Money $chosen, TaxArchetype $soldAlongside, ?string $declarationReference = null, ?string $buyerCountry = null): ClientIntent
     {
-        // Recorded on its OWN list rather than beside the purchases, and the separation is what a consumer
+        // Recorded on its own list rather than beside the purchases, and the separation is what a consumer
         // asserts against: a tip has no add-on key, so a shared list would have to carry a null where every
         // other row carries a string, and `assertPurchased('pro-pack')` would have to learn to skip rows
         // that are not purchases at all.
@@ -185,10 +185,10 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     /**
      * The same checkout, with the coupon the caller actually passed.
      *
-     * A SEPARATE method rather than an optional third parameter on assertSubscribeStarted(), and that is the
+     * A separate method rather than an optional third parameter on assertSubscribeStarted(), and that is the
      * whole design: an optional `?string $coupon = null` cannot tell "assert no coupon was passed" from "do
      * not check the coupon", because both spell it `null`. The first is exactly what a consumer validating a
-     * code before checkout needs to prove -- that an invalid code did NOT reach the seam.
+     * code before checkout needs to prove -- that an invalid code did not reach the seam.
      *
      * It matters because the package deliberately ignores a bad code downstream rather than failing the
      * checkout. That is right here and wrong on a consumer's own order form, where showing a discount the
@@ -230,7 +230,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      * The subscription start, with the declaration reference the caller actually passed.
      *
      * The subscription twin of assertPurchasedWithDeclaration(), with the same null semantics: `null` asserts that
-     * NO reference was passed.
+     * no reference was passed.
      */
     public function assertSubscribeStartedWithDeclaration(Model $owner, string $tierKey, ?string $declarationReference): void
     {
@@ -262,7 +262,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     }
 
     /**
-     * The subscription start, with WHICH contract it opens.
+     * The subscription start, with which contract it opens.
      *
      * Recorded since the type existed and not askable until now, which made the recording a claim rather than
      * a capability: a consumer whose screen dropped the type had no way to notice, and the argument decides
@@ -301,7 +301,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     /**
      * The subscription start, with the caller's own correlation key.
      *
-     * This is the one a BUSINESS checkout has to be asserted on, because it is the only key such a purchase
+     * This is the one a business checkout has to be asserted on, because it is the only key such a purchase
      * carries: there is no declaration reference on a sale to a buyer who has no right of withdrawal. A screen
      * that forgets to pass it sends the sale off with nothing to match the consumer's own row against, and
      * nothing else in a test would notice.
@@ -387,7 +387,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      * under the given merchant and of the given contract type when those are.
      *
      * Compared as a moment, not as text, so a moment held in another time zone still matches. A failure names
-     * the moments the owner WAS canceled to, because that is the answer the reader goes looking for.
+     * the moments the owner was canceled to, because that is the answer the reader goes looking for.
      */
     public function assertCanceledAt(Model $owner, ?CarbonInterface $endsAt = null, ?MerchantScope $merchant = null, ?string $type = null): void
     {
@@ -419,7 +419,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
             : "Expected a cancellation to [{$wanted}], but the owner was canceled to [".implode(', ', $seen).'].');
     }
 
-    /** The owner's subscription was NOT canceled to a moment, under the given merchant and of the given type when named. */
+    /** The owner's subscription was not canceled to a moment, under the given merchant and of the given type when named. */
     public function assertNotCanceledAt(Model $owner, ?MerchantScope $merchant = null, ?string $type = null): void
     {
         $this->assertNoLifecycle($owner, 'cancelAt', $merchant, $type);
@@ -432,7 +432,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     }
 
     /**
-     * The owner's subscription was NOT canceled: under the given merchant when one is named, under none at all when
+     * The owner's subscription was not canceled: under the given merchant when one is named, under none at all when
      * none is. A failure lists every action the owner did see, because that is what the reader of a failing negative
      * assertion goes looking for.
      */
@@ -441,13 +441,13 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         $this->assertNoLifecycle($owner, 'cancel', $merchant, $type);
     }
 
-    /** The owner's subscription did NOT end immediately, under the given merchant and of the given type when named. */
+    /** The owner's subscription did not end immediately, under the given merchant and of the given type when named. */
     public function assertNotCanceledNow(Model $owner, ?MerchantScope $merchant = null, ?string $type = null): void
     {
         $this->assertNoLifecycle($owner, 'cancelNow', $merchant, $type);
     }
 
-    /** The owner's cancellation was NOT taken back, under the given merchant and of the given type when named. */
+    /** The owner's cancellation was not taken back, under the given merchant and of the given type when named. */
     public function assertNotResumed(Model $owner, ?MerchantScope $merchant = null, ?string $type = null): void
     {
         $this->assertNoLifecycle($owner, 'resume', $merchant, $type);
@@ -518,7 +518,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      * The same purchase, with the declaration reference the caller actually passed.
      *
      * The twin of assertSubscribeStartedWithCoupon(), for the same reason and with the same null semantics:
-     * `null` asserts that NO reference was passed. purchase() already explains why it records the value --
+     * `null` asserts that no reference was passed. purchase() already explains why it records the value --
      * "a fake that swallowed it would make the round trip untestable from outside" -- and this is the half
      * that makes good on it.
      */
@@ -632,7 +632,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     }
 
     /**
-     * The gate was asked about this merchant AND said no.
+     * The gate was asked about this merchant and said no.
      *
      * Both halves are asserted on purpose. "The gate denied" is worth nothing without "the gate was
      * consulted": a routed payment that never reached the gate at all would otherwise satisfy an assertion
@@ -688,7 +688,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
             return;
         }
 
-        // The scopes it DID run under go in the message, for the reason the coupon assertion gives: the fake
+        // The scopes it did run under go in the message, for the reason the coupon assertion gives: the fake
         // is holding the answer, and a bare "it did not happen" sends the reader off to add a dump.
         PHPUnit::assertTrue($found, sprintf(
             'Expected the subscription action [%s] for the owner%s%s, but %s.',

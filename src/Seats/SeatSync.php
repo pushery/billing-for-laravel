@@ -13,7 +13,7 @@ use Pushery\Billing\Events\SeatQuantityChanged;
 /**
  * Keeps the seat quantity a team is billed for in step with the seats it actually occupies.
  *
- * This is provider-neutral on purpose: it decides WHETHER a change is needed and delegates the actual
+ * This is provider-neutral on purpose: it decides whether a change is needed and delegates the actual
  * provider call to {@see SeatBilling}. That split is what lets one service serve every driver, and it is
  * why a membership change — a member joining, leaving, being removed — can safely re-sync seats without the
  * caller knowing anything about the billing provider.

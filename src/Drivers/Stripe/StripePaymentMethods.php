@@ -24,7 +24,7 @@ use Stripe\Subscription as StripeSubscription;
  * In-app payment-method management for the Stripe driver. It talks to Stripe's PaymentMethod / Customer
  * APIs directly and hands back neutral value objects, so the account hub never sees a Stripe object.
  * The billable's Stripe customer is resolved through the StripeCustomerRegistry, so adding a card to an
- * account that has never checked out creates a customer WITH the owner's identity on it — Stripe needs a
+ * account that has never checked out creates a customer with the owner's identity on it — Stripe needs a
  * name and an email to put on the invoice and the receipt.
  *
  * Both mutating verbs confirm the method belongs to the billable's Stripe customer first: the method ids
@@ -199,7 +199,7 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
     {
         $customerId = $this->customers->find($billable);
 
-        // Detaching is GLOBAL to the method id: Stripe does not ask whose it is, so the customer check
+        // Detaching is global to the method id: Stripe does not ask whose it is, so the customer check
         // is ours to make. Without it one owner's browser could detach another's card and break their
         // next renewal — the same guard the read path makes before streaming a document (StripeInvoices).
         if ($customerId === null || ! $this->ownsMethod($customerId, $methodId)) {
@@ -260,7 +260,7 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
         try {
             $method = $this->stripe->paymentMethods->retrieve($methodId);
         } catch (RateLimitException $e) {
-            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // A 429 is transient and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException) {

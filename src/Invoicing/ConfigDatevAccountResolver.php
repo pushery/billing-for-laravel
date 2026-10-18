@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\DatevAccount;
 /**
  * Resolves a business transaction to a DATEV account from the configured chart of accounts.
  *
- * This class carries NO account numbers of its own — they all live in config (a chart of accounts is
+ * This class carries no account numbers of its own — they all live in config (a chart of accounts is
  * jurisdiction-specific, and putting a number in code would bury a German-only value in the neutral core).
  * When no chart is selected it falls back to the single-seller revenue account, which is what keeps the
  * shipped export byte-for-byte unchanged. A transaction with no configured account is refused, never booked
@@ -53,10 +53,10 @@ final readonly class ConfigDatevAccountResolver implements DatevAccountResolver
         $revenue = $this->config->get('billing.datev.revenue_account');
 
         // The single-seller revenue account is treated as automatic: the export has never set a
-        // BU-Schlüssel, and that stays the correct behavior. An UNSET account resolves to an empty number,
-        // NOT an error — the shipped export deliberately emits a blank Gegenkonto for an unconfigured install
+        // BU-Schlüssel, and that stays the correct behavior. An unset account resolves to an empty number,
+        // not an error — the shipped export deliberately emits a blank Gegenkonto for an unconfigured install
         // (a valid template to fill in later), and that byte-for-byte behavior must be preserved. Fail-closed
-        // is for a SELECTED chart with a missing account, not for the single-seller template.
+        // is for a selected chart with a missing account, not for the single-seller template.
         return new DatevAccount(is_scalar($revenue) ? (string) $revenue : '', automatic: true);
     }
 
@@ -95,7 +95,7 @@ final readonly class ConfigDatevAccountResolver implements DatevAccountResolver
      * The reverse-charge transaction key of a chart entry, validated where it is read.
      *
      * Unset means the chart declares none and the field stays out of the file. A value that is present but
-     * cannot be one — zero, negative, more than three digits, not a number — is REFUSED here rather than
+     * cannot be one — zero, negative, more than three digits, not a number — is refused here rather than
      * emitted: the format description says zero is not permitted, and a key that is merely wrong books the
      * right amount under the wrong tax circumstance, which reconciles perfectly and is wrong all the same.
      *

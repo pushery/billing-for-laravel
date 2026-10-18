@@ -55,7 +55,7 @@ final readonly class PlanSwapPlanner
         $current = $this->entitlementsFor($currentTierKey);
         $target = $this->entitlementsFor($targetTierKey);
 
-        // isUpgradeOver is strict (>): equal ranks are not an upgrade. Two DIFFERENT keys can only share a
+        // isUpgradeOver is strict (>): equal ranks are not an upgrade. Two different keys can only share a
         // rank if one is unranked (-1), in which case moving toward the ranked one is the upgrade and away
         // from it the downgrade — the strict comparison lands both correctly.
         return $target->isUpgradeOver($current) ? Direction::Upgrade : Direction::Downgrade;

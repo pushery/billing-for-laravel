@@ -14,6 +14,7 @@ use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\BillingInterval;
+use Pushery\Billing\Enums\CollectionTiming;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -54,6 +55,8 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * @property ?Carbon $seat_quantity_since
  * @property int $seat_days_accrued
  * @property int $tier_adjustment_accrued
+ * @property ?CollectionTiming $collection_timing
+ * @property ?Carbon $paused_at
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
@@ -70,7 +73,8 @@ class Subscription extends Model
         'trial_ends_at', 'ends_at', 'terminated_at', 'delinquent_since', 'dunning_level', 'payment_reminded_on', 'synced_event_at',
         'current_period_start', 'current_period_end', 'scheduled_processing_at',
         'merchant_uid', 'merchant_type', 'merchant_id', 'declaration_reference', 'started_at',
-        'seat_quantity', 'seat_quantity_since', 'seat_days_accrued', 'tier_adjustment_accrued',
+        'seat_quantity', 'seat_quantity_since', 'seat_days_accrued', 'tier_adjustment_accrued', 'collection_timing',
+        'paused_at',
     ];
 
     /**
@@ -102,7 +106,7 @@ class Subscription extends Model
         'ends_at' => UtcDateTime::class,
         'delinquent_since' => UtcDateTime::class,
         'dunning_level' => 'integer',
-        // A DATE, not a datetime: the marker answers "was a reminder sent today", and a time of day would
+        // A date, not a datetime: the marker answers "was a reminder sent today", and a time of day would
         // make that comparison depend on when the sweep happens to run.
         'payment_reminded_on' => 'date',
         'terminated_at' => UtcDateTime::class,
@@ -116,6 +120,8 @@ class Subscription extends Model
         'seat_quantity_since' => UtcDateTime::class,
         'seat_days_accrued' => 'integer',
         'tier_adjustment_accrued' => 'integer',
+        'collection_timing' => CollectionTiming::class,
+        'paused_at' => UtcDateTime::class,
     ];
 
     public function onTrial(): bool
@@ -163,8 +169,9 @@ class Subscription extends Model
      * Whether the period in progress is the subscription's last: it was canceled to a moment at or before the
      * period's end.
      *
-     * A driver that collects a period at its end reads this when it does: the cycle then closes the
-     * subscription instead of opening the next period.
+     * The local engine reads this when the period ends. Collected in arrears, the cycle that closes the period then
+     * ends the subscription instead of opening the next period; collected in advance, the period is paid already and
+     * the subscription simply ends.
      */
     public function endsWithThisPeriod(): bool
     {
@@ -218,12 +225,23 @@ class Subscription extends Model
      * Whether this subscription expired for good and cannot be revived.
      *
      * Distinct from `onGracePeriod()` and from a status of `ended`: those describe where the row stands
-     * today, this records that a decision was taken. A payment arriving after it is a NEW subscription, not
+     * today, this records that a decision was taken. A payment arriving after it is a new subscription, not
      * a resumption of this one — so the marker has to survive every status a provider may report afterwards.
      */
     public function terminated(): bool
     {
         return $this->terminated_at !== null;
+    }
+
+    /**
+     * Whether the local engine collects each period of this subscription when it begins.
+     *
+     * Read from the column the start wrote. A row started before the column existed holds null and is collected in
+     * arrears, as it always was: switching it would collect the period in progress twice.
+     */
+    public function collectsInAdvance(): bool
+    {
+        return $this->collection_timing === CollectionTiming::InAdvance;
     }
 
     /** Billing is paused: no invoice is being raised, so no paid tier is being paid for. */
@@ -253,7 +271,7 @@ class Subscription extends Model
     /** Drop a pending plan change — the customer canceled it, or a new upgrade took effect immediately. */
     public function cancelScheduledSwap(): void
     {
-        // Cleared when EITHER column is set, not only when the tier is: a malformed row (a date with no
+        // Cleared when either column is set, not only when the tier is: a malformed row (a date with no
         // tier) must also be clearable, or the runner would re-select it by date on every pass and never
         // shake it loose. A row with both already null needs no write.
         if ($this->scheduled_tier_key === null && $this->scheduled_swap_at === null) {
@@ -344,13 +362,13 @@ class Subscription extends Model
     }
 
     /**
-     * Narrow a query to ONE contract type — the default one when none is named.
+     * Narrow a query to one contract type — the default one when none is named.
      *
      * The uniqueness of a row is (owner, type, merchant), and `ofDefaultType()` answers only about the
      * first of those contracts. A second one with the same merchant — a sponsorship beside a subscription,
      * measured in a consumer — is a different row that the default scope cannot see, and a reader that
      * cannot see it does not report a gap: it reports the other contract's row as if it were the one asked
-     * for. So the default is expressed THROUGH this scope rather than beside it, and the thirteen callers
+     * for. So the default is expressed through this scope rather than beside it, and the thirteen callers
      * of `ofDefaultType()` keep their exact meaning while gaining a way to say which one they mean.
      *
      * @param  Builder<self>  $query
@@ -376,11 +394,11 @@ class Subscription extends Model
     }
 
     /**
-     * Narrow a query to rows that belong to a MERCHANT rather than to the platform itself.
+     * Narrow a query to rows that belong to a merchant rather than to the platform itself.
      *
      * The inverse of the sentinel, and it exists so that a marketplace-only mechanism can say so in one
      * clause instead of reading the marketplace flag. The two are not the same test: the flag says whether
-     * the surface is switched on, this says whether THIS ROW came through it. A single-seller install has no
+     * the surface is switched on, this says whether this row came through it. A single-seller install has no
      * non-platform row at all, so a sweep narrowed this way is byte-identical there whatever the flag does —
      * and an install that later switches the flag on does not retroactively pull its own platform
      * subscriptions into a marketplace rule.
@@ -402,14 +420,14 @@ class Subscription extends Model
         SubscriptionState::Active->value,
         SubscriptionState::Grace->value,
         SubscriptionState::PastDue->value,
-        // TRIALING BELONGS HERE, and it was missing for as long as nothing in this package created
+        // Trialing belongs here, and it was missing for as long as nothing in this package created
         // a local trialing subscription. Under a provider that drives its own cycle the trial ends
         // at the provider and arrives as an event, so the sweep never had to see one.
         //
         // A local-engine trial is scheduled at its own END, so it is due exactly once: at the
         // moment the free period stops. Without it on this list the row was invisible to the run
         // that collects — no charge, no state change, no log line, and a customer keeping their
-        // access indefinitely for nothing. The date is what keeps a RUNNING trial untouched, and
+        // access indefinitely for nothing. The date is what keeps a running trial untouched, and
         // it is the same mechanism that keeps every other state from being collected early.
         SubscriptionState::Trialing->value,
     ];
@@ -420,7 +438,7 @@ class Subscription extends Model
      *
      * The state filter is the only thing between a canceled customer and a fresh debit, because a local
      * engine charges on its own initiative rather than being told to by a provider. So the list is stated
-     * as what IS charged rather than as what is not — a new state added tomorrow is then excluded until
+     * as what is charged rather than as what is not — a new state added tomorrow is then excluded until
      * somebody decides otherwise, which is the safe direction for a query that moves money.
      *
      * Three states are in, and one of them is worth saying out loud. `Grace` is a subscription the customer
@@ -447,7 +465,7 @@ class Subscription extends Model
      * Whether this owner has ever been granted a subscription trial.
      *
      * One reader for a fact that three places need and that must not be answered differently by any of
-     * them: the starter decides whether to grant one, the plan screen decides whether to ADVERTISE one,
+     * them: the starter decides whether to grant one, the plan screen decides whether to advertise one,
      * and the mandate effect must not erase the evidence when it reuses the row. A screen that promised
      * what the starter refuses is the same defect as a starter that granted what the screen did not offer
      * — only the customer notices it later, after pressing a button that said "includes a free trial".
@@ -457,7 +475,7 @@ class Subscription extends Model
      * the column keeps saying that a trial was granted once. A separate counter would be a second version
      * of one fact, and it would drift the first time anything else wrote the row.
      *
-     * Deliberately NOT the owner's own `trial_ends_at`, which the GENERIC trial owns and `onGenericTrial()`
+     * Deliberately NOT the owner's own `trial_ends_at`, which the generic trial owns and `onGenericTrial()`
      * reads as "a tier is unlocked without a subscription".
      */
     public static function ownerHasHadATrial(Model $owner): bool
@@ -471,7 +489,7 @@ class Subscription extends Model
     }
 
     /**
-     * Whether a NEW subscription may take this row's place.
+     * Whether a new subscription may take this row's place.
      *
      * One question, one answer, read from two sides that must never disagree: `LocalSubscriptionStarter`
      * asks it before sending a customer to the provider, and `StartSubscriptionOnMandate` asks it again
@@ -506,10 +524,24 @@ class Subscription extends Model
      */
     public function advanceCycle(BillingInterval $interval): void
     {
+        $this->update($this->nextCycle($interval));
+    }
+
+    /**
+     * The columns the next period opens with, written nowhere: the period after this one on the interval, the run
+     * scheduled to its end, and nothing billed of it yet.
+     *
+     * {@see self::advanceCycle()} writes them. The engine reads them on a copy of the row to price the period a run
+     * will open before the run comes.
+     *
+     * @return array<string, mixed>
+     */
+    public function nextCycle(BillingInterval $interval): array
+    {
         $start = $this->current_period_end ?? Carbon::now()->utc();
         $end = $interval->advance($start, $this->cycleAnchor());
 
-        $this->update([
+        return [
             'current_period_start' => $start,
             'current_period_end' => $end,
             'scheduled_processing_at' => $end,
@@ -518,7 +550,7 @@ class Subscription extends Model
             'seat_days_accrued' => 0,
             // So does the tier: every day of the new period is at the tier in force now.
             'tier_adjustment_accrued' => 0,
-        ]);
+        ];
     }
 
     /**

@@ -20,7 +20,7 @@ use Pushery\Billing\Enums\BillingAction;
  * The base every billing notice extends. It carries the three things that are the same for all of them,
  * so no individual notice can get them wrong:
  *
- * 1. **Queued AFTER COMMIT.** A webhook effect claims, sends and marks itself handled in ONE transaction;
+ * 1. **Queued AFTER COMMIT.** A webhook effect claims, sends and marks itself handled in one transaction;
  *    deferring the mail to the commit is what guarantees a run that rolled back cannot have mailed the
  *    customer, and a run that failed before committing is retried rather than silently losing the notice.
  *
@@ -28,7 +28,7 @@ use Pushery\Billing\Enums\BillingAction;
  *    `database` in `config('billing.notifications.channels')`. Every billing notice already carries a
  *    `toArray()` payload, so the database channel works the moment it is turned on.
  *
- * 3. **What it is** — {@see category()} / {@see isSuppressible()}. A billing notice is TRANSACTIONAL (a
+ * 3. **What it is** — {@see category()} / {@see isSuppressible()}. A billing notice is transactional (a
  *    failed payment, a receipt, a trial about to end, an account about to be suspended). It is therefore
  *    NON-SUPPRESSIBLE: a preference screen must never offer to switch it off, because the customer would
  *    be opting out of being told their money did not move. That decision is made once, here, and is final

@@ -18,7 +18,7 @@ use Pushery\Billing\Tax\UnionMembership;
  *
  * A category each writer derived itself would be two copies of one rule, and two copies are two places
  * it can drift. The drift has no symptom — each document is internally consistent, and only a reader
- * comparing a UBL and a CII rendering of the SAME invoice would ever see them disagree.
+ * comparing a UBL and a CII rendering of the same invoice would ever see them disagree.
  *
  * ## What the two booleans could not say
  *
@@ -29,14 +29,14 @@ use Pushery\Billing\Tax\UnionMembership;
  *   statements. `Z` says "the supplier taxed this at 0%"; `G` says "this was exported, no tax charged".
  *   Different exemption code, different treatment at the recipient, and the difference is not recoverable
  *   from the document afterwards.
- * - **`K`** — an exempt intra-community supply of GOODS, which the chain renders as `AE`. `AE` is the services term;
+ * - **`K`** — an exempt intra-community supply of goods, which the chain renders as `AE`. `AE` is the services term;
  *   goods take `K` with VATEX-EU-IC.
  *
  * The distinction both need is goods-versus-services, and that is a fact about the product, which the
  * document already freezes as `tax_archetype`. So the category is decided from the frozen exemption reason
- * AND the frozen archetype — never from the amount, which is the same zero in every one of these cases.
+ * and the frozen archetype — never from the amount, which is the same zero in every one of these cases.
  *
- * - **`O`** — a SERVICE placed outside the union is outside the SCOPE of VAT, not taxed at zero. `Z` would
+ * - **`O`** — a service placed outside the union is outside the scope of VAT, not taxed at zero. `Z` would
  *   say the tax reached the supply and the rate was nothing; `O` says it never reached it. It rests on
  *   BR-O-11: the category is **exclusive**, so an invoice carrying an O breakdown may carry no other, and
  *   the BR-O-* rules forbid it stating a tax amount or a rate at all. A taxed band on such a document is
@@ -114,7 +114,7 @@ final readonly class EnInvoiceTaxCategory
         }
 
         // A supply frozen as leaving the union, stated as going to a member of it, is a contradiction in the
-        // document's OWN data. Refused rather than rendered: whichever of the two is wrong, one of them is,
+        // document's own data. Refused rather than rendered: whichever of the two is wrong, one of them is,
         // and a document that asserts both is worse than no document — it would claim an exemption its own
         // destination disproves, and only an auditor comparing the two fields would ever notice.
         if ($exemption === TaxExemptionReason::SuppliedOutsideTheUnion
@@ -138,9 +138,9 @@ final readonly class EnInvoiceTaxCategory
                 throw ContradictoryExemption::taxedMarginSupply($rate);
             }
 
-            // ONE CODE PER GOODS CLASS. The directive names three classes and gives each its own exemption
+            // One code per goods class. The directive names three classes and gives each its own exemption
             // code, so one code for all of them would send a work of art out under the second-hand code --
-            // a statement about WHICH scheme applied, wrong, in the field a receiving system reads to decide
+            // a statement about which scheme applied, wrong, in the field a receiving system reads to decide
             // how to book it.
             //
             // Read off the basis' own goods class rather than matched a second time here: the enum names
@@ -154,7 +154,7 @@ final readonly class EnInvoiceTaxCategory
 
         $goods = self::isGoods($archetype);
 
-        // Asked before `$exempt`, because a reverse charge IS an exemption and would otherwise be flattened
+        // Asked before `$exempt`, because a reverse charge is an exemption and would otherwise be flattened
         // into E — losing both the category and the buyer's obligation to account for the tax.
         if ($exemption === TaxExemptionReason::ReverseCharge) {
             return $goods
@@ -166,7 +166,7 @@ final readonly class EnInvoiceTaxCategory
             return new self('G', 'VATEX-EU-G', 'Export outside the EU');
         }
 
-        // A SERVICE placed outside the union is outside the SCOPE of VAT, which is a different statement
+        // A service placed outside the union is outside the scope of VAT, which is a different statement
         // from "taxed at zero". `O` says the tax does not reach this supply at all; `Z` says it reached it
         // and the rate happened to be nothing. Only the first is true here, and the difference is not
         // recoverable from the document later.
@@ -227,7 +227,7 @@ final readonly class EnInvoiceTaxCategory
      * Whether an archetype is a supply of goods rather than a service.
      *
      * Here rather than on `TaxArchetype`, and that placement is enforced: `ProductTaxonomyTest` asserts the
-     * enum carries NO accessors, because an accessor on it would hard-code one jurisdiction's answer into a
+     * enum carries no accessors, because an accessor on it would hard-code one jurisdiction's answer into a
      * fact that every jurisdiction shares, and a consumer elsewhere could not replace it without replacing
      * the enum.
      *

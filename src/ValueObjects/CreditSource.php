@@ -11,7 +11,7 @@ use InvalidArgumentException;
  * What caused a credit-balance movement — an add-on purchase, a refund attempt, an order.
  *
  * It exists as its own type rather than as a second `Model` parameter on the ledger, and the reason is a
- * guard rather than taste. `CreditLedgerContainmentTest` treats ANY call taking two models as the shape of
+ * guard rather than taste. `CreditLedgerContainmentTest` treats any call taking two models as the shape of
  * value moving between parties, because that shape is the risk whatever the author meant by it — and a
  * cause passed as a model is indistinguishable from a second owner to a reader and to the check alike.
  *

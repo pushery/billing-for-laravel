@@ -43,14 +43,14 @@ enum TaxExemptionReason: string
      * The supplier is relieved under their own state's small-business scheme.
      *
      * Taxable in principle and relieved in fact, which is why it is category E and not Z: there is a supply,
-     * and a relief was claimed on it. The document has to say WHICH relief — a credit note the platform
+     * and a relief was claimed on it. The document has to say which relief — a credit note the platform
      * raises in the creator's name that states only "tax exempt" claims a relief without naming its ground,
      * and the creator is the one an audit asks.
      */
     case DomesticSmallBusiness = 'domestic_small_business';
 
     /**
-     * The supplier is a small business in ANOTHER member state, relieved under the cross-border scheme.
+     * The supplier is a small business in another member state, relieved under the cross-border scheme.
      *
      * Separate from the domestic case rather than folded into it, because the two are relieved under
      * different law and only one of them is relieved by the platform's own statute. A platform-issued

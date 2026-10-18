@@ -20,7 +20,7 @@ use Pushery\Billing\Models\CreatorTaxStatusRecord;
 use Pushery\Billing\Support\LockedRow;
 
 /**
- * The creator tax-status time series: the only place a status is RECORDED, and the only place the series is
+ * The creator tax-status time series: the only place a status is recorded, and the only place the series is
  * interpreted — which interval governs a given date.
  *
  * It is not the only code that touches the table. Two sweeps go to
@@ -30,10 +30,10 @@ use Pushery\Billing\Support\LockedRow;
  *
  * Neither is a violation: they touch a bookkeeping column and re-read intervals this class produced, and
  * neither splits or appends. But "the only reader" is the kind of claim someone builds on — it is exactly
- * what makes a change here look safe — so what this class actually owns is stated instead: the SPLIT rule
+ * what makes a change here look safe — so what this class actually owns is stated instead: the split rule
  * below, and the interpretation of which interval applies.
  *
- * Recording a status SPLITS the series rather than appending to it. A status recorded with a start date in
+ * Recording a status splits the series rather than appending to it. A status recorded with a start date in
  * the past is the normal case, not an exception — somebody establishes in April what was already true in
  * January — and the interval that contained that date has to end there while everything after it stays
  * exactly as it was. Appending would leave two intervals claiming the same day, and which one a document
@@ -58,7 +58,7 @@ final readonly class CreatorTaxStatusLedger implements CreatorTaxStatusResolver
 
             // An expired attestation is not a weaker standing, it is no standing. Answering here rather than
             // relying on a scheduled job to rewrite the series is the fail-safe half: a job that did not run
-            // would otherwise leave a stale declaration reading as current, and it would read as a RECORDED
+            // would otherwise leave a stale declaration reading as current, and it would read as a recorded
             // answer rather than as an assumption — the harder kind to notice.
             return $row->hasExpiredBy($at) ? CreatorTaxStatus::Unclarified : $row->status;
         }
@@ -101,7 +101,7 @@ final readonly class CreatorTaxStatusLedger implements CreatorTaxStatusResolver
 
             $previous = $this->statusAt($merchant, $effectiveFrom);
 
-            // Close the interval that CONTAINS the new start, and only that one. Intervals that already
+            // Close the interval that contains the new start, and only that one. Intervals that already
             // start later are untouched: a retroactive correction of January says nothing about March.
             $this->seriesFor($merchant)
                 ->where('effective_from', '<', $from)

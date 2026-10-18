@@ -36,7 +36,7 @@ use Pushery\Billing\ValueObjects\SellerPeriodReport;
  *
  * ## Determinism is part of the contract
  *
- * Two runs over the same reports must produce the same BYTES, because that is what the archive compares. It
+ * Two runs over the same reports must produce the same bytes, because that is what the archive compares. It
  * is easy to break by accident — an unordered iteration, a locale-dependent number, a timestamp inside the
  * payload — and each of those turns "did anything change since we last produced this?" into a question
  * nobody can answer.

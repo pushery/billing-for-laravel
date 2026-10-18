@@ -11,7 +11,7 @@ use Pushery\Billing\ValueObjects\ReportingPeriod;
 /**
  * A filing obligation falls due soon, and this is the one warning it gets.
  *
- * ## One event per OBLIGATION, never per day
+ * ## One event per obligation, never per day
  *
  * The last period's return and the annual seller report fall due on the same date — different law, different
  * data, one calendar day. An event that said "something is due on the 31st" would let a recipient handle the

@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Pushery\Billing\Contracts;
 
 /**
- * The licensing gate: what a tier UNLOCKS, kept separate from what it COSTS (the billing config). An
+ * The licensing gate: what a tier unlocks, kept separate from what it COSTS (the billing config). An
  * app resolves the owner's tier key (via its TierResolver) and asks here whether a boolean feature is
- * granted or what a numeric limit is. Denials fail closed — an unlisted feature is NOT granted — while
+ * granted or what a numeric limit is. Denials fail closed — an unlisted feature is not granted — while
  * an unlisted or null limit means "not capped".
  */
 interface License

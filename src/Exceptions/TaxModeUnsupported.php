@@ -42,7 +42,7 @@ final class TaxModeUnsupported extends RuntimeException
      */
     public static function unresolvable(mixed $mode, array $resolvable): self
     {
-        // The configured value is echoed back so the operator can see WHICH value was rejected, but it is
+        // The configured value is echoed back so the operator can see which value was rejected, but it is
         // bounded and stripped of control characters first: this message is persisted into failure-reason
         // columns and written to logs, where an unbounded value with embedded newlines forges log structure.
         $clean = is_string($mode) ? (string) preg_replace('/[^\P{C}]++/u', '', $mode) : '';

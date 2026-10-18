@@ -37,7 +37,7 @@ use Throwable;
 /**
  * The record of what was routed, and the only writer of the three reversal totals.
  *
- * Every total here is a CAP, and each is read by a different reversal. The refunded total limits what the
+ * Every total here is a cap, and each is read by a different reversal. The refunded total limits what the
  * buyer can still get back; the reversed total limits what can still be clawed back from the merchant.
  * They are the same number only while the platform returns its commission on every refund — and they part
  * company permanently the first time it does not.
@@ -73,15 +73,15 @@ final readonly class RoutedChargeLedger
         /**
          * The commission terms this sale was made under, frozen onto the row.
          *
-         * Optional because the three amounts alone already settle a FULL clawback — everything still held
-         * goes back, and no terms are needed for that. They are needed for a PARTIAL one, where a
+         * Optional because the three amounts alone already settle a full clawback — everything still held
+         * goes back, and no terms are needed for that. They are needed for a partial one, where a
          * proportional share is the wrong figure whenever the fee has a flat part, and where the only other
          * source would be today's configuration: a platform that raised its rate would then claw old sales
          * back at the new one, with nothing on the row to say so.
          */
         ?PlatformFee $policy = null,
         /**
-         * WHICH LANE the money took, frozen for the same reason the terms above are.
+         * Which lane the money took, frozen for the same reason the terms above are.
          *
          * The two reverse in completely different ways: a destination charge unwinds its transfer with the
          * refund, a separate transfer needs a second call with a calculated amount. A refund that read the
@@ -94,11 +94,11 @@ final readonly class RoutedChargeLedger
          */
         ?ChargeType $chargeType = null,
         /**
-         * WHICH AMOUNT the commission was taken on, expressed as the tax rate that separates it from the
+         * Which amount the commission was taken on, expressed as the tax rate that separates it from the
          * payment.
          *
-         * The take rate is a NET rate. Frozen for the same reason the terms above are, with one extra edge:
-         * a partial clawback recomputes the commission on what REMAINS of the sale, so it needs the rate
+         * The take rate is a net rate. Frozen for the same reason the terms above are, with one extra edge:
+         * a partial clawback recomputes the commission on what remains of the sale, so it needs the rate
          * itself and not the base amount — a stored base cannot answer for a remainder.
          *
          * Optional, and null means the commission was taken on the payment itself. That is what every row
@@ -109,8 +109,8 @@ final readonly class RoutedChargeLedger
         /**
          * The buyer fee this sale carried, frozen onto the row — or null when it carried none.
          *
-         * FROZEN, and that is the whole reason it is stored rather than recomputed. A withdrawal returns the
-         * fee that was CHARGED, and recomputing it later would price an old sale at today's rate, today's
+         * Frozen, and that is the whole reason it is stored rather than recomputed. A withdrawal returns the
+         * fee that was charged, and recomputing it later would price an old sale at today's rate, today's
          * model and today's place of supply — three settings an operator may change without leaving any
          * trace that they did. The number would come out plausible, which is what makes it the dangerous
          * kind of wrong.
@@ -128,7 +128,7 @@ final readonly class RoutedChargeLedger
          */
         ?SellerOfRecordPosture $sellerPosture = null,
         /**
-         * WHAT was sold, frozen for the same reason the lane above is — and for one this table has not had
+         * What was sold, frozen for the same reason the lane above is — and for one this table has not had
          * to answer before.
          *
          * The amounts say what moved; nothing says what for. That is invisible while the share is
@@ -136,10 +136,10 @@ final readonly class RoutedChargeLedger
          * moment a consumer credits the share to a balance instead: a ledger entry carries a type, and an
          * append-only ledger with the wrong one cannot be corrected, only offset.
          *
-         * IT IS DERIVABLE AFTERWARDS FOR TWO OF THE THREE LANES AND NOT FOR THE THIRD, which is what
+         * It is derivable afterwards for two of the three lanes and not for the third, which is what
          * makes it a column rather than a query. A purchase resolves through its payment reference; a
          * subscription cycle takes three hops and the middle one only exists where this package writes the
-         * order; a tip persists nothing that names it and is reachable only by the ABSENCE of the other two
+         * order; a tip persists nothing that names it and is reachable only by the absence of the other two
          * — so during a race, a purchase whose rows have not landed yet reads as a tip. The caller knows it
          * for certain; every route back to it is longer, and the last one is wrong.
          *
@@ -156,7 +156,7 @@ final readonly class RoutedChargeLedger
          */
         ?string $paymentReference = null,
         /**
-         * WHAT KIND of thing was sold, where the lane knows it.
+         * What kind of thing was sold, where the lane knows it.
          *
          * Under intermediation this row is the only record of the sale the package writes, so it is the only
          * place a count of a seller's sales of goods can read. Null means "written before this was recorded"
@@ -179,7 +179,7 @@ final readonly class RoutedChargeLedger
                 'seller_posture' => $sellerPosture,
                 'fee_bps' => $policy?->bps,
                 'fee_flat_minor' => $policy?->flatMinor,
-                // The DIRECTION, frozen beside the rate and the flat part, because a clawback is a
+                // The direction, frozen beside the rate and the flat part, because a clawback is a
                 // difference against this sale and not a fresh split of it. The document side has always
                 // frozen this; the money side read today's configuration, so a charge priced before somebody
                 // changed the setting was reconstructed the other way round from the document correcting it.
@@ -206,7 +206,7 @@ final readonly class RoutedChargeLedger
      */
     public function settle(MerchantCharge $charge, ?string $transferReference = null, ?Money $actuallyMoved = null): bool
     {
-        // UNDER THE LOCK, like every other advance of this column.
+        // Under the lock, like every other advance of this column.
         //
         // With the check and the write outside a transaction, two deliveries arriving together would both
         // read `pending` and both write. Both would return true, and a caller that treats that as "I made
@@ -375,7 +375,7 @@ final readonly class RoutedChargeLedger
      * Most changes move it out of `pending`. Recording a failed transfer changes the row and leaves it there,
      * and it needs the same guarantee for the same reason.
      *
-     * The transition is decided from the row read INSIDE the lock, never from the instance the caller
+     * The transition is decided from the row read inside the lock, never from the instance the caller
      * happened to be holding — that instance was loaded before the other delivery arrived, and deciding
      * from it is the whole race.
      *
@@ -418,7 +418,7 @@ final readonly class RoutedChargeLedger
      * by the key, not by the row, and has to find this row again by it.
      *
      * All three amounts are recorded, not one and two derivations. The buyer's refund, what comes back
-     * from the merchant and what the platform returns of its own commission are NOT proportional to each
+     * from the merchant and what the platform returns of its own commission are not proportional to each
      * other — a fee with a fixed component makes the merchant's share of a half refund more than half of
      * their payout — and a figure recomputed at reversal time would use whatever the fee policy says then
      * rather than what it said when the refund was decided.
@@ -469,12 +469,12 @@ final readonly class RoutedChargeLedger
      *
      * ## Why the announcement is here and not at the call site
      *
-     * This is the only place that knows what a reversal ACTUALLY moved. The caller knows what it asked
+     * This is the only place that knows what a reversal actually moved. The caller knows what it asked
      * for; the caps above decide what it got, and on a redelivered confirmation those differ by the whole
      * amount. A consumer reversing its own payout entry has no way to derive that figure — which is what
      * `MerchantTransferReversed` exists to hand it.
      *
-     * It is dispatched AFTER the transaction, and only when something actually moved. Both halves matter:
+     * It is dispatched after the transaction, and only when something actually moved. Both halves matter:
      * inside the transaction a queued listener can run against a snapshot that has not committed, and a
      * second confirmation that moved nothing would tell a consumer to reverse its ledger a second time —
      * the exact double-reversal the caps above exist to prevent, reintroduced one layer higher.
@@ -524,16 +524,16 @@ final readonly class RoutedChargeLedger
 
             $refunded = min($attempt->amount_minor, $charge->refundableMinor());
 
-            // Each amount is capped against its OWN ceiling, read fresh under the lock. The caps are a
+            // Each amount is capped against its own ceiling, read fresh under the lock. The caps are a
             // backstop against a confirmation arriving twice, not the calculation: what comes back from
             // the merchant was decided when the refund was, and is carried on the attempt.
-            // What the attempt INTENDED, unless the caller learned what the provider actually did. Those are
+            // What the attempt intended, unless the caller learned what the provider actually did. Those are
             // the same number on the lane that reverses as part of the refund, and they are 0 and "the whole
             // share" on the lane that does not: a separate transfer moved in its own call, so refunding the
             // payment leaves it untouched and the rails deliberately report no reversal reference.
             //
             // Booking the intent there spends reversibleMinor() on a reversal nobody made and announces a
-            // clawback to a consumer whose merchant is still holding the money. So a caller that KNOWS may
+            // clawback to a consumer whose merchant is still holding the money. So a caller that knows may
             // say so, and the default stays the attempt's own figure for the chargeback path, where the
             // reversal was performed by the job that then books it.
             $intended = $actuallyReversed instanceof Money
@@ -629,7 +629,7 @@ final readonly class RoutedChargeLedger
      *
      * ## Why the read cannot be allowed to throw
      *
-     * A stored `merchant_type` is a class NAME, and a consumer that renames or removes a model leaves rows
+     * A stored `merchant_type` is a class name, and a consumer that renames or removes a model leaves rows
      * pointing at a class that no longer exists — where `morphTo` raises an `Error` rather than answering
      * null. By the time this runs the money has already moved and committed. Letting that escape would
      * report a completed reversal as a failure, and the caller's natural response is to retry: the caps
@@ -680,7 +680,7 @@ final readonly class RoutedChargeLedger
     {
         $stored = $charge->merchant_type;
 
-        // The morph pair on this table is NOT nullable — erasure marks `merchant_erased_at` and leaves the
+        // The morph pair on this table is not nullable — erasure marks `merchant_erased_at` and leaves the
         // pair standing, because the financial record outlives the person. So the only way this fails is a
         // class that has gone away, never an absent one.
         return class_exists(Relation::getMorphedModel($stored) ?? $stored);
@@ -729,7 +729,7 @@ final readonly class RoutedChargeLedger
         // The caller's instance is refreshed rather than left stale, because it is the same object a caller
         // reads back from to decide whether anything happened.
         //
-        // Only when there is still a row behind it. `refresh()` THROWS on a deleted model, so a charge
+        // Only when there is still a row behind it. `refresh()` throws on a deleted model, so a charge
         // erased between the provider call and this one would turn "nothing was counted" — an honest zero —
         // into an exception on a path where the money has already moved. Surfaced by pushing this branch to
         // coverage, which is the whole reason the floor is where it is.
@@ -766,7 +766,7 @@ final readonly class RoutedChargeLedger
     }
 
     /**
-     * The charge whose PAYMENT this is, for a charge recorded under something other than its payment.
+     * The charge whose payment this is, for a charge recorded under something other than its payment.
      *
      * A subscription cycle is recorded under its invoice, and a dispute names only the payment, so this is the
      * way from the one to the other. It is a separate lookup rather than a second condition in {@see self::find()}

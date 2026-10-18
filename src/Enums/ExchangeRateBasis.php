@@ -30,7 +30,7 @@ enum ExchangeRateBasis: string
     /**
      * The central bank's monthly average — the rule German domestic turnover is converted under.
      *
-     * Named for the place the figure comes from, not the place it is PUBLISHED. The ministry table is an
+     * Named for the place the figure comes from, not the place it is published. The ministry table is an
      * aggregation of central bank reference rates, it carries no independent observation, and it is published
      * behind a page that refuses automated retrieval, so a basis named after it would have no importer and
      * could never have one. This one is derived from the daily series this package already imports.

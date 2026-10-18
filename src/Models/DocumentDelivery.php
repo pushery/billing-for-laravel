@@ -61,7 +61,7 @@ class DocumentDelivery extends Model
 
     /**
      * Erasure is the one exception, and it is not an edit of what happened: it unlinks the person from a
-     * record whose CONTENT is untouched, which is exactly what an unlinkable evidentiary log is for.
+     * record whose content is untouched, which is exactly what an unlinkable evidentiary log is for.
      *
      * @return list<string>
      */
@@ -71,7 +71,7 @@ class DocumentDelivery extends Model
     }
 
     /**
-     * Never through the model, inside `purging()` or not. The erasure axis holds this table as RETAINED:
+     * Never through the model, inside `purging()` or not. The erasure axis holds this table as retained:
      * unlinked when its merchant is erased, and removed by query once the retention window has passed.
      */
     protected static function appendOnlyDeletion(): AppendOnlyDeletion

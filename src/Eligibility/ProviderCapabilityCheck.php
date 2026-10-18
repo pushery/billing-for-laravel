@@ -12,12 +12,12 @@ use Pushery\Billing\ValueObjects\MerchantAccountReference;
  * The package's own receiving check: the provider has confirmed this merchant can take charges, receive
  * payouts, and has finished submitting their details.
  *
- * It NEVER throws. A check is one voice in a composed gate, and a check that threw would turn a merchant
+ * It never throws. A check is one voice in a composed gate, and a check that threw would turn a merchant
  * who simply has not onboarded into an error page — so an absent account, a stale account and a
  * half-onboarded account all answer the same way: no.
  *
  * A consumer adds their own predicates beside this one (verified, of age, not suspended). The two kinds are
- * deliberately separate: this one reports what the PROVIDER established and nothing more, so a platform
+ * deliberately separate: this one reports what the provider established and nothing more, so a platform
  * rule can never be mistaken for a provider fact, or the reverse.
  */
 final readonly class ProviderCapabilityCheck

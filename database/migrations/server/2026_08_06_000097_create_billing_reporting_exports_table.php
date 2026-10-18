@@ -11,8 +11,8 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## Why not the tax-return archive's table
  *
- * That one holds the same DISCIPLINE and a different SHAPE. `billing_tax_return_exports.quarter` is not
- * nullable, and neither are its `net_minor` and `tax_minor`. A seller report is an ANNUAL record with no
+ * That one holds the same discipline and a different shape. `billing_tax_return_exports.quarter` is not
+ * nullable, and neither are its `net_minor` and `tax_minor`. A seller report is an annual record with no
  * quarter of its own, no tax total, and no country/rate lines — there is no value it could honestly write
  * into those columns, and a zero would be a claim rather than a placeholder.
  *
@@ -42,7 +42,7 @@ return new class extends Migration
             $table->id();
             $table->unsignedSmallInteger('period_year');
             $table->string('currency', 3);
-            // WHICH format, and WHICH version of it — two columns rather than one string, because the pair
+            // Which format, and which version of it — two columns rather than one string, because the pair
             // is asked separately: "show me every DAC7 record" and "which ones predate version 2".
             $table->string('format');
             $table->string('format_version');
@@ -55,7 +55,7 @@ return new class extends Migration
             $table->string('written_to')->nullable();
             $table->timestamps();
 
-            // No unique key on the period. A second run of one year is NORMAL — figures move as late
+            // No unique key on the period. A second run of one year is normal — figures move as late
             // corrections land — and the interesting fact is that it happened and whether the two agree. A
             // unique key would force the second run to overwrite the first, destroying the only evidence
             // that anything changed.

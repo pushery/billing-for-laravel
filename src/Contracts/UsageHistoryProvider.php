@@ -9,7 +9,7 @@ use Pushery\Billing\ValueObjects\AddonTopup;
 use Pushery\Billing\ValueObjects\PeriodUsage;
 
 /**
- * The read-side companion to {@see UsageProvider}: an owner's PAST usage, for the UsageHistory screen.
+ * The read-side companion to {@see UsageProvider}: an owner's past usage, for the UsageHistory screen.
  * Where UsageProvider reports the current period from the project's live metering source, this reports
  * finished periods — and the package's default binding reads them column-authoritatively from the
  * persisted usage counters (never a provider call), so the history is always available even for a tier

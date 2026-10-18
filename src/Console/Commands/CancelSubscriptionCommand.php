@@ -17,7 +17,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * over SSH or from a runbook. It exists for the same reason the comp command does: an operation only
  * reachable through a UI is unreachable exactly when the UI is what is broken.
  *
- * An unknown owner FAILS rather than succeeding quietly, and so does an owner with no running subscription in
+ * An unknown owner fails rather than succeeding quietly, and so does an owner with no running subscription in
  * the scope named. A cancel that reports success while canceling nothing is the one outcome worse than an error
  * here: the agent moves on believing the subscription is ended, and it bills again next cycle. The platform's
  * default contract is canceled unless `--merchant` names a seller's scope by its uid (`m:<type>#<id>`) or

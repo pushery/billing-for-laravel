@@ -14,7 +14,7 @@ use Pushery\Billing\Preflight\MarketplacePreflight;
  * Prints the marketplace go-live checklist: every point, in order, with what it found.
  *
  * The command is registered whether or not the marketplace is switched on, and that is deliberate. Flipping
- * the switch is the LAST step of the checklist, so a preflight only available after the switch is on is one
+ * the switch is the last step of the checklist, so a preflight only available after the switch is on is one
  * that can never be run at the moment it is for — and worse, the boot guard would by then be refusing to
  * start the application that would have run it. Registering an artisan command changes no behavior and
  * costs a single-seller install nothing: no config is read until somebody types the command.

@@ -8,13 +8,13 @@ namespace Pushery\Billing\ValueObjects;
  * One axis along which the package's records are scoped to a person: the morph columns that identify them,
  * the column that records their erasure, and what may happen to each table when they are erased.
  *
- * The package has more than one such axis, and that is the point. A BUYER owns a subscription and an
- * invoice; a MERCHANT is named on a payout statement and a commission invoice. Both are people with a right
+ * The package has more than one such axis, and that is the point. A buyer owns a subscription and an
+ * invoice; a merchant is named on a payout statement and a commission invoice. Both are people with a right
  * to erasure and both appear on records the law requires the platform to keep, but they are not the same
  * person and they are not on the same rows — a merchant is not an owner, and treating them as one axis
  * would either erase a buyer's records when a merchant leaves or leave a merchant's data behind.
  *
- * Making the axis a VALUE is what keeps the two from drifting. Erasure, export and the retention clock all
+ * Making the axis a value is what keeps the two from drifting. Erasure, export and the retention clock all
  * take an axis and do the same work with it, so a table that one of them covers cannot be one the others
  * forget — the failure this whole area exists to prevent, in either direction: an export that misses a
  * table denies a person their data, an erasure that misses one keeps it.

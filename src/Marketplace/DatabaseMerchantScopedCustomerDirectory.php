@@ -10,7 +10,7 @@ use Pushery\Billing\Models\MerchantCustomer;
 use Pushery\Billing\Support\OwnerOfRecord;
 
 /**
- * The shipped account-scoped lookup: the package's own table, keyed by account AND customer.
+ * The shipped account-scoped lookup: the package's own table, keyed by account and customer.
  *
  * It never falls back to a global lookup when the scoped one misses, and that refusal is the whole point.
  * A fallback would restore exactly the ambiguity this exists to remove — and it would do so only in the

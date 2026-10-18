@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Which billing period a COLLECTIVE settlement document settles — `YYYY-MM` for a monthly run — frozen onto
+ * Which billing period a collective settlement document settles — `YYYY-MM` for a monthly run — frozen onto
  * the row.
  *
  * A monthly collective self-billing document is one document per creator and month; running the settlement

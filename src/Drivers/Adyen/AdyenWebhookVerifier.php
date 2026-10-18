@@ -16,8 +16,8 @@ use Pushery\Billing\Contracts\WebhookVerifier;
  *
  * Adyen differs from the two drivers already here, and the difference decides the shape of this
  * class. Stripe signs the request; Mollie signs it or sends a bare id. Adyen signs each
- * NotificationRequestItem SEPARATELY, inside the body, and posts several of them in one request.
- * So there is no single signature to check: a request is authentic only if EVERY item in it is,
+ * NotificationRequestItem separately, inside the body, and posts several of them in one request.
+ * So there is no single signature to check: a request is authentic only if every item in it is,
  * and one forged item among nine genuine ones has to fail the whole request rather than be
  * dropped quietly. A partially trusted batch is the worse outcome, because the effects run per
  * item and nothing downstream would know which ones were vouched for.
@@ -41,7 +41,7 @@ final readonly class AdyenWebhookVerifier implements WebhookVerifier
      *
      * Injectable for the same reason MollieClientFactory takes its client class that way: the
      * absence branch below is the one an installation without the optional package walks, and a
-     * hardcoded constant makes that branch unreachable from a suite where the package IS
+     * hardcoded constant makes that branch unreachable from a suite where the package is
      * installed. A guard nothing can enter is a guard nobody has checked.
      */
     public function __construct(
@@ -60,8 +60,8 @@ final readonly class AdyenWebhookVerifier implements WebhookVerifier
             return false;
         }
 
-        // `is_a` with the string flag rather than `class_exists`, because it answers BOTH questions
-        // in one call: the class is present, AND it is the helper this code then calls a method on.
+        // `is_a` with the string flag rather than `class_exists`, because it answers both questions
+        // in one call: the class is present, and it is the helper this code then calls a method on.
         // A name that resolves to some other class would pass an existence check and fail at the
         // call site with a fatal, which is a worse failure than the refusal this branch exists for.
         if (! is_a($this->signatureClass, HmacSignature::class, true)) {

@@ -31,10 +31,10 @@ final readonly class TaxSupportGuard
     {
         $mode = $this->config->get('billing.tax', 'none');
 
-        // A mode nothing can resolve is refused HERE, at boot — not ignored. Ignoring it hands the decision
+        // A mode nothing can resolve is refused here, at boot — not ignored. Ignoring it hands the decision
         // to the calculator factory, which finds no match and falls back to the no-op: 0% VAT on every
         // invoice, silently. Both shapes of unresolvable are covered together because they fail identically:
-        // a NON-STRING (billing.tax becomes an array the moment someone adds a sub-key under it) and a
+        // a non-string (billing.tax becomes an array the moment someone adds a sub-key under it) and a
         // mistyped mode name ('eu_os'), which is the likelier of the two since it comes from an env var.
         if (! is_string($mode) || ! in_array($mode, TaxCalculatorFactory::MODES, true)) {
             throw TaxModeUnsupported::unresolvable($mode, TaxCalculatorFactory::MODES);
@@ -48,7 +48,7 @@ final readonly class TaxSupportGuard
         $driver = $this->drivers->driver()->name();
 
         // Every provider-delegating mode, not just the literal 'provider': 'stripe' is an alias that resolves
-        // to the same provider calculator. Matching only 'provider' here classified 'stripe' as a LOCAL mode,
+        // to the same provider calculator. Matching only 'provider' here classified 'stripe' as a local mode,
         // which refused to boot on exactly the driver it needs and passed on one that cannot apply it.
         if (in_array($mode, TaxCalculatorFactory::PROVIDER_MODES, true)) {
             if (! $supportsProviderTax) {
@@ -58,7 +58,7 @@ final readonly class TaxSupportGuard
             return;
         }
 
-        // Any other configured mode is a LOCAL computation (eu_oss today). It can only be applied by a
+        // Any other configured mode is a local computation (eu_oss today). It can only be applied by a
         // driver that produces the invoice itself; a provider-tax driver defers the charge to the provider
         // and would leave the locally-computed VAT uncollected.
         if ($supportsProviderTax) {

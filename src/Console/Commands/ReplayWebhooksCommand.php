@@ -26,11 +26,11 @@ use Pushery\Billing\Webhooks\WebhookEffectRegistry;
  * A provider retries a failed webhook for a while and then gives up — Stripe stops after ~3 days. If an
  * effect was still failing when that window closed (a bug, an outage, a migration that had not run yet),
  * the work is simply never done again and no one is coming back to do it: an add-on stays uncredited, a
- * plan stays out of sync. That is the gap this closes. The receiver stores every verified delivery WITH
+ * plan stays out of sync. That is the gap this closes. The receiver stores every verified delivery with
  * its raw payload, so the package can re-drive it itself, on its own schedule, long after the provider
  * has stopped caring.
  *
- * Replay is SAFE to run twice because it goes through the same ledger the live path does: an effect run
+ * Replay is safe to run twice because it goes through the same ledger the live path does: an effect run
  * already marked handled refuses the claim and is skipped, so a customer is not credited or mailed twice.
  * Only failed (and never-completed) runs actually re-run. Signature verification is not repeated — these
  * payloads were verified when they arrived; nothing unverified is ever stored.
@@ -118,7 +118,7 @@ final class ReplayWebhooksCommand extends Command
                 $effects,
             ));
 
-            // A delivery that produced nothing is REPORTED, because "replayed … → 0 effect(s)" reads as
+            // A delivery that produced nothing is reported, because "replayed … → 0 effect(s)" reads as
             // success and is exactly how a merchant delivery would disappear from a bulk replay. Not a
             // non-zero exit, though: one unhandled event type in two hundred deliveries would turn the whole
             // run red, and an operator who learns to ignore a red replay has lost the signal again.
@@ -168,7 +168,7 @@ final class ReplayWebhooksCommand extends Command
         }
 
         if ($failedOnly) {
-            // A delivery is worth replaying when an EFFECT of it failed, or when the delivery itself never
+            // A delivery is worth replaying when an effect of it failed, or when the delivery itself never
             // finished (the request died mid-dispatch, so some effects may never have been queued at all).
             $query->where(fn (Builder $delivery): Builder => $delivery
                 ->whereIn('status', [WebhookEventState::Failed, WebhookEventState::Pending])
@@ -199,7 +199,7 @@ final class ReplayWebhooksCommand extends Command
      * still cannot receive money.
      *
      * The second half is the expensive one. A connected-account subscription mapped without a merchant scope
-     * resolves against the PLATFORM catalog: not inaction, but state written for the wrong seller.
+     * resolves against the platform catalog: not inaction, but state written for the wrong seller.
      *
      * Resolved per delivery rather than injected, because the marketplace mapper is bound only where a
      * marketplace is set up. An installation with no merchant endpoint has no merchant deliveries either, so
@@ -236,7 +236,7 @@ final class ReplayWebhooksCommand extends Command
     }
 
     /**
-     * Rebuild the request the provider sent from the payload we stored, so the SAME mapper that ran live
+     * Rebuild the request the provider sent from the payload we stored, so the same mapper that ran live
      * maps it — no second, replay-only mapping path that could drift out of step with the real one.
      */
     private function rebuild(BillingWebhookEvent $delivery): Request

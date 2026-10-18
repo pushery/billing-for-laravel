@@ -22,7 +22,7 @@ enum CheckpointStatus: string
     /**
      * Whether this status leaves the checklist able to proceed.
      *
-     * TWO statuses stop it, not one. `Failed` is the obvious one; `Unreachable` stops it as well, and that
+     * Two statuses stop it, not one. `Failed` is the obvious one; `Unreachable` stops it as well, and that
      * is deliberate rather than a side effect of the expression — a blocking point nobody could evaluate is
      * not a point that passed. `PreflightLine::isOpenBlocker()` and `PreflightReport::passed()` both say so
      * in their own words ("a blocking point that did not hold, or that was never reached").

@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Which settlement document this row IS — a self-billed invoice or a plain settlement note — frozen onto it.
+ * Which settlement document this row is — a self-billed invoice or a plain settlement note — frozen onto it.
  *
  * A self-billed invoice and an ordinary one are different documents to a tax authority: the type code that
  * names a self-billed invoice (389) is not the one for an ordinary invoice (380), and emitting the wrong

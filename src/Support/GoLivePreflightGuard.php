@@ -16,7 +16,7 @@ use Pushery\Billing\Preflight\MarketplacePreflight;
  * Binding the switch to the result means the shortcut does not exist — `marketplace.enabled = true` with an
  * open blocking point is a refusal to boot, naming the points.
  *
- * It re-runs the checklist rather than trusting a stored receipt. Every point IT RUNS is a cheap read of
+ * It re-runs the checklist rather than trusting a stored receipt. Every point it runs is a cheap read of
  * local state, so running them is affordable -- the database-reading ones are excluded here and belong to
  * the console command; a receipt, by contrast, would certify the moment it was written and
  * would keep certifying it after the configuration underneath had changed.
@@ -37,7 +37,7 @@ final readonly class GoLivePreflightGuard
             return;
         }
 
-        // The BOOT set: configuration and bindings only. GoLiveCheckpoint promises the checklist reads no
+        // The boot set: configuration and bindings only. GoLiveCheckpoint promises the checklist reads no
         // database, and one shipped checkpoint has to break that promise to do its job -- so it is excluded
         // here and runs from the console instead. Without this, a non-blocking checkpoint could refuse the
         // whole application: an exception out of evaluate() does not care what isBlocking() returned, and on

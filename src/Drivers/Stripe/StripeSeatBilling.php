@@ -16,7 +16,7 @@ use Stripe\StripeClient;
 use Stripe\SubscriptionItem;
 
 /**
- * Stripe's seat billing: reads and writes the quantity on the subscription's TIER item.
+ * Stripe's seat billing: reads and writes the quantity on the subscription's tier item.
  *
  * The quantity always goes on the base tier item, resolved by price rather than position — a subscription
  * that also carries a metered component would reject a quantity on the meter, and writing it onto the wrong
@@ -27,7 +27,7 @@ use Stripe\SubscriptionItem;
  * A permanent rejection (Stripe's InvalidRequestException — a bad price, a metered item) is logged, never
  * retried: retrying a doomed request storms the queue. A transient failure (a dropped connection, a
  * rate-limit) is allowed to propagate so the queued caller retries it. And a downgrade below the occupied
- * seat count fails LOUDLY — that one is a policy error, not a provider hiccup, and swallowing it would
+ * seat count fails loudly — that one is a policy error, not a provider hiccup, and swallowing it would
  * silently under-bill the team.
  */
 final readonly class StripeSeatBilling implements SeatBilling
@@ -49,7 +49,7 @@ final readonly class StripeSeatBilling implements SeatBilling
         try {
             $subscription = $this->stripe->subscriptions->retrieve($reference);
         } catch (RateLimitException $e) {
-            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // A 429 is transient and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException) {
@@ -84,7 +84,7 @@ final readonly class StripeSeatBilling implements SeatBilling
         try {
             $subscription = $this->stripe->subscriptions->retrieve($reference);
         } catch (RateLimitException $e) {
-            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // A 429 is transient and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException) {
@@ -107,7 +107,7 @@ final readonly class StripeSeatBilling implements SeatBilling
                 'proration_behavior' => $prorate ? 'create_prorations' : 'none',
             ]);
         } catch (RateLimitException $e) {
-            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // A 429 is transient and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException $e) {

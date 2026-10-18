@@ -19,7 +19,7 @@ use RuntimeException;
  * somebody else, and the money is already gone. That is why the shipped answer is to end access — there is
  * no version of this where the platform chose to give the work away.
  *
- * The reason is CHARGEBACK, kept apart from REFUND on purpose. One is a decision somebody made and can be
+ * The reason is chargeback, kept apart from refund on purpose. One is a decision somebody made and can be
  * asked about; the other is a decision made against them.
  *
  * This ends access and nothing else. The money-side correction a chargeback triggers is its own cascade, and

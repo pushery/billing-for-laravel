@@ -8,7 +8,7 @@ namespace Pushery\Billing\Enums;
  * What happened to a settlement document on its way to the person it settles with.
  *
  * Three events, and their asymmetry is the point. Making a document available and telling its recipient are
- * together what delivers it — that is the whole obligation. Fetching it is evidence ON TOP, not part of the
+ * together what delivers it — that is the whole obligation. Fetching it is evidence on top, not part of the
  * obligation: a recipient who never opens what they were handed has still been handed it, and a system that
  * treated an unfetched document as undelivered would keep re-issuing documents that were already valid.
  *

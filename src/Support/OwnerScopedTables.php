@@ -8,7 +8,7 @@ use Pushery\Billing\ValueObjects\ErasureAxis;
 
 /**
  * Every table the package keys to an owner, and what an erasure request may do with it. The eraser and the
- * exporter both read this ONE list, so they cannot drift apart — an export that misses a table denies a
+ * exporter both read this one list, so they cannot drift apart — an export that misses a table denies a
  * person their data, and an erasure that misses one keeps it.
  *
  * The split is the whole design, and getting it backwards is worse than not doing it at all:
@@ -17,7 +17,7 @@ use Pushery\Billing\ValueObjects\ErasureAxis;
  *
  * RETAINED — the financial record. An invoice must carry the buyer's name and address to be a valid invoice
  * at all (§14 UStG), and invoices must be kept for years (§147 AO, §14b UStG). A right to erasure yields to
- * a legal retention obligation (GDPR Art. 17(3)(b)), so these rows are UNLINKED from the owner and kept,
+ * a legal retention obligation (GDPR Art. 17(3)(b)), so these rows are unlinked from the owner and kept,
  * and the retention clock (`billing:prune`) removes them once the law stops requiring them. Cascading them
  * away with the account would destroy tax records — a compliance gap turned into a compliance disaster.
  *
@@ -26,7 +26,7 @@ use Pushery\Billing\ValueObjects\ErasureAxis;
  * carries the customer's email, name, billing address and card last four, so that goes, and so does the error
  * recorded beside it, which can quote that payload.
  *
- * CASCADED — a table keyed to a PARENT row rather than to the owner. It cannot go in the lists above,
+ * CASCADED — a table keyed to a parent row rather than to the owner. It cannot go in the lists above,
  * because the eraser and exporter filter on `owner_type`/`owner_id` and those columns do not exist on it;
  * it is reached by joining through its parent instead. Both sides read this map for the same reason they
  * read the lists above: a child table covered by one and forgotten by the other is exactly the drift this
@@ -49,11 +49,20 @@ final class OwnerScopedTables
         // The row an owner's mandate storing locks per provider so that two of them take turns. It holds nothing
         // but the owner's key and the provider, and goes with the mandates it serialized.
         'billing_payment_mandate_anchors',
+        // The notices sent before a direct debit was drawn. They record that a payer was told, which matters for the
+        // debits still to come and goes with the person: the money the debits collected lives on the retained invoice.
+        'billing_direct_debit_notices',
         // Prepaid units are an entitlement, not a financial record: the money that bought them lives on the
         // (retained) add-on purchase and its invoice. Once the person is gone there is nobody left to spend
         // them, so the balance goes with them.
         'billing_prepaid_units',
-        // A coupon redemption records WHO used a coupon — personal data, not a financial record (any money it
+        // Units given until a moment, such as a plan's allowance for its period, are an entitlement in the same way
+        // and go with the person as well; nothing about them is a financial record.
+        'billing_usage_grants',
+        // What an owner's model calls cost per day, counted for the AI spend brake. It is a running count against a
+        // cap, not a financial record, and goes with the person. A provider's rows in the same table name nobody.
+        'billing_ai_spend',
+        // A coupon redemption records who used a coupon — personal data, not a financial record (any money it
         // discounted lives on the retained invoice). It goes with the person; the coupon definition itself is
         // owner-less and stays.
         'billing_coupon_redemptions',
@@ -70,7 +79,7 @@ final class OwnerScopedTables
         // no retention obligation. It goes with the person: nobody is entitled to keep why someone left once
         // they are gone.
         'billing_cancellation_surveys',
-        // What somebody bought and may still open. Operational ACCESS data, not a financial record: a grant
+        // What somebody bought and may still open. Operational access data, not a financial record: a grant
         // needs no name to be valid and carries no retention obligation of its own — the invoice and the
         // add-on purchase do, and this row merely points at them through source_reference. Once the person
         // is erased there is nobody left to grant anything to, so keeping it would preserve an entitlement
@@ -96,7 +105,7 @@ final class OwnerScopedTables
         'billing_submitted_invoices',
 
         // Which country a sale was taxed in, and what said so. It is the evidence a return was built on and
-        // is kept LONGER than the documents themselves — deleting it would leave a filed return with nothing
+        // is kept longer than the documents themselves — deleting it would leave a filed return with nothing
         // supporting the country it declared. Country codes only; nothing here identifies anybody by itself.
         'billing_place_evidence',
 
@@ -125,6 +134,22 @@ final class OwnerScopedTables
         // know, and it supports invoices that are kept for years, so it follows them: unlinked rather than
         // deleted.
         'billing_tax_id_verifications',
+
+        // The proof of a direct debit mandate given on the application's form: the text the account holder confirmed,
+        // their name, when and from where. The payee has to be able to show a mandate for as long as a debit drawn
+        // under it can be disputed, so the consent outlives the person named on it, unlinked rather than deleted, as
+        // the withdrawal declarations do. The stored mandate itself, the live authorization, is purged above.
+        'billing_mandate_consents',
+
+        // A cancellation declared through the cancellation button, kept as it arrived and with the moment it arrived.
+        // It is a business letter the business received and has to keep, and the proof that the contract was canceled
+        // in time, so it outlives the person who declared it, unlinked rather than deleted. A declaration made without
+        // signing in is written unlinked from the start, so the same retention clock reaches it.
+        'billing_cancellation_declarations',
+
+        // A withdrawal sent through the withdrawal function, kept as it arrived and with the moment it was sent, which
+        // is what decides whether it was in time. Kept and unlinked for the same reasons as a cancellation.
+        'billing_withdrawal_declarations',
     ];
 
     /** The row survives; the personal data inside it does not. */
@@ -133,9 +158,9 @@ final class OwnerScopedTables
     /**
      * Child tables, reached through their parent: table => [parent table, referencing column].
      *
-     * The foreign key would cascade these away on its own, and that is deliberately NOT what the eraser
+     * The foreign key would cascade these away on its own, and that is deliberately not what the eraser
      * relies on: SQLite enforces foreign keys only when `PRAGMA foreign_keys` is on, and it is off by
-     * default — an erasure obligation resting on a setting the CONSUMING application controls, failing
+     * default — an erasure obligation resting on a setting the consuming application controls, failing
      * silently on the one engine where nothing would look wrong. The cascade stays as defense in depth.
      *
      * @var array<string, array{parent: string, foreign_key: string}>
@@ -146,14 +171,14 @@ final class OwnerScopedTables
     ];
 
     /**
-     * The MERCHANT axis. A merchant is not an owner, and this is not a formality: the owner lists above split
+     * The merchant axis. A merchant is not an owner, and this is not a formality: the owner lists above split
      * on a buyer's relationship to the platform, and a merchant stands on the other side of the same sale.
      * Their rows carry `merchant_type`/`merchant_id`, so the owner lists cannot reach them at all — an
      * erasure walking the owner axis would step straight past a merchant's data and report success.
      *
      * The classification follows the owner precedent exactly, because the conflict is the same one
      * (2026-07-21 decision): a payout statement or a commission invoice is at once the merchant's personal
-     * data AND a financial record the platform must keep. So the record is RETAINED and unlinked, never
+     * data and a financial record the platform must keep. So the record is RETAINED and unlinked, never
      * cascaded away — with the frozen seller snapshot on the row itself, since a document that names the
      * merchant as the seller has to keep naming them after they are gone. What is purely operational is
      * PURGED, including the access a merchant's buyers hold: leaving those would keep granting access on
@@ -167,7 +192,7 @@ final class OwnerScopedTables
         // an erased merchant resolves to nobody instead of to whatever their id now points at.
         'billing_merchant_accounts',
 
-        // The subscriptions a merchant's fans hold to THEM — the access half of the classification comment
+        // The subscriptions a merchant's fans hold to them — the access half of the classification comment
         // above. It is purely operational: it grants a fan continued access to a creator, so once that
         // creator is erased it would keep granting access on behalf of somebody who no longer exists. The
         // financial record of what the fan actually paid lives on in billing_merchant_charges (retained), so
@@ -187,7 +212,7 @@ final class OwnerScopedTables
         // merchant is gone there is nobody left to warn and nothing the row could still prevent.
         //
         // Purged rather than retained, which is the opposite of the standings beside it in the other list:
-        // a standing is EVIDENCE that justifies how documents were taxed and outlives its subject for that
+        // a standing is evidence that justifies how documents were taxed and outlives its subject for that
         // reason. A notification receipt justifies nothing. Keeping it would mean holding somebody's
         // identity to remember an email.
         'billing_tax_hold_warnings',
@@ -210,7 +235,7 @@ final class OwnerScopedTables
         // erasing it would leave a later reversal with nothing to cap itself against.
         'billing_merchant_charges',
 
-        // What the provider charged the platform over one merchant's dispute. It is the platform's OWN cost,
+        // What the provider charged the platform over one merchant's dispute. It is the platform's own cost,
         // and a cost with no record shows up only as an unexplained difference at the end of a month — so it
         // outlives the merchant it arose over, unlinked rather than deleted.
         'billing_provider_fees',

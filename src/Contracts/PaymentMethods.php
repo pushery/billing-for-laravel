@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\PaymentMethod;
  * front-end adapter consumes (a Stripe client secret, or another provider's token or session). The
  * list/remove/set-default trio is the superset closure over apps that could only add a single card.
  *
- * The method id in the two mutating verbs is client-supplied, so an implementation MUST verify the
+ * The method id in the two mutating verbs is client-supplied, so an implementation must verify the
  * method belongs to the billable before acting — a provider detach is typically global to the method
  * id, so the provider will not check for you.
  */
@@ -32,7 +32,7 @@ interface PaymentMethods
     public function addMethodUrl(Model $billable): ?string;
 
     /**
-     * A driver-shaped client payload for capturing a method with the provider's OWN front-end element —
+     * A driver-shaped client payload for capturing a method with the provider's own front-end element —
      * the DIY seam for an app that wants inline capture. The package ships no element for it; mount your
      * own from this payload (a Stripe client secret, or another provider's token or session). Most apps want
      * {@see addMethodUrl()} instead.
@@ -46,11 +46,11 @@ interface PaymentMethods
 
     /**
      * Set the billable's default method: the one the provider charges next, which for a subscription that
-     * names a method of its own means that subscription's method too. Implementations MUST verify the
+     * names a method of its own means that subscription's method too. Implementations must verify the
      * method belongs to the billable.
      */
     public function setDefault(Model $billable, string $methodId): void;
 
-    /** Remove a stored method. Implementations MUST verify the method belongs to the billable. */
+    /** Remove a stored method. Implementations must verify the method belongs to the billable. */
     public function remove(Model $billable, string $methodId): void;
 }

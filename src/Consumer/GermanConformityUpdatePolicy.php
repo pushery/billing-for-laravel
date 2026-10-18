@@ -12,15 +12,15 @@ use Pushery\Billing\Contracts\ConformityUpdatePolicy;
  * The German reading of the conformity-update obligation for digital works.
  *
  * A seller owes the buyer the updates needed to keep a digital work conforming — defect fixes, security
- * fixes, staying compatible — for as long as the buyer may reasonably expect, and this holds for a ONE-OFF
- * purchase, not only for a subscription. That is why a frozen sale here is a sale whose ENRICHMENT stopped,
+ * fixes, staying compatible — for as long as the buyer may reasonably expect, and this holds for a one-off
+ * purchase, not only for a subscription. That is why a frozen sale here is a sale whose enrichment stopped,
  * never a sale whose obligations stopped.
  *
  * ## The period is not in this file, and that is deliberate
  *
  * "As long as the buyer may reasonably expect" is a judgment about a kind of product — a game, a font, an
  * ebook — and the law states no number. Hard-coding one would be inventing a legal answer and then hiding it
- * in a library. So the period is configuration, it ships EMPTY, and empty means no end has been established:
+ * in a library. So the period is configuration, it ships empty, and empty means no end has been established:
  * the updates keep flowing. That direction is chosen because it is the one that cannot harm a buyer, and
  * because a package quietly deciding when somebody's rights run out is the outcome worth ruling out.
  *
@@ -28,9 +28,9 @@ use Pushery\Billing\Contracts\ConformityUpdatePolicy;
  *
  * A blanket "no updates" arrangement is only capable of being valid where it was agreed separately and
  * before the contract, with the buyer told what they are giving up — never a config default, never an
- * order-form checkbox. Whether SECURITY updates can be waived at all is genuinely disputed, and this package
+ * order-form checkbox. Whether security updates can be waived at all is genuinely disputed, and this package
  * does not resolve it: the flag ships off, and turning it on is an operator's decision taken on their own
- * advice. Even then it only makes a waiver POSSIBLE — recording one still needs a reference to the actual
+ * advice. Even then it only makes a waiver possible — recording one still needs a reference to the actual
  * agreement.
  */
 final readonly class GermanConformityUpdatePolicy implements ConformityUpdatePolicy

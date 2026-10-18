@@ -41,7 +41,7 @@ final readonly class XRechnungInvoice implements EInvoice
      */
     private const string CUSTOMIZATION = 'urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0';
 
-    /** UNTDID 4461 code 58, a SEPA credit transfer: the payment means a configured account is paid by. */
+    /** untdid 4461 code 58, a SEPA credit transfer: the payment means a configured account is paid by. */
     private const string SEPA_CREDIT_TRANSFER = '58';
 
     private SellerPartyResolver $sellerResolver;
@@ -85,14 +85,14 @@ final readonly class XRechnungInvoice implements EInvoice
         // once in the shared concern so UBL and CII never disagree. The code, not a negative amount, carries
         // the correcting meaning, so the amounts below stay positive.
         //
-        // All FOUR are named on purpose: a cancellation and an amendment are two different documents that a
+        // All four are named on purpose: a cancellation and an amendment are two different documents that a
         // tax authority tells apart by this code alone.
         $this->el($doc, $root, 'cbc:InvoiceTypeCode', $this->typeCode($invoice));
         $this->el($doc, $root, 'cbc:DocumentCurrencyCode', $currency);
         // BT-10 Buyer reference (the Leitweg-ID for B2G); defaults to the invoice reference for B2B.
         $this->el($doc, $root, 'cbc:BuyerReference', $this->buyerReference($invoice) ?? $reference);
 
-        // BT-22: a self-billed document has to SAY it is one. Without the statement it reads as an ordinary
+        // BT-22: a self-billed document has to say it is one. Without the statement it reads as an ordinary
         // invoice issued by the wrong party, and the recipient cannot tell it was written under an
         // arrangement they agreed to. UBL puts a document-level note after the type code and before the
         // references, so it goes here — and it is absent entirely on every other document.
@@ -102,7 +102,7 @@ final readonly class XRechnungInvoice implements EInvoice
             $this->el($doc, $root, 'cbc:Note', $selfBilled);
         }
 
-        // BG-14 the period the WHOLE document covers (BT-73 start, BT-74 end). Distinct from the periods on
+        // BG-14 the period the whole document covers (BT-73 start, BT-74 end). Distinct from the periods on
         // the lines below: a reader asks which months the document is for before reading a line, and
         // answering that by reducing a set of line periods means every reader has to agree on how. UBL
         // orders cac:InvoicePeriod after cbc:BuyerReference and before the references, so it goes here.
@@ -114,10 +114,13 @@ final readonly class XRechnungInvoice implements EInvoice
             $root->appendChild($period);
         }
 
-        // BG-3 Preceding invoice reference: a correction must name the invoice it corrects (BR-55). UBL
-        // orders cac:BillingReference after cbc:BuyerReference and before the parties.
-        if ($correction && $invoice->credited_invoice_number !== null) {
-            $root->appendChild($this->billingReference($doc, $invoice->credited_invoice_number));
+        // BG-3 Preceding invoice reference: a correction must name the invoice it corrects (BR-55), and an invoice
+        // that charges a credited amount again names the invoice it charges again. UBL orders cac:BillingReference
+        // after cbc:BuyerReference and before the parties.
+        $preceding = $correction ? $invoice->credited_invoice_number : $invoice->reinstatedInvoiceNumber();
+
+        if ($preceding !== null) {
+            $root->appendChild($this->billingReference($doc, $preceding));
         }
 
         $seller = $this->seller($invoice);
@@ -125,7 +128,7 @@ final readonly class XRechnungInvoice implements EInvoice
         $root->appendChild($this->party($doc, 'cac:AccountingSupplierParty', $seller));
         $root->appendChild($this->party($doc, 'cac:AccountingCustomerParty', $this->buyer($invoice)));
 
-        // BT-72 the date the supply was actually made. Written ONLY from the recorded date, never derived
+        // BT-72 the date the supply was actually made. Written only from the recorded date, never derived
         // from the period's end: a subscription billed in advance issues on the first of the month, and a
         // derived value would state a delivery in the future on a document dated before it. UBL orders
         // cac:Delivery after the parties and before the payment and tax blocks.
@@ -143,7 +146,7 @@ final readonly class XRechnungInvoice implements EInvoice
             $root->appendChild($this->paymentMeans($doc, $seller));
         }
 
-        // How this document is taxed, derived ONCE. An intra-EU B2B reverse charge makes every band and line
+        // How this document is taxed, derived once. An intra-EU B2B reverse charge makes every band and line
         // VAT category AE at 0% with an exemption reason on the document band — not the zero-rated Z a 0%
         // rate would otherwise get, which a conformant EN 16931 validator rejects here.
         //
@@ -310,7 +313,7 @@ final readonly class XRechnungInvoice implements EInvoice
     }
 
     /**
-     * A VAT category element (TaxCategory / ClassifiedTaxCategory). Normally the category CODE follows the
+     * A VAT category element (TaxCategory / ClassifiedTaxCategory). Normally the category code follows the
      * rate: a positive rate is Standard-rated ("S"); a zero rate is Zero-rated ("Z") — emitting "S" with a
      * 0% rate violates EN 16931 BR-S-05/06. A reverse charge overrides both: category "AE" at 0%, and — on
      * the document-level band ($withReason) — the exemption reason (BT-121 code + BT-120 text) that BR-AE-*
@@ -323,7 +326,7 @@ final readonly class XRechnungInvoice implements EInvoice
 
         // Decided by the shared authority rather than here. A copy of this rule in each writer would be two
         // places it can drift — with no symptom, because each document stays internally consistent and only
-        // a reader comparing a UBL and a CII rendering of the SAME invoice would ever see them disagree.
+        // a reader comparing a UBL and a CII rendering of the same invoice would ever see them disagree.
         $resolved = EnInvoiceTaxCategory::forDocument($treatment->invoice, $rate);
 
         $this->el($doc, $category, 'cbc:ID', $resolved->code);

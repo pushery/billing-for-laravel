@@ -21,7 +21,7 @@ use Pushery\Billing\ValueObjects\Money;
  * one it already has, while a genuine price change (a different amount) is a new price the host records in
  * its place.
  *
- * A null interval mints a ONE-TIME price, for a single purchase such as a paid post: no recurring component,
+ * A null interval mints a one-time price, for a single purchase such as a paid post: no recurring component,
  * on the same account a recurring price for this merchant would live on, so the checkout that charges it finds
  * it. `$tierKey` is then the key of the item being sold. The idempotency key tells the two apart, so a one-time
  * price never reuses a recurring one of the same amount, or the other way round.

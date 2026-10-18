@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Our ledger and the provider's meter DISAGREE about how much usage a customer had.
+ * Our ledger and the provider's meter disagree about how much usage a customer had.
  *
  * The two are separate sources of truth and they drift quietly: a report that was accepted locally but never
  * arrived, an event the provider rejected after the fact, a meter that stopped rating. Nothing throws — the
@@ -27,7 +27,7 @@ final readonly class UsageReconciliationDrift implements BillingDomainEvent
         public string $period,
         /** What WE believe we successfully reported (already netted of prepaid units). */
         public int $reported,
-        /** What the PROVIDER says it actually recorded. */
+        /** What the provider says it actually recorded. */
         public int $recorded,
     ) {}
 

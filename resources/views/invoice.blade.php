@@ -36,6 +36,11 @@
                  carried this as BT-25 all along; the half a person opens said nothing. --}}
             <br>{{ __('billing::invoice.corrects', ['number' => $correctsNumber]) }}
         @endif
+        @if ($reinstatesNumber)
+            {{-- An invoice that charges a credited amount again names the invoice it charges again, as the XML does in
+                 BT-25, so it does not read as a second charge for the same sale. --}}
+            <br>{{ __('billing::invoice.reinstates', ['number' => $reinstatesNumber]) }}
+        @endif
     </p>
 
     @if ($selfBilled)

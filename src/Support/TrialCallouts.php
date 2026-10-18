@@ -13,9 +13,9 @@ use Pushery\Billing\Models\PaymentMandate;
 use Pushery\Billing\ValueObjects\TrialCallout;
 
 /**
- * Resolves the ONE call-to-action an account screen shows while an owner is on a trial, or null when they
+ * Resolves the one call-to-action an account screen shows while an owner is on a trial, or null when they
  * are not — so every screen renders exactly one trial CTA, chosen the same way. Policy-driven: a generic
- * trial (no subscription yet) points at picking a plan; a subscription trial started WITHOUT a card points
+ * trial (no subscription yet) points at picking a plan; a subscription trial started without a card points
  * at adding one before it converts; a subscription trial that already has a card points at reviewing the
  * plan. It reads only local records (the trial clock, the payment method on file) — no provider call — so it
  * is cheap enough to run on every screen render.

@@ -7,14 +7,14 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Lets a MERCHANT issue a coupon, instead of the discount namespace belonging to the platform alone.
+ * Lets a merchant issue a coupon, instead of the discount namespace belonging to the platform alone.
  *
  * `code` was globally unique, which is worse than "no merchant column". It meant two merchants could not
  * both run a `SUMMER25`: the namespace was shared, so in practice it was reserved for a single issuer. On a
  * marketplace the creator discount code is the acquisition tool — it is the reason a seller advertises their
  * own subscription page anywhere — so a shared namespace does not merely limit the feature, it removes it.
  *
- * The axis is the same NOT-NULL sentinel string the subscription table keys on (`merchant_uid`, default
+ * The axis is the same not-null sentinel string the subscription table keys on (`merchant_uid`, default
  * `'platform'`), for the same reason: a nullable column inside a unique index makes the uniqueness vanish on
  * MySQL, where two NULLs do not collide — so the platform's own one-code-per-name invariant would silently
  * disappear the day a merchant coupon appeared. Every existing row reads as `'platform'`, so what the old

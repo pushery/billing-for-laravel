@@ -16,8 +16,8 @@ use Pushery\Billing\ValueObjects\CountrySignals;
  *
  * ## Two questions that are easy to mistake for one
  *
- * WHICH country the buyer is in is a question of evidence — what the buyer said, what their payment says,
- * where their connection is. WHETHER that country's tax applies is a separate question about the seller: a
+ * Which country the buyer is in is a question of evidence — what the buyer said, what their payment says,
+ * where their connection is. Whether that country's tax applies is a separate question about the seller: a
  * seller below a turnover limit charges their own country's tax on the very same sale to the very same
  * buyer.
  *

@@ -11,10 +11,10 @@ use Pushery\Billing\Models\BillingWebhookEvent;
 
 /**
  * Records each verified provider delivery, payload and all. Keeping the raw payload is what makes an
- * effect REPLAYABLE: when one fails, the package can re-drive it from what the provider already sent,
+ * effect replayable: when one fails, the package can re-drive it from what the provider already sent,
  * instead of hoping the provider will redeliver (which it stops doing after its own retry window).
  *
- * Recording is idempotent on (provider, ACCOUNT REFERENCE, event_id) — all three, which is what
+ * Recording is idempotent on (provider, account reference, event_id) — all three, which is what
  * `record()` keys its `firstOrCreate` on: a redelivery of the same event from the same account returns the
  * existing row rather than a second one. The account is empty for the platform's own deliveries, so a
  * single-seller install behaves exactly as if the key were the pair (provider, event_id).
@@ -43,7 +43,7 @@ final class WebhookEventLedger
         // A redelivery of an event recorded before payloads were kept (or by an older version) still
         // needs its payload, or it could never be replayed.
         //
-        // A payload that was REMOVED stays removed. An erasure scrubs it and the retention clock prunes it, and
+        // A payload that was removed stays removed. An erasure scrubs it and the retention clock prunes it, and
         // both stamp the row; refilling one of those would write the person's data back into a row still linked
         // to them, after the erasure receipt said it was gone.
         if ($delivery->payload === null && $delivery->payload_removed_at === null) {

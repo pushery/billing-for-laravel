@@ -19,11 +19,11 @@ use Pushery\Billing\ValueObjects\Money;
 /**
  * Assembles a routed payment's routing and checks the pairing while doing it.
  *
- * ## What this does NOT claim
+ * ## What this does not claim
  *
  * It is not the one place a routed payment is assembled, and not the one place the pairing is checked: a
  * routing can be constructed without it. That limit matters more than most, because it says where a
- * MONEY-FLOW guard is enforced.
+ * money-flow guard is enforced.
  *
  *  - {@see ChargeRouting}'s constructor is public and validates only that the fee is not negative. It knows
  *    nothing of {@see ChargeType} or the seller posture.
@@ -79,7 +79,7 @@ final readonly class ChargeRoutingResolver
             throw MerchantPartyUnavailable::forMerchant($merchant);
         }
 
-        // On the NET, which is what the configured rate has always claimed to be and what the pricing path
+        // On the net, which is what the configured rate has always claimed to be and what the pricing path
         // has always done. Taken here on the payment, the commission included the buyer's tax — and this
         // figure is the one handed to the provider as the application fee, so the difference is not a
         // reporting discrepancy but money the merchant was not paid.

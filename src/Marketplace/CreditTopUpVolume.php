@@ -31,7 +31,7 @@ use Pushery\Billing\ValueObjects\UnitGrant;
  * {@see VoucherVolumeMonitor} counted calmly on. That is precisely the state the monitor was written
  * against: finding out at an audit that the line was passed eleven months ago and nobody was counting.
  *
- * ## What counts as money credit, decided in ONE place
+ * ## What counts as money credit, decided in one place
  *
  * An add-on that grants usage units is a purchase of something, and so is one its catalog classifies as a
  * product; an add-on its catalog classifies as money credit credits the owner's money balance at face value,
@@ -112,7 +112,7 @@ final readonly class CreditTopUpVolume
      * credit and issues no vouchers with an empty list, so the figure was computed correctly for currencies
      * nobody asked about and the sweep announced nothing.
      *
-     * Not windowed, deliberately, and the voucher half is not either: the window belongs to the FIGURE, and
+     * Not windowed, deliberately, and the voucher half is not either: the window belongs to the figure, and
      * a currency dropped from this list because its last top-up aged out would take its own rolling total
      * with it — the answer would fall to nothing at the moment it stopped being asked, which is the shape of
      * a counter that goes quiet rather than down.

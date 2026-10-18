@@ -20,7 +20,7 @@ use Pushery\Billing\Tax\DelegatingSmallBusinessExemptionValidator;
  * one reach the exempt standing.
  *
  * Two of the three answers land in the same place, and that is the whole design. A registration the
- * register rejected and a register that could not be reached both leave the merchant UNESTABLISHED — not
+ * register rejected and a register that could not be reached both leave the merchant unestablished — not
  * "probably fine", not "treat as an ordinary business". The second case is the one worth being explicit
  * about: an outage is not evidence, and a merchant carried through on an outage gets a settlement document
  * that charges them tax they do not owe, plus a declaration of a tax that never arose.

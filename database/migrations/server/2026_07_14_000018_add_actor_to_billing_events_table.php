@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\BillingSchema;
 
 /**
- * Gives the audit ledger an ACTOR and a SOURCE. Until now a row said what happened and to whom, but not
+ * Gives the audit ledger an actor and a source. Until now a row said what happened and to whom, but not
  * who did it — the actor was smuggled as free text into the payload's reason, so the ledger could not tell
  * a customer canceling their own plan from a support agent canceling it for them. The actor morph is the
  * specific user or agent; the source is the category (customer / admin / webhook / system), always present.

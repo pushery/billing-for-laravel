@@ -8,6 +8,7 @@ return [
     'invoice' => 'Factura',
     'correction' => 'Factura rectificativa',
     'corrects' => 'Corrige :number',
+    'reinstates' => 'Refacturación de :number',
     'number' => 'Número de factura :number',
     'issued' => 'Emitida el :date',
     'from' => 'De',

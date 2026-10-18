@@ -76,11 +76,11 @@ final readonly class DatabaseExchangeRateSource implements ExchangeRateSource
     }
 
     /**
-     * The average ANNOUNCED for the month the date falls in, stored against the month's first day.
+     * The average announced for the month the date falls in, stored against the month's first day.
      *
      * Read as a row, never computed from the daily series, and the difference is the point. Taking the
      * arithmetic mean of the month's published days produces the aggregation the ministry's table is made
-     * OF, which is not the same thing as the table: the two part company the moment a day is missing from
+     * of, which is not the same thing as the table: the two part company the moment a day is missing from
      * the local series, a publisher revises an observation, or the rounding differs by a digit. Every one of
      * those is invisible, and what it produces is a plausible figure nobody published, on a tax document
      * that is checked years later against the official one.

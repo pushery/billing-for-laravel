@@ -21,7 +21,7 @@ use Pushery\Billing\Support\BillingManager;
 use Throwable;
 
 /**
- * Warns owners whose GENERIC trial is about to end.
+ * Warns owners whose generic trial is about to end.
  *
  * ## The half the provider could never warn
  *
@@ -30,13 +30,13 @@ use Throwable;
  * the owner's own row, written by `Trials::grant()` with a `save()` and nothing else. Nobody could send that
  * event, and nothing here looked for the date, so the trial simply ended.
  *
- * That is the mode WITHOUT a card, which is the one where the customer has no other signal — no failed
+ * That is the mode without a card, which is the one where the customer has no other signal — no failed
  * charge, no receipt, nothing. They lost access on the day, having been told nothing. For the operator it is
  * churn that appears in no error list.
  *
  * ## Once per trial END, not once per owner
  *
- * The mark is written to the audit log against the owner AND the date. Keyed on the owner alone, an extended
+ * The mark is written to the audit log against the owner and the date. Keyed on the owner alone, an extended
  * trial would be silenced for good; keyed on nothing, the customer is mailed every night the scheduler runs.
  * A trial moved to a new date is a new reminder, which is the same rule the webhook path applies.
  *
@@ -68,7 +68,7 @@ final class WarnEndingTrialsCommand extends Command
         $dryRun = $this->option('dry-run') === true;
         $warned = 0;
 
-        // From NOW, not from the start of the day: a trial that already ended is not ending soon, and a
+        // From now, not from the start of the day: a trial that already ended is not ending soon, and a
         // reminder about it is a message about something already lost.
         $now = Carbon::now();
 
@@ -88,7 +88,7 @@ final class WarnEndingTrialsCommand extends Command
                         $raw = $owner->getAttribute('trial_ends_at');
 
                         // `DateTimeInterface`, not `Carbon`. The `immutable_datetime` cast is ordinary in a
-                        // consumer's model and yields a `CarbonImmutable`, which is NOT a `Carbon` — matching
+                        // consumer's model and yields a `CarbonImmutable`, which is not a `Carbon` — matching
                         // on the concrete class would have silently skipped every installation using it.
                         if ($raw instanceof DateTimeInterface) {
                             $endsAt = Carbon::instance($raw);
@@ -134,9 +134,9 @@ final class WarnEndingTrialsCommand extends Command
     }
 
     /**
-     * The SUBSCRIPTION trials, which the scan above cannot see.
+     * The subscription trials, which the scan above cannot see.
      *
-     * That one reads the OWNER's `trial_ends_at` — the generic trial, a date on a model with no
+     * That one reads the owner's `trial_ends_at` — the generic trial, a date on a model with no
      * subscription behind it. A subscription trial keeps its date on the subscription row instead, and
      * until a local-engine driver existed nobody had to look there: the only driver that created one was
      * Stripe, and Stripe announces its own trial ends.
@@ -186,7 +186,7 @@ final class WarnEndingTrialsCommand extends Command
 
                     $notifier->trialEnding($owner, $endsAt);
 
-                    // The SAME event type and the same date format the generic path records, so the two
+                    // The same event type and the same date format the generic path records, so the two
                     // dedupe against each other and the provider's own notice does too — it writes this
                     // record as well. A second type would make three paths that each believe they are the
                     // only one.
@@ -203,10 +203,10 @@ final class WarnEndingTrialsCommand extends Command
     /**
      * Whether this subscription's provider tells the customer their trial is ending.
      *
-     * Asked of the DRIVER's declared capability rather than of its name, because the answer is a property
+     * Asked of the driver's declared capability rather than of its name, because the answer is a property
      * of what that driver actually wires: Stripe's mapper produces the event and its provider registers the
      * notice on it. A driver that cannot be resolved — a subscription left behind by a provider the install
-     * no longer configures — is treated as announcing NOTHING, which is the safe direction: a duplicate
+     * no longer configures — is treated as announcing nothing, which is the safe direction: a duplicate
      * reminder costs an email, and a missing one costs an unannounced charge.
      */
     private function providerAnnouncesTrialEnd(string $provider): bool
@@ -236,20 +236,20 @@ final class WarnEndingTrialsCommand extends Command
     }
 
     /**
-     * Whether this owner's GENERIC trial reminder would be wrong or redundant.
+     * Whether this owner's generic trial reminder would be wrong or redundant.
      *
-     * TWO independent reasons, and collapsing them into one is wrong in either direction.
+     * Two independent reasons, and collapsing them into one is wrong in either direction.
      *
      * "Any subscription at all" assumes a provider that sends the trial-will-end event. A local-engine driver
      * sends none: nothing at such a provider knows a trial is running, so it announces nothing.
      *
-     * The capability question ALONE is not enough either. An owner's `trial_ends_at` is written by
-     * `Trials::grant()` and cleared by nothing — not by subscribing — so somebody who converts DURING their
+     * The capability question alone is not enough either. An owner's `trial_ends_at` is written by
+     * `Trials::grant()` and cleared by nothing — not by subscribing — so somebody who converts during their
      * generic trial keeps a future date on their own row. Asked only about the provider, they would be mailed
      * "add a payment method before it ends" while already paying, with a mandate on file.
      *
-     * So: a LIVE subscription skips them because they converted, whatever the provider; and a subscription
-     * under a provider that announces skips them because the webhook is about to say it. A TERMINAL row
+     * So: a live subscription skips them because they converted, whatever the provider; and a subscription
+     * under a provider that announces skips them because the webhook is about to say it. A terminal row
      * under a silent provider skips neither — that owner really is on a generic trial that nobody else
      * will mention.
      */
@@ -268,7 +268,7 @@ final class WarnEndingTrialsCommand extends Command
                 || $this->providerAnnouncesTrialEnd($subscription->provider));
     }
 
-    /** Whether this owner has already been told about THIS trial end. */
+    /** Whether this owner has already been told about this trial end. */
     private function alreadyWarned(Model $owner, Carbon $endsAt): bool
     {
         // Compared in PHP rather than through a JSON path in SQL, deliberately. The three engines this

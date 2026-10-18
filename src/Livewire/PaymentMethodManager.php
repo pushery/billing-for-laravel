@@ -20,7 +20,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * could only ever add a single card.
  *
  * The method id is a client-supplied action argument (`wire:click="remove('pm_x')"`), so both mutating
- * verbs check it against the owner's OWN methods before acting — an id for another account resolves to a
+ * verbs check it against the owner's own methods before acting — an id for another account resolves to a
  * 404 here, and the driver re-checks it against the Stripe customer as defense in depth.
  */
 final class PaymentMethodManager extends AccountScreen
@@ -81,7 +81,7 @@ final class PaymentMethodManager extends AccountScreen
 
     /**
      * Whether removing this method would leave a live subscription with no card to bill: the method is the
-     * default or the owner's only one, AND the subscription is in a state that still needs a payment method
+     * default or the owner's only one, and the subscription is in a state that still needs a payment method
      * (a charge is coming or is being retried). Grace and the terminal states have no charge coming, so
      * removing a card there is harmless.
      */

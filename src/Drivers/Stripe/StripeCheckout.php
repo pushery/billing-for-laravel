@@ -36,14 +36,14 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 use Stripe\StripeClient;
 
 /**
- * The Stripe entrance: a hosted Checkout Session in SUBSCRIPTION mode. The client submits a tier KEY,
+ * The Stripe entrance: a hosted Checkout Session in subscription mode. The client submits a tier key,
  * the price is resolved from the plan catalog (anti-price-injection), the customer is resolved-or-created
  * with identity, and the customer redirects to Stripe's hosted page — which is where SCA / 3-D Secure,
  * the card capture, and (when configured) the trial, the provider tax + VAT-id collection, promotion
  * codes and the billing address all live. On return, the success URL reconciles the subscription onto
  * the local row so the customer is never shown "Free" after paying.
  *
- * Subscription-mode payload rules Stripe enforces (and a fake will not): a metered line item carries NO
+ * Subscription-mode payload rules Stripe enforces (and a fake will not): a metered line item carries no
  * quantity; automatic_tax against an existing customer needs customer_update.address = 'auto'; and
  * invoice_creation / receipt_email are payment-mode only — in subscription mode Stripe raises the
  * subscription invoice itself.
@@ -114,7 +114,7 @@ final readonly class StripeCheckout implements Checkout
         $customerId = $this->customers->resolve($billable);
 
         // The Stripe SDK's generated param shape cannot express a payload assembled at runtime (optional
-        // trial/tax/promo/discount groups, a variable line-item list). The payload IS a valid
+        // trial/tax/promo/discount groups, a variable line-item list). The payload is a valid
         // subscription-mode Checkout Session request; its shape is asserted field-by-field in StripeCheckoutTest.
         // @phpstan-ignore argument.type (the SDK's generated shape cannot express a payload assembled at run time)
         $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant, $declarationReference, $collectTaxId, $type, $callerReference));
@@ -130,7 +130,7 @@ final readonly class StripeCheckout implements Checkout
 
     /**
      * The Checkout Session payload. The tier's base price is one line item; each of the tier's billable
-     * metered components is another, with NO quantity (Stripe rejects a quantity on a metered price).
+     * metered components is another, with no quantity (Stripe rejects a quantity on a metered price).
      *
      * @return array<string, mixed>
      */
@@ -146,8 +146,8 @@ final readonly class StripeCheckout implements Checkout
         ];
 
         // A subscription trial (mode 'subscription') attaches trial_period_days for this tier. A generic
-        // trial (mode 'generic', taken before subscribing) does NOT — and neither does a subscription tier
-        // for an owner ALREADY mid generic trial, or a mixed config would trial the same owner twice.
+        // trial (mode 'generic', taken before subscribing) does not — and neither does a subscription tier
+        // for an owner already mid generic trial, or a mixed config would trial the same owner twice.
         if ($this->trial->subscriptionTrialEnabled($tierKey) && ! $this->trials->onGenericTrial($billable)) {
             $payload['subscription_data'] = ['trial_period_days' => $this->trial->days($tierKey)];
 
@@ -160,7 +160,7 @@ final readonly class StripeCheckout implements Checkout
 
         // A resolved package coupon maps to a Stripe coupon (config stripe_coupon) and is applied as a
         // checkout discount — Stripe owns the money math and the native max_redemptions/redeem_by. Stripe
-        // forbids a session that carries BOTH an explicit discount and allow_promotion_codes, so an
+        // forbids a session that carries both an explicit discount and allow_promotion_codes, so an
         // applied coupon wins over the promotion-code field.
         $stripeCoupon = $this->providerCouponFor($couponCode, $this->scopeOf($merchant));
 
@@ -181,7 +181,7 @@ final readonly class StripeCheckout implements Checkout
             // owes. A platform that sells to consumers may leave the field out and charge every buyer their
             // country's tax. On by default, so an existing installation keeps the field.
             //
-            // A caller can decide it for THIS checkout, and the installation's setting is only the default. A
+            // A caller can decide it for this checkout, and the installation's setting is only the default. A
             // marketplace selling to consumers and to businesses needs both answers at once: no field where a
             // consumer buys, and the field where a business has to prove its status for the reverse charge.
             if ($collectTaxId ?? $this->config->get('billing.checkout.tax_id_collection', true) !== false) {
@@ -191,13 +191,13 @@ final readonly class StripeCheckout implements Checkout
             $payload['customer_update'] = ['address' => 'auto'];
         }
 
-        // WHAT RIDES ON THE SUBSCRIPTION, assembled in ONE place before it is attached.
+        // What rides on the subscription, assembled in one place before it is attached.
         //
         // Both of these have to reach the subscription object rather than the session: session metadata stays
         // behind on the session, while `subscription_data.metadata` is copied onto the subscription and
         // repeated on every later webhook about it — which is what the local row mirrors.
         //
-        // Collected first and attached once, because the alternative is an ORDER DEPENDENCY nobody can see.
+        // Collected first and attached once, because the alternative is an order dependency nobody can see.
         // Written as two blocks that each assign `metadata`, whichever ran last erases the other, and both
         // losses are silent: a dropped declaration reads as a buyer who declared nothing, and a dropped type
         // sends a second contract into the first contract's row. One assembly cannot have that bug.
@@ -210,20 +210,20 @@ final readonly class StripeCheckout implements Checkout
             $metadata['withdrawal_declaration'] = $declarationReference;
         }
 
-        // WHICH contract of this owner at this merchant the subscription is — the field that lets a second
-        // contract with ONE merchant find its own local row instead of overwriting the first one's.
+        // Which contract of this owner at this merchant the subscription is — the field that lets a second
+        // contract with one merchant find its own local row instead of overwriting the first one's.
         if ($type !== null) {
             $metadata['subscription_type'] = $type;
         }
 
-        // THE CALLER'S OWN KEY, carried and never interpreted. A consumer that writes its row BEFORE opening
+        // The caller's own key, carried and never interpreted. A consumer that writes its row before opening
         // the checkout needs to find that row again on the webhook, and until now the only key that traveled
         // was the withdrawal declaration — which a business buyer does not have, because a business has no
         // right of withdrawal to declare. So exactly the purchases with no declaration had no key at all, and
         // for a subscription there was not even a workaround: the subscription reference does not exist yet
         // when the session is opened.
         //
-        // ITS OWN KEY, NEVER `withdrawal_declaration`. Reusing that one would send a correlation id to
+        // Its own key, never `withdrawal_declaration`. Reusing that one would send a correlation id to
         // the provider and read it back with the meaning "this buyer declared", which is the one statement a
         // business checkout must not make. Two keys, two meanings.
         if ($callerReference !== null) {
@@ -237,14 +237,14 @@ final readonly class StripeCheckout implements Checkout
             ];
         }
 
-        // A routed sale MERGES its destination and fee into subscription_data rather than assigning it: the
+        // A routed sale merges its destination and fee into subscription_data rather than assigning it: the
         // trial block above may already have populated it, and overwriting would silently drop the trial. A
         // platform sale adds nothing and its payload is byte-for-byte the single-seller one.
         if ($merchant instanceof Model) {
             $routing = $this->routing($merchant);
             $existing = $payload['subscription_data'] ?? [];
 
-            // The METADATA is merged a level deeper. The separate-transfer lane names its merchant and terms there,
+            // The metadata is merged a level deeper. The separate-transfer lane names its merchant and terms there,
             // and the declaration key above may already sit in the same bag; a plain spread would replace one with
             // the other.
             if (isset($routing['metadata'])) {
@@ -259,7 +259,7 @@ final readonly class StripeCheckout implements Checkout
 
     /**
      * The tier's base line item plus one line item per billable metered component. A metered price is
-     * usage-billed, so it must be sent WITHOUT a quantity.
+     * usage-billed, so it must be sent without a quantity.
      *
      * @return list<array<string, mixed>>
      */
@@ -291,10 +291,10 @@ final readonly class StripeCheckout implements Checkout
     }
 
     /**
-     * The Stripe coupon a package coupon CODE maps to on a sale by this seller, or null when the code is
+     * The Stripe coupon a package coupon code maps to on a sale by this seller, or null when the code is
      * empty, does not resolve for that seller, or has no Stripe mapping.
      *
-     * TWO sources, the row before the config. `billing_coupons.provider_coupon_id` describes the coupon it
+     * Two sources, the row before the config. `billing_coupons.provider_coupon_id` describes the coupon it
      * sits on; `billing.coupons.<code>.stripe_coupon` is a global map needing an entry per code. Until this
      * read existed the column had no reader anywhere in the package: an adopter who filled it — because the
      * model and the migration offer it — got a discount that never applied, and nothing threw or warned.
@@ -303,7 +303,7 @@ final readonly class StripeCheckout implements Checkout
      * A config-only installation is unchanged. No row means the config answers, exactly as before.
      *
      * Public, and the visibility is the point rather than a convenience: this is also the honest answer to
-     * "will this code do anything", which the subscription starter has to give a screen BEFORE the customer
+     * "will this code do anything", which the subscription starter has to give a screen before the customer
      * commits. Read-only and side-effect free -- it resolves and looks up, it never redeems.
      */
     public function providerCouponFor(?string $couponCode, ?MerchantScope $merchant = null): ?string
@@ -312,10 +312,10 @@ final readonly class StripeCheckout implements Checkout
             return null;
         }
 
-        // A code that does not resolve for THIS seller (unknown, expired, or another seller's) is ignored —
+        // A code that does not resolve for this seller (unknown, expired, or another seller's) is ignored —
         // a bad code never blocks checkout.
         //
-        // This stays FIRST, ahead of both sources. The column is a MAPPING, not an authority: a row must
+        // This stays first, ahead of both sources. The column is a mapping, not an authority: a row must
         // never apply a discount the catalog rejected, or filling one column would be a way past the
         // validity check rather than a way to reach the provider id. The seller's own live rows are part of
         // that catalog. Before they were, a code that existed only as a row failed right here, so a
@@ -327,11 +327,11 @@ final readonly class StripeCheckout implements Checkout
         // Matched by the same rule the catalog just applied, CouponCodes', so a row is reached by the code the
         // catalog accepted whatever its case, and a code is never split.
         //
-        // Scoped to the SELLER of this sale. Without the scope this finds any issuer's row of that name, so
+        // Scoped to the seller of this sale. Without the scope this finds any issuer's row of that name, so
         // one seller's provider coupon would be applied to another seller's checkout — and on this lane the
         // discount is money Stripe takes off the invoice.
         //
-        // And only a LIVE row. A deactivated or expired one is a coupon that was withdrawn, and a config entry of the
+        // And only a live row. A deactivated or expired one is a coupon that was withdrawn, and a config entry of the
         // same code passes the check above on its own account, so a row read without asking would put the withdrawn
         // coupon's discount on the invoice anyway.
         $row = CouponCodes::find(Coupon::model()::query()->issuedBy($merchant), $couponCode);
@@ -344,7 +344,7 @@ final readonly class StripeCheckout implements Checkout
         // Read by the code's key, never a dotted config path: a code is matched by CouponCodes' rule and never
         // split on a dot (the same rule the ConfigDiscountResolver follows).
         //
-        // NOT scoped, and on purpose. The config map carries no issuer, so a code declared there is the
+        // Not scoped, and on purpose. The config map carries no issuer, so a code declared there is the
         // platform's and its Stripe coupon applies on every sale, a merchant's included — the same reach the
         // resolver gives it. A code only one seller should honor belongs in a row that seller issued.
         $coupons = $this->config->get('billing.coupons');
@@ -369,8 +369,8 @@ final readonly class StripeCheckout implements Checkout
     }
 
     /**
-     * The tier's provider price — from the MERCHANT's own catalog for a routed sale, the platform plan
-     * catalog otherwise. The anti-price-injection guarantee holds in both: a tier KEY resolves only to a
+     * The tier's provider price — from the merchant's own catalog for a routed sale, the platform plan
+     * catalog otherwise. The anti-price-injection guarantee holds in both: a tier key resolves only to a
      * price the relevant catalog declares, never one the client submitted.
      */
     private function priceFor(string $tierKey, ?Model $merchant): ?string
@@ -388,14 +388,14 @@ final readonly class StripeCheckout implements Checkout
      *
      * Refused before any provider call when the merchant cannot receive — unknown counts as no, because the
      * capability is reported asynchronously — or has no account on file to route to. On the destination lane the
-     * fee is expressed as application_fee_percent, a PERCENTAGE of each recurring invoice; a flat per-transaction
+     * fee is expressed as application_fee_percent, a percentage of each recurring invoice; a flat per-transaction
      * component has no place in a percentage, and dropping it silently would undercharge the agreed commission on
      * every renewal, so a flat component is refused loudly instead of quietly discarded.
      *
-     * ## The basis on this lane is the GROSS, and the configured rate is documented as a net rate
+     * ## The basis on this lane is the gross, and the configured rate is documented as a net rate
      *
      * That difference is stated here because it cannot be fixed here. Stripe defines the field as a
-     * percentage of the subscription's invoice TOTAL, and a total includes the buyer's tax — so a net rate
+     * percentage of the subscription's invoice total, and a total includes the buyer's tax — so a net rate
      * is not expressible through it. Converting one (`gross_pct = bps / (1 + t)`) fails at the next step:
      * `t` differs per buyer, while a subscription carries a single percentage for every invoice and every
      * buyer. No one number is right for 19%, 20% and a reverse-charge buyer at once, and the plausible-looking
@@ -415,7 +415,7 @@ final readonly class StripeCheckout implements Checkout
         $chargeType = $this->context->chargeType();
 
         // The charge type and the seller-of-record posture are independent axes that must agree, so this
-        // lane asks before it assembles the payment. The check happens BEFORE anything is assembled, which
+        // lane asks before it assembles the payment. The check happens before anything is assembled, which
         // is the only point at which refusing is still free.
         $this->context->assertRoutingCompatible($chargeType);
 
@@ -435,7 +435,7 @@ final readonly class StripeCheckout implements Checkout
 
         $fee = $this->fees->feeFor($merchant);
 
-        // THE CONFIGURED LANE AND THE EMITTED ONE ARE THE SAME STATEMENT. Emitting `transfer_data.destination`
+        // The configured lane and the emitted one are the same statement. Emitting `transfer_data.destination`
         // whatever was configured would let a separate transfer pass the posture guard on the shipped defaults
         // and then go out as the destination charge the table forbids for that posture: the money would go
         // straight to the merchant while the documents named the platform as seller.

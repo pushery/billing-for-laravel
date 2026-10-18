@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Support\UsageFlusher;
+use Pushery\Billing\Support\UsageGrants;
 use Pushery\Billing\Support\UsageMeter;
 
 /**
@@ -24,7 +25,7 @@ final class FlushUsageCommand extends Command
 
     protected $description = 'Report recorded metered usage to the billing provider';
 
-    public function handle(UsageFlusher $flusher, UsageMeter $counters, Repository $config): int
+    public function handle(UsageFlusher $flusher, UsageMeter $counters, UsageGrants $grants, Repository $config): int
     {
         // Reclaim first, and reclaim even when billing is switched off. A hold is allowance a request took
         // and never gave back — a worker killed mid-request — and while it stands, the owner is refused
@@ -35,6 +36,14 @@ final class FlushUsageCommand extends Command
 
         if ($reclaimed > 0) {
             $this->components->info("Reclaimed {$reclaimed} expired usage reservation(s).");
+        }
+
+        // An expired grant is written off here, with the loss recorded, for the same reason and on the same cadence:
+        // it is allowance, and allowance is metered whether billing is on or not.
+        $expired = $grants->expire();
+
+        if ($expired > 0) {
+            $this->components->info("Wrote off {$expired} expired usage grant(s).");
         }
 
         if (! (bool) $config->get('billing.enabled', true)) {

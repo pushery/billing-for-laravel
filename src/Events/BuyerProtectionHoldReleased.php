@@ -10,7 +10,7 @@ use Pushery\Billing\ValueObjects\Money;
 /**
  * The protection period ended in the seller's favor and the money is on its way to them.
  *
- * Announced for EVERY route to that outcome — the buyer confirming, the auto-release at the end of the
+ * Announced for every route to that outcome — the buyer confirming, the auto-release at the end of the
  * confirmation window, an operator resolving in the seller's favor — because a consuming application cares
  * that it happened, not which of the three doors it came through.
  */

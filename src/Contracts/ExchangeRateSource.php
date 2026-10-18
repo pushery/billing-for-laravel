@@ -19,7 +19,7 @@ use Pushery\Billing\Tax\FrozenExchangeRate;
  * rate — and the moment it has one, the interesting question is not the number but where it came from and
  * which day it belongs to. A float answers neither, and a float is what every convenient API returns.
  *
- * The answer is therefore a {@see FrozenExchangeRate}: the rate as scaled integer, the date the PUBLISHER
+ * The answer is therefore a {@see FrozenExchangeRate}: the rate as scaled integer, the date the publisher
  * stated, the source, and the rule that made it the correct one. That object already refuses the two ways
  * this goes wrong quietly — a non-positive rate, and a "conversion" between a currency and itself.
  *
@@ -49,12 +49,12 @@ use Pushery\Billing\Tax\FrozenExchangeRate;
  * An implementation reads reference data it already holds. It does not call a bank on the critical path of
  * a sale: the rate for a past date does not change, and a payment must not wait on somebody else's uptime.
  *
- * A rate that is not held is a REFUSAL, never a zero and never today's rate as a stand-in. Both of those
+ * A rate that is not held is a refusal, never a zero and never today's rate as a stand-in. Both of those
  * produce a document that looks defensible and states a figure nobody published. Implementations throw
  * {@see ExchangeRateUnavailable}.
  *
  * There is a specific trap behind the date argument: fetched on a Saturday,
- * a central bank's daily file answers HTTP 200 carrying FRIDAY's data. No error, no 404 — the real date is
+ * a central bank's daily file answers HTTP 200 carrying friday's data. No error, no 404 — the real date is
  * inside the document. An implementation therefore stamps the publisher's date, never the clock, and a
  * rule that has no rate on a given day (a weekend, a holiday) resolves forward to the next publication day
  * rather than inventing one.

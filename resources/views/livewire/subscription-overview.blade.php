@@ -68,7 +68,7 @@
 
         <div class="mt-6 flex flex-wrap items-center gap-3">
             @if ($state === \Pushery\Billing\Enums\SubscriptionState::Active)
-                {{-- The optional churn survey. It NEVER blocks the cancellation — "prefer not to say" leaves
+                {{-- The optional churn survey. It never blocks the cancellation — "prefer not to say" leaves
                      the reason empty and the button still cancels in one click. --}}
                 <div class="flex w-full flex-col gap-3">
                     <label class="flex max-w-xs flex-col gap-1 text-sm text-gray-600 dark:text-gray-300">

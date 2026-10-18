@@ -6,9 +6,9 @@
     a second one would show every toast twice. That duplicate is visible only in a browser, which makes it a
     bad thing to introduce while fixing a silence.
 
-    TWO regions rather than one with a switched attribute. `aria-live` is honored when the region is
+    Two regions rather than one with a switched attribute. `aria-live` is honored when the region is
     announced, and changing it on a live region is unreliable across assistive technology — so the urgency is
-    decided by WHICH container a toast is appended to. `polite` waits for a pause, which is right for "your
+    decided by which container a toast is appended to. `polite` waits for a pause, which is right for "your
     subscription is active"; `assertive` interrupts, which is right for "your payment could not be
     processed". The mapping is the one `ToastLevel` already carries.
 
@@ -62,7 +62,7 @@
             var toast = document.createElement('div');
             toast.className = 'pointer-events-auto max-w-md rounded-lg px-4 py-3 text-sm shadow-lg ' + STYLES[variant];
             // textContent, never innerHTML: a broadcast payload is untrusted, and the bridge clamps only the
-            // SEVERITY. The message is whatever the application sent, so it is written as text.
+            // severity. The message is whatever the application sent, so it is written as text.
             toast.textContent = message;
 
             var dismiss = document.createElement('button');

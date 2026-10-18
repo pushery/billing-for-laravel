@@ -9,7 +9,7 @@ use Pushery\Billing\Enums\ContentAvailability;
 use Pushery\Billing\ValueObjects\ContentReference;
 
 /**
- * The consumer's answer to "is this work there right now" — asked in BULK, never one work at a time.
+ * The consumer's answer to "is this work there right now" — asked in bulk, never one work at a time.
  *
  * The package holds the ownership rows and does not hold the works, so it cannot tell a taken-down work from
  * a live one. It asks. What it does with the answer is fixed: availability never changes whether somebody
@@ -18,7 +18,7 @@ use Pushery\Billing\ValueObjects\ContentReference;
  * ## The signature is a list because the caller has a list
  *
  * A library screen resolves every row a person owns at once. A per-reference method would turn that into one
- * call per row — and because the implementation is the consumer's own catalog, that is one QUERY per row, in
+ * call per row — and because the implementation is the consumer's own catalog, that is one query per row, in
  * their code, invisible from here. Taking the whole set makes the efficient implementation the natural one
  * and the N+1 impossible to write by accident.
  */

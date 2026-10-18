@@ -87,7 +87,7 @@ final readonly class SaleTaxDecision
         // and then the buyer's status has its say over it. The order matters: reading the product last would
         // give a consumer answer for a validated business.
         //
-        // Asked through the CLASSIFIER rather than the taxonomy directly, so that an archetype which
+        // Asked through the classifier rather than the taxonomy directly, so that an archetype which
         // delegates gets its answer from what it was sold alongside. The merge belongs there and only there:
         // a second copy of "take the delegated cells from the reference" is the one quantity, two derivations
         // that this package keeps paying for. The classifier also raises the refusal for a delegating
@@ -104,7 +104,7 @@ final readonly class SaleTaxDecision
             $placeCell = $classification->placeOfSupplyInPerson;
         }
 
-        // ONE archetype is refused here.
+        // One archetype is refused here.
         //
         // A tip is answerable: it takes its placement from what it was paid on, which `$soldAlongside` names.
         // A delegating archetype is resolved by the classifier from its reference, or refused there, and a
@@ -113,7 +113,7 @@ final readonly class SaleTaxDecision
         // the rule lives.
         //
         // A multi-purpose voucher stays refused unconditionally, and no reference argument can change that:
-        // it has no treatment AT ALL until redemption, so answering would mean inventing a redemption that
+        // it has no treatment at all until redemption, so answering would mean inventing a redemption that
         // has not happened. The refusal is this package's own exception, which tells whoever called
         // `decide()` what to do; a `LogicException` from deep inside a value object would speak only to
         // whoever maintains this package.
@@ -170,7 +170,7 @@ final readonly class SaleTaxDecision
         return new SaleTaxFacts(
             tax: $tax,
             placement: $placement,
-            // The country the DOCUMENT states, which is the one the tax belongs to — not necessarily the
+            // The country the document states, which is the one the tax belongs to — not necessarily the
             // buyer's. A seller-placed supply to a foreign consumer is taxed at home, and a document naming
             // the buyer's country there would report it into a return that never owed it.
             country: $this->places->documentCountryFor($productRule, $buyer),
@@ -179,7 +179,7 @@ final readonly class SaleTaxDecision
             exemption: $this->exemptionFor($net, $tax, $placement, $buyer),
             // Decided here rather than left to the caller, for the same reason the rate is: this is the one
             // place a sale's tax is settled, and a tax point worked out somewhere else is a second answer to
-            // a question that must have exactly one. It is the SAME value the rate was asked for above,
+            // a question that must have exactly one. It is the same value the rate was asked for above,
             // computed once — a second call here would be a second answer to that same question.
             taxPoint: $taxPoint,
             appliedRateBps: $this->appliedRateBpsFor($taxed, $net->currency),
@@ -200,7 +200,7 @@ final readonly class SaleTaxDecision
     }
 
     /**
-     * Decide the tax on a sale whose BUYER-FACING TOTAL is what was chosen, not its net.
+     * Decide the tax on a sale whose buyer-facing total is what was chosen, not its net.
      *
      * A tip and a pay-what-you-want price arrive gross: the fan picks what they will pay, and the net is
      * whatever is left once the tax is taken out. Every other path in this package prices the other way
@@ -210,7 +210,7 @@ final readonly class SaleTaxDecision
      *
      * ## Why the rate is read back rather than looked up
      *
-     * There is no rate table to consult here. `rateBps` on the facts is DERIVED — the calculator is asked
+     * There is no rate table to consult here. `rateBps` on the facts is derived — the calculator is asked
      * for an amount and the rate is the quotient. So the rate for this sale is obtained the only way it can
      * be: ask the calculator once, on the gross, purely to learn the slope; then split the real gross at
      * that slope. The probe's tax is discarded — it answers a question about the wrong amount.
@@ -221,7 +221,7 @@ final readonly class SaleTaxDecision
      * to pay this total and a document whose parts do not add up to it is visibly wrong. `Money::baseFromMarkup`
      * guarantees it by taking the tax as the remainder rather than computing it a second time.
      *
-     * What is then CHECKED is whether the regime agrees: charged on the resulting net, does it produce the
+     * What is then checked is whether the regime agrees: charged on the resulting net, does it produce the
      * tax the split implies? One minor unit of slack is allowed, because some totals genuinely have no exact
      * inverse in whole cents. Anything wider means the rate does not scale with the amount, and the whole
      * approach is void for that regime — so it refuses rather than shipping a number that looks right.
@@ -262,7 +262,7 @@ final readonly class SaleTaxDecision
             throw new GrossPriceNotSplittable($gross, $slope, $impliedTax, $facts->tax);
         }
 
-        // The SPLIT's tax is what travels on, not the recomputed one. They differ by at most that cent, and
+        // The split's tax is what travels on, not the recomputed one. They differ by at most that cent, and
         // only one of the two adds back up to what the fan actually paid.
         return $facts->withTax($impliedTax);
     }
@@ -289,7 +289,7 @@ final readonly class SaleTaxDecision
         // Would this regime have taxed anything at all? An installation configured for no tax returns zero
         // for every sale, and reading those zeros as exemptions would print a legal claim the operator never
         // made — "supplied outside the union" on a shop that simply does not compute VAT. So the question is
-        // asked of the calculator itself, with the plainest domestic sale there is: if THAT is also zero, the
+        // asked of the calculator itself, with the plainest domestic sale there is: if that is also zero, the
         // zero here says nothing about this supply, and there is no exemption to name.
         //
         // Asked rather than inferred from configuration, because the calculator is what actually answered.
@@ -312,7 +312,7 @@ final readonly class SaleTaxDecision
      * Whether this tax regime charges anything on an ordinary domestic consumer sale.
      *
      * The probe is deliberately the least exceptional sale the installation can make: its own country, a
-     * consumer, no VAT id. Anything that comes back zero from THAT is a regime that does not tax, not a
+     * consumer, no VAT id. Anything that comes back zero from that is a regime that does not tax, not a
      * supply that was relieved.
      */
     private function regimeCharges(Money $net): bool

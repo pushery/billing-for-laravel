@@ -123,4 +123,29 @@ return [
         'cta' => 'Conferma il pagamento',
     ],
 
+    'direct_debit_announced' => [
+        'subject' => 'Il tuo prossimo addebito diretto',
+        'intro' => ':payee addebiterà :amount sul tuo conto con addebito diretto SEPA il :date.',
+        'recurring' => 'Dopo, lo stesso importo verrà addebitato a ogni scadenza del tuo abbonamento. Se l\'importo cambia, riceverai un avviso prima dell\'addebito.',
+        'account' => 'Conto che termina con :account.',
+        'mandate' => 'Riferimento del mandato: :reference.',
+        'creditor' => 'Identificativo del creditore: :creditor.',
+        'outro' => 'Non devi fare nulla.',
+        'cta' => 'Vedi i tuoi metodi di pagamento',
+    ],
+
+    'cancellation_received' => [
+        'subject' => 'Abbiamo ricevuto la tua disdetta',
+        'intro' => 'Ti confermiamo la disdetta che hai dichiarato, con tutto il suo contenuto e la data e l’ora in cui ci è pervenuta.',
+        'outro' => 'Conserva questa email. È la prova della tua disdetta e del momento in cui ci è pervenuta.',
+        'cta' => 'Vedi la tua disdetta',
+    ],
+
+    'withdrawal_received' => [
+        'subject' => 'Abbiamo ricevuto il tuo recesso',
+        'intro' => 'Ti confermiamo il recesso che hai dichiarato, con tutto il suo contenuto e la data e l’ora in cui ci è pervenuto.',
+        'outro' => 'Conserva questa email. È la prova del tuo recesso e del momento in cui ci è pervenuto.',
+        'cta' => 'Vedi il tuo recesso',
+    ],
+
 ];

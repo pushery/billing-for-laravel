@@ -12,7 +12,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
 use Pushery\Billing\ValueObjects\PricedSale;
 
 /**
- * A tip or a pay-what-you-want price: a fee the FAN chooses, run through the ordinary sale pipeline.
+ * A tip or a pay-what-you-want price: a fee the fan chooses, run through the ordinary sale pipeline.
  *
  * A tip is not a donation and takes no side path. It is consideration for the creator's supply — the fan
  * sought the channel out — so it carries the same regime, the same commission and the same document chain
@@ -20,8 +20,8 @@ use Pushery\Billing\ValueObjects\PricedSale;
  *
  * Two things this has to hold that a catalog sale gets for free. A catalog price cannot be chosen by the
  * buyer, which is the package's defense against price injection; a fan-chosen amount reintroduces that
- * exposure, so the floor is enforced HERE, on the server, from config — never trusted from the request.
- * That sentence stood while it was true of ONE of the two entries: a pay-what-you-want price was floored
+ * exposure, so the floor is enforced here, on the server, from config — never trusted from the request.
+ * That sentence stood while it was true of one of the two entries: a pay-what-you-want price was floored
  * and a tip was not, though a tip is a buyer-chosen amount by construction and the contract says so in as
  * many words. Both are floored now, and a tip may carry its own threshold. And
  * a chosen amount of zero is not a sale of nothing: it is no sale, with no transaction, no document and no
@@ -44,7 +44,7 @@ final readonly class FanChosenPricing
     /**
      * Price a tip, or return null when there is nothing to charge.
      *
-     * NULL ANSWERS TWO DIFFERENT QUESTIONS and the caller can tell them apart without this saying which:
+     * Null answers two different questions and the caller can tell them apart without this saying which:
      * tipping is switched off, or the buyer chose nothing. Only the first is a configuration answer
      * somebody may want to act on, and `tipsEnabled()` is public so that a caller who cares can ask it
      * directly rather than infer it from a null that also means the box was left empty.
@@ -102,7 +102,7 @@ final readonly class FanChosenPricing
     /**
      * The commission applied to a tip: a tip-specific rate if configured, otherwise the ordinary one.
      *
-     * Public because the charge path needs the SAME fee this class prices with. It was private, and that is
+     * Public because the charge path needs the same fee this class prices with. It was private, and that is
      * precisely why nothing could call this class: a caller could ask for a priced tip or it could charge
      * one, but it could not do both at the same rate — so the tip rate was a setting no sale could ever
      * carry. One place decides it, and both the preview and the money read it from here.
@@ -122,12 +122,12 @@ final readonly class FanChosenPricing
             );
         }
 
-        // A configured tip rate replaces BOTH the rate and the flat component; the rounding direction is
+        // A configured tip rate replaces both the rate and the flat component; the rounding direction is
         // the only thing carried over. The zero is deliberate, not a dropped argument: a flat fee is a
         // fixed amount per transaction, so on a 1.00 tip against a 30-minor flat it would take almost a
         // third of a voluntary payment, and on a small enough tip more than the tip. The platform absorbs it.
         //
-        // Note the asymmetry with the early return above, because it is the surprising part: with NO tip
+        // Note the asymmetry with the early return above, because it is the surprising part: with no tip
         // rate configured the ordinary fee is returned whole, flat component included. So a tip carries the
         // flat fee exactly when the operator has said nothing about tips, and stops carrying it the moment
         // they set a rate. Both branches are pinned in FanChosenPricingTest — neither was, which is why
@@ -156,7 +156,7 @@ final readonly class FanChosenPricing
     }
 
     /**
-     * The floor a TIP must clear: its own setting where the operator wrote one, otherwise the sale floor.
+     * The floor a tip must clear: its own setting where the operator wrote one, otherwise the sale floor.
      *
      * The fallback is what makes the setting worth having rather than a second copy. An operator who has
      * said "a buyer-chosen amount below this is not worth a transaction" has said something that is true of

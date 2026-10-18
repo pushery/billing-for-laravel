@@ -14,7 +14,7 @@ use RuntimeException;
  * the provider can reach — usually the platform — while the local records say it was split. Unwinding that
  * is manual, per transaction, and only starts once somebody reconciles.
  *
- * It is deliberately distinct from {@see EligibilityDenied}, which refuses the BUYER. The two are refused
+ * It is deliberately distinct from {@see EligibilityDenied}, which refuses the buyer. The two are refused
  * for unrelated reasons and fixed by different people, and one exception for both would send whoever reads
  * it to the wrong person.
  *

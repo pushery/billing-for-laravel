@@ -64,7 +64,7 @@ final readonly class GrantPurchasedContent
         // The checkout reference, not the payment id: it is the key a redelivered webhook repeats, so it is
         // the one that makes a replay return the row it already wrote instead of a second one.
         //
-        // THE TYPE AND THE CONSENT ARE WHAT ARM THE GATE, and until now neither was passed. `ContentGrants`
+        // The type and the consent are what arm the gate, and until now neither was passed. `ContentGrants`
         // returns before consulting the withdrawal gate when it gets no type, so the fail-closed check
         // before provision — built, bound, tested and reachable — could not fire on any install however it
         // was configured. Passing a type nobody supplies is the whole of the defect; the rest of that path
@@ -74,7 +74,7 @@ final readonly class GrantPurchasedContent
             $content,
             $event->reference,
             withdrawalType: $this->types->forAddon($event->addonKey),
-            // The MINTED key first, the session reference second. The minted one is what the declarations
+            // The minted key first, the session reference second. The minted one is what the declarations
             // were actually written against -- it had to be, because at the moment they were made this
             // purchase had no reference of any kind. The fallback covers an install that records against
             // the session reference itself out of band, which is the only other shape this ledger has ever

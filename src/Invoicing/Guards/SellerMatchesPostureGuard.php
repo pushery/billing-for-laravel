@@ -9,10 +9,10 @@ use Pushery\Billing\Exceptions\SellerContradictsPosture;
 use Pushery\Billing\Invoicing\Party;
 
 /**
- * The seller a document NAMES must agree with the posture it carries: the deemed supplier is the platform,
+ * The seller a document names must agree with the posture it carries: the deemed supplier is the platform,
  * anyone else is the merchant.
  *
- * This is the WHO half of "a document must match its sale"; `DocumentRoleGuard` is the ROLE half. Checked at
+ * This is the who half of "a document must match its sale"; `DocumentRoleGuard` is the ROLE half. Checked at
  * creation and independent of the regime — a document may carry a posture and a seller without a regime —
  * and skipped entirely where no seller was snapshotted, so a single-seller row is untouched.
  *
@@ -53,7 +53,7 @@ final class SellerMatchesPostureGuard
     }
 
     /**
-     * Whether the named seller IS the platform company — identity by legal name plus tax id.
+     * Whether the named seller is the platform company — identity by legal name plus tax id.
      *
      * @param  array<array-key, mixed>  $seller
      * @param  array<array-key, mixed>  $company

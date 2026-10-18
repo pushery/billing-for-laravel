@@ -9,13 +9,13 @@ namespace Pushery\Billing\ValueObjects;
  * with its own local engine. This is how a local-engine driver slots in without reducing Stripe: Stripe
  * reports rich native capabilities; the others report fewer, and the package supplies the rest.
  *
- * ## Every flag here describes REMOTE payment, and that boundary is stated rather than left to be found
+ * ## Every flag here describes remote payment, and that boundary is stated rather than left to be found
  *
  * A buyer who is not present: a hosted checkout, a stored mandate, a webhook. Card-present payment is
  * outside it -- there is no flag that says a driver can take money at a counter, and there is deliberately
  * no flag that says it cannot either, because the question is not one this object can carry.
  *
- * In-person payment is a payment PATH, not a capability: terminal pairing, reader state, offline
+ * In-person payment is a payment path, not a capability: terminal pairing, reader state, offline
  * behavior, a receipt, and a place of supply that is not the one distance selling uses -- which reaches
  * `src/Tax/`, where a wrong answer is a filed return rather than a missing feature. Hanging one more
  * boolean here would let a consumer ask the question and get an answer this package could not keep.
@@ -38,11 +38,11 @@ final readonly class DriverCapabilities
         public bool $supportsProviderCredit = false,
         public array $availablePaymentMethods = [],
         public array $recurringCapableMethods = [],
-        // Appended LAST, and it has to stay last. The value object is constructed positionally by
+        // Appended last, and it has to stay last. The value object is constructed positionally by
         // driver code outside this package, so inserting a parameter anywhere else silently shifts
         // every argument after it — a capability flag would start reading a payment-method list.
         public bool $supportsConnectDestinationCharges = false,
-        // Appended LAST for the same reason as the line above, and it answers a question the package now
+        // Appended last for the same reason as the line above, and it answers a question the package now
         // has to ask: does this provider tell the customer their trial is about to end?
         //
         // Stripe does — `customer.subscription.trial_will_end` reaches the mapper, which produces a
@@ -50,7 +50,7 @@ final readonly class DriverCapabilities
         // nothing, because nothing at the provider knows a trial is running: the package holds that date
         // itself and its own sweep collects the first charge.
         //
-        // A capability is a promise the PACKAGE keeps, so this is true where a mapper genuinely produces
+        // A capability is a promise the package keeps, so this is true where a mapper genuinely produces
         // the event, never where the provider merely could.
         public bool $supportsProviderTrialNotice = false,
     ) {}

@@ -11,7 +11,7 @@ use Pushery\Billing\Enums\MeteringPolicy;
 /**
  * One metered usage dimension for the current period — the building block of a QuotaSnapshot. A
  * project renders 0..N of these (one app meters a single token budget, another meters two counts).
- * Pure value object: the math here is display-only; the ENFORCED limits live in each project's own
+ * Pure value object: the math here is display-only; the enforced limits live in each project's own
  * request path (e.g. an atomic reservation).
  */
 final readonly class MeteredDimension
@@ -28,7 +28,7 @@ final readonly class MeteredDimension
         // The clock-authoritative moment this period's budget resets. Optional so dimensions that
         // are not calendar-bound (e.g. a per-session count) can omit it.
         public ?DateTimeInterface $resetAt = null,
-        // THE FORECAST PAIR, and it is supplied rather than computed.
+        // The forecast pair, and it is supplied rather than computed.
         //
         // A rate needs history, and this object knows only the current period. Worse, "per day" is a
         // claim about a project's own counting: a dimension reset mid-period, a backfilled import, or a

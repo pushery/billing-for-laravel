@@ -16,11 +16,11 @@ use Pushery\Billing\ValueObjects\MerchantAccountReference;
  * A recording stand-in for the receiving side, so a marketplace consumer can assert routing without a
  * provider.
  *
- * It is bound EXPLICITLY, never by the general billing fake. That fake stands in for the three seams that
+ * It is bound explicitly, never by the general billing fake. That fake stands in for the three seams that
  * move a buyer's money; the receiving side is a different surface with different assertions, and binding it
  * along would quietly replace a consumer's own rails in tests that never asked for it.
  *
- * Accounts it hands out are NOT receivable. A fake that reported a fully capable account would let a test
+ * Accounts it hands out are not receivable. A fake that reported a fully capable account would let a test
  * route money the moment onboarding started — the exact sequence the real gate refuses, since a provider
  * confirms capabilities later, or never. A test that wants a receivable merchant says so.
  */

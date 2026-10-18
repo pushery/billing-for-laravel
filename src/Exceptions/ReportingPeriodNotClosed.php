@@ -11,7 +11,7 @@ use RuntimeException;
  * Thrown when a reporting rate is asked for before the period it converts at has ended.
  *
  * A refusal rather than a best effort, and the distinction matters more here than it usually does. The rate
- * reader resolves a day it holds nothing for FORWARD, to the next publication day — so running early would
+ * reader resolves a day it holds nothing for forward, to the next publication day — so running early would
  * not produce an error. It would produce a real rate, correctly dated, for the wrong day, on every document
  * in the period at once. A wrong figure that passes every check is the expensive kind.
  *

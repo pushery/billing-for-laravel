@@ -20,7 +20,7 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  *
  * ## The length is profile data, and so is whether there is a window at all
  *
- * Fourteen days is one country's number. More importantly, WHICH sales have a window is also a reading:
+ * Fourteen days is one country's number. More importantly, which sales have a window is also a reading:
  * under the German rules a work whose right extinguished on delivery has none once the declarations were
  * made, while a subscription's runs from provision regardless. The core asks the question; it does not
  * know either answer.

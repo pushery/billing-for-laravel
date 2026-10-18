@@ -7,7 +7,7 @@ namespace Pushery\Billing\Contracts;
 use Pushery\Billing\Enums\TaxArchetype;
 
 /**
- * A catalog that can say WHAT KIND of thing one of its entries is.
+ * A catalog that can say what kind of thing one of its entries is.
  *
  * ## Why this is its own contract and not a method on AddonCatalog
  *
@@ -17,7 +17,7 @@ use Pushery\Billing\Enums\TaxArchetype;
  * system answers that before anything runs. The same reasoning already governs {@see RoutesMoney} and
  * {@see MovesMerchantShare}.
  *
- * ## Why the archetype has to live on the PRODUCT
+ * ## Why the archetype has to live on the product
  *
  * The archetype decides tax regime, place of supply, rate band, reporting relevance and — the reason this
  * contract exists now — the kind of withdrawal right a buyer has. `RoutedPayment::charge()` already takes
@@ -30,7 +30,7 @@ use Pushery\Billing\Enums\TaxArchetype;
  * An unclassified entry returns null rather than a default. A guessed archetype is a guessed tax treatment
  * and a guessed withdrawal right, and both are wrong quietly.
  *
- * What a null MEANS is each caller's decision, and they decide differently. The tax basis of an order
+ * What a null means is each caller's decision, and they decide differently. The tax basis of an order
  * freezes nothing for an unclassified add-on. A withdrawal question has no answer for an unclassified
  * add-on, while a tier without a key reads as a plain subscription. The content-grant effect reads a null
  * as "nothing to gate" — **regardless of the consumer-rights profile**, because the gate is never reached

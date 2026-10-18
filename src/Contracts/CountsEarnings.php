@@ -15,8 +15,8 @@ use Pushery\Billing\ValueObjects\Money;
  * ## Why the window had to come out
  *
  * This package owes three counters over the same transactions, and they differ in exactly two settings: the
- * WINDOW and the BASIS. The threshold monitor counts payout-net over a calendar year; a reporting counter
- * counts a party's gross inflow over a calendar QUARTER; a nexus counter counts the buyer's gross by region.
+ * window and the basis. The threshold monitor counts payout-net over a calendar year; a reporting counter
+ * counts a party's gross inflow over a calendar quarter; a nexus counter counts the buyer's gross by region.
  * A seam that takes an `int $year` can serve the first and nothing else — so the others would each bring
  * their own counting, and two tallies over one set of transactions drift apart at the first refund.
  *
@@ -40,8 +40,8 @@ use Pushery\Billing\ValueObjects\Money;
 interface CountsEarnings
 {
     /**
-     * The party's earnings that ARRIVED within the window, in that currency, less anything reversed that
-     * COMPLETED within the same window — the cash basis in both directions, exactly as the annual counter
+     * The party's earnings that arrived within the window, in that currency, less anything reversed that
+     * completed within the same window — the cash basis in both directions, exactly as the annual counter
      * defines it.
      */
     public function countedIn(Model $party, string $currency, CountingPeriod $period): Money;

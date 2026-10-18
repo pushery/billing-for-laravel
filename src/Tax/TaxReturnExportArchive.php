@@ -73,7 +73,7 @@ final readonly class TaxReturnExportArchive
      *
      * The point of asking: a return is reproducible only if nothing under it moved. A mismatch is not an
      * error — it is the normal consequence of a late correction — but it is a fact somebody has to see
-     * BEFORE filing, not discover afterwards from a tax authority.
+     * before filing, not discover afterwards from a tax authority.
      *
      * @param  list<TaxReturnLine>  $lines
      */

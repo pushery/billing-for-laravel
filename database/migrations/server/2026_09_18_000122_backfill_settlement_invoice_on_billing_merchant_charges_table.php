@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Fill in the settlement link for charges that were settled one transaction at a time.
  *
- * `billing_merchant_charges.settlement_invoice_id` arrived for the COLLECTIVE settlement shape, because a
+ * `billing_merchant_charges.settlement_invoice_id` arrived for the collective settlement shape, because a
  * month-end document carries its transactions as lines and can name none of them in its header. The
  * per-transaction shape was left to the opposite direction — `settled_charge_reference` on the document —
  * and that is where the defect lived: one fact reachable two ways, so a reader walking from a charge found
@@ -23,15 +23,15 @@ use Illuminate\Support\Facades\DB;
  *
  * ## Why this backfills where the neighboring column deliberately does not
  *
- * `purpose` on this table is nullable and NOT backfilled, and its migration explains why: the value would
- * have to be GUESSED, and the guess is wrong in the direction that matters. Nothing is guessed here. The
+ * `purpose` on this table is nullable and not backfilled, and its migration explains why: the value would
+ * have to be guessed, and the guess is wrong in the direction that matters. Nothing is guessed here. The
  * document states which charge it settled, in a column written at issue and frozen since; this migration
  * only walks a link that already exists in the other direction.
  *
  * ## What it refuses to match, and why each refusal is the safe direction
  *
  * A wrong link is worse than a missing one. A missing one leaves a fee placed by the money date, which is
- * today's behavior; a wrong one places it by a document that documents a DIFFERENT sale, and nothing about
+ * today's behavior; a wrong one places it by a document that documents a different sale, and nothing about
  * the resulting figure looks unusual.
  *
  * - **A document naming no provider matches nothing.** A charge reference is unique only per provider, so

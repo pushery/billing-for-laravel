@@ -30,8 +30,8 @@ final class ReconcileMerchantJournalCommand extends Command
         $option = $this->option('driver');
         $driver = is_string($option) && $option !== '' ? $option : $active;
 
-        // ONE INSTALL READS BACK THROUGH ONE DRIVER, so a named driver that is not the active one cannot
-        // be audited from here — and it must not be attempted. The option selects which ROWS to sweep; the
+        // One install reads back through one driver, so a named driver that is not the active one cannot
+        // be audited from here — and it must not be attempted. The option selects which rows to sweep; the
         // reader is bound process-wide to whichever driver the install runs. Asking the active provider
         // about another provider's reference gets a refusal, which this command reports as
         // MISSING_AT_PROVIDER: the most serious finding it has, manufactured, once per row.

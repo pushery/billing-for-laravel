@@ -26,7 +26,7 @@ final readonly class CountryEvidence
         /**
          * Whether the buyer has to be asked.
          *
-         * Distinct from an unresolved country: this one CAN be settled, by the person who knows. Treating
+         * Distinct from an unresolved country: this one can be settled, by the person who knows. Treating
          * it as a failure would refuse a sale that is merely ambiguous, and treating it as resolved would
          * pick one of two contradicting sources at random.
          */

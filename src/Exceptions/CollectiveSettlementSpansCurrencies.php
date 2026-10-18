@@ -9,7 +9,7 @@ use RuntimeException;
 /**
  * A month's transactions for one creator arrived in more than one currency — refused rather than summed.
  *
- * A collective document carries ONE currency. The totals behind it are accumulated as minor units, and minor
+ * A collective document carries one currency. The totals behind it are accumulated as minor units, and minor
  * units of two currencies add up to a number that means nothing: 100 cents plus 100 cents is 200 of neither.
  * Stamping the result with whichever currency arrived first turns that into a document a creator is paid
  * against.

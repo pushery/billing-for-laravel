@@ -16,7 +16,7 @@
         {{ __('billing::account.skip_to_content') }}
     </a>
 
-    {{-- A deliberately minimal admin shell — NOT the customer account nav. It is plain, framework-agnostic
+    {{-- A deliberately minimal admin shell — not the customer account nav. It is plain, framework-agnostic
          markup so the package needs no UI-kit dependency; publish `billing-views` to replace it wholesale
          (e.g. with your own back-office app shell). --}}
     <div class="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-8">

@@ -114,8 +114,8 @@ final readonly class Party
     }
 
     /**
-     * Resolve the party's electronic address (BT-34 seller / BT-49 buyer). XRechnung 3.0 promoted BOTH to
-     * MANDATORY 1..1 fields (BR-DE, effective 2024-02-01), so the writer must never omit them — a missing
+     * Resolve the party's electronic address (BT-34 seller / BT-49 buyer). XRechnung 3.0 promoted both to
+     * mandatory 1..1 fields (BR-DE, effective 2024-02-01), so the writer must never omit them — a missing
      * EndpointID makes the KoSIT validator reject the document. Resolve down a most-correct-first chain:
      *
      *   1. an explicitly configured endpoint (a real delivery address) + its scheme (default "EM")

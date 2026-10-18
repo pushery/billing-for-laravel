@@ -28,7 +28,7 @@ use Pushery\Billing\Support\UniqueRow;
  * they added once.
  *
  * **The default is claimed only when there is no default.** The first mandate becomes it because there is
- * nothing else to charge; a later one must not take over, because the customer ADDED a method rather than
+ * nothing else to charge; a later one must not take over, because the customer added a method rather than
  * choosing to switch to it, and a silent switch bills the wrong card. Choosing is `makeDefault()`, and it
  * is a deliberate act with a screen behind it.
  *

@@ -8,6 +8,7 @@ return [
     'invoice' => 'Rechnung',
     'correction' => 'Rechnungskorrektur',
     'corrects' => 'Korrektur zu :number',
+    'reinstates' => 'Erneute Berechnung zu :number',
     'number' => 'Rechnungsnummer :number',
     'issued' => 'Ausgestellt am :date',
     'from' => 'Von',

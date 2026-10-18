@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Lang;
  *
  * A view that writes `format('d.m.Y')` hands a German date to every locale. The package ships seven, and
  * for `en` that is not merely unidiomatic but ambiguous: `03.09.2026` is the 3rd of September or the 9th
- * of March depending on the reader, and both readings are reasonable. On an INVOICE and on an
+ * of March depending on the reader, and both readings are reasonable. On an invoice and on an
  * access-expiry date, guessing wrong is not a cosmetic problem.
  *
  * ## The trap this class exists to close
@@ -34,24 +34,25 @@ use Illuminate\Support\Facades\Lang;
  * pointing the other way, and harder to notice — the test somebody writes first runs under `en`,
  * where it looks perfect.
  *
- * Hence: the locale is read from the app and handed to Carbon EXPLICITLY, on every call.
+ * Hence: the locale is read from the app and handed to Carbon explicitly, on every call.
  *
  * ## Why there are three methods and not one
  *
  * `short()` is the direct replacement for what the views did: numeric, compact, right inside a table
- * cell. `long()` spells the month out, and exists for ONE reason — a document that outlives the
+ * cell. `long()` spells the month out, and exists for one reason — a document that outlives the
  * session it was rendered in. `03/09/2026` is what `es`, `fr`, `it` and `pt` produce, and it is
- * character-for-character what `en` produces for a DIFFERENT day; an invoice read in another country
+ * character-for-character what `en` produces for a different day; an invoice read in another country
  * years later has no locale to disambiguate it, and the month name needs none.
  *
- * `shortWithTime()` is `short()` plus the clock, for the admin event log — the only place carrying a
- * time. Without it, converting that column would have dropped the time silently, which is exactly the
- * kind of loss a sweeping replacement makes and nobody notices.
+ * `shortWithTime()` is `short()` plus the clock, for the admin event log. Without it, converting that
+ * column would have dropped the time silently, which is exactly the kind of loss a sweeping replacement
+ * makes and nobody notices. `longWithSeconds()` is `long()` plus the clock to the second and the zone, for
+ * the receipt of a declaration, where the moment it arrived is the fact the receipt exists to state.
  *
- * ## What this deliberately does NOT do
+ * ## What this deliberately does not do
  *
  * It does not convert time zones. The values reaching it are already whatever the caller stored (this
- * package stores UTC through its own cast), and shifting them here would change WHICH MOMENT is shown
+ * package stores UTC through its own cast), and shifting them here would change which moment is shown
  * while pretending to change only how it is spelled. That is a separate decision with its own test.
  */
 final class LocalizedDate
@@ -74,6 +75,12 @@ final class LocalizedDate
         return self::render($moment, 'L LT');
     }
 
+    /** The month spelled out, the time to the second and the zone: `3. September 2026, 14:05:09 CEST`. */
+    public static function longWithSeconds(DateTimeInterface $moment): string
+    {
+        return (string) self::render($moment, 'LL, LTS z');
+    }
+
     /**
      * Null in, null out — so a caller keeps its own `?? '—'` and no view has to learn a second way of
      * saying "there is no date here".
@@ -88,7 +95,7 @@ final class LocalizedDate
         // setLocale would leak this package's choice into the host application's own dates.
         //
         // `settings()` rather than the more obvious `locale()`: the latter is overloaded — with no
-        // argument it RETURNS the current locale as a string, so its signature is `static|string` and a
+        // argument it returns the current locale as a string, so its signature is `static|string` and a
         // chained `->isoFormat()` does not type-check. Narrowing that with an `instanceof` would add a
         // branch no run can enter, which the coverage floor would then report as an untested line
         // forever. `settings()` returns `static` unconditionally and produces the identical output,

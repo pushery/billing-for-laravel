@@ -9,8 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 /**
  * Implemented by a billing owner that can say whether an actor still belongs to it.
  *
- * THIS EXISTS BECAUSE `billing.team_relation` MAY POINT AT A POINTER RATHER THAN A MEMBERSHIP.
- * `BillingEntityResolver` reads the configured relation off the actor, and for a relation that IS
+ * This exists because `billing.team_relation` may point at a pointer rather than a membership.
+ * `BillingEntityResolver` reads the configured relation off the actor, and for a relation that is
  * the membership -- `$user->team` on a belongs-to -- the answer carries its own proof: the row
  * exists because the user belongs to it. A great many applications instead point at a mutable
  * column the user controls, `current_team_id` being the common one, and there the two questions

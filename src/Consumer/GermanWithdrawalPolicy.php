@@ -39,7 +39,7 @@ final readonly class GermanWithdrawalPolicy implements ConsumerWithdrawalPolicy,
     }
 
     /**
-     * Fourteen days from PROVISION — § 355 Abs. 2 BGB — where a window exists at all.
+     * Fourteen days from provision — § 355 Abs. 2 BGB — where a window exists at all.
      *
      * Counted as days on the German calendar: the window ends when the fourteenth day after provision has ended, and
      * a last day on a Saturday, a Sunday or a public holiday gives way to the next working day. How, and why every
@@ -53,12 +53,12 @@ final readonly class GermanWithdrawalPolicy implements ConsumerWithdrawalPolicy,
      *
      * ## The three kinds that get no date, and they are not the same thing
      *
-     * A work whose right EXTINGUISHED on delivery has no window left once the declarations were made and
+     * A work whose right extinguished on delivery has no window left once the declarations were made and
      * confirmed — that is what those declarations do. Without them the right survives, so the window runs.
      *
      * `NotApplicable` never had one: no consumer contract, nothing for a right to attach to.
      *
-     * And an UNCLASSIFIED sale gets none either, which is the one that would be tempting to default. The
+     * And an unclassified sale gets none either, which is the one that would be tempting to default. The
      * archetype resolver states plainly that null means unclassified and never "no right applies", so a
      * date computed here would be a statutory-looking answer produced by a guess.
      */

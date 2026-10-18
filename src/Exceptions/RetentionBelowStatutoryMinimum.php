@@ -7,14 +7,14 @@ namespace Pushery\Billing\Exceptions;
 use RuntimeException;
 
 /**
- * A configured retention window is SHORTER than the law requires, and nobody said to allow that.
+ * A configured retention window is shorter than the law requires, and nobody said to allow that.
  *
  * The right to erasure yields to a legal retention obligation (GDPR Art. 17(3)(b)); in Germany an invoice
  * must be kept for ~10 years (§147 AO, §14b UStG). Deleting a financial record before that window closes is
  * a bookkeeping violation, so the package refuses to boot on a window below the statutory floor rather than
  * quietly prune tax records too early.
  *
- * The floor is a FLOOR, not a target: keeping data LONGER is always allowed. Only shortening it below the
+ * The floor is a floor, not a target: keeping data longer is always allowed. Only shortening it below the
  * legal minimum is refused, and only until an operator opts in on purpose (billing.retention.
  * allow_below_statutory_minimum) — for a jurisdiction whose minimum genuinely is shorter than the German
  * default this ships with.

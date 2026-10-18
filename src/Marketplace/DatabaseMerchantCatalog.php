@@ -12,7 +12,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
  * The merchant catalog a marketplace binds in place of the single-seller default: every scope resolves to a
- * database-backed catalog reading THAT merchant's rows.
+ * database-backed catalog reading that merchant's rows.
  *
  * A fresh catalog is built per scope so two merchants never share one, and a null scope resolves to the
  * platform's own — the marketplace still has a platform. The whole merchant dimension is contained here; the

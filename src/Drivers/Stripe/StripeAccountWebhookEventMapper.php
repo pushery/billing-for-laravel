@@ -18,6 +18,9 @@ use Stripe\StripeClient;
  * Stripe signs each event, so its type says what happened. An event about a payment intent carries the intent. An
  * event about a refund, a failed refund or a dispute only names it, so the intent is read back with the account's
  * client, together with its latest charge, and the amounts and the metadata are the payment's own.
+ *
+ * A Checkout Session the customer never paid ends without a payment intent, because Stripe creates one only when
+ * the customer pays. Its expiry is reported under the session's id, the reference its charge's result named.
  */
 final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapper
 {
@@ -33,10 +36,23 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
     /** The events about a refund, which report one only where it failed. */
     private const array REFUND_EVENTS = ['refund.failed', 'refund.updated', 'charge.refund.updated'];
 
+    /** The event about a Checkout Session that ran out before the customer paid. */
+    private const string SESSION_EXPIRED = 'checkout.session.expired';
+
     public function __construct(
         private StripeClient $stripe,
         private string $account,
     ) {}
+
+    /**
+     * Every event type this mapper reads, for the webhook endpoint of an account to subscribe to.
+     *
+     * @return list<string>
+     */
+    public static function events(): array
+    {
+        return [...array_keys(self::INTENT_EVENTS), 'charge.refunded', 'charge.dispute.created', ...self::REFUND_EVENTS, self::SESSION_EXPIRED];
+    }
 
     /** @return iterable<AccountPaymentChanged> */
     public function map(Request $request): iterable
@@ -61,6 +77,7 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
                 AccountPaymentStatus::RefundFailed,
                 refund: is_string($id) ? $id : null,
             ),
+            $type === self::SESSION_EXPIRED => $this->ofExpiredSession($object),
             default => null,
         };
 
@@ -83,6 +100,27 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
         }
 
         return $this->change($id, $status, $amount, Money::zero($amount->currency), Money::zero($amount->currency), $intent['metadata'] ?? null);
+    }
+
+    /**
+     * What an expired Checkout Session reports: its amount, nothing gone back, and the metadata its charge set. A
+     * session in another mode than `payment` takes no payment and reports nothing.
+     *
+     * @param  array<array-key, mixed>  $session
+     */
+    private function ofExpiredSession(array $session): ?AccountPaymentChanged
+    {
+        $id = $session['id'] ?? null;
+        $total = $session['amount_total'] ?? null;
+        $currency = $session['currency'] ?? null;
+
+        if (! is_string($id) || ($session['mode'] ?? null) !== 'payment' || ! is_int($total) || ! is_string($currency) || $currency === '') {
+            return null;
+        }
+
+        $amount = StripeAmount::toMoney($total, $currency);
+
+        return $this->change($id, AccountPaymentStatus::Expired, $amount, Money::zero($amount->currency), Money::zero($amount->currency), $session['metadata'] ?? null);
     }
 
     /**
@@ -118,7 +156,7 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
         );
     }
 
-    private function change(string $intentId, AccountPaymentStatus $status, Money $amount, Money $refunded, Money $chargedBack, mixed $metadata, ?string $refund = null): AccountPaymentChanged
+    private function change(string $paymentReference, AccountPaymentStatus $status, Money $amount, Money $refunded, Money $chargedBack, mixed $metadata, ?string $refund = null): AccountPaymentChanged
     {
         $values = is_array($metadata) ? $metadata : [];
         $kept = [];
@@ -134,7 +172,7 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
         return new AccountPaymentChanged(
             'stripe',
             $this->account,
-            $intentId,
+            $paymentReference,
             $status,
             $amount,
             $refunded,

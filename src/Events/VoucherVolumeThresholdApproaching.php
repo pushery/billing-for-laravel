@@ -21,7 +21,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * ## What it carries, and why the figure travels with it
  *
- * The window is ROLLING, so the number that triggered this warning is not the number a recipient would
+ * The window is rolling, so the number that triggered this warning is not the number a recipient would
  * compute when they get round to reading it. Carrying the volume and the threshold means the message can be
  * phrased, filed and audited later against what was actually true when it was sent.
  */

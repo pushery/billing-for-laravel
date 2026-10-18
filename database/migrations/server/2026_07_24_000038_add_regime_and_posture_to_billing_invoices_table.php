@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Schema;
  * describing different transactions — each internally consistent, comparable only by somebody who thought
  * to compare them. Adding them separately would leave a window in which a row carries one and not the other.
  *
- * Both are NULLABLE, and null means "no regime was resolved for this row", not a shape. Rows written before
+ * Both are nullable, and null means "no regime was resolved for this row", not a shape. Rows written before
  * routed sales existed have no regime, and defaulting them to the commoner of the two would assert a
  * classification about transactions nobody classified — which is the same error as re-classifying one,
  * committed in bulk and without a decision.

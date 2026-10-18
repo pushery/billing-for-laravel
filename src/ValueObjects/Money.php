@@ -134,14 +134,14 @@ final readonly class Money
      * rounding remainder is distributed one unit at a time to the earliest buckets (Fowler's
      * allocate). Used for credit-balance proration.
      *
-     * ## The remainder goes to the FIRST ratio, and that is a decision about money
+     * ## The remainder goes to the first ratio, and that is a decision about money
      *
      * On any split that does not divide evenly, whoever is named first gets the extra unit. At volume that
      * is real money moving in one direction, so the order is never hardcoded at a call site: it comes from
      * the operator's setting through {@see self::splitByBps()}, which puts the pair back in a fixed order
      * afterwards so a caller never has to remember which way it ran.
      *
-     * ## Not the primitive for a FIXED fee
+     * ## Not the primitive for a fixed fee
      *
      * A fee of a flat amount is not a ratio of anything — it is `gross->minus(fee)`, and reaching for an
      * allocation there invents a proportion the parties never agreed to. The two look interchangeable
@@ -183,10 +183,10 @@ final readonly class Money
     }
 
     /**
-     * Split into a bps portion and the remainder, summing EXACTLY to the original.
+     * Split into a bps portion and the remainder, summing exactly to the original.
      *
      * A percentage of an integer amount rarely divides evenly, and the rule that keeps a cent from
-     * appearing or vanishing is that one side is computed and the OTHER is the difference — never both
+     * appearing or vanishing is that one side is computed and the other is the difference — never both
      * independently. That is exactly what allocate() does; this is the bps-shaped face of it. The odd minor
      * unit of an uneven split goes to the side named by $residual, which at volume is real money and so is
      * an explicit choice rather than a consequence of argument order.
@@ -203,7 +203,7 @@ final readonly class Money
             throw new InvalidArgumentException("A bps split must be between 0 and 10000; got {$bps}.");
         }
 
-        // allocate() puts the residual on the FIRST ratio. To land it on the portion, the portion's ratio
+        // allocate() puts the residual on the first ratio. To land it on the portion, the portion's ratio
         // goes first; to land it on the remainder, the remainder's does — then the pair is returned in the
         // fixed [portion, remainder] order regardless, so a caller never has to track which way it ran.
         if ($residual === RoundingResidual::ToPortion) {
@@ -216,10 +216,10 @@ final readonly class Money
     }
 
     /**
-     * Read an amount that INCLUDES a bps markup as the base it was added to and the markup itself.
+     * Read an amount that includes a bps markup as the base it was added to and the markup itself.
      *
      * Gross to net: a 119.00 amount that carries 19% (1900 bps) is a 100.00 base plus 19.00. The base is
-     * `round(amount / (1 + bps))` as integer minor-unit math, and the markup is the DIFFERENCE — so the two
+     * `round(amount / (1 + bps))` as integer minor-unit math, and the markup is the difference — so the two
      * always sum back to the original and a cent is never conjured. At 7% on 119.00 that is 111.21 base and
      * 7.79 markup as the difference, where an independent `base × rate` would have lost a cent.
      *
@@ -237,11 +237,11 @@ final readonly class Money
     }
 
     /**
-     * Read an amount that REMAINS after a bps rate was deducted as the base it came from and the deduction.
+     * Read an amount that remains after a bps rate was deducted as the base it came from and the deduction.
      *
      * Target payout to net: a 90.00 payout after a 10% (1000 bps) fee reconstructs a 100.00 base, and the
      * deduction is the base minus the amount (10.00). The base is `round(amount / (1 − bps))` in integer
-     * minor units; the deduction is the DIFFERENCE, so the base less the deduction is the amount exactly.
+     * minor units; the deduction is the difference, so the base less the deduction is the amount exactly.
      *
      * @return array{self, self} [base, deduction]
      */
@@ -260,7 +260,7 @@ final readonly class Money
      * A fraction of the amount, rounded half-up to the nearest minor unit.
      *
      * For a value-for-use split: the elapsed part of a period is this proportion of the whole, and the
-     * refund is the DIFFERENCE from the payment — so one side is rounded and the other is exact, and a cent
+     * refund is the difference from the payment — so one side is rounded and the other is exact, and a cent
      * is never created or lost between them. Integer math throughout, no float on the money path.
      *
      * @param  int  $numerator  the elapsed part

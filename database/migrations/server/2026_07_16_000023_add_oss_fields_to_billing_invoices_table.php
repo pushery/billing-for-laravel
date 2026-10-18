@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * EU One-Stop-Shop (OSS) markers, frozen on the issued invoice. Under the OSS scheme a supplier charges the
  * customer's-country VAT rate on cross-border B2C digital supplies and reports it centrally, so the frozen
- * document must record WHICH destination and WHICH rate were applied — the amounts alone cannot be re-derived
+ * document must record which destination and which rate were applied — the amounts alone cannot be re-derived
  * once rates change:
  *  - oss — whether this supply was taxed under the OSS scheme (default false; most invoices are domestic).
  *  - destination_country — ISO 3166-1 alpha-2 of the customer's country, whose rate was applied.

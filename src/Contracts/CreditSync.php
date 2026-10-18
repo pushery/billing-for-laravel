@@ -17,7 +17,7 @@ use Pushery\Billing\ValueObjects\Money;
  * basic feature (earning, showing and — for locally-collected charges — netting the balance) keeps working
  * on every driver. Only the "reduce the next Stripe invoice automatically" part needs this.
  *
- * The delta follows the PACKAGE's sign convention: a positive amount is credit the customer gained (their
+ * The delta follows the package's sign convention: a positive amount is credit the customer gained (their
  * next invoice should be smaller), a negative amount is credit clawed back. A driver translates that to its
  * own convention. The reference is the money operation's idempotency key: pushing the same reference twice
  * must not move the provider balance twice.

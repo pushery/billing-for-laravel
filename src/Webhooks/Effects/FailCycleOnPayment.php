@@ -12,8 +12,8 @@ use Pushery\Billing\Support\LocalBillingEngine;
  * Turns a held cycle into a real failure when its in-flight charge comes back refused.
  *
  * The other direction of {@see SettleCycleOnPayment}, and the reason holding a cycle open is not simply
- * optimism. A bank debit can be accepted and bounce days later; THAT is the moment dunning belongs to.
- * Before this, dunning fired when the payment was CREATED — which is to say, on every such subscriber,
+ * optimism. A bank debit can be accepted and bounce days later; that is the moment dunning belongs to.
+ * Before this, dunning fired when the payment was created — which is to say, on every such subscriber,
  * every cycle, whether or not anything was ever wrong.
  *
  * Without it a bounced debit would leave the cycle held forever: no charge, no ladder, no notice. The
@@ -25,8 +25,8 @@ final readonly class FailCycleOnPayment
 
     public function __invoke(PaymentFailed $event): void
     {
-        // Resolved through the MANAGER, which is what everything else in this package does and what the
-        // container can actually build. `BillingEngine` is an interface bound NOWHERE — the engine is
+        // Resolved through the manager, which is what everything else in this package does and what the
+        // container can actually build. `BillingEngine` is an interface bound nowhere — the engine is
         // reached only as `driver()->engine()` — so injecting it would make this class unconstructible, and
         // `HandleWebhookEffect` builds effects with `Container::make()`. Every held cycle would then stay
         // held forever while every test stayed green, because a test that constructs the engine by hand

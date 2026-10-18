@@ -9,7 +9,7 @@ use RuntimeException;
 /**
  * A conformity waiver was asked for and refused.
  *
- * Refused rather than ignored, and refused LOUDLY. A waiver that silently did not take effect would leave a
+ * Refused rather than ignored, and refused loudly. A waiver that silently did not take effect would leave a
  * caller believing the obligation had ended while the package believed it had not — and the two beliefs only
  * meet when somebody asks why their fix never arrived, or why one did.
  *

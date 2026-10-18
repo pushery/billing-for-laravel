@@ -15,7 +15,7 @@ use Pushery\Billing\ValueObjects\SellerPeriodReport;
  * Some of what makes a filing wrong is not a property of any single row. Two rows for one seller is a
  * duplicate, and neither row is wrong on its own; a period whose sellers all check out individually can
  * still be one nobody may file. A per-seller signature would make those rules impossible to express, and
- * the ones that ARE per-seller lose nothing by looping.
+ * the ones that are per-seller lose nothing by looping.
  *
  * ## Why the catalog is not core code
  *

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Contracts;
 
 /**
- * An OPTIONAL capability a {@see BillingDriver} may also implement to declare that it can route money
+ * An optional capability a {@see BillingDriver} may also implement to declare that it can route money
  * to a merchant other than the platform.
  *
  * Why this is an interface a driver opts into rather than a fifth method on BillingDriver: that

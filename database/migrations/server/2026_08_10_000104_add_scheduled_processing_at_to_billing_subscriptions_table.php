@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Schema;
  * so. A driver whose engine is local has nobody to ask, and this column is the answer — the one row
  * `billing:run` selects on.
  *
- * It is deliberately NOT a reading of `current_period_end`, though on the happy path the two agree. They
+ * It is deliberately not a reading of `current_period_end`, though on the happy path the two agree. They
  * have to be free to disagree: a failed charge is retried inside the period it belongs to, and a dunning
  * ladder that pushes the next attempt out would otherwise have to move `current_period_end` with it —
  * silently re-dating the service the customer is paying for, on the row every invoice and usage bucket

@@ -20,11 +20,11 @@ use Pushery\Billing\ValueObjects\TierIdentity;
  * grants nothing, so this hard-dunning resolver falls to the zero-tier, as does a missing/unknown
  * tier. A resolver never implies access.
  *
- * An owner on a GENERIC trial has no subscription at all, yet is entitled — so when there is no
+ * An owner on a generic trial has no subscription at all, yet is entitled — so when there is no
  * subscription row, the configured trial tier is unlocked for the length of the trial. Crucially the
- * generic trial only applies in the ABSENCE of a subscription: once a subscription exists its state
+ * generic trial only applies in the absence of a subscription: once a subscription exists its state
  * governs, so a past-due/incomplete subscriber whose owner trial clock still happens to be in the future
- * is NOT rescued back to the paid tier — that would defeat this resolver's own hard-dunning contract.
+ * is not rescued back to the paid tier — that would defeat this resolver's own hard-dunning contract.
  * A row in one of the two terminal states is absent in that sense: it is the row a new subscription takes
  * over, and a returning customer the starter gave a generic trial is entitled to it.
  */
@@ -58,7 +58,7 @@ final readonly class SubscriptionTierResolver implements TierResolver
             }
 
             // A subscription exists — its state is the authority. A generic trial is a trial taken
-            // WITHOUT a subscription, so a blocking (past-due/incomplete) or unknown-tier subscription
+            // without a subscription, so a blocking (past-due/incomplete) or unknown-tier subscription
             // falls to the zero tier here and is never rescued by a lingering owner trial clock.
             return $this->zeroTier();
         }

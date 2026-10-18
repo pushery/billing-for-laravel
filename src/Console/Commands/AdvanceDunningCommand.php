@@ -22,7 +22,7 @@ use Pushery\Billing\ValueObjects\DunningLevel;
 use Throwable;
 
 /**
- * Walks the dunning ladder for every delinquent owner: each run advances a subscription by AT MOST ONE
+ * Walks the dunning ladder for every delinquent owner: each run advances a subscription by at most one
  * rung, and only when that next rung's day has been reached (measured from the outage-safe
  * delinquent_since clock). Advancing sends the escalating suspension warning once, charges the rung's
  * configured fee once (via the LateFees seam), and records the rung reached — so the package finally

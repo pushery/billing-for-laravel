@@ -14,10 +14,10 @@ use Pushery\Billing\Models\MerchantAccount;
  *
  * The stamp is kept on its own column rather than folded into the capability flags, because the two states
  * demand different actions. A withheld capability stops transfers and can come back; a deauthorization
- * stops transfers AND reversals, which is the state in which a clawback becomes impossible. Somebody owed
+ * stops transfers and reversals, which is the state in which a clawback becomes impossible. Somebody owed
  * money by that merchant has to be able to tell which of the two happened.
  *
- * The FIRST deauthorization wins. A redelivery, or a merchant who reconnects and leaves again, must not
+ * The first deauthorization wins. A redelivery, or a merchant who reconnects and leaves again, must not
  * move the date forward: when the platform lost reach is the fact a dispute turns on.
  */
 final readonly class MarkMerchantDeauthorized

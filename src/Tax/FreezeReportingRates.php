@@ -19,7 +19,7 @@ use Pushery\Billing\Preflight\CheckpointRegistry;
  * ## Why this cannot happen when the document is issued
  *
  * The document layer is frozen at issue, because its rate exists then. The reporting layer cannot be, and
- * the reason is arithmetic rather than architectural: the rule converts at the LAST DAY OF THE PERIOD, and
+ * the reason is arithmetic rather than architectural: the rule converts at the last day of the period, and
  * on the day a sale is booked that day has not happened. There is no rate to freeze, and no amount of
  * wiring makes one appear.
  *
@@ -30,7 +30,7 @@ use Pushery\Billing\Preflight\CheckpointRegistry;
  * ## It refuses to run early, loudly
  *
  * Asked for a period that has not ended, this throws instead of doing its best. The alternative is worse
- * than it looks: the rate reader resolves a missing day FORWARD to the next publication day, so an early
+ * than it looks: the rate reader resolves a missing day forward to the next publication day, so an early
  * run would not fail — it would quietly freeze the first rate published after the request and stamp it
  * with that day's date. Every document in the period would then carry a real, checkable, wrong figure.
  *

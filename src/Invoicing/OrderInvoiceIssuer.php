@@ -43,7 +43,7 @@ use Throwable;
  * attempted rather than checked-then-inserted, because between a check and an insert is exactly where a
  * concurrent run fits.
  *
- * ## The tax AND the net are stated only where they were established
+ * ## The tax and the net are stated only where they were established
  *
  * A driver whose provider does not determine tax (`supportsProviderTax: false`) has no result to copy, and
  * zero is not the absence of a claim — it is the claim that no tax was due. So `tax_minor` is never
@@ -54,7 +54,7 @@ use Throwable;
  * exemption, destination and the period supplied — which is what makes the figure defensible years later
  * and what {@see Guards\TaxWithoutBasisGuard} insists on.
  *
- * WHEN IT REFUSES, THE NET IS NULL TOO, NOT EQUAL TO THE TOTAL. A subtotal equal to the total is the same
+ * When it refuses, the net is null too, not equal to the total. A subtotal equal to the total is the same
  * kind of claim as a zero tax: it says the supply was untaxed. True under a small-business regime or an
  * exemption, false under a taxable supply, and nobody determined which. The argument that makes zero
  * unacceptable makes this unacceptable for exactly the same reason, one column over.
@@ -83,7 +83,7 @@ final readonly class OrderInvoiceIssuer
     public function __construct(
         private InvoiceNumber $numbers,
         /**
-         * REQUIRED, and it was optional for about an hour.
+         * Required, and it was optional for about an hour.
          *
          * A nullable parameter with a default is not auto-resolved: `Container::resolveClass()` returns the
          * default whenever one exists and the class is not explicitly bound, without ever attempting to
@@ -148,14 +148,14 @@ final readonly class OrderInvoiceIssuer
             'order_id' => $order->getKey(),
             'number' => $this->numbers->next($issuedAt),
             'total_minor' => $order->total_minor,
-            // The net, and ONLY where one was established. Null otherwise, for the same reason `tax_minor`
+            // The net, and only where one was established. Null otherwise, for the same reason `tax_minor`
             // is null there: a subtotal equal to the total is not the absence of a claim, it is the claim
             // that the supply was untaxed. That is right under a small-business regime or an exempt supply
             // and wrong under a taxable one, and nobody determined which — so the document says nothing
             // rather than guessing, exactly as it already does about the tax.
             //
             // The page falls back to `total_minor - (tax_minor ?? 0)` where the column is null, and the
-            // e-invoice reads the net from the frozen LINES, which carry theirs wherever this column does —
+            // e-invoice reads the net from the frozen lines, which carry theirs wherever this column does —
             // see frozenLines(). What stops is the record asserting a number as established when it was
             // assumed.
             //
@@ -326,7 +326,7 @@ final readonly class OrderInvoiceIssuer
      * A discount or a credit line carries a negative total and is kept as such: an invoice that shows the
      * gross and quietly nets the discount away tells the reader a price that was never charged.
      *
-     * The order was priced gross, and a document line is read for its NET, its net unit price and its rate:
+     * The order was priced gross, and a document line is read for its net, its net unit price and its rate:
      * {@see Line::fromArray()} takes a missing net as zero and a missing rate as 0%. Frozen with neither, every
      * e-invoice of this engine stated 0.00 in category Z and every line on the page showed 0%. So the
      * determined tax is shared out over the lines in proportion to their totals, which makes the line nets add
@@ -339,7 +339,7 @@ final readonly class OrderInvoiceIssuer
     private function frozenLines(Order $order, ?DeterminedOrderTax $tax, bool $lateFee): array
     {
         // Typed like any other value, because the type-coverage floor counts it like any other — and here it
-        // is also the only thing saying WHAT is being frozen. A line whose shape nobody states is one somebody
+        // is also the only thing saying what is being frozen. A line whose shape nobody states is one somebody
         // later reads a different column off, and this array is copied onto an issued document that must not
         // change afterwards.
         /** @var list<OrderItem> $items */

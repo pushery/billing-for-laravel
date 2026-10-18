@@ -4,17 +4,23 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Mollie;
 
+use DateTimeInterface;
 use InvalidArgumentException;
 use Mollie\Api\Exceptions\ApiException;
 use Mollie\Api\Exceptions\RequestException;
+use Mollie\Api\Http\Data\Date;
+use Mollie\Api\Http\Requests\CreateMandateRequest;
 use Mollie\Api\Http\Requests\CreatePaymentRefundRequest;
 use Mollie\Api\Http\Requests\CreatePaymentRequest;
 use Mollie\Api\MollieApiClient;
+use Mollie\Api\Resources\Mandate;
 use Mollie\Api\Resources\Payment;
 use Mollie\Api\Resources\Refund;
 use Mollie\Api\Types\MandateMethod;
+use Pushery\Billing\Contracts\CollectsDirectDebits;
 use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
 use Pushery\Billing\Contracts\PaymentRails;
+use Pushery\Billing\Exceptions\DirectDebitMandateRefused;
 use Pushery\Billing\Exceptions\MandateNeedsRedirect;
 use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\Support\SafeExternalUrl;
@@ -22,23 +28,25 @@ use Pushery\Billing\ValueObjects\ChargeNarrative;
 use Pushery\Billing\ValueObjects\ChargeOptions;
 use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
+use Pushery\Billing\ValueObjects\Iban;
 use Pushery\Billing\ValueObjects\MandateHandshake;
 use Pushery\Billing\ValueObjects\MandateReference;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\RefundResult;
+use Pushery\Billing\ValueObjects\SepaCreditor;
 use Pushery\Billing\ValueObjects\TokenizedMethod;
 
 /**
  * Mollie's implementation of the lower billing layer.
  *
- * Three of the five contract methods are ordinary. Two REFUSE, and that is the honest answer for this
+ * Three of the five contract methods are ordinary. Two refuse, and that is the honest answer for this
  * provider rather than a gap waiting to be filled — see {@see MandateNeedsRedirect}.
  *
  * ## What "the token" means here
  *
  * `charge()` takes a `$token` that Stripe fills with a stored payment-method id. Mollie has no such thing:
- * details are captured on its own checkout, and what a caller can choose in advance is the METHOD (`ideal`,
- * `creditcard`). So the argument carries the method, and the result is deliberately NOT a settled charge —
+ * details are captured on its own checkout, and what a caller can choose in advance is the method (`ideal`,
+ * `creditcard`). So the argument carries the method, and the result is deliberately not a settled charge —
  * it is `requiresAction` with the checkout URL the customer still has to visit.
  *
  * Putting a URL in `clientSecret` stretches that field's name, which was written for a Stripe intent
@@ -53,12 +61,12 @@ use Pushery\Billing\ValueObjects\TokenizedMethod;
  * `paid` is success; `failed`, `canceled` and `expired` are declines; everything else is `pending`, which
  * the engine reads as "not yet" rather than as "no".
  */
-final readonly class MolliePaymentRails implements EstablishesMandateByRedirect, PaymentRails
+final readonly class MolliePaymentRails implements CollectsDirectDebits, EstablishesMandateByRedirect, PaymentRails
 {
     /**
      * Mollie's `description` carries 255 characters at most, and less for some payment methods.
      *
-     * Trimmed HERE rather than left to the provider, because Mollie cuts the end — and the end is the
+     * Trimmed here rather than left to the provider, because Mollie cuts the end — and the end is the
      * period, which is the half that tells two otherwise identical charges apart.
      */
     private const int DESCRIPTION_LIMIT = 255;
@@ -89,14 +97,14 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
      * Start an on-session payment. The result carries the checkout to send the customer to, never a
      * settled charge — at Mollie the money moves after the customer acts, not during this call.
      *
-     * @param  string  $token  The Mollie METHOD to offer (`ideal`, `creditcard`, …). See the class docblock.
+     * @param  string  $token  The Mollie method to offer (`ideal`, `creditcard`, …). See the class docblock.
      */
     public function charge(Money $amount, string $token, ?string $idempotencyKey = null, ?ChargeRouting $routing = null, ?ChargeNarrative $narrative = null, ?ChargeOptions $options = null): ChargeResult
     {
-        // THE KEY GOES ON THE REQUEST, not only into the description. `PaymentRails` states what it is
+        // The key goes on the request, not only into the description. `PaymentRails` states what it is
         // for in as many words -- "pass the invoice/charge id so a re-run collapses onto the first charge
         // rather than billing the customer again" -- and putting it in `description` collapses nothing: it
-        // is a label on the payment. Every retried charge was a SECOND real payment.
+        // is a label on the payment. Every retried charge was a second real payment.
         //
         // The exposure is the ordinary one, not an exotic race. An off-session charge that times out is
         // recorded as a refusal, the dunning ladder retries it with the same order id, and under Mollie the
@@ -185,9 +193,54 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
     }
 
     /**
+     * Mollie collects every direct debit under the creditor identifier of its foundation, on behalf of the merchant,
+     * and its API takes no creditor identifier of the merchant's own.
+     */
+    public function creditor(): SepaCreditor
+    {
+        return new SepaCreditor('Stichting Mollie Payments', 'Keizersgracht 126, 1015 CW Amsterdam', 'NL', 'NL08ZZZ502057730000');
+    }
+
+    /**
+     * Whether Mollie draws a charge against this mandate as a SEPA direct debit.
+     *
+     * A mandate given on the application's form is one, and so is a mandate a bank payment such as iDEAL or
+     * Bancontact established, which Mollie collects as a direct debit afterwards. A card, PayPal or BACS mandate
+     * is not.
+     */
+    public function drawsDirectDebit(MandateReference $mandate): bool
+    {
+        return MandateMethod::getForFirstPaymentMethod($mandate->method) === self::SEPA_MANDATE;
+    }
+
+    /**
+     * Register a direct debit mandate at Mollie, with the name and IBAN the account holder confirmed.
+     *
+     * Mollie answers a mandate registered this way as `valid` at once. Any other status is refused here, because a
+     * stored row reads as chargeable and the first debit against it would come back as a payment failure.
+     */
+    public function giveDirectDebitMandate(string $customerReference, string $accountHolder, Iban $iban, string $mandateReference, DateTimeInterface $signedOn): MandateReference
+    {
+        $mandate = MollieValue::narrow($this->client->send(new CreateMandateRequest(
+            customerId: $customerReference,
+            method: self::SEPA_MANDATE,
+            consumerName: $accountHolder,
+            consumerAccount: $iban->value,
+            signatureDate: new Date($signedOn),
+            mandateReference: $mandateReference,
+        )), Mandate::class);
+
+        if (! $mandate instanceof Mandate || ! $mandate->isValid()) {
+            throw DirectDebitMandateRefused::notValid('Mollie', $mandate instanceof Mandate ? (MollieValue::of($mandate->status) ?? 'unknown') : 'unknown');
+        }
+
+        return new MandateReference(MollieValue::id($mandate->id), self::SEPA_MANDATE, true, $customerReference);
+    }
+
+    /**
      * Collect a due cycle against a stored mandate — the call the local engine makes.
      *
-     * A mandate that is not reusable is refused HERE rather than at Mollie. The provider would refuse it
+     * A mandate that is not reusable is refused here rather than at Mollie. The provider would refuse it
      * too, but at the cost of a round trip on every due cycle of a subscriber whose mandate was revoked —
      * and each refusal reads as a payment failure in the log rather than as the settled fact it is.
      */
@@ -219,7 +272,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
      * Refund a previous payment, in full or in part.
      *
      * A Mollie refund is `queued` or `pending` when it is created and only later `refunded`. That is
-     * reported as SUCCESS, unlike the charge mapping above, and the asymmetry is deliberate: an accepted
+     * reported as success, unlike the charge mapping above, and the asymmetry is deliberate: an accepted
      * refund is a commitment the provider has taken on, and reporting it as unsuccessful would invite the
      * caller to try again — which is a second refund.
      */
@@ -228,7 +281,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
         try {
             $refund = $this->keyed($idempotencyKey, fn (): mixed => $this->client->send(new CreatePaymentRefundRequest(
                 paymentId: $chargeReference,
-                // 'Refund', not the reference. Mollie shows a refund's description to the CUSTOMER, the same
+                // 'Refund', not the reference. Mollie shows a refund's description to the customer, the same
                 // way it shows a payment's — so this field leaked an internal id onto the statement of somebody
                 // getting their money back, which is the worst moment to look disorganized. The two money calls
                 // were corrected when the reference moved to metadata; this one was missed because a refund is
@@ -239,7 +292,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
                 metadata: $this->traceOf($idempotencyKey),
             )));
         } catch (RequestException $refusal) {
-            // Mollie refused THIS refund: more than is left to refund, a payment that cannot be refunded, an id it
+            // Mollie refused this refund: more than is left to refund, a payment that cannot be refunded, an id it
             // does not know. That is an answer, and it comes back as one with Mollie's own words. A refusal that
             // says nothing about the refund (credentials, a rate limit, an outage) travels, so it is retried.
             $status = $refusal->getStatusCode();
@@ -276,12 +329,12 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
     /**
      * The caller's reference, for the payment's metadata rather than for its description.
      *
-     * The description is the wrong field for it, twice over. It is the text Mollie shows the CUSTOMER — so a
+     * The description is the wrong field for it, twice over. It is the text Mollie shows the customer — so a
      * subscriber would see a bare internal number where the name of the thing they bought belongs — and it is
      * not a place anything can search, so a charge could not be traced back to the cycle that made it.
      *
      * Metadata answers both halves at once: the number goes into a machine field, and the description is
-     * a word a person can read. That word is the SERVICE and the period where the caller knows them
+     * a word a person can read. That word is the service and the period where the caller knows them
      * ({@see describe()}); this method stays about the machine field, and the two must never swap.
      *
      * @return ?array<string, string>
@@ -306,7 +359,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
     /**
      * The description limit of a recurring payment, which Mollie collects on its mandate's rails.
      *
-     * The stored method is the FIRST payment's, and the SDK maps it onto the mandate it established: a card or
+     * The stored method is the first payment's, and the SDK maps it onto the mandate it established: a card or
      * Apple Pay onto a card mandate, PayPal and BACS onto their own, and iDEAL, Bancontact and every other bank
      * method onto a SEPA direct-debit mandate. A method the SDK does not know lands on direct debit as well,
      * which costs a shorter service name at worst and keeps the period.
@@ -319,7 +372,7 @@ final readonly class MolliePaymentRails implements EstablishesMandateByRedirect,
     }
 
     /**
-     * Run one request with the idempotency key armed, and disarm it afterwards WHATEVER happened.
+     * Run one request with the idempotency key armed, and disarm it afterwards whatever happened.
      *
      * The client is a singleton, so a key still set after this call would go out with the next request: a
      * customer creation could come back as the previous charge, or be refused for a payload that does not

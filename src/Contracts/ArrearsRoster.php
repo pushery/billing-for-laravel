@@ -12,13 +12,13 @@ use Pushery\Billing\ValueObjects\ArrearsEntry;
  *
  * ## The counterpart to ArrearsClock, one axis wider
  *
- * {@see ArrearsClock} answers about ONE relationship: is this owner behind with this merchant, and since
- * when. That is what a gate needs, because a gate is always asked about somebody in particular. A SWEEP has
+ * {@see ArrearsClock} answers about one relationship: is this owner behind with this merchant, and since
+ * when. That is what a gate needs, because a gate is always asked about somebody in particular. A sweep has
  * nobody in particular — it has to find them — so it needs the other direction, and until this existed it
  * got it by querying this package's `billing_subscriptions` directly.
  *
  * The consequence was that the dunning ladder was only half adoptable. An application holding its own view
- * of a subscription could bind the clock and get the suspension; the reminder INSIDE the cure window stayed
+ * of a subscription could bind the clock and get the suspension; the reminder inside the cure window stayed
  * out of reach. That is the half that helps the person: without it the window runs out, access is gone, and
  * nobody heard anything.
  *

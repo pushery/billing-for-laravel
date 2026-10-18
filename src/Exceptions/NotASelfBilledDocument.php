@@ -9,7 +9,7 @@ use RuntimeException;
 /**
  * An objection was raised against a document that is not a self-billed one, so there is nothing to object to.
  *
- * The right to object exists because the platform wrote the creator's invoice FOR them — a self-billed
+ * The right to object exists because the platform wrote the creator's invoice for them — a self-billed
  * invoice or settlement note. An ordinary fan invoice is not one of those: nobody wrote it on someone else's
  * behalf, so the objection right does not attach to it. Refused rather than recorded as a no-op, so a caller
  * pointing at the wrong document learns it now.

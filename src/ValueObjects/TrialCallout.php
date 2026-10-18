@@ -10,7 +10,7 @@ use Pushery\Billing\Support\TrialCallouts;
 /**
  * The single call-to-action an account screen shows an owner while they are on a trial — exactly one per
  * trial state, resolved by {@see TrialCallouts}. It carries the state that raised
- * it, a WireKit intent (so severity reads by color AND text), how many whole days are left (for the
+ * it, a WireKit intent (so severity reads by color and text), how many whole days are left (for the
  * message), and the message / CTA-label translation keys plus the hub route the action points at. The
  * message key is a `trans_choice` key so ":days day / :days days" pluralizes per locale.
  */

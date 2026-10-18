@@ -35,7 +35,7 @@ return new class extends Migration
             // uses it to ignore a retried or out-of-order older webhook.
             $table->unsignedBigInteger('synced_event_at')->nullable();
             // The current billing cycle, mirrored from the provider. Metered usage is accounted into
-            // THIS window, not into a calendar month: an owner who renews on the 31st has neither.
+            // this window, not into a calendar month: an owner who renews on the 31st has neither.
             $table->timestamp('current_period_start')->nullable();
             $table->timestamp('current_period_end')->nullable();
             $table->timestamps();

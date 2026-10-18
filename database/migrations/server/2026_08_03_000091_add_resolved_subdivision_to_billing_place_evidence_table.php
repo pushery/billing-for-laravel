@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * The subdivision the place evidence settled on, where the resolved country has subdivisions in scope.
  *
- * It is added rather than derived because it CANNOT be derived later. The evidence is written once at the
+ * It is added rather than derived because it cannot be derived later. The evidence is written once at the
  * sale and kept for years, and the raw IP that could name a state is deliberately discarded — so a
  * subdivision not captured at the sale is gone for good, and a US nexus counter built afterwards could only
  * ever fill an `unknown` bucket while looking as though it worked.

@@ -8,7 +8,7 @@ use Pushery\Billing\Enums\ExchangeRateBasis;
 use Pushery\Billing\Enums\ExchangeRateLayer;
 
 /**
- * A jurisdiction profile that says which conversion rule its PERIODIC RETURN is filed under.
+ * A jurisdiction profile that says which conversion rule its periodic return is filed under.
  *
  * ## Why this is a second contract and not a second method on the first
  *

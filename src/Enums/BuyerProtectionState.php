@@ -26,7 +26,7 @@ enum BuyerProtectionState: string
     /** The seller has it. Terminal. */
     case Released = 'released';
 
-    /** The buyer says something is wrong. The confirmation clock STOPS here. */
+    /** The buyer says something is wrong. The confirmation clock stops here. */
     case Disputed = 'disputed';
 
     /** Nobody resolved it in time, so somebody has to now — the platform does not decide it. */

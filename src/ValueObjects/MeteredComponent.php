@@ -10,11 +10,11 @@ use Pushery\Billing\Enums\MeteringPolicy;
  * One usage-billed component of a tier: what is counted, what a package of it costs, and how much of
  * it the tier already includes. This is the thing that turns "12 000 emails sent" into money.
  *
- * WHO OWNS THE ARITHMETIC. The provider rates the usage, not this package. The allowance and the
- * packaging live in the PROVIDER'S price (a graduated tier priced at 0 up to `included`, then a
+ * Who owns the arithmetic. The provider rates the usage, not this package. The allowance and the
+ * packaging live in the provider's price (a graduated tier priced at 0 up to `included`, then a
  * package of `packageSize`), and raw units are reported to it. The values here exist to render the
  * gauge, to let a local billing engine rate the same usage itself, and to be checked against the
- * provider's price so the two cannot silently disagree. Netting the allowance locally AND letting the
+ * provider's price so the two cannot silently disagree. Netting the allowance locally and letting the
  * provider net it again is how a customer gets twice the free units they paid for.
  */
 final readonly class MeteredComponent
@@ -41,6 +41,12 @@ final readonly class MeteredComponent
          * merely informational.
          */
         public float $warnThreshold = 0.8,
+        /**
+         * The units a request on a blocking meter may still take past the allowance, so work already under way is
+         * not cut off at the last unit. What it takes is owed until the next grant pays it off, and never more than
+         * this at once. Zero, the default, refuses at the ceiling; non-blocking meters bill past it instead.
+         */
+        public int $grace = 0,
     ) {}
 
     /** Whether this component can actually be billed at a provider. */

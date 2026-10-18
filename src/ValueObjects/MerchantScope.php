@@ -11,14 +11,14 @@ use InvalidArgumentException;
  * Which merchant a piece of subscription state belongs to — or the platform itself, when there is no
  * marketplace.
  *
- * This is the LOCAL identity of a merchant, not its provider account. A subscription row is keyed by it so
+ * This is the local identity of a merchant, not its provider account. A subscription row is keyed by it so
  * one billable can hold many concurrent subscriptions, one per creator; the money path's own
  * MerchantAccountReference answers a different question (which connected account the provider pays) and is
  * resolved separately. Keeping the two apart is deliberate: the local key must be stable across a provider
  * re-onboarding, and the provider reference must be free to change without moving a subscription.
  *
  * It renders to a single sentinel string, `uid()`, that every database engine compares identically — the
- * reason the subscription table keys on a NOT-NULL string rather than a nullable morph, which would let the
+ * reason the subscription table keys on a not-null string rather than a nullable morph, which would let the
  * single-seller uniqueness silently disappear on an engine whose NULLs do not collide. The platform's uid is
  * the literal `platform`; a real merchant's is `m:<type>#<id>`, and the `m:` prefix is what makes the two
  * structurally unable to collide.
@@ -77,11 +77,11 @@ final readonly class MerchantScope
      *
      * The rendering is lossless by construction — the type and the key are both in the string — but until
      * this existed nothing read them back, so anything holding only the sentinel could scope a query and
-     * could not say WHOSE relationship it had. That is the shape a sweep needs: it finds rows first and has
+     * could not say whose relationship it had. That is the shape a sweep needs: it finds rows first and has
      * to name the merchant afterwards.
      *
-     * Splits on the FIRST `#` only. A merchant type is a class name or a morph alias and contains no `#`;
-     * a KEY may well contain one, and splitting on the last would move part of it into the type.
+     * Splits on the first `#` only. A merchant type is a class name or a morph alias and contains no `#`;
+     * a key may well contain one, and splitting on the last would move part of it into the type.
      *
      * Anything that is not a well-formed merchant sentinel reads as the platform. That is the same
      * direction `isPlatform()` already takes for a half-built scope, and it is the safe one here: an

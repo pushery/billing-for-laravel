@@ -13,7 +13,7 @@ use RuntimeException;
  * ## Why this refuses instead of quietly charging nothing
  *
  * A buyer fee is the platform's own intermediation supply to the buyer. Under a commission chain there is
- * no mediation to charge for: the platform IS the seller and sells to the buyer directly, so a fee booked
+ * no mediation to charge for: the platform is the seller and sells to the buyer directly, so a fee booked
  * there as intermediation revenue invents a supply relationship that does not exist. That is the mirror of
  * the defect the reporting record had, where a withheld fee was reported in the one regime that has none.
  *

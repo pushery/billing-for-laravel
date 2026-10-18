@@ -12,7 +12,7 @@ use Pushery\Billing\ValueObjects\CountrySignals;
  *
  * ## Why this is carried at all
  *
- * A US sales-tax nexus is measured PER STATE, and the threshold is a rolling window — so the question
+ * A US sales-tax nexus is measured per state, and the threshold is a rolling window — so the question
  * "have we crossed it in Texas" can only be answered from history. The place evidence is written once at
  * the sale and the raw IP behind it is discarded on purpose, which means a state not captured at the sale
  * cannot be reconstructed afterwards from anything. A counter built later could only ever fill an `unknown`

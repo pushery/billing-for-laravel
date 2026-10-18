@@ -11,7 +11,7 @@ namespace Pushery\Billing\Contracts;
  *
  * A reporting duty covers some sellers and not others, and transmitting one it does not cover is a return
  * that is not correct in its own right. The same kind of duty usually asks the operator to keep a record of
- * the due diligence for EVERY seller it was applied to: who was examined, when, and with which result. Those
+ * the due diligence for every seller it was applied to: who was examined, when, and with which result. Those
  * are two different artifacts, and a renderer produces one or the other.
  *
  * So the export decides what a renderer is handed by what the renderer is. A plain

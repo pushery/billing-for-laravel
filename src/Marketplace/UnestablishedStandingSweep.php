@@ -14,7 +14,7 @@ use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\TaxHoldWarning;
 
 /**
- * Tells the merchants who have never declared that the deadline is coming — BEFORE it arrives.
+ * Tells the merchants who have never declared that the deadline is coming — before it arrives.
  *
  * ## The gap this closes
  *
@@ -30,7 +30,7 @@ use Pushery\Billing\Models\TaxHoldWarning;
  *
  * Same reason as the lapsed-attestation sweep: nothing to observe. A merchant who never declared performs
  * no action, so there is no write to watch — only a date approaching. But that sweep marks the status
- * record it announced, and these merchants HAVE no status record. Never declaring is precisely what puts
+ * record it announced, and these merchants have no status record. Never declaring is precisely what puts
  * them in the blocking state. Writing a placeholder record to hold a flag would invent a declaration.
  *
  * ## Who is warned, and who is not
@@ -43,7 +43,7 @@ use Pushery\Billing\Models\TaxHoldWarning;
  * ## Once per deadline, not once ever
  *
  * The warning is sent once, because repeating it nightly turns the one channel a merchant has into noise.
- * But a deadline an operator MOVES is a different deadline: the old warning no longer describes it, and a
+ * But a deadline an operator moves is a different deadline: the old warning no longer describes it, and a
  * merchant who was told about March is not thereby told about June. The marker carries the date for exactly
  * that reason.
  */
@@ -131,7 +131,7 @@ final readonly class UnestablishedStandingSweep
                 continue;
             }
 
-            // Asked AS OF THE DEADLINE, which is what makes this a warning rather than a report: the hold
+            // Asked as of the deadline, which is what makes this a warning rather than a report: the hold
             // does not bite today, so asking about today would find nobody.
             if ($this->hold->blocksSales($merchant, $deadline)) {
                 yield $merchant;

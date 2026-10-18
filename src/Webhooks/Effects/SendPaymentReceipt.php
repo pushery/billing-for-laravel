@@ -20,7 +20,7 @@ use RuntimeException;
  * resolve the owner, notify, record — and the once-per-payment guarantee lives in the delivery machinery
  * (HandleWebhookEffect claims, runs and marks in one transaction), so a failed send is retried, not lost.
  *
- * It dedups on the PAYMENT reference, not the delivery: a provider that redelivers the same "payment
+ * It dedups on the payment reference, not the delivery: a provider that redelivers the same "payment
  * succeeded" signal mints a fresh event id, and deduping on that would mail the customer a second receipt
  * for money they only paid once.
  */

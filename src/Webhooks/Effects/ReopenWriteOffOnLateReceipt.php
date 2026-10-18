@@ -25,7 +25,7 @@ use RuntimeException;
  *
  * A correction issued because the consideration would not be received is a judgment about the future, and
  * the future is allowed to disagree: when the money turns up, the write-off was wrong and the tax goes back.
- * A correction issued because the consideration was HANDED BACK can never be reopened — a payment afterwards
+ * A correction issued because the consideration was handed back can never be reopened — a payment afterwards
  * is a new transaction with its own document.
  *
  * The two produce identical figures in identical periods. Nothing in the amounts tells them apart, which is
@@ -33,7 +33,7 @@ use RuntimeException;
  *
  * ## Why the match has to be exact, and why ambiguity does nothing
  *
- * `PaymentSucceeded` names a customer, an amount and a payment reference. It does NOT name the receivable it
+ * `PaymentSucceeded` names a customer, an amount and a payment reference. It does not name the receivable it
  * settles — the provider has no idea one was ever written off. So the link has to be inferred, and inference
  * is where an automatic tax correction would become a guess with a document behind it.
  *
@@ -75,7 +75,7 @@ final readonly class ReopenWriteOffOnLateReceipt implements DedupesOnReference
         $candidates = $this->reopenableFor($owner, $event);
 
         // Nothing to reopen is the ordinary case — most payments settle something that was never written
-        // off. More than one is the case that must NOT be resolved by picking: two write-offs of the same
+        // off. More than one is the case that must not be resolved by picking: two write-offs of the same
         // amount in the same currency are indistinguishable from here, and choosing between them would
         // reopen the wrong period as often as the right one.
         if (count($candidates) !== 1) {
@@ -106,7 +106,7 @@ final readonly class ReopenWriteOffOnLateReceipt implements DedupesOnReference
      * The corrections this payment could be putting back — asked one at a time, never filtered by reason
      * in the query.
      *
-     * The query narrows to what CANNOT match (another owner, another currency, another amount, a document
+     * The query narrows to what cannot match (another owner, another currency, another amount, a document
      * that corrects nothing); the judgment about whether a reason reopens is left to the one class that
      * owns it. A `where` on the reason column here would be the same rule spelled twice, and the second
      * spelling is the one that stops being updated.

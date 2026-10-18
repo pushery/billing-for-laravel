@@ -19,7 +19,7 @@ use RuntimeException;
  * siblings the effect is pure — resolve the owner, notify, record — with the once-per-invoice guarantee
  * in the delivery machinery.
  *
- * It dedups on the INVOICE the authentication is holding, not the delivery: the provider mints a fresh
+ * It dedups on the invoice the authentication is holding, not the delivery: the provider mints a fresh
  * event id each time it re-signals "still needs action", and deduping on that would nag the customer on
  * every redelivery. A new invoice that needs authentication is a genuinely new prompt.
  */

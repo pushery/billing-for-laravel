@@ -8,10 +8,10 @@ use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\BillingSchema;
 
 /**
- * One row per HELD unit of allowance: the claim a request makes on a metered ceiling before it does the
+ * One row per held unit of allowance: the claim a request makes on a metered ceiling before it does the
  * work it will be billed for. The counter's `reserved` column stays the fast aggregate the ceiling check
  * reads under its row lock; this table is what gives each hold an identity, so a hold can be settled
- * exactly once and — the part that matters — EXPIRE.
+ * exactly once and — the part that matters — expire.
  *
  * Without an expiry, a worker that dies between reserving and settling holds allowance for the rest of
  * the billing period, and a paying customer is refused a request they never spent. A leaked hold is the

@@ -96,17 +96,17 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
      * Which resource this ping is about, across both of Mollie's webhook generations.
      *
      * The legacy ping is a form with a single `id` field naming the payment. The next generation is signed
-     * JSON describing an event, and it carries BOTH: `id` is the event (`evt_…`) and `entityId` is the
+     * JSON describing an event, and it carries both: `id` is the event (`evt_…`) and `entityId` is the
      * resource the event happened to. So `entityId` is read first — the other order fetches the event id as
      * if it were a payment, and the failure mode is silence rather than an error, because the fetch simply
      * does not resolve and this class is built to say nothing about an id it cannot follow.
      *
-     * Both generations then run the SAME path from here, which is the reason this returns an id rather than
+     * Both generations then run the same path from here, which is the reason this returns an id rather than
      * branching. Two paths would be two behaviors to keep in step, and the one that runs on fewer installs
      * is the one that would quietly fall behind.
      *
      * The SDK ships a mapper for the next-generation payload and it is deliberately not used: its map
-     * covers the event types it knows and THROWS on anything else, and ordinary payment transitions are not
+     * covers the event types it knows and throws on anything else, and ordinary payment transitions are not
      * among them — the events this package exists for are the ones it would refuse.
      */
     private function entityIdOf(Request $request): ?string
@@ -117,7 +117,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
             return trim($entityId);
         }
 
-        // The fallback belongs to the LEGACY ping alone, and `type` is what tells the two apart: a legacy
+        // The fallback belongs to the legacy ping alone, and `type` is what tells the two apart: a legacy
         // body has no event type, so `id` there names the payment. A next-generation event that reached
         // this line is malformed — it announced a type and then named no entity — and falling back would
         // spend an API round trip asking Mollie about an `evt_…` id that cannot be a payment. Under a
@@ -136,7 +136,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
     {
         // Answered BEFORE the id is looked at, because the id cannot answer it. A next-generation delivery
         // names its own kind of entity — `dis_…`, `po_…` — and running that through the payment check
-        // produces a warning about the id when the real subject is the TYPE, which somebody has already
+        // produces a warning about the id when the real subject is the type, which somebody has already
         // decided about.
         if ($this->isDecidedAgainst($request)) {
             return;
@@ -230,7 +230,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
      * Say something about a status this mapper does not act on — but only about the ones nobody chose.
      *
      * There are two kinds of silence here and only one of them is a problem. `open`, `pending` and
-     * `authorized` are silent BY DECISION: a SEPA debit sits on `open` for days, and treating that as a
+     * `authorized` are silent by decision: a SEPA debit sits on `open` for days, and treating that as a
      * failure would start a dunning ladder against money that is on its way. Logging those would write a
      * line on a large share of all deliveries, and a log nobody can read is the same as no log.
      *
@@ -258,8 +258,8 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
     /**
      * Whether this delivery announces a next-generation type this package deliberately does not act on.
      *
-     * Three states, and the middle one is what this adds. A type that was CONSIDERED and declined passes
-     * silently; a type the SDK knows and nobody here has classified WARNS, because Mollie adding an event
+     * Three states, and the middle one is what this adds. A type that was considered and declined passes
+     * silently; a type the SDK knows and nobody here has classified warns, because Mollie adding an event
      * and this package never noticing is the case worth a line. An unrecognized type is not this method's
      * business at all — it falls through to the id checks, where a forged or malformed body belongs.
      *
@@ -334,7 +334,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
      *
      * Mollie has no SetupIntent: recurring capability is established by a `sequenceType: first` payment the
      * customer completes on checkout, and the mandate exists only once that payment is paid. So this is
-     * where a Mollie subscriber BECOMES billable — and it is here, on the webhook, rather than on the
+     * where a Mollie subscriber becomes billable — and it is here, on the webhook, rather than on the
      * return redirect, because the redirect happens in a browser that may never come back while the
      * webhook fires either way. A customer who pays and closes the tab is otherwise left holding a valid
      * mandate the package does not know about, and is dunned for it at the first renewal.
@@ -362,7 +362,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
         $method = MollieValue::of($payment->method);
         $method = $method !== '' ? $method : null;
 
-        // The payment id travels with the mandate, because under this provider the payment IS how the
+        // The payment id travels with the mandate, because under this provider the payment is how the
         // mandate was granted — and it is the only thing that says which request this answers. A customer
         // adding a second card establishes a mandate too; without the reference the two are the same event.
         yield new MandateEstablished(
@@ -456,10 +456,10 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
     /**
      * The refund this payment carries, if anything was taken back from it.
      *
-     * Mollie's webhook never names a refund — it pings with the PAYMENT id, and the refund is something the
+     * Mollie's webhook never names a refund — it pings with the payment id, and the refund is something the
      * fetched payment turns out to hold. Same shape as the chargeback below, and the same reason.
      *
-     * The amount is the provider's CUMULATIVE refunded total rather than this delivery's delta, because
+     * The amount is the provider's cumulative refunded total rather than this delivery's delta, because
      * that is what {@see AddonRefunded} is defined to carry: the ledger claws back only the part it has not
      * already reversed, so a redelivery and a second partial refund each land correctly without this mapper
      * remembering anything. Sending the payment's own amount instead would reverse the whole purchase for a
@@ -472,7 +472,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
      *
      * An unreadable refunded amount yields nothing rather than a zero, and a warning that names the payment and
      * what Mollie sent. A refund reported as zero reverses nothing and looks like it worked; one dropped without
-     * a word is the same failure, so the log is where it can be found later. An ABSENT one is a payment Mollie
+     * a word is the same failure, so the log is where it can be found later. An absent one is a payment Mollie
      * offers no refund on, which has refunded nothing.
      *
      * @param  iterable<mixed>  $chargebacks
@@ -502,14 +502,17 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
             MollieValue::id($payment->id),
             $cumulative,
             reason: $chargedBack->isPositive() ? ReversalCause::DisputeLost->value : null,
+            // Named, because a chargeback the bank takes back lowers the total again: a new chargeback of the same
+            // amount afterwards is told apart from a redelivery by which chargebacks stand.
+            standingChargebacks: MollieChargebackEvents::standingIds($chargebacks),
         );
     }
 
     /**
      * The chargebacks this payment turned out to carry.
      *
-     * Mollie's legacy webhook never names a chargeback — it pings with the PAYMENT id, and the chargeback
-     * is something the fetched payment turns out to have. So it is noticed here and then ASKED for,
+     * Mollie's legacy webhook never names a chargeback — it pings with the payment id, and the chargeback
+     * is something the fetched payment turns out to have. So it is noticed here and then asked for,
      * because the one number that matters is not on the payment.
      *
      * Each chargeback becomes its own event with its own amount, and both halves of that matter. A

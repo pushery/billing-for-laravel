@@ -11,7 +11,7 @@ use Throwable;
  * A configured preprocessor threw while pricing a cycle, so the cycle was not claimed.
  *
  * This is deliberately fatal to the cycle rather than survivable. A chain that fails halfway has priced
- * SOME of the lines, and continuing would charge the subscriber a total that no configuration reproduces
+ * some of the lines, and continuing would charge the subscriber a total that no configuration reproduces
  * — then mark the cycle claimed, so the next tick skips it and nothing ever revisits the amount. The
  * failure would be permanent, silent, and in the customer's money.
  *

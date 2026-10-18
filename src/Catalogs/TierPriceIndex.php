@@ -12,7 +12,7 @@ use Pushery\Billing\Contracts\TierCatalog;
  * it belong to? A subscription may carry prices the catalog does not list — a metered component, an
  * item the host app added itself — so "not a tier price" is a normal answer, never an error.
  *
- * A tier is recognized by its CURRENT price and by every price listed under its `legacy_prices`. Raising
+ * A tier is recognized by its current price and by every price listed under its `legacy_prices`. Raising
  * a tier's price would otherwise turn every existing subscriber's tier unknown at the next webhook: they
  * are still on the old price id, and the tier they are paying for would stop being resolvable.
  */

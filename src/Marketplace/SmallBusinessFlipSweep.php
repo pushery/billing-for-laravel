@@ -12,7 +12,7 @@ use Pushery\Billing\Models\CreatorTaxStatusRecord;
 /**
  * Goes looking for the creators who have outgrown their size relief, because nothing else will.
  *
- * ## Why a sweep, and why this one DECIDES where its sibling only tells
+ * ## Why a sweep, and why this one decides where its sibling only tells
  *
  * `LapsedAttestationSweep` is the shape this follows, and the difference is worth stating out loud: that one
  * announces a hold that already began, this one **changes a creator's tax standing**. A bug there is a
@@ -23,17 +23,17 @@ use Pushery\Billing\Models\CreatorTaxStatusRecord;
  * moment the flip should have happened is a moment nothing dispatched. Only something that goes looking
  * finds it.
  *
- * ## What it does NOT decide
+ * ## What it does not decide
  *
  * The asymmetry belongs to {@see SmallBusinessAutoFlip} and this sweep does not soften it: a count that
- * stays under a limit proves nothing, because the platform only ever sees what was sold HERE. So this can
+ * stays under a limit proves nothing, because the platform only ever sees what was sold here. So this can
  * flip a creator to standard rating and can never flip one back.
  *
  * It also does not re-implement who is eligible. Every merchant with any recorded standing is handed to the
  * flip, which refuses on its own for anyone not resting on a size relief. A pre-filter here would be a
  * second copy of that rule, and the two would eventually disagree.
  *
- * ## The founding year is REPORTED when missing, never substituted
+ * ## The founding year is reported when missing, never substituted
  *
  * `business_founded_year` is nullable, and the limit that applies in a business's founding year is a
  * different, much lower one — 2.5 million against 10 million in the shipped German figures. Passing a
@@ -104,7 +104,7 @@ final readonly class SmallBusinessFlipSweep
      * The one interval answering for each creator right now, newest first per creator.
      *
      * Read from the series rather than from a current-status column, because there is no such column and
-     * deliberately so: a document asks what a standing WAS on the day of a supply, and one overwritable
+     * deliberately so: a document asks what a standing was on the day of a supply, and one overwritable
      * value cannot answer that.
      *
      * @return list<CreatorTaxStatusRecord>
@@ -123,7 +123,7 @@ final readonly class SmallBusinessFlipSweep
             ->whereNotNull('merchant_id')
             // An index-friendly pre-filter and nothing more. What makes a future standing not count is
             // `covers()` below, which is also true of the rows this clause happens to drop -- stated because
-            // deleting this line changes no answer, and a reader who mistook it for the RULE would then be
+            // deleting this line changes no answer, and a reader who mistook it for the rule would then be
             // free to move `covers()` instead.
             ->where('effective_from', '<=', $at)
             ->orderBy('effective_from')
@@ -137,7 +137,7 @@ final readonly class SmallBusinessFlipSweep
             // Ordered oldest first, so the last one written per creator is the newest that still covers now.
             //
             // In a healthy series exactly one interval covers a moment, and this overwrite never fires. It
-            // is here for the series that is NOT healthy: nothing at the database level forbids two
+            // is here for the series that is not healthy: nothing at the database level forbids two
             // overlapping intervals -- the unique key is on the start date -- so a data repair or a
             // hand-written row can produce a pair. Reading whichever came back first would then reconcile a
             // creator against a standing they have already replaced, and the run would look perfectly normal.

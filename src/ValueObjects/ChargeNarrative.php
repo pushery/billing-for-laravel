@@ -8,7 +8,7 @@ use Carbon\CarbonInterface;
 use InvalidArgumentException;
 
 /**
- * What the CUSTOMER should read on the charge — the service they bought and the period it covers.
+ * What the customer should read on the charge — the service they bought and the period it covers.
  *
  * The money seams carry an amount and a mandate, which is everything the provider needs and nothing a
  * person needs. A charge described by those alone reads as a generic word or a bare number, and neither
@@ -29,7 +29,7 @@ use InvalidArgumentException;
  * rails next; and the length limits differ, 1000 characters at Stripe, 255 at Mollie and 140 where Mollie
  * collects a SEPA direct debit, so a pre-rendered string is either truncated for the strictest of them
  * everywhere or left for the provider to cut at its limit, mid-word, on the line the customer reads.
- * Holding the parts lets each driver render to its own limit, and lets the trimming spend the SERVICE name
+ * Holding the parts lets each driver render to its own limit, and lets the trimming spend the service name
  * rather than the period (see {@see statement()}).
  *
  * ## No translator, deliberately
@@ -66,7 +66,7 @@ final readonly class ChargeNarrative
         public ?CarbonInterface $periodStart = null,
         public ?CarbonInterface $periodEnd = null,
     ) {
-        // REFUSED rather than defaulted, and the reason is that this field exists to be read by a person.
+        // Refused rather than defaulted, and the reason is that this field exists to be read by a person.
         // A blank name renders as a bare period in brackets — "(2026-03-01 - 2026-03-31)" — which is worse
         // than the `Subscription` it replaced: it looks deliberate, so nobody goes looking for the name.
         // The caller has a fallback available (the tier key, and past that a generic word) and should use
@@ -84,7 +84,7 @@ final readonly class ChargeNarrative
      *
      * ## What gets spent when it does not fit
      *
-     * The SERVICE name, never the period. The period is short and fixed-width, so trimming it saves almost
+     * The service name, never the period. The period is short and fixed-width, so trimming it saves almost
      * nothing; and it is the half that distinguishes this charge from the eleven others that look exactly
      * like it. A truncated name is still recognizable — `Acme Professional Pl` — while a truncated period
      * is a date that reads as complete and is wrong.
@@ -93,7 +93,7 @@ final readonly class ChargeNarrative
      * cut. Nothing sensible survives that case and inventing a rule for it would be a branch no real
      * installation enters.
      *
-     * `mb_*` throughout: the limits are the providers' CHARACTER limits, and cutting a multi-byte name with
+     * `mb_*` throughout: the limits are the providers' character limits, and cutting a multi-byte name with
      * `substr` would end the line in half a character. That is not valid UTF-8, so it cannot be encoded as the
      * JSON Mollie's API takes.
      */
@@ -126,7 +126,7 @@ final readonly class ChargeNarrative
     /**
      * The period as one string, or null when neither end is known.
      *
-     * A half-known period is rendered as the end that IS known rather than dropped. "from 2026-03-01" says
+     * A half-known period is rendered as the end that is known rather than dropped. "from 2026-03-01" says
      * something true; saying nothing loses it, and inventing the other end would put a date on the
      * customer's statement that no row in this package holds.
      */

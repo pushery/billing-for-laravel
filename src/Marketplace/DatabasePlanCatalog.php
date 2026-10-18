@@ -14,8 +14,8 @@ use Pushery\Billing\ValueObjects\TierIdentity;
 /**
  * A merchant's purchasable-plan catalog, read from the host's rows.
  *
- * It implements the SAME PlanCatalog every caller already holds, with the merchant fixed at construction, and
- * it keeps the anti-price-injection guarantee per merchant: the price for a tier KEY comes ONLY from that
+ * It implements the same PlanCatalog every caller already holds, with the merchant fixed at construction, and
+ * it keeps the anti-price-injection guarantee per merchant: the price for a tier key comes only from that
  * merchant's own row, never from config, never from another merchant, and never from anything the client
  * submitted. A key the merchant has not defined is not purchasable and resolves to null.
  */

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Support;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
@@ -14,7 +15,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * data-portability request (GDPR Art. 15 and Art. 20). That is the person as a buyer and, on a marketplace, as a
  * merchant: the same account can do both, and its merchant rows carry no owner columns.
  *
- * It reads the SAME table map the eraser does, so the two cannot drift: a table the export forgets is data
+ * It reads the same table map the eraser does, so the two cannot drift: a table the export forgets is data
  * a person is entitled to and never receives, and every table added to the package is covered by both or by
  * neither.
  *
@@ -25,17 +26,29 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 final readonly class BillingDataExport
 {
     /**
-     * The shared table machinery is DEFAULTED rather than required: this class is public surface a consumer
+     * The shared table machinery is defaulted rather than required: this class is public surface a consumer
      * may legitimately construct with `new`, and it is stateless, so demanding the dependency would break
      * that for no benefit. The container still injects its own instance.
+     *
+     * The manager, which decides the mode, is defaulted for the same reason: one constructed with `new` asks the
+     * container for it when it exports.
      */
-    public function __construct(private SubjectScopedRecords $records = new SubjectScopedRecords) {}
+    public function __construct(
+        private SubjectScopedRecords $records = new SubjectScopedRecords,
+        private ?BillingManager $manager = null,
+    ) {}
 
     /**
      * @return array<string, list<array<array-key, mixed>>>
      */
     public function for(Model $owner): array
     {
+        // Payments-only mode keeps the webhook deliveries and nothing else (PaymentsModeSchema), so what it holds
+        // about a person is the deliveries recorded for them, payloads included.
+        if (($this->manager ?? Container::getInstance()->make(BillingManager::class))->paymentsOnly()) {
+            return $this->records->export(PaymentsModeSchema::ownerAxis(), $owner);
+        }
+
         // The same axis, the same table work the eraser does — read out instead of deleted. Child tables
         // included: they key on their parent row rather than on the person, so they are reached by joining
         // through the parent, and covering them here but not there (or the reverse) is exactly the drift

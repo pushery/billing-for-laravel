@@ -36,8 +36,8 @@ final class MarketplaceUnsupported extends RuntimeException
     /**
      * The driver was handed a separate-transfer routing, which it cannot complete.
      *
-     * On this shape the platform takes the whole payment and the merchant's share is moved by a LATER
-     * call — one THESE RAILS cannot make, because it can only go out once the payment has succeeded, which
+     * On this shape the platform takes the whole payment and the merchant's share is moved by a later
+     * call — one these rails cannot make, because it can only go out once the payment has succeeded, which
      * is after `charge()` has returned. Accepting the routing here would settle the entire amount on the
      * platform account and never pay the merchant — with a successful `ChargeResult` and a null transfer
      * reference that reads exactly like a transfer still settling.
@@ -49,11 +49,11 @@ final class MarketplaceUnsupported extends RuntimeException
      * situation: "a driver that cannot serve a routing must THROW, never no-op." A loud failure costs one
      * checkout; the silent one costs every routed sale until somebody reconciles an account.
      *
-     * This refusal is PERMANENT and correct, not a placeholder. The rails alone genuinely cannot serve the
+     * This refusal is permanent and correct, not a placeholder. The rails alone genuinely cannot serve the
      * lane: the transfer can only be made once the payment has actually succeeded, which is after charge()
      * has already returned. RoutedPayment is where the two halves meet, and it is the supported path.
      *
-     * Named for what the caller should DO, not for a gap. A factory name is the first thing in a stack trace
+     * Named for what the caller should do, not for a gap. A factory name is the first thing in a stack trace
      * and the string people grep for; a name saying "not implemented" would send them away from a capability
      * that exists, while the message right below it points them at RoutedPayment.
      */
@@ -90,8 +90,8 @@ final class MarketplaceUnsupported extends RuntimeException
      * A tip was asked for on an installation with nobody to tip.
      *
      * Refused rather than routed to the platform, and the asymmetry with a purchase is the point: an
-     * unrouted PURCHASE is an ordinary single-seller sale, and the platform keeping the money is exactly
-     * right. An unrouted TIP is money the buyer meant for a person, kept by the platform instead — the
+     * unrouted purchase is an ordinary single-seller sale, and the platform keeping the money is exactly
+     * right. An unrouted tip is money the buyer meant for a person, kept by the platform instead — the
      * buyer pays, the platform keeps all of it, and the person they meant to tip never hears about it.
      * Nothing about that is visible from either side afterwards.
      */

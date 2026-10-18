@@ -11,7 +11,7 @@ use Pushery\Billing\Exceptions\InvalidBillingConfig;
 /**
  * Which money flow this installation uses with its provider.
  *
- * ONE READER, because there were three and they disagreed on both axes. `billing.marketplace.charge_type`
+ * One reader, because there were three and they disagreed on both axes. `billing.marketplace.charge_type`
  * was read in the routing resolver, in the hosted checkout and in the one-time charge, and the third read it
  * differently in each direction:
  *
@@ -20,13 +20,13 @@ use Pushery\Billing\Exceptions\InvalidBillingConfig;
  *  - a fallback of `SeparateTransfer` rather than `Destination`.
  *
  * All three docblocks claimed to fall back to "the shipped default". Exactly one was telling the truth: the
- * shipped default IS `separate_transfer`, and the two that fell back to `Destination` were silently choosing
+ * shipped default is `separate_transfer`, and the two that fell back to `Destination` were silently choosing
  * the other lane — the one that moves the merchant of record. That is not a smaller mistake than the crash;
  * it is the quieter one.
  *
  * ## An unreadable value refuses, and does not fall back
  *
- * The fallback exists for an ABSENT key — a consumer whose published config predates it. A key that is
+ * The fallback exists for an absent key — a consumer whose published config predates it. A key that is
  * present and unreadable is a different situation: somebody typed something and meant it. Guessing a lane
  * there picks who the merchant of record is on their behalf, so it raises instead, naming the key.
  */
@@ -44,7 +44,7 @@ final readonly class ConfiguredChargeType
         $configured = $this->config->get('billing.marketplace.charge_type');
 
         // Absent, not merely unreadable: the shipped default, which the config file also states. The
-        // separate-transfer shape needs a SECOND provider call to pay the merchant their share, and that
+        // separate-transfer shape needs a second provider call to pay the merchant their share, and that
         // call ships — `StripeMerchantTransfers::transferShare()`, made by `RoutedPayment::charge()`. What
         // refuses is the bare rail: `PaymentRails::charge()` has already returned by the time a transfer
         // could go out, so accepting the routing there would take the buyer's money with no moment left in

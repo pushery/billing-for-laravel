@@ -12,13 +12,13 @@ use Pushery\Billing\Enums\CreatorTaxStatusSource;
 
 /**
  * The asymmetric automatic status flip: a platform count that reaches a small-business limit flips the
- * creator to standard rating; a count UNDER the limit never flips them back.
+ * creator to standard rating; a count under the limit never flips them back.
  *
  * The asymmetry is not a preference — it follows from what the platform count is. It sees only the turnover
- * that ran through this platform, so it is a LOWER BOUND of the creator's real total. When the lower bound
- * breaks the limit, the limit is SURELY broken (there can only be more, never less), and continuing to issue
+ * that ran through this platform, so it is a lower bound of the creator's real total. When the lower bound
+ * breaks the limit, the limit is surely broken (there can only be more, never less), and continuing to issue
  * tax-free self-billed invoices would be knowingly wrong — so the flip is mandatory. When the lower bound
- * stays under, NOTHING is proven (external turnover is invisible here), so an automatic flip back, or an
+ * stays under, nothing is proven (external turnover is invisible here), so an automatic flip back, or an
  * automatic confirmation of the small-business status, is a fallacy the system must not commit.
  *
  * A flip writes a new status line (source = auto_flip, no attestation clock) at the RIGHT effective moment —
@@ -40,7 +40,7 @@ final readonly class SmallBusinessAutoFlip
 
     public function reconcile(Model $creator, string $currency, int $year, ?int $foundingYear): void
     {
-        // Only strictly-enabled flips: a missing or non-boolean switch fails toward NOT changing a creator's
+        // Only strictly-enabled flips: a missing or non-boolean switch fails toward not changing a creator's
         // tax standing on its own.
         if ($this->config->get('billing.tax_small_business.auto_flip_enabled', true) !== true) {
             return;

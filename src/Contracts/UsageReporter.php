@@ -13,19 +13,19 @@ use Carbon\CarbonInterface;
  * The `identifier` is the contract. It is minted once, when the usage is recorded, and replayed
  * unchanged on every retry — that is what makes a retry safe: the provider recognizes the identifier
  * and bills the usage once, however many times the network made us ask. An implementation must
- * therefore pass it through untouched and MUST NOT mint one of its own.
+ * therefore pass it through untouched and must not mint one of its own.
  *
- * `occurredAt` is when the usage HAPPENED, never when it was flushed, so a delayed flush still bills
+ * `occurredAt` is when the usage happened, never when it was flushed, so a delayed flush still bills
  * the usage into the cycle it belongs to.
  */
 interface UsageReporter
 {
     /**
-     * Report `quantity` units of `meterName` for a customer. Quantities are RAW — the allowance and the
+     * Report `quantity` units of `meterName` for a customer. Quantities are raw — the allowance and the
      * packaging live in the provider's price, and applying them here as well would bill the customer
      * twice for neither.
      *
-     * MUST be idempotent by identifier: reporting usage the provider already holds is a SUCCESS, and
+     * Must be idempotent by identifier: reporting usage the provider already holds is a success, and
      * must return normally. Providers signal this differently — Stripe rejects the replay outright with
      * `duplicate_meter_event` rather than accepting it quietly — so an implementation has to recognize
      * its provider's way of saying "already have it" and swallow it. Letting that surface as a failure
@@ -53,7 +53,7 @@ interface UsageReporter
     public function reverse(string $meterName, string $identifier): void;
 
     /**
-     * The total the PROVIDER has actually recorded for this customer and meter in a window — the authority
+     * The total the provider has actually recorded for this customer and meter in a window — the authority
      * our own ledger has to agree with.
      *
      * Reporting usage can succeed on our side and still never arrive: the ledger and the provider's meter are

@@ -30,7 +30,7 @@ interface OneTimeCharge
      * @param  ?string  $buyerCountry  the buyer's ISO country where the caller already knows it; checked against
      *                                 `billing.tax_markets` before the provider is asked for anything, so a market
      *                                 that is not open throws MarketNotOpen. Null checks nothing here
-     * @param  ?bool  $collectTaxId  whether THIS checkout asks the buyer for a tax ID while the provider computes tax;
+     * @param  ?bool  $collectTaxId  whether this checkout asks the buyer for a tax ID while the provider computes tax;
      *                               null follows `billing.checkout.tax_id_collection`
      */
     public function purchase(Model $billable, string $addonKey, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $callerReference = null): ClientIntent;
@@ -40,12 +40,12 @@ interface OneTimeCharge
      *
      * ## Why it is a second method rather than a special add-on key
      *
-     * `purchase()` takes a KEY and never an amount, and that is deliberate: the price comes from the
+     * `purchase()` takes a key and never an amount, and that is deliberate: the price comes from the
      * catalog so a caller cannot inject one. A tip has no catalog entry and cannot have one — the figure
      * is the buyer's, chosen at the moment of paying. The two rules are opposite, so they are two methods
      * rather than one with a flag, and the anti-injection rule stays absolute where it applies.
      *
-     * What replaces the catalog as the guard is the SERVER: the amount is refused when tipping is off,
+     * What replaces the catalog as the guard is the server: the amount is refused when tipping is off,
      * when it is not positive, when it is below the operator's floor, and when the installation has no
      * merchant for the sale to route to.
      *
@@ -54,7 +54,7 @@ interface OneTimeCharge
      * entitled to assume otherwise — a tip is a buyer-chosen amount by the paragraph above, which is the
      * same argument the floor rests on.
      *
-     * ## Why a tip has to say what it was paid ON
+     * ## Why a tip has to say what it was paid on
      *
      * A tip has no tax treatment of its own. It is placed by the supply it accompanies — a tip on
      * commissioned work and a tip on a file download are taxed in different countries — so

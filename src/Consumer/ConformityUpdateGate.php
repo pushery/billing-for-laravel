@@ -17,8 +17,8 @@ use Pushery\Billing\Models\AccessGrant;
  *
  * ## It never reads the update policy, and that is the whole design
  *
- * `UpdatePolicy` governs ENRICHMENT: new editions and added material, which the creator sells and may
- * withhold. This governs CONFORMITY: what the seller owes afterwards regardless. A frozen grant is a sale
+ * `UpdatePolicy` governs enrichment: new editions and added material, which the creator sells and may
+ * withhold. This governs conformity: what the seller owes afterwards regardless. A frozen grant is a sale
  * whose enrichment stopped, never a sale whose obligations stopped — so nothing in this file looks at
  * `update_policy`, and no value it could hold changes an answer here.
  *
@@ -31,7 +31,7 @@ use Pushery\Billing\Models\AccessGrant;
  *
  * ## On, the on is not switchable
  *
- * With a profile active there is deliberately NO configuration value that turns conformity updates off
+ * With a profile active there is deliberately no configuration value that turns conformity updates off
  * across the install. That is not an oversight to be fixed by adding one — an operator-wide off switch is
  * precisely the blanket arrangement the law refuses to recognize, and offering it as a setting would let a
  * legal obligation be configured away. The only way an obligation ends early is one grant at a time, against
@@ -80,7 +80,7 @@ final readonly class ConformityUpdateGate
     /**
      * The end date to record on a grant being created now, or null when none can be stated.
      *
-     * Called on the write side so the period is FROZEN with the sale, like every other fact a document was
+     * Called on the write side so the period is frozen with the sale, like every other fact a document was
      * made under. An operator who later takes advice and configures a longer period does not thereby shorten
      * anybody's existing obligation, and one who shortens it does not reach backwards into sales already
      * made.

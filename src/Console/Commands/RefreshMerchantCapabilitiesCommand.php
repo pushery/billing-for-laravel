@@ -30,7 +30,7 @@ use Pushery\Billing\ValueObjects\MerchantAccountReference;
  * ## A maintenance command, never the money path
  *
  * One provider call per merchant, so it belongs where `billing:sync` belongs and nowhere near a checkout.
- * It is deliberately NOT scheduled: a timer that calls the provider for every merchant is a cost and
+ * It is deliberately not scheduled: a timer that calls the provider for every merchant is a cost and
  * rate-limit decision an operator makes, and this package already carries findings about commands that
  * ended up in no schedule and about ones that reach out unasked. Manual first, scheduled separately if at
  * all.
@@ -138,7 +138,7 @@ final class RefreshMerchantCapabilitiesCommand extends Command
      * Two failures make the relation the wrong tool here, and each one crashes a whole sweep for one bad
      * row. Reading `$account->merchant` lazy-loads, which throws outright in an application that has turned
      * lazy loading off — an ordinary production setting. Eager-loading instead moves the crash earlier: a
-     * morph type whose CLASS no longer exists (deleted, renamed, never migrated) throws inside the load, so
+     * morph type whose class no longer exists (deleted, renamed, never migrated) throws inside the load, so
      * the null check below would never be reached.
      *
      * Resolved by hand, both are ordinary answers: an unknown class is a named skip, and so is a row whose

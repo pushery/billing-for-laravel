@@ -61,16 +61,16 @@ use Pushery\Billing\ValueObjects\Money;
  * yields nothing.
  *
  * `charge.refunded` maps to AddonRefunded so a refunded one-time add-on's credit is automatically
- * clawed back — the MONEY side. `credit_note.created` maps to InvoiceCorrected — the ACCOUNTING side:
+ * clawed back — the money side. `credit_note.created` maps to InvoiceCorrected — the accounting side:
  * the document that credits a finalized invoice, with the lines and tax a raw refund event does not
  * carry. The two are deliberately separate concerns, not a duplicate mapping of the same money.
  *
- * `@partially-mapped:` `charge.dispute.created` and `charge.dispute.closed` ARE answered — the first opens the
- * case for the host, the second books its outcome — and what neither does is resolve an OWNER from it. The
+ * `@partially-mapped:` `charge.dispute.created` and `charge.dispute.closed` are answered — the first opens the
+ * case for the host, the second books its outcome — and what neither does is resolve an owner from it. The
  * qualifier below carries the whole difference, so it is stated here where a reader looking for the exclusion
  * will find it.
  *
- * A lost dispute over a sale this package ROUTED yields `ChargebackReceived` rather than `AddonRefunded`,
+ * A lost dispute over a sale this package routed yields `ChargebackReceived` rather than `AddonRefunded`,
  * and the branch turns on the routed-charge row rather than on anything in the payload. Under
  * `separate_transfer` the platform takes the whole payment, so the charge lives on the platform account and
  * the dispute arrives here and nowhere else — while the four things a chargeback owes a routed sale all
@@ -81,24 +81,24 @@ use Pushery\Billing\ValueObjects\Money;
  * booking is worse than leaving a rare correction to be made by hand. Dispute and mandate-revocation
  * webhooks (charge.dispute.*, mandate/payment-method events) are not mapped for owner resolution either —
  * the provider dispute and mandate objects carry no customer, so that needs a dedicated design. That
- * exclusion is about the OWNER and nothing else: a lost dispute over a routed sale does produce
+ * exclusion is about the owner and nothing else: a lost dispute over a routed sale does produce
  * `ChargebackReceived` here, identified by the charge, because the routed row says whose sale it was, and
  * every opened dispute produces `DisputeOpened`, which names the dispute and the payment and needs no owner.
  *
  * `@partially-mapped:` `payment_intent.succeeded`, `payment_intent.payment_failed` and
- * `payment_intent.canceled` ARE answered — but only for a ROUTED marketplace charge, and every one of them
+ * `payment_intent.canceled` are answered — but only for a routed marketplace charge, and every one of them
  * returns nothing for a payment that carries an invoice.
  *
- * `payment_intent.*` is mapped for NOTHING INVOICE-DRIVEN, which is every customer-facing payment. Those are
+ * `payment_intent.*` is mapped for nothing invoice-driven, which is every customer-facing payment. Those are
  * already covered: a subscription charge fires `invoice.payment_*` (which carries the invoice reference the
  * dunning notice dedups on), an add-on fires `checkout.session.*`, and an off-session recovery charge
- * returns its ChargeResult to the caller synchronously. A `payment_intent.payment_failed` fires in PARALLEL
- * with `invoice.payment_failed` for the SAME failure but carries the payment-intent id, not the invoice —
- * so mapping THAT to PaymentFailed would bypass the dunning dedup and mail the customer a second "payment
+ * returns its ChargeResult to the caller synchronously. A `payment_intent.payment_failed` fires in parallel
+ * with `invoice.payment_failed` for the same failure but carries the payment-intent id, not the invoice —
+ * so mapping that to PaymentFailed would bypass the dunning dedup and mail the customer a second "payment
  * failed", while covering no failure the invoice event does not already cover. `PaymentIntentMappingTest`
  * pins the exclusion so it stays a decision rather than an oversight.
  *
- * What the routed arms map instead is a payment with NO invoice at all — the discriminator is taken from the
+ * What the routed arms map instead is a payment with no invoice at all — the discriminator is taken from the
  * payload rather than from a lookup, and the effect behind it no-ops on a reference this package never wrote
  * as a routed charge. So an ordinary invoice-less checkout emits an event that finds nothing.
  *
@@ -110,6 +110,45 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final readonly class StripeWebhookEventMapper implements WebhookEventMapper
 {
+    /**
+     * Every event type this mapper answers, which is what the platform's webhook endpoint has to receive.
+     *
+     * An endpoint that subscribes to a selection without one of these loses what hangs off it, and nothing says so:
+     * an event that never arrives produces nothing. `billing:doctor` holds each endpoint against this list, and
+     * `StripeEventTypesAreListedTest` holds the list against the arms of {@see self::map()}.
+     *
+     * @var list<string>
+     */
+    public const array EVENT_TYPES = [
+        'charge.dispute.closed',
+        'charge.dispute.created',
+        'charge.refund.updated',
+        'charge.refunded',
+        'checkout.session.async_payment_succeeded',
+        'checkout.session.completed',
+        'checkout.session.expired',
+        'credit_note.created',
+        'customer.subscription.created',
+        'customer.subscription.deleted',
+        'customer.subscription.trial_will_end',
+        'customer.subscription.updated',
+        'customer.tax_id.created',
+        'customer.tax_id.deleted',
+        'customer.tax_id.updated',
+        'invoice.finalized',
+        'invoice.payment_action_required',
+        'invoice.payment_failed',
+        'invoice.payment_succeeded',
+        'invoice.upcoming',
+        'payment_intent.canceled',
+        'payment_intent.payment_failed',
+        'payment_intent.succeeded',
+        'payment_method.detached',
+        'refund.failed',
+        'refund.updated',
+        'transfer.reversed',
+    ];
+
     /**
      * @param  RoutedChargeLedger  $routed  built here when absent, the same way the ledger's own constructor
      *                                      resolves its dispatcher — the call sites that build this mapper
@@ -151,7 +190,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             'invoice.payment_succeeded' => [
                 ...$this->invoiceEvents($object, failed: false),
                 ...$this->invoiceSnapshotEvents($object),
-                // A THIRD reading of the same message, and deliberately its own event. The two above are
+                // A third reading of the same message, and deliberately its own event. The two above are
                 // about the platform's relationship with the buyer and fire for every payment there is;
                 // this one exists so the handler that reaches the provider is only ever woken for a cycle
                 // that could plausibly route. See RoutedSubscriptionInvoicePaid.
@@ -170,8 +209,8 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             // reverse charge went on resting on a number the customer no longer gives.
             'customer.tax_id.deleted' => $this->taxIdRemovalEvents($object),
             // `@partially-mapped:` payment_intent.succeeded, payment_intent.payment_failed and
-            // payment_intent.canceled ARE answered, for routed marketplace charges only. What stays out is
-            // every INVOICE-DRIVEN payment, which is the whole customer-facing surface — and that qualifier
+            // payment_intent.canceled are answered, for routed marketplace charges only. What stays out is
+            // every invoice-driven payment, which is the whole customer-facing surface — and that qualifier
             // is the claim, not a softening of it.
             //
             // `payment_intent.*` stays unmapped for anything invoice-driven, which is every customer-facing
@@ -180,7 +219,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             // payment-intent id rather than the invoice, so mapping it would bypass a dunning dedup keyed on
             // the invoice and mail the customer a second failure notice.
             //
-            // A ROUTED marketplace charge is not that. It is not invoiced through the provider at all, so
+            // A routed marketplace charge is not that. It is not invoiced through the provider at all, so
             // the payload carries no `invoice` — and that absence is the discriminator, taken from the
             // payload itself rather than from a database lookup a mapper has no business doing. On an endpoint
             // older than `basil` every case the pin covers carries an invoice and maps to nothing. On the pinned
@@ -215,11 +254,11 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
 
     /**
      * A detached payment method — a card removed, a mandate-backed method taken off the customer. After the
-     * detach the object's `customer` is null, but Stripe carries the customer it WAS attached to in the
+     * detach the object's `customer` is null, but Stripe carries the customer it was attached to in the
      * event's `previous_attributes`, so the owner to notify is resolvable without a local mandate store
      * (which is exactly what left this unmapped before). Maps to the neutral MandateRevoked.
      *
-     * Note: this covers a payment method REMOVED from the customer. A SEPA mandate that goes inactive while
+     * Note: this covers a payment method removed from the customer. A SEPA mandate that goes inactive while
      * the method stays attached (`mandate.updated`) carries no customer and is not mapped here — its charge
      * failure is still caught reactively by the dunning path.
      *
@@ -252,7 +291,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     }
 
     /**
-     * A refunded charge. Stripe reports a CUMULATIVE `amount_refunded`, keyed on the PaymentIntent — the
+     * A refunded charge. Stripe reports a cumulative `amount_refunded`, keyed on the PaymentIntent — the
      * same id a one-time add-on stored when it was bought, so a reversal is matched to the purchase it
      * undoes. A refund matching no tracked add-on reverses nothing.
      *
@@ -341,7 +380,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     }
 
     /**
-     * A closed dispute. Only a LOST dispute claws anything back — the money is gone the same as a refund,
+     * A closed dispute. Only a lost dispute claws anything back — the money is gone the same as a refund,
      * so it maps to the same add-on reversal, keyed on the dispute's PaymentIntent. A won or otherwise
      * closed dispute reverses nothing: mapping it unconditionally would strip a customer of credit for a
      * dispute the merchant actually won. The dispute object carries no customer, which is exactly why the
@@ -377,7 +416,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     }
 
     /**
-     * A lost dispute over a sale that was routed to a merchant, reported on the PLATFORM's endpoint.
+     * A lost dispute over a sale that was routed to a merchant, reported on the platform's endpoint.
      *
      * Under `separate_transfer` the platform takes the whole payment and moves the merchant's share in a
      * second call, so the charge lives on the platform account and its dispute is a platform event. Nothing
@@ -387,7 +426,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
      * under, or the payment kept beside the invoice a subscription cycle is recorded under.
      *
      * `AddonRefunded` is the wrong event for such a sale and was the only one it could produce. It ends
-     * access and issues a LOCAL credit note, and it reaches none of the four things a chargeback owes on a
+     * access and issues a local credit note, and it reaches none of the four things a chargeback owes on a
      * routed sale: the provider's fee booked as the platform's own inbound supply, the chain corrected on
      * the leg the ground code says it corrects, and the merchant's share taken back. The platform had
      * already returned the money to the network and already paid the merchant; both stayed that way, and
@@ -422,7 +461,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
      */
     private function subscriptionEvents(array $object, ?int $occurredAt): array
     {
-        // A routed subscription rides a destination charge: it lives on the PLATFORM account (so its event
+        // A routed subscription rides a destination charge: it lives on the platform account (so its event
         // arrives here, not on the merchant endpoint) but carries transfer_data.destination naming the
         // connected account its money is owed to. That destination resolves to the local merchant, which
         // keys the fan's per-creator row — while the customer stays a platform customer, so the owner is
@@ -511,7 +550,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     /**
      * The cycle behind a paid invoice, when there is one.
      *
-     * Emitted for EVERY paid subscription invoice, routed or not — because the delivered payload cannot say
+     * Emitted for every paid subscription invoice, routed or not — because the delivered payload cannot say
      * which. It carries no `transfer_data` and no account on the pinned version, so
      * the discrimination has to happen where this package already knows the answer: on the local
      * subscription row. Deciding here would mean fetching from the provider inside a mapper, which is the
@@ -636,11 +675,11 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             return [];
         }
 
-        // Narrowed HERE rather than at each read. A provider that sent no metadata bag, or something
+        // Narrowed here rather than at each read. A provider that sent no metadata bag, or something
         // that is not one, yields the empty bag — and every read below then answers null exactly as
         // the ternary did, including the `addon_key` that returns early three lines down.
         //
-        // THE OLD SHAPE WAS TRUE AND UNPROVABLE, WHICH IS A DIFFERENT THING FROM SAFE. Reaching the
+        // The old shape was true and unprovable, which is a different thing from safe. Reaching the
         // second read at all requires `$addonKey` to be non-null, which requires the bag to be an
         // array — but that chain runs through a ternary and an early return, and whether an analyzer
         // follows it is a property of the analyzer. An older phpstan than the one this package pins did
@@ -654,12 +693,12 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         $id = $this->string($object, 'id');
         $currency = $this->string($object, 'currency');
 
-        // A TIP SESSION CARRIES NO ADD-ON KEY, and reading it as one would be worse than reading it as
+        // A tip session carries no add-on key, and reading it as one would be worse than reading it as
         // nothing: the grant path would look up a catalog key that does not exist and credit nothing,
         // quietly, because a missing grant is an ordinary state there. So the tip is recognized on its
         // own marker, before the add-on branch refuses the session for want of a key it never had.
         //
-        // Both companions are required, and a bag with one of them is deliberately NOT a tip. They are
+        // Both companions are required, and a bag with one of them is deliberately not a tip. They are
         // written by this package's own session opener in a single statement, so a half-filled bag is
         // only reachable by editing the session at the provider — and guessing the missing half would
         // mean inventing either the merchant the money is destined for or the treatment it is taxed
@@ -678,7 +717,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
                 $this->string($object, 'payment_intent'),
                 $soldAlongside,
                 $tipMerchant,
-                // Three answers, not two, and the third is null. Absent is not read as NOT domestic: that
+                // Three answers, not two, and the third is null. Absent is not read as not domestic: that
                 // would hand every listener a fact about the buyer nobody established. The session opener
                 // writes the key, so a session without it is one nobody answered for, and null says so.
                 match ($this->string($metadata, 'tip_buyer_domestic')) {
@@ -710,7 +749,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             $id,
             // The PaymentIntent — the reversal key a later refund webhook carries (the session id it does not).
             $this->string($object, 'payment_intent'),
-            // THE ROUND TRIP, and the reason the declarations can be found again at all. The package mints
+            // The round trip, and the reason the declarations can be found again at all. The package mints
             // this key before the redirect and writes the two declarations against it; the provider carries
             // it as opaque metadata and hands it back here. Read from the same metadata bag as the add-on
             // key, so a session that lost one lost both -- which is far easier to notice than a payment that
@@ -828,7 +867,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     /**
      * How much of the customer's Stripe balance this invoice consumed.
      *
-     * Stripe keeps a customer balance where a CREDIT is negative: `starting_balance` is what the customer
+     * Stripe keeps a customer balance where a credit is negative: `starting_balance` is what the customer
      * held when the invoice was created, `ending_balance` what they hold after it. Credit consumed is
      * therefore `ending - starting` — with EUR 100 of credit and an invoice for the same, `-10000` to `0`
      * gives `10000`.
@@ -888,9 +927,8 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             issuedAt: $this->finalizedAt($object),
             buyer: $this->buyerSnapshot($object),
             lines: $this->lineSnapshots($object, $net, $tax),
-            // Stripe stamps the customer's tax status onto the finalized invoice: 'reverse' is an intra-EU
-            // B2B reverse charge (the buyer accounts for the VAT). That is the fact the e-invoice must carry.
-            reverseCharge: $this->string($object, 'customer_tax_exempt') === 'reverse',
+            // An intra-EU B2B reverse charge (the buyer accounts for the VAT), the fact the e-invoice must carry.
+            reverseCharge: $this->reverseCharged($object),
             creditAppliedMinor: $this->creditApplied($object),
         ))];
 
@@ -938,7 +976,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     }
 
     /**
-     * The document's net (taxable base) and tax, both AFTER any discount. Stripe's `subtotal` is the
+     * The document's net (taxable base) and tax, both after any discount. Stripe's `subtotal` is the
      * pre-discount, pre-tax amount, so subtracting an invoice-level discount (promotion codes are allowed by
      * default) gives the real taxable base; the tax is then total - net. An invoice lists its discounts as
      * `total_discount_amounts` and a credit note as `discount_amounts`, so both are read: reading only the
@@ -1069,8 +1107,37 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             creditsProviderId: $creditedInvoice,
             buyer: $this->buyerSnapshot($object),
             lines: $this->lineSnapshots($object, $net, $tax),
-            reverseCharge: $this->string($object, 'customer_tax_exempt') === 'reverse',
+            reverseCharge: $this->reverseCharged($object),
         ))];
+    }
+
+    /**
+     * Whether Stripe reversed the charge on this invoice or credit note, by the customer's tax status or by Stripe Tax
+     * on its own.
+     *
+     * Stripe Tax reverses it two ways. A customer whose tax status is set to `reverse` carries it on
+     * `customer_tax_exempt`. A customer with a valid tax id in another member state keeps the status `none`, and the
+     * reversal shows only on the tax amounts, as `taxability_reason: reverse_charge`: that is the way a number attached
+     * through `AttachesVerifiedVatIds` takes. The amounts are `total_taxes` from API version 2025-03-31 on and
+     * `total_tax_amounts` before it, and a webhook arrives in the version of its endpoint, so both are read.
+     *
+     * @param  array<array-key, mixed>  $object
+     */
+    private function reverseCharged(array $object): bool
+    {
+        if ($this->string($object, 'customer_tax_exempt') === 'reverse') {
+            return true;
+        }
+
+        foreach ([$object['total_taxes'] ?? null, $object['total_tax_amounts'] ?? null] as $amounts) {
+            foreach (is_array($amounts) ? $amounts : [] as $amount) {
+                if (is_array($amount) && ($amount['taxability_reason'] ?? null) === 'reverse_charge') {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1141,7 +1208,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     }
 
     /**
-     * The invoice lines, each carrying its net AFTER any discount so the lines sum to the document net (the
+     * The invoice lines, each carrying its net after any discount so the lines sum to the document net (the
      * discount-adjusted taxable base). Stripe's line `amount` is the pre-discount figure and its per-line
      * `discount_amounts` carry the reduction, so the post-discount net is amount minus those. On a price set
      * gross, `amount` also carries the tax, and the tax the line reports as inclusive comes off as well. A lineless
@@ -1339,7 +1406,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     private function routedChargeEvents(array $object, bool $confirmed): array
     {
         // Invoice-driven means customer-facing, and customer-facing is what the pin protects. Checked for
-        // PRESENCE rather than truthiness: the provider sends `invoice: null` on a payment that has none,
+        // presence rather than truthiness: the provider sends `invoice: null` on a payment that has none,
         // and a null-check that treated that as "has an invoice" would map nothing, forever, silently.
         //
         // Only an endpoint older than `basil` sends the field at all; the pinned version removed it from the
@@ -1355,7 +1422,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             return [];
         }
 
-        // NO TRANSFER IS READ HERE, because this payload cannot carry one.
+        // No transfer is read here, because this payload cannot carry one.
         //
         // This read `transfer` off the object, to carry the destination charge's transfer through to the row. The
         // object is a PaymentIntent, and `transfer` is a field of a Charge: the intent names its charge in
@@ -1412,11 +1479,11 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     /**
      * A transfer the provider reversed on its own.
      *
-     * Attributed on the TRANSFER id, which is the only field that ties the event to a sale this package
+     * Attributed on the transfer id, which is the only field that ties the event to a sale this package
      * recorded — the connected account alone would name a merchant, not a charge, and a merchant can have
      * many.
      *
-     * `amount_reversed` is the provider's CUMULATIVE figure, and carrying it as such is what makes the
+     * `amount_reversed` is the provider's cumulative figure, and carrying it as such is what makes the
      * effect idempotent without a dedup table: a redelivery states the same total, a second reversal states
      * a higher one, and both are handled by writing what was reported.
      *

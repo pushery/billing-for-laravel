@@ -11,7 +11,7 @@ use Pushery\Billing\Enums\MerchantStatus;
  * A merchant's account at the payment provider, as the package sees it: the provider key, the account
  * id, and the three capability flags that decide whether money may be destined to it.
  *
- * The flags are a SNAPSHOT, not a live read. A provider reports them asynchronously (an account that
+ * The flags are a snapshot, not a live read. A provider reports them asynchronously (an account that
  * finished onboarding is announced by a webhook), so the value a consumer holds can be older than the
  * account. That is why the accessor below is written as a conjunction of positive facts rather than
  * "not blocked": an unknown or stale account is one whose flags are false, and false must mean "do not
@@ -26,9 +26,9 @@ final readonly class MerchantAccountReference
         public bool $payoutsEnabled = false,
         public bool $detailsSubmitted = false,
         /**
-         * When the merchant disconnected their account, if they did. A DIFFERENT axis from the three flags
+         * When the merchant disconnected their account, if they did. A different axis from the three flags
          * above and appended last on purpose, so a positional construction written before it still compiles.
-         * A withheld capability stops transfers; a deauthorization stops transfers AND reversals, which is
+         * A withheld capability stops transfers; a deauthorization stops transfers and reversals, which is
          * the state in which a clawback becomes impossible.
          */
         public ?CarbonInterface $deauthorizedAt = null,

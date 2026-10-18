@@ -17,14 +17,14 @@ use Pushery\Billing\Models\UsageEvent;
 use Pushery\Billing\ValueObjects\UsageDrift;
 
 /**
- * Asks the provider what it ACTUALLY recorded, and compares it with what we believe we sent.
+ * Asks the provider what it actually recorded, and compares it with what we believe we sent.
  *
  * Usage reporting works — and that is exactly the problem it hides. The local ledger and the provider's
  * meter are two separate sources of truth, and they drift quietly: a report accepted on our side that never
  * arrived, an event the provider dropped, a meter that stopped rating. Nothing throws. The customer simply
  * gets an invoice built on a number nobody checked, and the first person to notice is them.
  *
- * What we compare is the NETTED figure — usage minus the prepaid units the owner had already bought — because
+ * What we compare is the netted figure — usage minus the prepaid units the owner had already bought — because
  * that is what actually crossed the wire. Comparing the raw total would report a "drift" on every customer
  * with prepaid units.
  *
@@ -40,7 +40,7 @@ final readonly class UsageReconciler
     ) {}
 
     /**
-     * Reconcile every owner's CURRENT cycle against the provider.
+     * Reconcile every owner's current cycle against the provider.
      *
      * Each owner is loaded once and asked for its current cycle once, and only that cycle's rollups are read. A
      * closed cycle costs nothing: walking every reported cycle and dropping the closed ones afterwards loaded the
@@ -131,7 +131,7 @@ final readonly class UsageReconciler
             return [];
         }
 
-        // Only the CURRENT cycle: a closed one cannot be corrected anyway (a meter event past the window is
+        // Only the current cycle: a closed one cannot be corrected anyway (a meter event past the window is
         // not retro-billed), and its window would have to be reconstructed from a period key that no longer
         // resolves. The reconcile runs daily and at cycle close, which is when it can still act.
         $period = $this->periods->forOwner($owner);
@@ -144,7 +144,7 @@ final readonly class UsageReconciler
                 continue;
             }
 
-            // What we believe crossed the wire: the usage MINUS the prepaid units it was covered by. Comparing
+            // What we believe crossed the wire: the usage minus the prepaid units it was covered by. Comparing
             // the raw total would flag every prepaid customer as drifting.
             $reported = array_sum(array_map(static fn (UsageEvent $rollup): int => $rollup->quantity - $rollup->prepaid_units, $rollups));
 

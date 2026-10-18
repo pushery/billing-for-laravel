@@ -30,7 +30,7 @@ Route::post(Config::string('billing.webhook_path', 'billing/webhook'), WebhookRe
     ->middleware($webhookMiddleware)
     ->name('billing.webhook');
 
-// Provider events about a MERCHANT arrive on their own endpoint, signed with their own secret. It is a
+// Provider events about a merchant arrive on their own endpoint, signed with their own secret. It is a
 // separate route because it is a separate trust boundary: one endpoint whose verifier accepted either
 // secret would let the merchant key authenticate platform events, and those move the platform's own money.
 // The receiver answers 404 while the marketplace is off, so a single-seller install exposes nothing.

@@ -19,7 +19,7 @@ use Pushery\Billing\Support\WebhookEventLedger;
 use Throwable;
 
 /**
- * The HTTP entry point for provider events about a MERCHANT.
+ * The HTTP entry point for provider events about a merchant.
  *
  * It is a second receiver rather than a branch inside the first, and every part of it differs: a different
  * signing secret, a different mapper, and a delivery that has to be recorded against the account it came
@@ -79,7 +79,7 @@ final readonly class MarketplaceWebhookReceiver
 
         foreach ($this->mapper->map($request) as $event) {
             // Attribute the stored delivery to the buyer it is about, so an erasure request can reach the
-            // personal data in its payload. Resolved INSIDE the account: a global lookup would hand back
+            // personal data in its payload. Resolved inside the account: a global lookup would hand back
             // whichever person happens to hold that customer id first, and attaching a stranger's identity
             // to somebody else's payload is worse than attaching none.
             if ($event instanceof IdentifiesCustomer) {
@@ -118,13 +118,13 @@ final readonly class MarketplaceWebhookReceiver
      * deliberate 400 into a 500, and a 5xx tells the sender "try again" about a request that can never
      * become valid. So a broken listener costs a log line and nothing else.
      *
-     * Logged AS WELL as dispatched. The event is what a consumer wires an audit trail to; the log line is
+     * Logged as well as dispatched. The event is what a consumer wires an audit trail to; the log line is
      * what an install that wired nothing still gets, and shipping a security signal that is invisible
      * without setup would be the same complaint one level down. The cost is named rather than hidden: a
      * scanner hammering the endpoint writes a line per attempt, which is why it is a warning and not an
      * error.
      *
-     * NOT recorded in the delivery ledger, deliberately. That table holds provider payloads for replay and
+     * Not recorded in the delivery ledger, deliberately. That table holds provider payloads for replay and
      * carries personal data; filling it from unauthenticated traffic would let anybody who can reach the
      * URL write rows into it.
      *

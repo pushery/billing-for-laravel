@@ -16,7 +16,7 @@ use RuntimeException;
  * return does not add up. So a code that is not a country is refused instead of silently zero-rated.
  *
  * Note what this can and cannot catch: a code that is malformed or unassigned is caught here, but a typo
- * that happens to land on ANOTHER assigned country ("DE" mistyped as "DK") is indistinguishable from a
+ * that happens to land on another assigned country ("DE" mistyped as "DK") is indistinguishable from a
  * deliberate supply to that country and is not detectable at this layer.
  *
  * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping

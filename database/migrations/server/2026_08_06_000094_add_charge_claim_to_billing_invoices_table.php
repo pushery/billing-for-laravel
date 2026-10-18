@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * One FIRST document per owner, series and settled charge — the period index's twin for one-off sales.
+ * One first document per owner, series and settled charge — the period index's twin for one-off sales.
  *
  * ## The hole this closes
  *
@@ -19,18 +19,18 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## Why the obvious key would have been a regression, and what makes this one exact
  *
- * The obvious key — owner, series and the charge reference — refuses documents that MUST exist. A buyer
+ * The obvious key — owner, series and the charge reference — refuses documents that must exist. A buyer
  * who took a short receipt may ask for a full invoice: that is a second document over the same sale, same
  * owner, same series, same reference, on purpose. A correction copies the reference for the same reason,
  * and there can be several of them.
  *
- * So the key is not the reference itself but the reference AS CLAIMED BY THE SALE'S FIRST DOCUMENT, and
+ * So the key is not the reference itself but the reference as claimed by the sale's first document, and
  * the claim is derived to mirror the lookup it protects, condition for condition:
  *
  * - **Null on a reissue and on every correction.** A distinction this package already makes and already
  *   relies on: `SettlementCorrectionIssuer` finds an original with `whereNull('credited_invoice_id')`, and
  *   `InvoiceRecord::isReissue()` reads `reissue_of_invoice_id`.
- * - **Null on any document that names a period.** Those are recognized BY the period and guarded by the
+ * - **Null on any document that names a period.** Those are recognized by the period and guarded by the
  *   index above. A prepaid term is twelve monthly documents over ONE charge, and claiming the charge would
  *   refuse eleven of them.
  * - **Qualified by the provider**, because the lookup is. Two drivers can mint the same id for different

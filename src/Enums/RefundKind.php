@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Enums;
 
 /**
- * WHY money went back — as a category, not as a sentence.
+ * Why money went back — as a category, not as a sentence.
  *
  * ## Why a free-text reason is not enough
  *
@@ -17,7 +17,7 @@ namespace Pushery\Billing\Enums;
  *
  * The audit trail already recorded a reason, and a reason is a sentence somebody typed. It cannot be
  * grouped, counted or filtered, and two operators describing the same event write two different strings.
- * The reason stays — it says what happened in this one case — and this says what KIND of thing it was.
+ * The reason stays — it says what happened in this one case — and this says what kind of thing it was.
  *
  * ## Why `Goodwill` is the default and not `Unspecified`
  *
@@ -52,7 +52,7 @@ enum RefundKind: string
      *
      * Its own kind rather than a second `StatutoryWithdrawal` row, because it is a different supply between
      * different parties: the withdrawal settles the creator's supply between platform and buyer, and this
-     * returns the platform's OWN intermediation supply. Counting them together would report the platform's
+     * returns the platform's own intermediation supply. Counting them together would report the platform's
      * mediation revenue as part of what a creator earned and gave back.
      *
      * It also moves different money. The mediated sale's refund reverses the creator's transfer in

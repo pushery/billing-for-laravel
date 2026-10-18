@@ -27,8 +27,8 @@ enum FeeRefundPolicy: string
     /**
      * Whether the provider should hand the platform's commission back with the refund.
      *
-     * Named for the QUESTION rather than the provider's field, because the field is named for the opposite
-     * of what a reader expects: Stripe's `refund_application_fee` is `false` when the platform KEEPS the
+     * Named for the question rather than the provider's field, because the field is named for the opposite
+     * of what a reader expects: Stripe's `refund_application_fee` is `false` when the platform keeps the
      * fee. A call site holding the raw boolean is one inverted reading away from a sign error on money, and
      * nothing downstream would notice — the buyer still gets their refund either way.
      */
@@ -42,7 +42,7 @@ enum FeeRefundPolicy: string
      *
      * Retaining a fee presupposes a fee document: something the platform issued to the merchant for a
      * service, which survives the sale being unwound. A commission chain has no such document. There the
-     * platform BUYS and RESELLS — its turnover is the margin between two supplies, not a commission — and
+     * platform buys and resells — its turnover is the margin between two supplies, not a commission — and
      * unwinding the sale unwinds both of them. Money kept afterwards sits on no supply at all: not a
      * retained fee but an unbilled receipt, and one that would appear on a tax return as turnover the
      * platform cannot point at a document for.

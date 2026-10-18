@@ -8,12 +8,12 @@ use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\BillingSchema;
 
 /**
- * A creator's OWN invoice, submitted through the fallback lane — the path a creator takes when the platform
+ * A creator's own invoice, submitted through the fallback lane — the path a creator takes when the platform
  * does not (or no longer) self-bills them, after an objection or a terminated self-billing agreement.
  *
  * It is a first-class object, not an attachment to a transaction: the platform receives it, reconciles its
  * amounts against what the creator actually earned that period, and releases the payout only once it passes.
- * The reconciliation is the point — without it the platform pays out what the creator WRITES, not what they
+ * The reconciliation is the point — without it the platform pays out what the creator writes, not what they
  * earned. The issuer's own invoice number is unique per issuer so the same invoice cannot be submitted, and
  * paid, twice.
  *
@@ -26,8 +26,8 @@ return new class extends Migration
         Schema::create('billing_submitted_invoices', function (Blueprint $table): void {
             $table->id();
 
-            // The creator who submitted it. Nullable because this is a RETAINED record: on the creator's
-            // erasure the document is kept but UNLINKED — the owner morph is nulled and owner_erased_at
+            // The creator who submitted it. Nullable because this is a retained record: on the creator's
+            // erasure the document is kept but unlinked — the owner morph is nulled and owner_erased_at
             // stamped — exactly like an invoice, so a valid financial document survives with no person on it.
             BillingSchema::hostType($table, 'owner_type')->nullable();
             BillingSchema::hostKey($table, 'owner_id')->nullable();

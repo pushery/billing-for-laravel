@@ -23,7 +23,7 @@ use RuntimeException;
  * and distinct from the receipt: the receipt is about the money, this is about the thing they bought being
  * switched on.
  *
- * It dedups ONCE PER SUBSCRIPTION, not per delivery and not per state change. That is the whole difficulty
+ * It dedups once per subscription, not per delivery and not per state change. That is the whole difficulty
  * here: a provider sends a subscription-updated event for many reasons, and an owner recovering from
  * past_due lands back on `active` — deduping on the event id would welcome them again every time they
  * recovered, which reads as a bug to the customer. A genuinely new subscription carries a new reference and
@@ -55,7 +55,7 @@ final readonly class SendSubscriptionActivatedNotice implements DedupesOnReferen
 
         $this->notifier->subscriptionActivated($owner, $label ?? ($event->tierKey ?? ''));
 
-        // The success toast lives HERE and not on the plan sync, which is where the original design put it.
+        // The success toast lives here and not on the plan sync, which is where the original design put it.
         // The sync runs on every subscription event a provider sends — renewals, price changes, a
         // cancellation — and a toast saying the subscription is live would be wrong on most of them and
         // absurd on the last. This effect is already the one moment that means "it is on now", and it is

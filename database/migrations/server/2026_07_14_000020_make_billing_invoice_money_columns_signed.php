@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Schema;
  * magnitude columns signed stores a negative invoice faithfully and identically on every engine.
  *
  * Only the amount columns change; ids (credited_invoice_id) stay unsigned. Postgres has no unsigned integer
- * type, so there the change is a no-op; on MySQL it drops the UNSIGNED attribute.
+ * type, so there the change is a no-op; on MySQL it drops the unsigned attribute.
  *
  * Server-only.
  */

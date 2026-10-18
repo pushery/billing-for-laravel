@@ -24,7 +24,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * A consumer that holds its own view of a subscription is not an edge case: an access-entitlement timeline
  * answers a different question from a subscription row (who may see what, from when to when, surviving the
  * end of the subscription as a closed window), so adopting this package's schema does not move that view
- * into it. That is the reported case, and it is why the seam reads a STATE rather than offering a model.
+ * into it. That is the reported case, and it is why the seam reads a state rather than offering a model.
  *
  * ## One fact, deliberately
  *
@@ -37,7 +37,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  *
  * A fan behind with creator A keeps creator B. The scope is part of the question rather than a filter
  * applied to the answer, so an implementation cannot accidentally aggregate across merchants — the mistake
- * this package made twice before the scope existed. A null merchant means the PLATFORM's own relationship,
+ * this package made twice before the scope existed. A null merchant means the platform's own relationship,
  * which in a single-seller install is the only one there is.
  */
 interface ArrearsClock

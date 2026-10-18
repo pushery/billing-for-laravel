@@ -25,7 +25,7 @@ use Pushery\Billing\ValueObjects\VoucherMovement;
  * Redeemable only here · never paid out · never topped up · never handed to somebody else. Together they are
  * what keeps this outside regulated money, and they are held by there being no method for any of them rather
  * than by a setting that says no. A switch that turned one off would look like any other setting and would
- * change what the instrument legally IS — so there is no switch, and a guard test asserts the absences so
+ * change what the instrument legally is — so there is no switch, and a guard test asserts the absences so
  * they stay properties instead of accidents.
  *
  * Redemption therefore takes a sale to pay towards, and the remaining value only ever goes down.
@@ -54,7 +54,7 @@ final readonly class VoucherLedger
     /**
      * Sell a voucher.
      *
-     * The type is read from configuration ONCE, here, and stored. Everything downstream reads the stored
+     * The type is read from configuration once, here, and stored. Everything downstream reads the stored
      * value — a voucher issued while the platform sold into many countries stays what it was, whatever the
      * platform does later.
      */
@@ -80,7 +80,7 @@ final readonly class VoucherLedger
             'expires_at' => is_int($expiresAfter) ? $issuedAt->copy()->addDays($expiresAfter) : null,
         ]);
 
-        // The FIRST producer this event has ever had. `VoucherEvent::Issued` was consumed by the exporter
+        // The first producer this event has ever had. `VoucherEvent::Issued` was consumed by the exporter
         // and produced by nothing, so the liability booking a voucher creates on the day it is sold could
         // not occur — while the turnover at redemption would eventually appear with no counter-entry.
         $this->record(new VoucherMovement(VoucherEvent::Issued, $faceValue, $code, $issuedAt));
@@ -199,13 +199,13 @@ final readonly class VoucherLedger
     /**
      * Write a movement down, and hand back the same value the caller was always given.
      *
-     * The persistence sits BESIDE the return value rather than replacing it: every existing caller keeps
+     * The persistence sits beside the return value rather than replacing it: every existing caller keeps
      * working unchanged, and the exporter — which reads the value object — gets the same shape whether it
      * came from a method call or from the table. What changes is only that the movement now outlives the
      * method that produced it, which is exactly what it could not do before.
      *
      * Written here rather than in an observer. These three methods are the only place a movement comes into
-     * existence at all, and an observer over a RETURN VALUE (rather than over a model event) would be a
+     * existence at all, and an observer over a return value (rather than over a model event) would be a
      * construction with no precedent anywhere in this package.
      */
     private function record(VoucherMovement $movement): VoucherMovement

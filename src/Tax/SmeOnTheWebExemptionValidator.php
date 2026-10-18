@@ -20,7 +20,7 @@ use Throwable;
  * `https://ec.europa.eu/taxation_customs/sme-verification/smeVerificationService.wsdl` (read on 2026-09-23).
  * The request names the exemption number and the member state. The answer carries two booleans, and both
  * matter: `valid` says the number exists and is in force on the day of the request, and `exemptionGranted`,
- * listed per member state, says the exemption holds THERE. A number in force whose exemption is not granted
+ * listed per member state, says the exemption holds there. A number in force whose exemption is not granted
  * in the state asked about is no exemption in that state, so only both together confirm one.
  *
  * What comes back as a verdict and what does not, measured against the service on 2026-09-23:

@@ -43,7 +43,7 @@ use Stripe\StripeClient;
 /**
  * A first-class, subscription-independent one-time purchase for the Stripe driver. It opens a hosted
  * Checkout Session for the add-on and returns the driver-shaped payload the front-end redirects to.
- * The price is resolved from the add-on KEY through the catalog — the client never submits a price
+ * The price is resolved from the add-on key through the catalog — the client never submits a price
  * (anti-price-injection) — and the add-on key is stamped on the session metadata, which the webhook
  * mapper reads on completion to credit the owner exactly once. This is the front half of the add-on
  * money loop whose back half (credit) already ships.
@@ -70,16 +70,16 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
          * Where a routed sale is written down.
          *
          * The synchronous lane records its charge in the same call that takes the money. This one cannot —
-         * the payment happens on Stripe's page, minutes later — so it records the sale as PENDING when the
+         * the payment happens on Stripe's page, minutes later — so it records the sale as pending when the
          * session opens, and the confirmation webhook settles that row. Without it the confirmation has
          * nothing to find: `SettleRoutedChargeOnConfirmation` looks the reference up and returns when there
          * is no row, so every hosted routed sale settled into silence.
          */
         private RoutedChargeLedger $ledger,
         /**
-         * Whether THIS sale carries a buyer fee — the developer's switch and the sale's regime, together.
+         * Whether this sale carries a buyer fee — the developer's switch and the sale's regime, together.
          *
-         * NULLABLE AND RESOLVED FROM THE CONTAINER, never default-constructed here. A hand-built one would
+         * Nullable and resolved from the container, never default-constructed here. A hand-built one would
          * need a configuration repository, and an empty one reads every setting as absent — so the switch
          * would report itself permanently off and the failure would look exactly like an installation that
          * chose not to charge fees. Nullable keeps the class constructible by a consumer without making a
@@ -114,11 +114,11 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
     }
 
     /**
-     * The line the buyer fee rides on, priced INCLUSIVE of tax.
+     * The line the buyer fee rides on, priced inclusive of tax.
      *
-     * Inclusive is not a preference, it follows from what the number means: a buyer fee is quoted GROSS —
+     * Inclusive is not a preference, it follows from what the number means: a buyer fee is quoted gross —
      * the buyer is told 5.00 and pays 5.00, with the net and the tax read back out of it. Sent exclusive
-     * under a provider tax mode, the provider would add tax ON TOP and the buyer would be charged more than
+     * under a provider tax mode, the provider would add tax on top and the buyer would be charged more than
      * they were quoted, while the figures this package recorded described the smaller sale.
      *
      * @return array{price_data: array{currency: string, unit_amount: int, tax_behavior: string, product_data: array{name: string}}, quantity: int}
@@ -168,21 +168,21 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
 
         $merchant = $this->context->routedMerchant();
 
-        // Resolved ONCE, and that is what makes the ledger row and the payment describe the same sale. The
+        // Resolved once, and that is what makes the ledger row and the payment describe the same sale. The
         // amounts below are kept rather than handed to Stripe and thrown away; recomputing them after the
         // session exists would mean a second provider call and a second chance for the two to disagree.
         $routed = $merchant instanceof Model ? $this->routing($merchant, $price, $this->archetypeOf($addonKey)) : null;
 
-        // The buyer fee, if this installation charges one AND this sale's regime has one. Resolved from the
-        // ITEM's price, never from a total: the fee is charged on top, so computing it from a figure that
+        // The buyer fee, if this installation charges one and this sale's regime has one. Resolved from the
+        // item's price, never from a total: the fee is charged on top, so computing it from a figure that
         // already contains it would compound.
         //
         // Null on every installation that has not switched fees on, which is the default and nearly all of
         // them -- and then every line below is byte-for-byte what it always was.
         $buyerFee = $routed === null ? null : $this->buyerFee()->on(
             $routed['gross'],
-            // The RATE IS NOT THIS LANE'S TO INVENT. Under a provider tax mode Stripe computes it from the
-            // line's own tax_behavior, and the fee line below is sent INCLUSIVE precisely so the figure the
+            // The rate is not this lane's to invent. Under a provider tax mode Stripe computes it from the
+            // line's own tax_behavior, and the fee line below is sent inclusive precisely so the figure the
             // buyer was quoted is the figure they pay. Zero here means "this lane states no rate", which is
             // what makes the recorded net equal the gross rather than a number nobody computed.
             0,
@@ -191,9 +191,9 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // Built before the payload so the rise is one statement rather than a condition inside an array
         // literal — and so a reader can see it only happens where a routing exists at all.
         //
-        // NESTED, NOT `?? null` PLUS A SEPARATE CONDITION, AND THAT IS A CORRECTION. `$buyerFee` is
+        // Nested, not `?? null` plus a separate condition, and that is a correction. `$buyerFee` is
         // non-null only where `$routed` is, so the two conditions were the same condition — but stated
-        // apart, whether the analyzer can join them is a property of the ANALYZER. An older phpstan than
+        // apart, whether the analyzer can join them is a property of the analyzer. An older phpstan than
         // the one this package pins did not join them and reported the offset as possibly missing, so the
         // check the gate ran and the check a developer ran disagreed about shipped code. The pinned one
         // joins them — the shape stays anyway, because a relationship the code relies on is cheaper said
@@ -210,12 +210,12 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             $intent['metadata'] = [self::SALE_METADATA_KEY => $saleReference];
 
             // On a separate transfer there is no application fee to raise: the platform keeps the whole payment,
-            // the buyer fee with it, and moves only the merchant's net share of the ITEM afterwards.
+            // the buyer fee with it, and moves only the merchant's net share of the item afterwards.
             if ($buyerFee instanceof FeeLine && isset($intent['application_fee_amount'])) {
-                // THE WHOLE CORRECTNESS OF THIS LANE. The buyer now pays item + fee, and the provider moves
+                // The whole correctness of this lane. The buyer now pays item + fee, and the provider moves
                 // everything that is not the application fee to the merchant — so leaving it alone would hand
                 // the platform's own intermediation revenue to the seller, on every sale, silently. What must
-                // not move is the merchant's share of the ITEM.
+                // not move is the merchant's share of the item.
                 $intent['application_fee_amount'] += StripeAmount::of($buyerFee->gross);
             }
         }
@@ -244,15 +244,15 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             'cancel_url' => $cancelUrl,
             // Absent for a single-seller install, so the session it opens is byte-identical to before.
             //
-            // WITH A BUYER FEE THE APPLICATION FEE RISES BY IT, and that is the whole correctness of this
+            // With a buyer fee the application fee rises by it, and that is the whole correctness of this
             // lane. The buyer now pays item + fee, and the provider moves everything that is not the
             // application fee to the merchant -- so leaving the application fee alone would hand the
             // platform's own intermediation revenue to the seller, on every sale, silently. The merchant's
-            // share of the ITEM is what must not move.
+            // share of the item is what must not move.
             'payment_intent_data' => $intent,
         ]);
 
-        // The same question the subscription lane answers, answered the same way — because it is ONE
+        // The same question the subscription lane answers, answered the same way — because it is one
         // installation-wide setting and must not give two opposite answers. Under a provider mode the
         // package deliberately computes nothing (the local calculator returns zero, correctly), so if the
         // provider is also never asked, the tax simply does not exist. That is not hypothetical: it is the
@@ -268,7 +268,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // nobody has made yet — and the same money is taxed again when the balance pays an invoice, which is
         // the error a credit cannot be corrected out of afterwards.
         //
-        // Where an installation sells into exactly one country at one rate, the supply IS determined at
+        // Where an installation sells into exactly one country at one rate, the supply is determined at
         // issue; `billing.marketplace.vouchers.instrument_type` says so, and then the tax falls here as it
         // always did. That knob is the voucher feature's own, deliberately — a second one beside it would let
         // one installation configure the same instrument two ways and never notice.
@@ -293,7 +293,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
 
         if ($routed !== null) {
             // `?? null` rather than a plain read, and the operator is doing real work here. A Stripe object
-            // answers an UNDEFINED property by emitting a notice and returning null — so reading it to find
+            // answers an undefined property by emitting a notice and returning null — so reading it to find
             // out whether it is there writes to the output of whatever is running, and under the pinned API
             // version the session names no payment at all. The null-coalescing operator asks `__isset` first,
             // which looks in the same value bag without complaining.
@@ -326,7 +326,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             );
         }
 
-        // THE GUARD THE CATALOG NORMALLY IS. `purchase()` cannot be handed an amount at all; this method
+        // The guard the catalog normally is. `purchase()` cannot be handed an amount at all; this method
         // must be, so the refusal that a key gives for free is written out here. A zero is the ordinary way
         // to get here — a buyer who leaves the tip box empty — and what it would otherwise buy is a
         // provider call, a charge row, an earnings figure and a line in a tax return, all describing a sale
@@ -337,7 +337,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             );
         }
 
-        // AND THE FLOOR, which is the other half of standing in for the catalog. Positive is not the same
+        // And the floor, which is the other half of standing in for the catalog. Positive is not the same
         // as worth charging: a tip under the provider's own fee costs the merchant more than it pays them,
         // and still produces a document over a taxable inflow. The threshold is the operator's and is
         // asked of the class that owns it, so this lane and the token one refuse the same amounts.
@@ -345,7 +345,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
 
         $merchant = $this->context->routedMerchant();
 
-        // A tip TO THE PLATFORM is not what this seam is for, and silently opening one would be the worst
+        // A tip to the platform is not what this seam is for, and silently opening one would be the worst
         // reading of a null: the buyer would pay, the platform would keep all of it, and the person they
         // meant to tip would never hear. A single-seller installation has no merchant to route to, and
         // that is a configuration answer rather than a runtime one.
@@ -378,13 +378,13 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
                     'product_data' => ['name' => $this->tipLineName()],
                 ],
             ]],
-            // What the confirmation needs and cannot re-derive. The archetype the tip was paid ON is known
+            // What the confirmation needs and cannot re-derive. The archetype the tip was paid on is known
             // here and nowhere later; the merchant is written down so a reconciler reading the session sees
             // who the money was destined for without joining anything. The declaration key rides the same
             // round trip it rides on a purchase, so a session that lost one lost both.
             'metadata' => array_filter([
                 'tip_sold_alongside' => $soldAlongside->value,
-                // THE MAPPER HAS READ THIS KEY SINCE THE LANE WAS BUILT AND NOTHING EVER WROTE IT. Every
+                // The mapper has read this key since the lane was built and nothing ever wrote it. Every
                 // real tip therefore arrived with the flag off, under a comment calling that the
                 // conservative direction — a decision about an absent value, describing one that could not
                 // be present. It is written here now, from the two stated countries and from nothing else:
@@ -406,8 +406,8 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             'payment_intent_data' => [...$routed['intent'], 'metadata' => [self::SALE_METADATA_KEY => $saleReference]],
         ]);
 
-        // NO BUYER FEE ON A TIP, and the omission is a decision. A buyer fee is charged ON TOP of a price
-        // the buyer was quoted; a tip has no quoted price — the total IS what they chose. Adding a fee to
+        // No buyer fee on a tip, and the omission is a decision. A buyer fee is charged on top of a price
+        // the buyer was quoted; a tip has no quoted price — the total is what they chose. Adding a fee to
         // it would charge them more than the number they typed, which is the one thing a voluntary payment
         // must never do.
         //
@@ -443,7 +443,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
     }
 
     /**
-     * The routing a TIP carries — the same shape a purchase gets, from an amount instead of a price.
+     * The routing a tip carries — the same shape a purchase gets, from an amount instead of a price.
      *
      * ## Why it is not `routing()` with a different argument
      *
@@ -453,7 +453,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      * provider call that method makes is not merely unnecessary here — there is nothing for it to ask
      * about.
      *
-     * ## And the commission is the TIP's, not the platform's ordinary one
+     * ## And the commission is the tip's, not the platform's ordinary one
      *
      * `feeForTip()` is asked, which is the whole reason `FanChosenPricing` is a dependency of this class.
      * An installation that charges less on voluntary payments — the common case, and why the setting
@@ -527,7 +527,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *
      * A payment-mode session takes `application_fee_amount` — an absolute figure — where a subscription
      * takes a percentage. A percentage needs no amount; an absolute one does. The catalog's
-     * `price_display.amount` is a DISPLAY value and is allowed to be absent or stale, and computing a
+     * `price_display.amount` is a display value and is allowed to be absent or stale, and computing a
      * commission from a number that is allowed to be wrong is how a platform quietly under- or overcharges
      * every routed sale. So the amount is read from the price the buyer will actually be charged against.
      *
@@ -547,13 +547,13 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      * is evidenced and their rate exists. The rate is not merely un-plumbed at that moment: it is not yet a
      * fact.
      *
-     * The lane sets `automatic_tax` under a provider mode, because leaving it unset would make the SAME
+     * The lane sets `automatic_tax` under a provider mode, because leaving it unset would make the same
      * installation-wide setting tax subscriptions and not add-ons.
      *
      * What the basis is now depends on the Stripe price's own `tax_behavior`, which this package does not
      * own. On an EXCLUSIVE price the buyer pays the unit amount plus tax, so the unit amount this fee is
-     * computed from is the NET — which is the rate as documented, and the same answer the routed money path
-     * gives. On an INCLUSIVE price the unit amount is still the gross and the old divergence stands.
+     * computed from is the net — which is the rate as documented, and the same answer the routed money path
+     * gives. On an inclusive price the unit amount is still the gross and the old divergence stands.
      *
      * So the routed money path's 10.00 on a 119.00 sale at 19% and this lane's 11.90 now agree or differ
      * according to a setting made in the Stripe dashboard. That is better than diverging unconditionally and
@@ -583,7 +583,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         $chargeType = $this->context->chargeType();
 
         // The charge type and the seller-of-record posture are independent axes that have to agree, and the
-        // check happens BEFORE anything is assembled — the only point at which refusing is still free.
+        // check happens before anything is assembled — the only point at which refusing is still free.
         $this->context->assertRoutingCompatible($chargeType);
 
         if (! $this->receiving->check($merchant)) {
@@ -621,7 +621,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         [$platformFee] = $policy->splitOf($gross);
 
         return [
-            // Carried rather than re-derived by the caller: it is the merchant this sale was priced FOR, and
+            // Carried rather than re-derived by the caller: it is the merchant this sale was priced for, and
             // asking the resolver a second time could answer differently within one request.
             'merchant' => $merchant,
             'chargeType' => $chargeType,
@@ -664,7 +664,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
     /**
      * Whether the seller's own small-value rules apply to this buyer, or null where nobody could say.
      *
-     * Two STATED countries and nothing else: the buyer's as the caller gave it, the seller's from
+     * Two stated countries and nothing else: the buyer's as the caller gave it, the seller's from
      * configuration. Both halves have to be there — a buyer country with no configured home answers nothing,
      * because "is this domestic" has no meaning without a home, and defaulting to false would state a
      * cross-border supply on an installation that never said where it sells from.
@@ -683,18 +683,18 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
     }
 
     /**
-     * Write the routed sale down as PENDING, before the buyer has paid.
+     * Write the routed sale down as pending, before the buyer has paid.
      *
      * ## Why here and not from the webhook
      *
-     * `payment_intent.succeeded` is already mapped to a `RoutedChargeConfirmed`, and that event CONFIRMS a
+     * `payment_intent.succeeded` is already mapped to a `RoutedChargeConfirmed`, and that event confirms a
      * row — `SettleRoutedChargeOnConfirmation` looks the reference up and returns when there is none. So a
      * lane that writes nothing here settles into silence: the money moves, the merchant is paid, and the
      * table every reversal cap, earnings count and small-business verdict is computed from says the sale
      * never happened.
      *
      * Writing it from `checkout.session.completed` instead does not work, and the reason is worth keeping:
-     * that payload carries `amount_total` but NOT `transfer_data` — the routing lives on the PaymentIntent,
+     * that payload carries `amount_total` but not `transfer_data` — the routing lives on the PaymentIntent,
      * and the session names it only as an id. A webhook payload cannot be expanded.
      *
      * ## Why it is keyed on the sale's own reference
@@ -725,7 +725,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         mixed $paymentIntent,
         string $saleReference,
         ?FeeLine $buyerFee,
-        // REQUIRED rather than defaulted, though the ledger accepts null: both lanes that reach here know
+        // Required rather than defaulted, though the ledger accepts null: both lanes that reach here know
         // exactly what they are selling, and a lane added later must be made to say so instead of silently
         // recording a sale nothing can type. Null on the column means "written before this was recorded",
         // and a new row is never that.
@@ -757,12 +757,12 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // separating a net from a gross, and null on this column means "written before this was
             // recorded" — a description of old rows, which this is not.
             //
-            // What it does NOT claim: whether that price was tax-exclusive or tax-inclusive. That is the
+            // What it does not claim: whether that price was tax-exclusive or tax-inclusive. That is the
             // Stripe price's own `tax_behavior`, this package does not own it, and the divergence it causes
             // is the open question `routing()` states above. Zero is the honest record of what was computed
             // here; it is not an assertion that the basis was the net.
             0,
-            // The fee is frozen onto the sale AT THE MOMENT IT IS CHARGED, which is the only moment the
+            // The fee is frozen onto the sale at the moment it is charged, which is the only moment the
             // figure is a fact. Without it a withdrawal would have to recompute the fee from whatever the
             // configuration says on the day it happens — and the withdrawal is precisely the event where an
             // old sale meets a changed setting.

@@ -12,12 +12,12 @@ use Pushery\Billing\Webhooks\Effects\SyncPlanFromSubscription;
 
 /**
  * Reconciles the billable's subscription against the provider on demand — the return path after a hosted
- * checkout. It pulls the current provider subscription and applies it through the SAME plan-sync effect
+ * checkout. It pulls the current provider subscription and applies it through the same plan-sync effect
  * the webhook uses, so the local row is written the instant the customer is back, not whenever the
  * webhook happens to arrive. It carries no rule of its own: the effect owns recency, the zero-tier pull,
  * the untouchable tiers and the create-race convergence.
  *
- * It applies to the KNOWN owner directly (not via the customer reference), so it works even on an install
+ * It applies to the known owner directly (not via the customer reference), so it works even on an install
  * that has not configured billing.customer — the exact case where the webhook path would find nobody.
  */
 final readonly class SubscriptionReconciler

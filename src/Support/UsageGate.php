@@ -15,14 +15,14 @@ use Pushery\Billing\ValueObjects\QuotaDecision;
 /**
  * The quota pre-check: given an owner, a meter and how much they want to consume, decide whether to
  * allow, degrade or block — according to the meter's policy. This is the enforcement the package always
- * had the primitive for (UsageMeter) but never applied; an app calls allows()/authorize() BEFORE doing
+ * had the primitive for (UsageMeter) but never applied; an app calls allows()/authorize() before doing
  * the work, then records the usage after.
  *
  * It is a point-in-time read, not a lock. Two truly simultaneous requests can both pass a boundary check
  * here — an owner one unit below their limit gets through as many times as they can fire requests at once.
  * That is inherent to asking rather than taking, and it is why an app that must not oversell meters through
- * UsageRecorder::meter(), which HOLDS the allowance under a row lock before the work runs. This gate is the
- * cheap pre-check in front of it, and what it guarantees is that the four policies DIFFER: hard-stop and
+ * UsageRecorder::meter(), which holds the allowance under a row lock before the work runs. This gate is the
+ * cheap pre-check in front of it, and what it guarantees is that the four policies differ: hard-stop and
  * refuse block, degrade serves but flags, fair-use never blocks.
  *
  * It counts held units against the allowance, not just used ones: allowance promised to a request that is

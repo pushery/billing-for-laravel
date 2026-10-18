@@ -15,10 +15,10 @@ use Pushery\Billing\ValueObjects\ServicePeriod;
  *
  * ## Why a term has to be cut at all
  *
- * A billing period is a PART-SUPPLY: an economically divisible service whose parts are separately agreed and
+ * A billing period is a part-supply: an economically divisible service whose parts are separately agreed and
  * separately settled. That is not a bookkeeping preference — it is what lets each period carry its own
  * document with its own service period, and it is why a monthly subscription stays a small-value receipt
- * while the same contract billed once a year does not. The threshold is read per DOCUMENT, from its own
+ * while the same contract billed once a year does not. The threshold is read per document, from its own
  * gross, never from what the contract is worth.
  *
  * ## The arithmetic that has to hold, and why it is the hard part
@@ -26,15 +26,15 @@ use Pushery\Billing\ValueObjects\ServicePeriod;
  * Twelve periods of a 119.00 term are not twelve times 9.9166… — they are twelve whole-cent amounts that
  * must sum back to 119.00 exactly. Dividing and rounding each period independently loses or invents cents,
  * and over a year the drift lands in whichever direction the rounding happened to lean. So the split is done
- * ONCE, with `Money::allocate()`, which distributes the remainder deterministically rather than letting each
+ * once, with `Money::allocate()`, which distributes the remainder deterministically rather than letting each
  * period round on its own.
  *
  * ## The dates, and the one that is easy to get wrong
  *
- * The end of a period is INCLUSIVE: the last day covered, not the first day of the next. Stated the other
+ * The end of a period is inclusive: the last day covered, not the first day of the next. Stated the other
  * way round, consecutive periods each claim the same day, and every document is internally consistent while
  * two of them lined up are not. `ServicePeriod` refuses the inverted case; this class guarantees the
- * stronger property the documents need — that consecutive periods TOUCH, with no gap and no overlap.
+ * stronger property the documents need — that consecutive periods touch, with no gap and no overlap.
  *
  * ## What this does not decide
  *
@@ -62,7 +62,7 @@ final readonly class SubscriptionPeriodSchedule
         // here, walking the calendar with `addMonth()` and accumulating each boundary from the one before,
         // would be wrong in a way nothing shows:
         //
-        // `addMonth()` OVERFLOWS. In Carbon, 31 January plus a month is 3 March, not the last day of the
+        // `addMonth()` overflows. In Carbon, 31 January plus a month is 3 March, not the last day of the
         // shorter month, so a term beginning on a 29th, 30th or 31st would get a first period that swallows
         // February whole and a start date that walks forward three days and never comes back. Nothing about
         // it would look wrong: the periods would still touch, the shares still sum to the term, and the totals
@@ -71,7 +71,7 @@ final readonly class SubscriptionPeriodSchedule
         // the supply falls into.
         //
         // `addMonthNoOverflow()` on the accumulation is no cure either: it stops the swallowing and then
-        // walks the anchor day BACKWARDS forever from the first short month. Every boundary is measured from
+        // walks the anchor day backwards forever from the first short month. Every boundary is measured from
         // the original start, which is what brings the 31st back the moment a month has one.
         return new SubscriptionPeriods()->split($start, $periods, $term);
     }
@@ -80,7 +80,7 @@ final readonly class SubscriptionPeriodSchedule
      * Whether a schedule covers its term with no gap and no overlap.
      *
      * Written as a question rather than trusted from the construction above, because it is the property the
-     * DOCUMENTS make a claim about: twelve receipts that each look right can still describe eleven months or
+     * documents make a claim about: twelve receipts that each look right can still describe eleven months or
      * thirteen. Anything that builds periods some other way — a migrated contract, a consumer's own
      * schedule — can be held to the same standard by asking here.
      *

@@ -7,7 +7,7 @@ namespace Pushery\Billing\Contracts;
 /**
  * Turns a network address into a country code — and gives back nothing else.
  *
- * The narrowness IS the privacy design. A resolver that returned a richer object, or that took a request
+ * The narrowness is the privacy design. A resolver that returned a richer object, or that took a request
  * and read the address itself, would give the address somewhere to travel: into a model attribute, a cache
  * key, a log line, a queued payload, an exception context. Each of those is a place nobody thinks of as
  * storage until an access request asks what is held about somebody.
@@ -15,7 +15,7 @@ namespace Pushery\Billing\Contracts;
  * So the address goes in as an argument and a two-letter code comes out. There is no accessor for what was
  * asked, and nothing downstream is ever handed the address to begin with.
  *
- * The package ships NO geolocation service and no database. Without an implementation bound there is simply
+ * The package ships no geolocation service and no database. Without an implementation bound there is simply
  * no signal from this direction — which is a missing input, not a failure: other signals answer the same
  * question, and one fewer of them is a weaker answer rather than a broken one.
  */

@@ -36,14 +36,14 @@ final class ProductNotClassified extends RuntimeException
      * A document is about to state a reverse charge without anybody having said whether it is goods.
      *
      * The narrow case, and the reason it is narrow: for a plain domestic supply the archetype changes nothing
-     * a reader can see, so demanding it there would refuse documents to buy nothing. Under a REVERSE CHARGE
+     * a reader can see, so demanding it there would refuse documents to buy nothing. Under a reverse charge
      * it changes the category the document carries — `K` with VATEX-EU-IC for an intra-Community supply of
      * goods, `AE` for a service — and those are two different statements about who accounts for the tax and
      * under which provision.
      *
      * With the column empty the renderer reads null as "not goods" and prints `AE`. That is right for a
      * digital supply and a wrong statement of the provision for every other, arrived at without the document
-     * ever being asked. So the refusal lands at ISSUE, not at render: by render time the row exists and its
+     * ever being asked. So the refusal lands at issue, not at render: by render time the row exists and its
      * number is drawn from a gapless series, and a document number is not returned by declining to print it.
      */
     public static function beforeReverseChargedDocument(string $reference): self

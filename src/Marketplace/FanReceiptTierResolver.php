@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * A buyer who asks for a full invoice gets one — that request always wins, because it is the only path that
  * collects their data and the only one they can trigger. Otherwise the choice is data-minimizing: a small
- * DOMESTIC purchase (at or below the threshold) gets a simplified receipt; everything else — a larger
+ * domestic purchase (at or below the threshold) gets a simplified receipt; everything else — a larger
  * purchase, or a cross-border one — gets a plain payment record. Neither carries buyer data.
  *
  * The threshold and what counts as domestic are a jurisdiction's rule and enter as config and a flag; the

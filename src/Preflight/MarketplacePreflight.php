@@ -19,7 +19,7 @@ use Pushery\Billing\ValueObjects\PreflightReport;
  * Enforcing the order is the part that does real work. The stages are not a to-do list to be worked in any
  * sequence — publishing terms after the first sale is a different act from publishing them before it, and
  * so is registering with an authority. So a stage with an open blocking point does not merely fail: every
- * point AFTER it is reported unreachable, unevaluated, and explicitly not green. The alternative — showing
+ * point after it is reported unreachable, unevaluated, and explicitly not green. The alternative — showing
  * later stages as passing while an earlier one is open — invites exactly the sequence the checklist exists
  * to impose.
  */

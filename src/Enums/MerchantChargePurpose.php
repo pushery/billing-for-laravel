@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Enums;
 
 /**
- * WHAT was sold, frozen onto the routed charge beside how much of it the merchant gets.
+ * What was sold, frozen onto the routed charge beside how much of it the merchant gets.
  *
  * The three amounts on a `MerchantCharge` say what moved. They do not say what for — and a consumer that
  * credits the share to a balance instead of transferring it needs exactly that, because a ledger entry
@@ -19,7 +19,7 @@ namespace Pushery\Billing\Enums;
  * - a one-off purchase resolves through its payment reference to an addon key;
  * - a subscription cycle takes three hops — the charge reference is an invoice, which names an order, which
  *   names a subscription — and the middle hop only exists on installations whose orders this package writes;
- * - a tip persists nothing that names it. It is only knowable by the ABSENCE of the other two, and absence
+ * - a tip persists nothing that names it. It is only knowable by the absence of the other two, and absence
  *   is the wrong answer during a race: a purchase whose addon row has not landed yet reads as a tip.
  *
  * The lane knows this for certain at the moment it opens the checkout. Every route back to it afterwards is

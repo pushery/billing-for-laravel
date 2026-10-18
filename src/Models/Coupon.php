@@ -19,7 +19,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * provider. `value` is a percentage (for `type = percent`) or an amount in minor units (for `type = fixed`,
  * scoped by `currency`).
  *
- * `provider_coupon_id` is the provider's own id for this coupon, and the Stripe checkout READS it:
+ * `provider_coupon_id` is the provider's own id for this coupon, and the Stripe checkout reads it:
  * `StripeCheckout::providerCouponFor()` prefers it over the global `billing.coupons.<code>.stripe_coupon`
  * map, after the code has passed the catalog check. Leaving it null keeps the config answering, so a
  * config-only installation reads its discounts from the config alone.
@@ -29,10 +29,10 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  *
  * ## Who writes this row
  *
- * The CONSUMING APPLICATION. Nothing in this package creates a coupon -- a discount is a commercial decision
+ * The consuming application. Nothing in this package creates a coupon -- a discount is a commercial decision
  * and its catalog is theirs. The package reads them (`CouponRedeemer` locks and spends one) and writes only
  * the redemption side. So a column here with no writer in `src/` is the correct state and not a gap; what
- * would be a defect is a READER that turns an absent value into an answer.
+ * would be a defect is a reader that turns an absent value into an answer.
  *
  * ## Who a coupon belongs to
  *
@@ -43,7 +43,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * absence.
  *
  * Always read a coupon through {@see Coupon::scopeIssuedBy()}, and by its code through {@see CouponCodes::find()},
- * which matches a code the same way on every database. A bare `where('code', ...)` finds ANY issuer's coupon of
+ * which matches a code the same way on every database. A bare `where('code', ...)` finds any issuer's coupon of
  * that name, which after this column exists means one seller's discount can be spent on another seller's sale.
  * `CouponsAreReadScopedTest` holds that, because the mistake is a query that looks completely ordinary.
  *
@@ -111,12 +111,12 @@ class Coupon extends Model
     /**
      * Only the coupons this issuer put out.
      *
-     * The scope is part of the QUESTION rather than a filter applied to the answer — the same shape
+     * The scope is part of the question rather than a filter applied to the answer — the same shape
      * {@see ArrearsClock} uses, and for the same reason. A lookup that finds a
      * coupon first and checks its issuer afterwards has already read somebody else's row, and the check is
      * the step that gets dropped.
      *
-     * A null scope means the PLATFORM, which in a single-seller install is the only issuer there is. That
+     * A null scope means the platform, which in a single-seller install is the only issuer there is. That
      * makes it the same query the package ran before this column existed.
      *
      * @param  Builder<$this>  $query
@@ -130,10 +130,10 @@ class Coupon extends Model
     /**
      * Whether this coupon can still be honored: switched on, and not past its expiry.
      *
-     * ONE definition for every reader that answers yes or no: the resolver, the hosted checkout's provider mapping
+     * One definition for every reader that answers yes or no: the resolver, the hosted checkout's provider mapping
      * and the local driver's coupon question. A copy in each would drift, and a copy that left it out would let a
      * withdrawn coupon's Stripe discount reach the invoice wherever the config accepts the same code.
-     * `CouponRedeemer` keeps its own checks, because it has to say WHICH condition failed.
+     * `CouponRedeemer` keeps its own checks, because it has to say which condition failed.
      *
      * The redemption cap is not part of it. That is a race by nature, and the only place it can be enforced
      * truthfully is the redeemer's locked transaction.
@@ -147,7 +147,7 @@ class Coupon extends Model
      * Whether this row describes a discount at all: a `percent` from 1 to 100, or a `fixed` amount above zero.
      *
      * The row is written by the application, so a percentage of 0 or 150 or a type of `percentage` is a row the
-     * package meets. ONE definition for the local driver's coupon question, the redemption of a carried code and
+     * package meets. One definition for the local driver's coupon question, the redemption of a carried code and
      * the cycle that applies it: a screen that read such a row as a code that took, while the cycle read it as no
      * discount, would show a customer a discount and charge them in full.
      */

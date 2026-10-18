@@ -17,7 +17,7 @@ use Pushery\Billing\Models\ReportingFiling;
  * ## It transmits nothing, and that is the design
  *
  * The package holds no portal credentials and submits nothing on anybody's behalf. What it can do is record
- * that an operator submitted THESE EXACT BYTES on this day, so that afterwards there is one answer to "what
+ * that an operator submitted these exact bytes on this day, so that afterwards there is one answer to "what
  * did we report" rather than a rebuild that may no longer match. That is why filing takes an export record
  * and not a year: the bytes are the claim.
  *
@@ -25,7 +25,7 @@ use Pushery\Billing\Models\ReportingFiling;
  *
  * Producing is repeatable and filing is not. A flag on the producing command would make an irreversible act
  * a character in a shell line — and the act is irreversible for a reason: once a period is filed, later
- * changes are a CORRECTION that names its predecessor, never a rewrite of what went out.
+ * changes are a correction that names its predecessor, never a rewrite of what went out.
  */
 final class ReportingFileCommand extends Command
 {

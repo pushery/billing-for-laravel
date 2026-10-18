@@ -17,7 +17,7 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
 /**
  * Refuses to provide a digital work until the consumer's consent is on record.
  *
- * The gate is only live where a consumer-rights profile is configured. That is deliberate and it is NOT the
+ * The gate is only live where a consumer-rights profile is configured. That is deliberate and it is not the
  * marketplace switch: this is consumer law, which a single seller in the same country needs just as much,
  * and which an operator may run under a different jurisdiction than their tax. Off by default so an install
  * that has not opted in is byte-for-byte unchanged — no extra step, no altered receipt.

@@ -21,7 +21,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * timestamp in front of it — the most expensive kind of dead check, because the report still lists it as
  * passing.
  *
- * So the same finding next year is a NEW finding, and somebody answers it again. That is not friction: the
+ * So the same finding next year is a new finding, and somebody answers it again. That is not friction: the
  * answer may well be different, and the year in which it changed is precisely what nobody would notice.
  *
  * ## Why the reason is required rather than encouraged

@@ -9,7 +9,7 @@ use Carbon\CarbonImmutable;
 /**
  * The two declarations a buyer must make before a digital work is provided, frozen onto the sale.
  *
- * Two, not one, and separate on purpose: the law asks for consent to immediate provision AND acknowledgement
+ * Two, not one, and separate on purpose: the law asks for consent to immediate provision and acknowledgement
  * that the right to withdraw ends when provision begins. They are different statements about different
  * things, and a single pre-ticked box satisfies neither.
  *
@@ -51,7 +51,7 @@ final readonly class WithdrawalConsent
     }
 
     /**
-     * Whether the wording of BOTH declarations is on file.
+     * Whether the wording of both declarations is on file.
      *
      * Both, because a receipt carrying one of them is worse than one carrying neither: it looks like a
      * confirmation and is not. What the law asks for is the confirmation of what the buyer agreed to, and

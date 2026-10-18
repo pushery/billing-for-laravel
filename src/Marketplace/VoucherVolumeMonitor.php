@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * It decides nothing. Crossing a supervisory threshold is a fact about a number; what follows from it is a
  * filing a person makes, and a package that tried to make it would be wrong about which jurisdiction, which
- * authority and which form. What a package CAN do is produce a defensible figure and say when it has been
+ * authority and which form. What a package can do is produce a defensible figure and say when it has been
  * passed — because the alternative is finding out at an audit that the threshold was crossed eleven months
  * ago and nobody was counting.
  *
@@ -30,7 +30,7 @@ final readonly class VoucherVolumeMonitor
     ) {}
 
     /**
-     * What has gone into prepaid value over the window ending now — BOTH instruments.
+     * What has gone into prepaid value over the window ending now — both instruments.
      *
      * A voucher and a paid credit top-up are the same thing in two tables: prepaid value, held by the
      * issuer, redeemed later. The threshold asks for the total value of the payment transactions over the
@@ -77,7 +77,7 @@ final readonly class VoucherVolumeMonitor
      * The figure at which a filing is expected, in minor units.
      *
      * Public because an announcement has to carry it: a recipient told "you are close" without being told
-     * close to WHAT has to go and look it up in configuration to phrase a single sentence, and the sweep
+     * close to what has to go and look it up in configuration to phrase a single sentence, and the sweep
      * would otherwise re-read the same key this class already reads.
      */
     public function thresholdMinor(): int

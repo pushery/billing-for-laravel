@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\TierIdentity;
 
 /**
  * Resolves a billable's tier from a raw column (config('billing.tier_column'), default "plan"). It
- * reads the RAW attribute via getAttributes() rather than the magic accessor on purpose: an app
+ * reads the raw attribute via getAttributes() rather than the magic accessor on purpose: an app
  * accessor could resolve a relationship (or the tier itself) and recurse. Any value that is not a
  * known tier fails safe to the configured zero-tier — a resolver never implies access.
  */

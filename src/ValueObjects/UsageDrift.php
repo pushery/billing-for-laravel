@@ -21,7 +21,7 @@ final readonly class UsageDrift
         public string $period,
         /** What WE believe we successfully reported. */
         public int $reported,
-        /** What the PROVIDER says it actually recorded. */
+        /** What the provider says it actually recorded. */
         public int $recorded,
     ) {}
 

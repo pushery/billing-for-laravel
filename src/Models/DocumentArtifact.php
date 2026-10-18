@@ -47,7 +47,7 @@ class DocumentArtifact extends Model
     ];
 
     /**
-     * Erasure unlinks the person from a record whose CONTENT is untouched. Everything else would be
+     * Erasure unlinks the person from a record whose content is untouched. Everything else would be
      * re-deciding after the fact what was already decided and acted on.
      *
      * @return list<string>
@@ -58,7 +58,7 @@ class DocumentArtifact extends Model
     }
 
     /**
-     * Never through the model, inside `purging()` or not. The erasure axis holds this table as RETAINED:
+     * Never through the model, inside `purging()` or not. The erasure axis holds this table as retained:
      * unlinked when its owner is erased, and removed by query once the retention window has passed.
      */
     protected static function appendOnlyDeletion(): AppendOnlyDeletion

@@ -19,18 +19,18 @@ use Pushery\Billing\ValueObjects\Money;
  * spends the balance down) atomically under a row lock, so concurrent proration credits and offsets
  * never race. The balance is scoped per currency.
  *
- * Every movement writes a {@see CreditLedgerEntry} in the SAME transaction as the balance it moves, so the
+ * Every movement writes a {@see CreditLedgerEntry} in the same transaction as the balance it moves, so the
  * running total can always be taken apart into what produced it. That is why the reason is a required
  * argument rather than an optional one: a default would let an unexplained movement in while looking
  * deliberate. The audit log cannot stand in for the entries. A separate call after the balance transaction
  * has committed can be interrupted in between, leaving a balance nobody could account for, and
  * `billing:prune` ages audit rows out on a clock while a balance is a holding and is never pruned.
  *
- * The balance is deliberately allowed to go NEGATIVE — a customer who is refunded credit they already
+ * The balance is deliberately allowed to go negative — a customer who is refunded credit they already
  * spent owes it back, and clamping at zero would silently forgive that debt. Both directions are just a
  * signed integer under the same lock.
  *
- * DO NOT ADD A PAYOUT OR TRANSFER METHOD HERE. Two properties of this class are load-bearing and hold only
+ * Do not add a payout or transfer method here. Two properties of this class are load-bearing and hold only
  * because the corresponding code does not exist:
  *
  *  1. There is no path that pays a balance back OUT — credit is spent against what this package bills, and
@@ -38,9 +38,9 @@ use Pushery\Billing\ValueObjects\Money;
  *  2. Every method takes exactly ONE owner, so a balance cannot move between owners.
  *
  * Together those keep this a prepayment against the seller's own supplies. A withdraw()/payout() method, or
- * a debit() wired to a "pay out my remaining balance" button, changes what the instrument IS — and it does
+ * a debit() wired to a "pay out my remaining balance" button, changes what the instrument is — and it does
  * so without breaking a single test, which is precisely why the properties are pinned by an explicit
- * containment test (tests/Unit/CreditLedgerContainmentTest.php) instead of being left to this comment. If a
+ * containment test in the package's own suite instead of being left to this comment. If a
  * feature seems to need one of these, it is a design decision to escalate, not a method to add.
  */
 final class CreditLedger
@@ -99,14 +99,14 @@ final class CreditLedger
     }
 
     /**
-     * Debit at most $ceiling of an owner's balance, and answer what ACTUALLY moved.
+     * Debit at most $ceiling of an owner's balance, and answer what actually moved.
      *
      * The read, the cap and the debit are one movement under the balance row's own lock, and that is the
      * whole difference between this and balanceFor() followed by debit(). Between those two the balance can
      * change — and a caller that decides a figure, goes off to a provider, and then debits what it decided
      * will spend a balance that is no longer there.
      *
-     * That drives the balance NEGATIVE, and negative is a one-way street here: no cycle ever collects it
+     * That drives the balance negative, and negative is a one-way street here: no cycle ever collects it
      * back, because every later offset reads a non-positive figure and skips itself. Two entries that each
      * read like a correct offset, and the seller is permanently out the smaller of them.
      *

@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Schema;
  * vouchers exported none of it — the liability never appeared, and the turnover at redemption showed up with
  * no counter-entry.
  *
- * A movement is an EVENT, not a state, which is why it is its own table rather than more columns on the
+ * A movement is an event, not a state, which is why it is its own table rather than more columns on the
  * voucher. A voucher can be redeemed many times, and the books need each one on the day it happened; the
  * voucher row can only ever say what is left today.
  *

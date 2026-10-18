@@ -40,7 +40,7 @@ final readonly class DocumentNumberAllocator
             );
         }
 
-        // The scope carries the series AND the year, so each series restarts its run every year without ever
+        // The scope carries the series and the year, so each series restarts its run every year without ever
         // touching the previous year's counter. It is also exactly the number's own leading segment, so the
         // finished number is the scope plus the running part — no second place for the prefix to disagree.
         $scope = sprintf('%s-%04d', $this->prefixFor($series), $year);

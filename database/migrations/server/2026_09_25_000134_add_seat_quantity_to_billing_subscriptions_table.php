@@ -26,7 +26,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * ## Why there is no index
  *
- * Nothing looks a subscription up BY its seats. They are read off a row already found by its owner.
+ * Nothing looks a subscription up by its seats. They are read off a row already found by its owner.
  */
 return new class extends Migration
 {

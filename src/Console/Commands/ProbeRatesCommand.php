@@ -55,7 +55,7 @@ final class ProbeRatesCommand extends Command
         // over one response would drift silently — a parser that drifts does not throw, it returns fewer
         // rows, and the caller then reports "no drift" over a response it failed to read.
         //
-        // SAY WHICH, on a failure. `unreachable: true` on its own is unfalsifiable: a refused connection, a
+        // Say which, on a failure. `unreachable: true` on its own is unfalsifiable: a refused connection, a
         // 500 from the service and a malformed request all arrive here and all read the same in the report,
         // and a diagnosis of "network problem" is then a guess.
         $answer = TedbRateSource::on($on);

@@ -18,7 +18,7 @@ use Stripe\StripeClient;
  * ## Which invoice, and why not simply the newest
  *
  * Stripe collects a subscription in advance, so the invoice for the period in progress is the newest one raised to
- * START or RENEW it. An invoice raised for a change within the period (a proration, a usage threshold) is not the
+ * start or renew it. An invoice raised for a change within the period (a proration, a usage threshold) is not the
  * period's price, and a pro-rata refund measured against it would return a fraction of the wrong amount. Only
  * `subscription_create` and `subscription_cycle` invoices are read, and the newest of those decides.
  *

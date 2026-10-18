@@ -9,9 +9,9 @@ use Pushery\Billing\Enums\ChargeType;
 /**
  * What a provider actually withheld on one routed subscription invoice, and from whom.
  *
- * ## Why this is READ rather than computed
+ * ## Why this is read rather than computed
  *
- * A routed subscription is priced with a RATE, not an amount: the lane sets `application_fee_percent`, and
+ * A routed subscription is priced with a rate, not an amount: the lane sets `application_fee_percent`, and
  * the provider applies it to each invoice as it is raised. So the absolute commission is not knowable when
  * the subscription is created — it exists once per cycle, on the invoice, and only the provider has it.
  *
@@ -21,9 +21,9 @@ use Pushery\Billing\Enums\ChargeType;
  * reversal caps, the earnings counter and the small-business judgment all read. A figure that is merely
  * plausible is the worst possible content for it, because nothing goes red.
  *
- * ## The terms travel WITH the amounts, and that is not redundancy
+ * ## The terms travel with the amounts, and that is not redundancy
  *
- * A full clawback needs only the amounts. A PARTIAL one needs the terms: a proportional share is the wrong
+ * A full clawback needs only the amounts. A partial one needs the terms: a proportional share is the wrong
  * figure the moment a fee has a fixed part, and the only other source would be today's configuration — a
  * platform that raised its rate would then claw old cycles back at the new one, with nothing on the row to
  * say so. So the rate is carried here and frozen onto the row beside the money.
@@ -43,7 +43,7 @@ final readonly class RoutedInvoiceCommission
          */
         public Money $fee,
         /**
-         * The rate the commission was taken at, in basis points, as it stood for THIS cycle.
+         * The rate the commission was taken at, in basis points, as it stood for this cycle.
          *
          * Read from the subscription rather than from configuration, so a rate changed later cannot rewrite
          * a cycle already billed. Null only when the provider does not state one, which on this lane means

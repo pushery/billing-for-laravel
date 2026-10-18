@@ -7,7 +7,7 @@ namespace Pushery\Billing\Contracts;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * An onboarding implementation that can say what the PROVIDER is still waiting for.
+ * An onboarding implementation that can say what the provider is still waiting for.
  *
  * ## Why this is its own interface and not two more methods on `MerchantOnboarding`
  *
@@ -18,7 +18,7 @@ use Illuminate\Database\Eloquent\Model;
  *
  * ## Why the answer is not on `MerchantAccountReference`
  *
- * That value is a SNAPSHOT, refreshed by webhook, and its three flags are all a routing decision needs.
+ * That value is a snapshot, refreshed by webhook, and its three flags are all a routing decision needs.
  * What is still outstanding is a different question with a different lifetime: it changes as a merchant
  * works through the provider's form, nobody routes money on it, and reading it means a live call. Putting
  * it on the snapshot would either make the snapshot stale in a new way or make every read of it an

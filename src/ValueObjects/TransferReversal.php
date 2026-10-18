@@ -12,7 +12,7 @@ namespace Pushery\Billing\ValueObjects;
  * than was asked for, most obviously when part of the transfer has already been reversed, and the reference
  * is what a later reconciliation matches against.
  *
- * REPORTING WHAT WAS ASKED FOR RATHER THAN WHAT MOVED is the failure this shape exists to prevent, and it is
+ * Reporting what was asked for rather than what moved is the failure this shape exists to prevent, and it is
  * worse on this side than on the outbound one. A ledger that records the requested figure believes the
  * clawback is complete, so it never asks for the rest — and the difference sits with the merchant while
  * every total adds up.

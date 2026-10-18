@@ -59,7 +59,7 @@ final readonly class CreditAddonPurchase
             return;
         }
 
-        // An add-on grants EITHER usage units or money credit — never both. Paying one purchase out twice
+        // An add-on grants either usage units or money credit — never both. Paying one purchase out twice
         // is not generosity, it is a bug. And it may grant neither: a work, a post or a sponsorship is paid for
         // and handed over elsewhere, and crediting its price back would give the buyer both.
         $grant = $this->addons->grantsFor($event->addonKey);
@@ -111,10 +111,10 @@ final readonly class CreditAddonPurchase
             return;
         }
 
-        // Mirror the credit onto the provider balance so it reduces the customer's next invoice, AFTER the
+        // Mirror the credit onto the provider balance so it reduces the customer's next invoice, after the
         // local credit commits: the job is queued once this effect's run has committed, so neither the run nor
         // the balance row it locked waits on the provider, and a run that rolls back pushes nothing. Deliberately
-        // UNCONDITIONAL: if the local claim succeeded but an earlier push failed, another delivery must still get
+        // unconditional: if the local claim succeeded but an earlier push failed, another delivery must still get
         // the provider in step — so it is idempotent by the purchase reference, and the provider dedups the key
         // rather than double-crediting.
         Bus::dispatch(new PushCreditToProvider($owner, $event->amount, 'addon:'.$event->reference));

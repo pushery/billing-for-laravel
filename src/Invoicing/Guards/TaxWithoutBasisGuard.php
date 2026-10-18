@@ -16,7 +16,7 @@ use Throwable;
  * ## The gap is a capability difference, not a missing column
  *
  * The invoice table serves two document worlds. A subscription invoice from a provider that determines tax
- * itself stores a RESULT — `tax_minor` and nothing about how it was reached — and that is correct: the
+ * itself stores a result — `tax_minor` and nothing about how it was reached — and that is correct: the
  * package did not decide it, the provider did, and `supportsProviderTax: true` says so.
  *
  * A driver whose provider determines nothing has no such result to store. Neither it nor the package has
@@ -40,20 +40,20 @@ use Throwable;
  * ## Only a driver this install actually has
  *
  * A provider name that resolves to no registered driver is out of scope, exactly like a document with no
- * provider at all. This guard compares what a driver DOES against what a document CLAIMS, and it can do
+ * provider at all. This guard compares what a driver does against what a document claims, and it can do
  * neither for a name it has never heard of — a marketplace routing through a PSP that is not a billing
  * driver is an ordinary shape, and refusing its receipts would be this rule making a statement about
  * something it cannot see.
  *
  * That boundary was measured rather than chosen: the first version treated an unresolvable name as
  * "determines nothing" and refused six documents across five suites, none of them the shape this exists
- * for. The safe-direction argument holds for a driver that is REGISTERED and says it determines no tax;
+ * for. The safe-direction argument holds for a driver that is registered and says it determines no tax;
  * it does not extend to a name that answers nothing at all.
  */
 final class TaxWithoutBasisGuard
 {
     /**
-     * The columns that record HOW a tax was determined.
+     * The columns that record how a tax was determined.
      *
      * One of them is enough. They are alternatives rather than a checklist — a reverse-charge supply names
      * a place of supply and no rate, an exempt one names its reason and no band — so demanding all of them
@@ -78,8 +78,8 @@ final class TaxWithoutBasisGuard
 
         $provider = $invoice->provider;
 
-        // NO DRIVER, NO STATEMENT ABOUT ONE. `provider` is nullable, and a document that names none is not
-        // making a claim this guard can judge: the gap it exists for is a capability DIFFERENCE between
+        // No driver, no statement about one. `provider` is nullable, and a document that names none is not
+        // making a claim this guard can judge: the gap it exists for is a capability difference between
         // drivers, and there is no driver here to differ. Whether a package-issued document with no
         // provider must carry its own basis is a real question, and a separate one — answering it here
         // would be a second rule smuggled in under the first, refusing documents this guard was never

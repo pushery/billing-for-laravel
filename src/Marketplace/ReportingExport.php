@@ -19,12 +19,12 @@ use Pushery\Billing\ValueObjects\SellerPeriodReport;
  *
  * ## The order is the whole design
  *
- * `assertClear()` runs FIRST, before a byte is rendered or a row is written. The statutory check happens
+ * `assertClear()` runs first, before a byte is rendered or a row is written. The statutory check happens
  * before the report, and the difference between the two placements is what a failure costs: a check folded
  * into the rendering aborts once a file exists, leaving an operator holding an artifact they must not keep
  * and a list of problems that arrives one at a time. This produces nothing until the period is clear.
  *
- * That is also why the export does not merely DOCUMENT that a caller should check first. A step somebody
+ * That is also why the export does not merely document that a caller should check first. A step somebody
  * has to remember is a step that is skipped exactly when the period is messy — which is the period the
  * check exists for.
  *

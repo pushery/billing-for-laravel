@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
  * ## Why the window is computable
  *
  * `acquired_at` on this table records the moment a work is provided — written immediately after the
- * fail-closed withdrawal gate, which IS the moment of provision.
+ * fail-closed withdrawal gate, which is the moment of provision.
  *
  * A reason does not age visibly. That paragraph went on excusing the same absence long after the tree had
  * removed its cause, which is how it stayed unnoticed while the surrounding work shipped.

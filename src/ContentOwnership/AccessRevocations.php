@@ -31,7 +31,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * - A takedown with no refund at all. A legal demand does not come with a payment instruction.
  *
  * A build that hard-wired revocation to a refund would make the first impossible and the third
- * unrepresentable. So this is its own action with its own switches, and it moves NO money.
+ * unrepresentable. So this is its own action with its own switches, and it moves no money.
  *
  * ## Uncoupled is not consequence-free
  *
@@ -64,7 +64,7 @@ final readonly class AccessRevocations
     /**
      * End one grant's access, with the reason on the row.
      *
-     * Idempotent, and the FIRST reason wins. A chargeback that arrives after a takedown must not overwrite
+     * Idempotent, and the first reason wins. A chargeback that arrives after a takedown must not overwrite
      * why access actually ended — the later event did not cause it, and an audit trail that records the last
      * thing to happen rather than the thing that mattered is worse than none.
      */
@@ -106,13 +106,13 @@ final readonly class AccessRevocations
     }
 
     /**
-     * End every grant on ONE WORK, across all its owners — a takedown order, or a creator's account going.
+     * End every grant on one work, across all its owners — a takedown order, or a creator's account going.
      *
      * ## Two levels, and this is the second one
      *
      * "The work can no longer be delivered" and "access ends, by force" are different facts, and the package
      * models them separately on purpose. A work whose publication ended answers `ContentAvailability::ContentGone`
-     * through the catalog seam and the grant is left ALONE — somebody owning a work that is no longer sold is
+     * through the catalog seam and the grant is left alone — somebody owning a work that is no longer sold is
      * the ordinary case, not a revocation.
      *
      * This is the other one: a legal order, or an account deletion, where ownership itself has to end. Reach
@@ -152,7 +152,7 @@ final readonly class AccessRevocations
     }
 
     /**
-     * End every grant sold by ONE MERCHANT — the shape a deleted creator account has.
+     * End every grant sold by one merchant — the shape a deleted creator account has.
      *
      * `RevokeReason::CreatorDeleted` existed as a case with no producer anywhere, and this axis is what it
      * names. Chunked for the same reason as the work axis: a seller's whole catalog is not a handful of
@@ -200,7 +200,7 @@ final readonly class AccessRevocations
     }
 
     /**
-     * End every grant that came from the purchase a PAYMENT belongs to.
+     * End every grant that came from the purchase a payment belongs to.
      *
      * A refund and a dispute both name the payment, never the checkout — a provider's dispute object has no
      * session on it at all. The purchase row is the only place the two references meet, so this is the hop
@@ -218,5 +218,54 @@ final readonly class AccessRevocations
         }
 
         return $this->revokePurchase((string) $purchase->reference, $reason, $at);
+    }
+
+    /**
+     * Give back a grant that was revoked for one cause, once that cause no longer holds.
+     *
+     * Only a grant revoked for exactly that cause comes back. One that ended for another reason, a takedown or
+     * a withdrawal, stays revoked, because the cause that went away did not end it. The revocation stays on the
+     * row as the record of what happened in between, and `reinstated_at` says when the grant granted again.
+     * Idempotent: a grant that grants already is left as it is.
+     */
+    public function reinstate(AccessGrant $grant, RevokeReason $cause, ?CarbonInterface $at = null): AccessGrant
+    {
+        if ($grant->status !== GrantStatus::Revoked || $grant->revoked_reason !== $cause) {
+            return $grant;
+        }
+
+        $grant->forceFill([
+            'status' => GrantStatus::Active,
+            'reinstated_at' => $at ?? Carbon::now(),
+        ])->save();
+
+        return $grant;
+    }
+
+    /**
+     * Give back every grant of the purchase a payment belongs to that was revoked for one cause.
+     *
+     * The way back of {@see revokeForPayment()}, through the same purchase row. No purchase row, no grants.
+     *
+     * @return list<AccessGrant> the grants that grant again
+     */
+    public function reinstateForPayment(string $paymentReference, RevokeReason $cause, ?CarbonInterface $at = null): array
+    {
+        $purchase = AddonPurchase::model()::query()->where('payment_reference', $paymentReference)->first();
+
+        if (! $purchase instanceof AddonPurchase) {
+            return [];
+        }
+
+        /** @var list<AccessGrant> $grants */
+        $grants = AccessGrant::model()::query()
+            ->where('source_reference', (string) $purchase->reference)
+            ->where('status', GrantStatus::Revoked->value)
+            ->where('revoked_reason', $cause->value)
+            ->orderBy('id')
+            ->get()
+            ->all();
+
+        return array_map(fn (AccessGrant $grant): AccessGrant => $this->reinstate($grant, $cause, $at), $grants);
     }
 }

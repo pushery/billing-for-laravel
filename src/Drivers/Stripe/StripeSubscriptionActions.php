@@ -7,13 +7,17 @@ namespace Pushery\Billing\Drivers\Stripe;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Event;
 use InvalidArgumentException;
 use Pushery\Billing\Consumer\ProratedCancellation;
 use Pushery\Billing\Contracts\AppliesScheduledSwaps;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\MerchantCatalog;
+use Pushery\Billing\Contracts\PausesSubscriptions;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\CancellationReason;
+use Pushery\Billing\Events\SubscriptionPaused;
+use Pushery\Billing\Events\SubscriptionUnpaused;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\EndInsidePeriodIsFinal;
 use Pushery\Billing\Models\Subscription;
@@ -34,12 +38,12 @@ use Stripe\SubscriptionItem;
  * subscription directly; the resulting `customer.subscription.*` webhook syncs the local row back.
  *
  * The swap is the superset closure that keeps upgrades/downgrades in-app: the client submits a tier
- * KEY, never a price, and the price is resolved from the plan catalog (anti-price-injection). A
+ * key, never a price, and the price is resolved from the plan catalog (anti-price-injection). A
  * cancel/cancelAt/resume/cancelNow with no live subscription is a safe no-op; a swap without one, to a tier
  * that carries no provider price, or onto a subscription whose tier item cannot be identified, is
  * rejected rather than silently doing nothing — or, worse, repricing the wrong item.
  */
-final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps, SubscriptionActions
+final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps, PausesSubscriptions, SubscriptionActions
 {
     /**
      * The payment methods, of those this driver collects, under which Stripe can hold a swap until it is paid.
@@ -151,6 +155,53 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
         ]));
     }
 
+    /**
+     * Pause collection at Stripe, which raises no invoice while it rests and keeps its own periods.
+     *
+     * `void` rather than keeping drafts: an invoice kept for later would collect the days the customer could not use
+     * the moment the pause ends. The local row learns the paused state from the `customer.subscription.updated`
+     * webhook, like every other mutation here; the event goes out once Stripe accepted the pause.
+     *
+     * @throws InvalidArgumentException when the subscription is not active, or is ending
+     */
+    public function pause(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
+        $reference = $subscription?->provider_id;
+
+        if (! $subscription instanceof Subscription || $reference === null) {
+            return;
+        }
+
+        if (! $subscription->active() || $subscription->ends_at !== null) {
+            throw new InvalidArgumentException(
+                "Cannot pause the subscription ({$subscription->status}): only an active subscription that is not ending can rest."
+            );
+        }
+
+        $this->stripe->subscriptions->update($reference, ['pause_collection' => ['behavior' => 'void']]);
+
+        Event::dispatch(new SubscriptionPaused($billable));
+    }
+
+    /** Take the pause off at Stripe, which collects again from its next invoice. */
+    public function unpause(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
+        $reference = $subscription?->provider_id;
+
+        if (! $subscription instanceof Subscription || $reference === null || ! $subscription->paused()) {
+            return;
+        }
+
+        // An empty `pause_collection` is how the Stripe API clears a pause, and the request StripeSubscriptionActionsTest
+        // asserts. The SDK's generated shape types the field as an object or null and cannot express the empty string.
+        // @phpstan-ignore argument.type (the SDK's generated shape cannot express the empty string that clears a field)
+        $this->stripe->subscriptions->update($reference, ['pause_collection' => '']);
+
+        Event::dispatch(new SubscriptionUnpaused($billable));
+    }
+
     public function cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
         $reference = $this->subscriptionFor($billable, $merchant, $type)?->provider_id;
@@ -181,7 +232,7 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
 
     private function reprice(Model $billable, string $tierKey, bool $prorate, ?MerchantScope $merchant, ?string $type): void
     {
-        // The price comes from the MERCHANT's catalog, so a marketplace swap reprices against the creator's
+        // The price comes from the merchant's catalog, so a marketplace swap reprices against the creator's
         // own tier — never the platform's, and never a price the client named. A null merchant reads the
         // platform catalog exactly as before.
         $price = $this->catalogs->planCatalog($merchant)->providerPriceFor($tierKey);
@@ -202,7 +253,7 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
                 'expand' => ['default_payment_method', 'customer.invoice_settings.default_payment_method'],
             ]);
         } catch (RateLimitException $e) {
-            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // A 429 is transient and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException) {
@@ -293,7 +344,7 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
         try {
             $call();
         } catch (RateLimitException $e) {
-            // A 429 is TRANSIENT and only lands here because the SDK makes RateLimitException a
+            // A 429 is transient and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException $refusal) {

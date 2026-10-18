@@ -32,8 +32,8 @@ final readonly class ReverseAddonPurchase implements DedupesOnReference
      * The event carries the cumulative figure, so a redelivery repeats it and a further refund raises it. Keyed on
      * the delivery instead, a provider that pings every change to a payment under one key had its second refund
      * dropped as a duplicate of the first: Mollie does, because a refund leaves the payment `paid`. The reversal,
-     * the credit note and the access revocation name the state with the same expression, so the three effects on
-     * this event agree about what "the same refund" means.
+     * the credit note and the access revocation all name it through {@see AddonRefunded::stateReference()}, so the
+     * three effects on this event agree about what "the same refund" means.
      */
     public function dedupReference(BillingDomainEvent $event): string
     {
@@ -41,6 +41,6 @@ final readonly class ReverseAddonPurchase implements DedupesOnReference
             throw new RuntimeException('ReverseAddonPurchase only handles AddonRefunded events.');
         }
 
-        return sprintf('%s:refunded:%d:%s:%s', $event->paymentReference, $event->cumulativeRefunded->minorUnits, $event->cumulativeRefunded->currency, $event->reason ?? 'refund');
+        return $event->stateReference();
     }
 }

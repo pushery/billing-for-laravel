@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\CreditSource;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
- * Brings credit the PROVIDER spent back onto this package's ledger.
+ * Brings credit the provider spent back onto this package's ledger.
  *
  * ## The hole this closes
  *
@@ -24,18 +24,18 @@ use Pushery\Billing\ValueObjects\Money;
  * provider consumed the balance on its own, and nothing told the ledger.
  *
  * Measured on the tree: the only production caller of `CreditLedger::debit()` was a refund, and the only
- * caller of `spendUpTo()` is the LOCAL billing engine — which never runs on a lane where the provider raises
+ * caller of `spendUpTo()` is the local billing engine — which never runs on a lane where the provider raises
  * the invoice. So from the first provider invoice that consumed credit onward, the local balance was too
  * high, permanently, and it is the balance the account hub shows the customer and the one a local charge
  * spends from. A customer could be handed the same hundred euros twice.
  *
- * ## Why the source is the invoice RECORD
+ * ## Why the source is the invoice record
  *
  * The ledger's `source` is a morph, so its id is an integer and a provider's own `in_…` identifier does not
  * fit. Keying on the record is better anyway: it is the row a support agent already has in front of them
  * when they ask why a balance moved.
  *
- * This effect therefore runs AFTER {@see PersistInvoice}, and says nothing when the record is missing rather
+ * This effect therefore runs after {@see PersistInvoice}, and says nothing when the record is missing rather
  * than debiting against a source nobody can open. A missing record means the invoice was not persisted, and
  * an unexplained movement is the state the ledger's own docblock says it must never reach.
  *

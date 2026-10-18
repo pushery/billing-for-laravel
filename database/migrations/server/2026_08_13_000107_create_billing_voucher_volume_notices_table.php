@@ -17,9 +17,9 @@ use Illuminate\Support\Facades\Schema;
  * would say the same thing every morning — and a channel that repeats becomes a channel nobody reads on the
  * day it finally means something.
  *
- * ## Why the key is currency + level + YEAR
+ * ## Why the key is currency + level + year
  *
- * Not per DAY: that is the daily repeat the marker exists to stop.
+ * Not per day: that is the daily repeat the marker exists to stop.
  *
  * Not once ever, either, which was the first shape considered. The window is rolling, so a figure can fall
  * back under the threshold and cross it again years later under a genuinely new obligation — and a marker

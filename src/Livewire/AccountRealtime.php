@@ -17,12 +17,12 @@ use Pushery\Billing\Events\Concerns\BroadcastsToOwner;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
- * The headless realtime bridge: mounted ONCE in the account-hub shell, it listens on the owner's private
+ * The headless realtime bridge: mounted once in the account-hub shell, it listens on the owner's private
  * `.account.toast` channel and relays each broadcast toast to the client as a `wirekit-toast` browser event
  * (which the shell's WireKit toast region renders). It has no visible output of its own.
  *
  * A WebSocket payload is untrusted, so the message must be a non-empty string and the level is clamped to a
- * known variant before it is dispatched. The SHELL decides WHETHER to mount this (only when broadcasting is on
+ * known variant before it is dispatched. The shell decides whether to mount this (only when broadcasting is on
  * and not a native runtime); the component only guarantees it is safe when it is.
  */
 final class AccountRealtime extends Component
@@ -80,7 +80,7 @@ final class AccountRealtime extends Component
         // Fail-closed, and not redundant with mount()'s identical check. Its caller is
         // getListeners(), which Livewire runs on mount and again for every event dispatched to the
         // component — and an event's request does not re-run mount(). So a session that ends between
-        // two requests reaches this method with the mount gate long past. Answering then would mean deriving a PRIVATE channel name from a guess,
+        // two requests reaches this method with the mount gate long past. Answering then would mean deriving a private channel name from a guess,
         // and somebody else may be listening on it.
         $actor = Auth::user();
 

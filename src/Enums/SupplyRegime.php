@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Enums;
 
 /**
- * Whose supply a routed sale IS — the classification the whole document chain hangs from.
+ * Whose supply a routed sale is — the classification the whole document chain hangs from.
  *
  * Two shapes, and they are not two ways of describing the same transaction. In one the platform buys and
  * resells: there are two supplies, the platform's margin is the difference between them, and the merchant
@@ -29,12 +29,12 @@ enum SupplyRegime: string
     case Intermediation = 'intermediation';
 
     /**
-     * Whether a seller under this regime is CHARGED a fee that could be reported as withheld from them.
+     * Whether a seller under this regime is charged a fee that could be reported as withheld from them.
      *
      * The two shapes differ in kind here, not in amount, and a reporting record has a field that asks
      * exactly this question — "separately withheld fees" — with only one honest answer per regime:
      *
-     * - **Commission chain: no.** The platform buys and resells. Its margin is the DIFFERENCE between two
+     * - **Commission chain: no.** The platform buys and resells. Its margin is the difference between two
      *   supplies; it is never charged to the merchant, never deducted from a payment owed to them, and the
      *   package deliberately issues them no commission invoice for it. Reporting that margin as a withheld
      *   fee invents a service relationship the books do not contain, and states an amount the seller never

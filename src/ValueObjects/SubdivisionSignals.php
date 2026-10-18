@@ -7,7 +7,7 @@ namespace Pushery\Billing\ValueObjects;
 use Pushery\Billing\Enums\SignalSource;
 
 /**
- * What each source said about the buyer's SUBDIVISION — a US state, a Canadian province.
+ * What each source said about the buyer's subdivision — a US state, a Canadian province.
  *
  * ## Why this is a separate object and not three more fields on CountrySignals
  *
@@ -21,7 +21,7 @@ use Pushery\Billing\Enums\SignalSource;
  * is the whole rule — a state from a source the country did not come from is a state about a different
  * place.
  *
- * ## What is NOT here, and it is the point
+ * ## What is not here, and it is the point
  *
  * No postcode, no city, no coordinates, no raw IP. The package discards the raw IP on purpose and stores
  * only as coarsely as the question needs; a subdivision is already one step finer than everything else in

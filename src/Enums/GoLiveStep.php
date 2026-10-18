@@ -8,10 +8,10 @@ namespace Pushery\Billing\Enums;
  * The ordered spine of the go-live checklist: the stages an operator works through before the marketplace
  * switch may be flipped.
  *
- * The spine is deliberately EMPTY of jurisdiction. It says only that contract terms come before authority
+ * The spine is deliberately empty of jurisdiction. It says only that contract terms come before authority
  * registrations, registrations before configuration, and configuration before an additional payout rail —
  * an ordering that holds wherever the package runs, because each stage is a precondition of the next in
- * fact, not in law. What each stage CONTAINS is contributed by a jurisdiction profile and by the consumer;
+ * fact, not in law. What each stage contains is contributed by a jurisdiction profile and by the consumer;
  * the core never names a statute or an authority.
  *
  * There is no case for the switch itself. The switch is not a step the checklist checks, it is the action

@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * When each market was opened or closed, and by whom.
  *
- * Configuration says which countries are open TODAY. It cannot say since when, and "since when" is the
+ * Configuration says which countries are open today. It cannot say since when, and "since when" is the
  * question that matters afterwards: a return covers a period, and whether a country belonged in it depends
  * on when it was opened — not on what the file says at the time somebody asks.
  *

@@ -18,7 +18,7 @@ use RuntimeException;
  *
  * ## A filing is an act, an export is an artifact
  *
- * {@see ReportingExportRecord} says what was produced. This says what was SUBMITTED — and the two are far
+ * {@see ReportingExportRecord} says what was produced. This says what was submitted — and the two are far
  * apart in practice. A period is produced, compared against the previous run, discussed, and then filed
  * days later, or never, because the comparison showed something. Folding the moment of filing into the
  * export as a column would need that row to be writable after the fact, and its whole value is that it is
@@ -29,7 +29,7 @@ use RuntimeException;
  * This row is what tells the two states apart. Before it exists, a period may be produced as often as
  * anybody likes and must come back byte-identical each time. Once it exists, the figures that went out are
  * fixed: a later correction, a master-data fix, a refund landing against last year — none of them reach
- * back. They produce a NEW export, which is filed as a correction naming this one.
+ * back. They produce a new export, which is filed as a correction naming this one.
  *
  * ## Immutable, like everything else in this chain
  *
@@ -111,7 +111,7 @@ class ReportingFiling extends Model
             $filing->filed_at ??= Carbon::now();
 
             // The sequence and the reference state the same thing, and a row where they disagree is the one
-            // shape this table exists to forbid. A correction that names nothing IS a second first report,
+            // shape this table exists to forbid. A correction that names nothing is a second first report,
             // whatever the sequence number on it says; a first filing that names a predecessor claims to
             // correct something while occupying the slot of the original.
             $names = $filing->corrects_filing_id !== null;

@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\InvoiceSnapshot;
  * from. Nothing wrote this table before; e-invoicing had a renderer and no data.
  *
  * Idempotent on (provider, provider_id): a redelivery, or a finalized-then-paid pair of webhooks for the
- * same invoice, converges to ONE row. updateOrCreate keyed on that pair is the dedup — the first webhook
+ * same invoice, converges to one row. updateOrCreate keyed on that pair is the dedup — the first webhook
  * creates the record, a later one (a status change to paid, a corrected total) updates it. The buyer, the
  * lines and the tax split are frozen from the snapshot: a valid invoice must carry the buyer (§14 UStG),
  * and an issued invoice must not change, so these are written once and read forever.
@@ -45,7 +45,7 @@ final readonly class PersistInvoice
         $attributes = $this->attributes($owner, $snapshot);
 
         // Never regress a settled invoice. Stripe fires invoice.finalized (open) then invoice.payment_succeeded
-        // (paid); if the finalized delivery is retried AFTER the paid one (a transient failure on the first
+        // (paid); if the finalized delivery is retried after the paid one (a transient failure on the first
         // attempt), it must not overwrite the paid record back to open. A provider invoice never leaves a
         // terminal state, so once stored terminal the status is kept whatever a later open snapshot says.
         if ($record->exists && $record->status->isTerminal() && ! $snapshot->status->isTerminal()) {

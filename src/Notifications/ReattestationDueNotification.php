@@ -14,7 +14,7 @@ use Pushery\Billing\Support\LocalizedDate;
 /**
  * A creator's tax declaration is due for renewal, and the notice says by when.
  *
- * Two things make it usable: the DATE the declaration stops answering, and what happens then — selling and
+ * Two things make it usable: the date the declaration stops answering, and what happens then — selling and
  * payouts pause until the creator declares again. A reminder without the date is one the reader cannot
  * plan around, and one without the consequence reads as paperwork that can wait.
  *

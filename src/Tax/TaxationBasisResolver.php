@@ -81,7 +81,7 @@ final readonly class TaxationBasisResolver
      * Whether a derived small-business verdict is standing on an empty ledger.
      *
      * A different question from `isDerived()`, and both matter at the same place. `isDerived()` asks whether
-     * anybody STATED the basis; this asks whether the figures behind a derived one exist at all. A verdict
+     * anybody stated the basis; this asks whether the figures behind a derived one exist at all. A verdict
      * of "relieved by size" computed from no rows is not a finding — it is the absence of one, wearing the
      * same shape.
      *

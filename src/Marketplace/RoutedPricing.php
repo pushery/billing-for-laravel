@@ -96,7 +96,7 @@ final readonly class RoutedPricing
      */
     private function priceOf(Money $fanGross, ?Money $target, PlatformFee $fee, int $taxBps): PricedSale
     {
-        // Tax as the DIFFERENCE. At 7% on 119.00 the base is 111.21 and the tax is 7.79; computing it as
+        // Tax as the difference. At 7% on 119.00 the base is 111.21 and the tax is 7.79; computing it as
         // base × rate gives 7.78 and loses a cent that the buyer nonetheless paid. baseFromMarkup(0)
         // returns [gross, 0], so a tax-free market needs no branch of its own.
         [$net, $tax] = $fanGross->baseFromMarkup($taxBps);
@@ -116,7 +116,7 @@ final readonly class RoutedPricing
     /**
      * The buyer's price for a net amount at a tax rate.
      *
-     * The tax is the rate's share OF THE NET added on top, taken with the same bps primitive the
+     * The tax is the rate's share of the net added on top, taken with the same bps primitive the
      * commission uses, so no float is constructed anywhere on the money path.
      */
     private function grossFrom(Money $net, int $taxBps): Money

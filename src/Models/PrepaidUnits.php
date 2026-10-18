@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Models\Concerns\Replaceable;
 
 /**
- * An owner's PREPAID balance for one meter — units they bought outright ("+1000 emails").
+ * An owner's prepaid balance for one meter — units they bought outright ("+1000 emails").
  *
  * Persistent and cycle-independent: unlike the tier's `included` allowance (which lives in the
  * period-scoped usage counter and expires with the cycle), prepaid units roll forever. Paid is paid.
@@ -18,6 +18,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * @property string $meter_key
  * @property int $balance
  * @property int $granted_total
+ * @property int $debt the overdraft a meter's grace let the owner run into, paid off by the next grant
  */
 class PrepaidUnits extends Model
 {
@@ -26,7 +27,7 @@ class PrepaidUnits extends Model
     protected $table = 'billing_prepaid_units';
 
     /** @var list<string> */
-    protected $fillable = ['owner_type', 'owner_id', 'meter_key', 'balance', 'granted_total'];
+    protected $fillable = ['owner_type', 'owner_id', 'meter_key', 'balance', 'granted_total', 'debt'];
 
     /**
      * The same defaults the schema carries, so a row that was just created reads like one that was read back.
@@ -40,8 +41,9 @@ class PrepaidUnits extends Model
     protected $attributes = [
         'balance' => 0,
         'granted_total' => 0,
+        'debt' => 0,
     ];
 
     /** @var array<string, string> */
-    protected $casts = ['balance' => 'integer', 'granted_total' => 'integer'];
+    protected $casts = ['balance' => 'integer', 'granted_total' => 'integer', 'debt' => 'integer'];
 }

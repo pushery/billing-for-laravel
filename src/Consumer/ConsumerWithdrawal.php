@@ -45,7 +45,7 @@ use Pushery\Billing\ValueObjects\WithdrawalSettlement;
  *
  * ## Why the refund is a subtraction and not its own calculation
  *
- * The value used is rounded ONCE, and the refund is the difference from what was paid. Rounding both sides
+ * The value used is rounded once, and the refund is the difference from what was paid. Rounding both sides
  * independently produces two figures that do not add back to the payment — a cent that belongs to nobody,
  * on every withdrawal, forever. 29.75 over 7 of 30 days is 6.94 retained and 22.81 returned, and those two
  * are the payment.
@@ -59,7 +59,7 @@ use Pushery\Billing\ValueObjects\WithdrawalSettlement;
  * nothing catches it.
  *
  * The correction is not computed here. {@see RoutedRefundCorrector} already does all three parts — the
- * arithmetic over both links, the documents a correction has to be, and reading every input off the FROZEN
+ * arithmetic over both links, the documents a correction has to be, and reading every input off the frozen
  * sale rather than off today — and it is the same path a lost chargeback and a canceled prepaid term take.
  * A second correction path beside it would be two places deciding document issuance and period assignment,
  * and the drift between them would be a document that adds up and states the wrong period.
@@ -232,6 +232,9 @@ final readonly class ConsumerWithdrawal
      * A provider that refuses the refund leaves the subscription ended as well. The settlement then says
      * `refundRefused` and names the payment in `chargeReference`, which is what a second attempt needs.
      *
+     * `type` names the contract where an owner holds more than one with the same seller, such as a subscription and
+     * a sponsorship; without it the default contract is the one withdrawn from.
+     *
      * @return ?WithdrawalSettlement null when no payment covers the period in progress: the subscription ended and no
      *                               money moved, which is the normal case on a driver that collects a period at its end
      *
@@ -243,16 +246,17 @@ final readonly class ConsumerWithdrawal
         ?MerchantScope $merchant = null,
         ?string $reason = null,
         ?Model $actor = null,
+        ?string $type = null,
     ): ?WithdrawalSettlement {
-        $subscription = $this->liveSubscription($owner, $merchant);
-        $type = $this->typeOf($subscription);
+        $subscription = $this->liveSubscription($owner, $merchant, $type);
+        $withdrawalType = $this->typeOf($subscription);
 
-        $this->assertSubscriptionWindowIsOpen($subscription, $type);
+        $this->assertSubscriptionWindowIsOpen($subscription, $withdrawalType);
 
         $payment = ($this->payments ?? Container::getInstance()->make(ReadsSubscriptionPayments::class))
             ->currentPeriodPayment($subscription);
 
-        ($this->actions ?? Container::getInstance()->make(SubscriptionActions::class))->cancelNow($owner, $merchant);
+        ($this->actions ?? Container::getInstance()->make(SubscriptionActions::class))->cancelNow($owner, $merchant, $type);
 
         if (! $payment instanceof SubscriptionPeriodPayment) {
             return null;
@@ -261,7 +265,7 @@ final readonly class ConsumerWithdrawal
         return $this->withdraw(
             $owner,
             $payment->chargeReference,
-            $type,
+            $withdrawalType,
             $payment->gross,
             $payment->elapsedDaysAt(CarbonImmutable::now()),
             $payment->periodDays(),
@@ -275,7 +279,7 @@ final readonly class ConsumerWithdrawal
      *
      * ## Its own position, and not for tidiness
      *
-     * The fee is a second supply between a different pair of parties: the platform mediated FOR THE BUYER,
+     * The fee is a second supply between a different pair of parties: the platform mediated for the buyer,
      * with its own rate and its own place of supply. Adding it to the pro-rata refund would move the same
      * total in one line, and that line could not be documented — there is no single rate that describes
      * 22.81 of a creator's supply plus 5.00 of the platform's own, and no reader could find the fee again.
@@ -284,7 +288,7 @@ final readonly class ConsumerWithdrawal
      *
      * The fee was added to the platform's application fee, never to the creator's transfer. So it goes back
      * out of the platform's share alone — {@see BillingAdmin::refundPlatformSupply()} — and the chain is
-     * NOT corrected for it. A creator's settlement document says what the creator earned; the fee is not in
+     * not corrected for it. A creator's settlement document says what the creator earned; the fee is not in
      * it, and issuing a correction for money that never reached them would state a reduction of nothing.
      *
      * ## The one kind that keeps it, and it is deliberate
@@ -343,7 +347,7 @@ final readonly class ConsumerWithdrawal
      *
      * `RevokeReason::Withdrawal` had no producer anywhere in `src/`. A statutory withdrawal reached the
      * register only through the refund that followed it, stamped `refund` by the webhook effect — and
-     * because a revocation keeps its FIRST reason, `withdrawal` could not be written afterwards. A later
+     * because a revocation keeps its first reason, `withdrawal` could not be written afterwards. A later
      * correction was a no-op that did not fail.
      *
      * So every exercise of a statutory right looked, in an operator's data, exactly like a goodwill refund
@@ -357,7 +361,7 @@ final readonly class ConsumerWithdrawal
      *
      * The same rule the correcting documents follow one method up: only what actually moved is acted on. A
      * provider that refused the refund leaves the buyer out of pocket, and taking their access away on top of
-     * that is the one outcome worse than doing nothing. A withdrawal with NOTHING refundable — a period used
+     * that is the one outcome worse than doing nothing. A withdrawal with nothing refundable — a period used
      * in full — does revoke: the buyer exercised the right, and no money was owed back to move.
      *
      * ## The same two switches, and no third
@@ -386,10 +390,10 @@ final readonly class ConsumerWithdrawal
 
         $revocations = $this->revocations ?? Container::getInstance()->make(AccessRevocations::class);
 
-        // The CHECKOUT reference, and that is measured rather than inferred from the name: the grant is
+        // The checkout reference, and that is measured rather than inferred from the name: the grant is
         // written with it as `source_reference` (`GrantPurchasedContent` passes the session reference), and
         // `assertWindowIsOpen()` above finds the row by matching that same column. `revokeForPayment()` is
-        // the other convention in this tree and would resolve a PAYMENT id — it would find nothing here, and
+        // the other convention in this tree and would resolve a payment id — it would find nothing here, and
         // silently: an empty array, no error.
         $revocations->revokePurchase($chargeReference, RevokeReason::Withdrawal);
     }
@@ -423,7 +427,7 @@ final readonly class ConsumerWithdrawal
     /**
      * Refuse to record a statutory withdrawal after the buyer's window has closed.
      *
-     * ## It refuses the CLASSIFICATION, never the money
+     * ## It refuses the classification, never the money
      *
      * A platform may refund out of goodwill whenever it likes, and that path is untouched. What must not
      * happen is the two being booked as one event: `RefundKind::StatutoryWithdrawal` says the buyer
@@ -441,9 +445,9 @@ final readonly class ConsumerWithdrawal
      * compare against" into "too late" would refuse the ordinary case rather than the exotic one.
      *
      * A grant whose window is null is the more interesting pass. Null means no honest date exists, and one
-     * of the four ways to get there is a right that EXTINGUISHED on delivery: refusing on it would say "too
+     * of the four ways to get there is a right that extinguished on delivery: refusing on it would say "too
      * late" about a sale where the right ended immediately — a true sentence with the wrong reason on it.
-     * Whether that sale should be a statutory withdrawal at all is a question about the TYPE, and it is
+     * Whether that sale should be a statutory withdrawal at all is a question about the type, and it is
      * answered where the type is.
      *
      * @throws WithdrawalWindowClosed
@@ -478,11 +482,11 @@ final readonly class ConsumerWithdrawal
      *
      * @throws SubscriptionWithdrawalUnavailable
      */
-    private function liveSubscription(Model $owner, ?MerchantScope $merchant): Subscription
+    private function liveSubscription(Model $owner, ?MerchantScope $merchant, ?string $type): Subscription
     {
         $subscription = Subscription::model()::query()
             ->forOwner($owner)
-            ->ofDefaultType()
+            ->ofType($type)
             ->forMerchant($merchant)
             ->latest('id')
             ->first();

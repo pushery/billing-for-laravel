@@ -13,7 +13,7 @@ use RuntimeException;
  *
  * A merchant who disconnects their provider account — by accident, while tidying up app connections, or
  * because a collaboration ended — is terminated here and cannot receive money. Asking to onboard them again
- * throws this rather than handing back the OLD reference with exit 0, which would give the operator output
+ * throws this rather than handing back the old reference with exit 0, which would give the operator output
  * that looks like a successful onboarding and a link to an account the provider no longer releases funds
  * through.
  *

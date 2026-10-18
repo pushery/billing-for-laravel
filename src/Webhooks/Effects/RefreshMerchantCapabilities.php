@@ -25,7 +25,7 @@ use Pushery\Billing\Models\SellerDataEscalationEpisode;
  * them, and every downstream consumer — a notice to the merchant, a subscription policy, an operator alert
  * — would fire on every one. A transition happens when something actually moved.
  *
- * Reinstatement is deliberately NOT symmetric with suspension: a terminated merchant stays terminated,
+ * Reinstatement is deliberately not symmetric with suspension: a terminated merchant stays terminated,
  * because a provider keeps reporting healthy capabilities for an account long after its owner disconnected
  * it from this platform.
  *
@@ -51,7 +51,7 @@ final readonly class RefreshMerchantCapabilities
             return;
         }
 
-        // What the PROVIDER says, on its own. The platform's own position is what this decides, so reading
+        // What the provider says, on its own. The platform's own position is what this decides, so reading
         // the combined answer here would make the decision depend on its own previous outcome.
         $providerPermits = $account->charges_enabled
             && $account->payouts_enabled

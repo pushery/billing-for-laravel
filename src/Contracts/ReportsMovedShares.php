@@ -18,7 +18,7 @@ interface ReportsMovedShares
     /**
      * The provider's current view of one transfer, or null when it has no record of that reference.
      *
-     * Null is a FINDING, not an absence. A reference in the local journal that the provider does not know is
+     * Null is a finding, not an absence. A reference in the local journal that the provider does not know is
      * the most serious disagreement of all: the package believes it paid a merchant and the provider says
      * no such payment exists.
      */

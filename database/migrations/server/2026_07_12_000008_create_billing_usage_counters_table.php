@@ -8,9 +8,9 @@ use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\BillingSchema;
 
 /**
- * The metered-usage counters, one row per owner per METER per period. Tracks used and reserved units
+ * The metered-usage counters, one row per owner per meter per period. Tracks used and reserved units
  * so a request can atomically reserve budget before running and commit or release it after. An owner
- * meters more than one thing (emails sent AND contacts stored), so the meter key is part of the
+ * meters more than one thing (emails sent and contacts stored), so the meter key is part of the
  * identity — without it the two would share a counter and each would enforce the other's limit.
  * Server-only.
  */

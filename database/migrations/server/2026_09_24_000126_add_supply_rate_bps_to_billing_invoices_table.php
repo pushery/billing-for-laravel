@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * The rate a settled supply is taxable at, whoever supplies it.
  *
- * `tax_rate_bps` is the rate a document STATES, and a settlement often states none: a small business
+ * `tax_rate_bps` is the rate a document states, and a settlement often states none: a small business
  * charges no tax, and a reverse-charged supply leaves the tax to the recipient. The supply still has a
  * rate. The recipient self-assesses a reverse charge at it, and the DATEV export picks the reduced
  * reverse-charge account from it.

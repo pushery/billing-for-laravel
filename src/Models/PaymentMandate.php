@@ -36,7 +36,7 @@ class PaymentMandate extends Model
     use Replaceable;
 
     /**
-     * The one status a mandate may be charged under. Stated as what IS chargeable rather than what is not,
+     * The one status a mandate may be charged under. Stated as what is chargeable rather than what is not,
      * so a status a provider introduces tomorrow is refused until somebody decides it may be charged —
      * the safe direction for a check that stands in front of a debit.
      */
@@ -97,7 +97,7 @@ class PaymentMandate extends Model
     /**
      * Make this the mandate the engine charges, demoting the previous one.
      *
-     * Scoped to the owner AND the provider: an install running two drivers has a default per driver, and
+     * Scoped to the owner and the provider: an install running two drivers has a default per driver, and
      * promoting one must not quietly unset the other. Both writes share a transaction, because the state
      * in between is two defaults — which is not a tie but a coin toss on the next charge, and the two may
      * be different cards.

@@ -26,7 +26,7 @@ use Pushery\Billing\Support\BillingManager;
  *
  * A second run creates no second account: the driver finds the local row first, because Stripe has no
  * notion of our merchants and could not answer "does this one already have an account". What a second run
- * does produce is a fresh LINK, and that is not a workaround — Stripe's account links are single-use and
+ * does produce is a fresh link, and that is not a workaround — Stripe's account links are single-use and
  * short-lived by design, so re-running this is the normal way to give somebody a link that still works.
  */
 final class MerchantOnboardCommand extends Command
@@ -99,10 +99,10 @@ final class MerchantOnboardCommand extends Command
     /**
      * The merchant behind the two arguments, or null with an error printed.
      *
-     * TWO arguments, and it is the schema that decides that rather than a preference: a merchant is stored
+     * Two arguments, and it is the schema that decides that rather than a preference: a merchant is stored
      * polymorphically (`merchant_type` + `merchant_id`), so this package has no single merchant class to
      * look a bare key up in. Asking for the type is the honest version of a question that has two halves —
-     * and it accepts the morph ALIAS as well as the class, because an installation with a morph map has
+     * and it accepts the morph alias as well as the class, because an installation with a morph map has
      * already decided that the alias is the name its rows go by.
      */
     private function resolveMerchant(): ?Model
@@ -153,7 +153,7 @@ final class MerchantOnboardCommand extends Command
      *
      * Falls back to the application URL rather than refusing, because the two return paths are a detail of
      * the operator's own screens and an onboarding link is useful before those screens exist. What it does
-     * NOT do is invent a path — the app root is somewhere real.
+     * not do is invent a path — the app root is somewhere real.
      */
     private function urlOption(string $name): string
     {

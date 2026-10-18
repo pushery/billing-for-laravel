@@ -19,7 +19,7 @@ use Pushery\Billing\ValueObjects\CountingPeriod;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
- * What the PLATFORM kept out of a seller's sales in a window — the third reporting figure.
+ * What the platform kept out of a seller's sales in a window — the third reporting figure.
  *
  * ## A withheld fee is not an event of its own
  *
@@ -54,7 +54,7 @@ use Pushery\Billing\ValueObjects\Money;
  * cannot be matched to its charge at all. Such a charge is placed by `settled_at`, which is what the
  * package did everywhere before.
  *
- * It is NOT dropped. A fee nobody reports is as wrong as one reported twice, and it is the quieter of the
+ * It is not dropped. A fee nobody reports is as wrong as one reported twice, and it is the quieter of the
  * two. {@see chargesPlacedByTheirMoneyIn()} makes the fallback askable, so the plausibility step can state
  * it instead of a reader discovering it while reconciling a return.
  *
@@ -62,7 +62,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * The fee comes back in whatever part the policy returned, and the ledger caps each confirmation against
  * what was still refundable at that moment — so a redelivered confirmation is stamped succeeded and moves
- * nothing. The replay reads what MOVED, never what an attempt asked for; reading the request would subtract
+ * nothing. The replay reads what moved, never what an attempt asked for; reading the request would subtract
  * a fee that was never given back.
  *
  * Floored at zero per charge, because a refund must never raise what the platform is counted as having
@@ -70,7 +70,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * ## Not derived from the other two, and that is the point
  *
- * Gross inflow minus payout is NOT the fee. It is right for a single unmixed sale at one rate and wrong for
+ * Gross inflow minus payout is not the fee. It is right for a single unmixed sale at one rate and wrong for
  * a basket that mixes rates, a sale with a flat fee component, or any period holding both — and it is wrong
  * quietly, because both inputs are correct.
  */
@@ -110,8 +110,8 @@ final readonly class WithheldFeeCounter
             $placedHere = $this->placedInside($charge, $start, $end);
 
             if ($placedHere) {
-                // `fee_minor` ONLY, and the omission is deliberate. A row can also carry
-                // `buyer_fee_*` -- what the BUYER was charged for arranging their side -- and that never
+                // `fee_minor` only, and the omission is deliberate. A row can also carry
+                // `buyer_fee_*` -- what the buyer was charged for arranging their side -- and that never
                 // touches what reaches the seller, so it can never be a deduction from their
                 // consideration. Summing "everything the platform charged on this sale" here is a
                 // one-line edit that balances perfectly and over-reports the seller in a return nobody
@@ -133,7 +133,7 @@ final readonly class WithheldFeeCounter
     }
 
     /**
-     * The charges this window placed by their MONEY because no document could place them.
+     * The charges this window placed by their money because no document could place them.
      *
      * The fallback, stated rather than assumed. A caller assembling a return asks this and reports it; the
      * figure above is correct either way, but a reader reconciling a quarter against the seller's own
@@ -205,7 +205,7 @@ final readonly class WithheldFeeCounter
                 }
 
                 $touching->orWhereExists(function (QueryBuilder $reversed) use ($start, $end): void {
-                    // Matched on the provider AND the reference. The reference alone is unique only per
+                    // Matched on the provider and the reference. The reference alone is unique only per
                     // provider, so a second processor's identical reference would attach its reversals to a
                     // stranger's charge — and there is no relation to lean on here, because the pair is a
                     // composite key rather than a foreign one.
@@ -256,10 +256,10 @@ final readonly class WithheldFeeCounter
      *
      * The ceiling is the fee itself, walked down as confirmations are applied. `completeRefund()` caps each
      * confirmation under the lock and then stamps the attempt succeeded regardless, so the row keeps the
-     * REQUESTED figure. Reading it would give back a fee that never moved.
+     * requested figure. Reading it would give back a fee that never moved.
      *
      * @param  list<RefundAttempt>  $reversals
-     * @param  ?string  $start  null when the window is the SALE's, in which case every succeeded
+     * @param  ?string  $start  null when the window is the sale's, in which case every succeeded
      *                          confirmation belongs here — including one with no completion moment
      */
     private function feeReturnedInside(MerchantCharge $charge, array $reversals, ?string $start, ?string $end): int

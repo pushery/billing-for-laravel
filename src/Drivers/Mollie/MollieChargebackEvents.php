@@ -20,7 +20,7 @@ use Throwable;
  * guard no run can enter is indistinguishable from a guard that is wrong, so the conversion is exposed
  * where a caller can hand it the shapes the type system admits.
  *
- * The event is filled the way every driver fills it: `reference` names the PAYMENT, which is what access,
+ * The event is filled the way every driver fills it: `reference` names the payment, which is what access,
  * the purchase and the documents hang on, and `disputeReference` names the chargeback, which is what keeps
  * two chargebacks on one payment apart.
  *
@@ -86,6 +86,27 @@ final readonly class MollieChargebackEvents
         }
 
         return $total;
+    }
+
+    /**
+     * The ids of the chargebacks that still stand.
+     *
+     * @param  iterable<mixed>  $chargebacks
+     * @return list<string>
+     */
+    public static function standingIds(iterable $chargebacks): array
+    {
+        $ids = [];
+
+        foreach (self::standingWithAmounts($chargebacks) as [$chargeback]) {
+            $id = MollieValue::id($chargeback->id);
+
+            if ($id !== '') {
+                $ids[] = $id;
+            }
+        }
+
+        return $ids;
     }
 
     /**

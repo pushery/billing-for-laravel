@@ -9,8 +9,8 @@ use Pushery\Billing\ValueObjects\TierIdentity;
 
 /**
  * The purchasable-plan catalog and the anti-price-injection guarantee: the client submits a tier
- * KEY, never a price id, and the server resolves the price from this allowlist. A plan is a
- * first-class local concept that MAY map to a provider price — never assume "plan == provider price".
+ * key, never a price id, and the server resolves the price from this allowlist. A plan is a
+ * first-class local concept that may map to a provider price — never assume "plan == provider price".
  */
 interface PlanCatalog
 {
@@ -23,7 +23,7 @@ interface PlanCatalog
     /**
      * Retired provider price ids that still resolve to this tier — a price rotated in the provider, a
      * grandfathered cohort. A subscription still on one of these is still on the tier. Never a price a
-     * NEW subscription may be sold at (that is always providerPriceFor()): recognition, not sale.
+     * new subscription may be sold at (that is always providerPriceFor()): recognition, not sale.
      *
      * @return list<string>
      */

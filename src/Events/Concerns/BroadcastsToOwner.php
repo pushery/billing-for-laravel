@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Config;
 
 /**
  * Shared plumbing for the account-hub broadcast events: an owner-scoped private channel and the opt-in gate.
- * The channel follows the RESOLVED billing owner (user XOR team), so one owner never receives another's
+ * The channel follows the resolved billing owner (user XOR team), so one owner never receives another's
  * stream; broadcasting is off unless it is explicitly switched on.
  */
 trait BroadcastsToOwner

@@ -8,7 +8,7 @@ namespace Pushery\Billing\Contracts;
  * The marketplace sibling of {@see PaymentRails}: everything a driver must supply before money can be
  * destined to somebody other than the platform.
  *
- * It is a SEPARATE contract rather than methods added to PaymentRails, and that is the load-bearing
+ * It is a separate contract rather than methods added to PaymentRails, and that is the load-bearing
  * decision of the whole marketplace layer. PaymentRails has implementations outside this repository —
  * a consumer registers its own driver through the public BillingManager::extend() — so a method added
  * there is a fatal error in code we do not own. A sibling contract a driver may also implement breaks

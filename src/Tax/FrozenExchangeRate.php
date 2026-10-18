@@ -60,7 +60,7 @@ final readonly class FrozenExchangeRate
         public string $toCurrency,
         /** The rate, scaled by 1e8 so it is an integer like every other figure on the money path. */
         public int $rateScaled,
-        /** The date the PUBLISHER stated for this rate — never the day it was retrieved. */
+        /** The date the publisher stated for this rate — never the day it was retrieved. */
         public CarbonImmutable $on,
         public string $source,
         public ExchangeRateBasis $basis,
@@ -87,8 +87,8 @@ final readonly class FrozenExchangeRate
      * differently — `11.0550` against `11.055`, `143.00` against `143` — so a string or hash comparison
      * raises a false alarm **between two genuine copies of the same official figure**.
      *
-     * NO PRODUCTION CALLER YET, and that is a state rather than an oversight. The consumer it was written for
-     * is the cross-check performed when a SECOND official source is imported beside the central bank's
+     * No production caller yet, and that is a state rather than an oversight. The consumer it was written for
+     * is the cross-check performed when a second official source is imported beside the central bank's
      * series — comparing the overlapping currencies between two publishers is the moment a formatting
      * difference would otherwise read as a disagreement about the rate. That importer does not exist: which
      * publisher supplies the currencies outside the central bank's series is an open question, and picking

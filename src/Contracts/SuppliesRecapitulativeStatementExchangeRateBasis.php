@@ -8,7 +8,7 @@ use Pushery\Billing\Enums\ExchangeRateBasis;
 use Pushery\Billing\Enums\ExchangeRateLayer;
 
 /**
- * A jurisdiction profile that says which conversion rule its RECAPITULATIVE STATEMENT is filed under.
+ * A jurisdiction profile that says which conversion rule its recapitulative statement is filed under.
  *
  * A contract of its own for the reason {@see SuppliesReportingExchangeRateBasis} gives: the layers do not
  * travel together. The statement is a national declaration of the reverse-charged supplies to businesses in

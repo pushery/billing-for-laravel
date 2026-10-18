@@ -19,7 +19,7 @@ use RuntimeException;
  * record — and the once-per-trial-end guarantee lives in the delivery machinery (HandleWebhookEffect claims,
  * runs and marks in one transaction), so a failed send is retried rather than lost.
  *
- * It dedups on the SUBSCRIPTION and its trial-end moment, not the delivery: the provider mints a fresh event
+ * It dedups on the subscription and its trial-end moment, not the delivery: the provider mints a fresh event
  * id for every redelivery of the same "trial will end" signal, so deduping on the event id would mail the
  * customer once per redelivery. A trial that is later extended carries a new end date and is a new reminder.
  */

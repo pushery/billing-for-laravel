@@ -13,15 +13,15 @@ use Pushery\Billing\Contracts\ReconfirmsIdentity;
 use Pushery\Billing\Livewire\AccountScreen;
 
 /**
- * Re-confirm the ACTING user's identity before an irreversible billing action (immediate cancel). What proves it
+ * Re-confirm the acting user's identity before an irreversible billing action (immediate cancel). What proves it
  * is the bound {@see ReconfirmsIdentity}: by default a password account proves its password and a passwordless
  * account (OAuth / magic-link) its account email, which a held session knows, so an application without
  * passwords binds a factor of its own.
  *
- * The attempt is per-user rate-limited (5 tries / 5 minutes) and the limiter is checked BEFORE the
+ * The attempt is per-user rate-limited (5 tries / 5 minutes) and the limiter is checked before the
  * credential is verified, so a brute-force is locked out rather than probed one attempt at a time. Only
  * a wrong credential consumes an attempt; a correct one clears the counter. The submitted credential is
- * NEVER persisted or logged — it lives only for the duration of the check.
+ * never persisted or logged — it lives only for the duration of the check.
  *
  * The using component must expose `actor()` (every {@see AccountScreen} does):
  * the identity re-confirmed is the signed-in user who clicked, not the billing owner (which may be a team).

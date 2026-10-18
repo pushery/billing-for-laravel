@@ -24,17 +24,17 @@ use RuntimeException;
  *
  * Webhook effects run inside `HandleWebhookEffect`'s `DB::transaction`, which is what makes a failed effect
  * release its dedup claim instead of leaving a marker for work nobody did. The cost of that — and it is the
- * right trade — is that an effect CANNOT make a provider call outside a transaction. Opening its own gets a
+ * right trade — is that an effect cannot make a provider call outside a transaction. Opening its own gets a
  * SAVEPOINT, not a commit, so a nested `DB::transaction` reads like the promise and is not one.
  *
  * So this effect only writes the intent. `ReverseMerchantShareForChargeback` is `ShouldQueueAfterCommit`, so
  * it is enqueued only once this transaction has actually committed: a chargeback whose effect rolled back
  * cannot leave a reversal in flight against money nobody took back.
  *
- * ## The attempt row IS the claim, and the claim is per DISPUTE
+ * ## The attempt row is the claim, and the claim is per dispute
  *
  * `beginRefund()` writes it before anything is sent and derives the provider's idempotency key from its id.
- * That key stops the provider acting twice on one attempt; it cannot stop a SECOND attempt, which gets a new
+ * That key stops the provider acting twice on one attempt; it cannot stop a second attempt, which gets a new
  * id and therefore a new key, and which the provider is right to honor.
  *
  * So what has to happen once is the effect, and the thing it happens once per is the dispute — not the
@@ -55,7 +55,7 @@ use RuntimeException;
  * that.
  *
  * It also does not issue correcting documents. `CorrectChainOnChargeback` does, and it is a separate effect
- * because it answers a question this one does not ask: WHICH legs a dispute corrects turns on the ground
+ * because it answers a question this one does not ask: which legs a dispute corrects turns on the ground
  * code, while what the merchant holds is the same either way.
  */
 final readonly class ClaimChargebackClawback implements DedupesOnReference
@@ -89,7 +89,7 @@ final readonly class ClaimChargebackClawback implements DedupesOnReference
             return;
         }
 
-        // The terms the SALE was made under. A row from before they were recorded prices a full reversal
+        // The terms the sale was made under. A row from before they were recorded prices a full reversal
         // identically under any rate -- nothing is left of the sale, so there is no remainder to price --
         // and a chargeback is always full: the network took the whole payment back.
         [$merchantClawback, $feeReturned] = $this->clawbacks->forRefund(
@@ -111,7 +111,7 @@ final readonly class ClaimChargebackClawback implements DedupesOnReference
     }
 
     /**
-     * Once per lost DISPUTE, never once per delivery of one.
+     * Once per lost dispute, never once per delivery of one.
      *
      * A charge can carry more than one dispute — only part of an order may be contested — so the charge
      * reference is too coarse to key on where the provider names the dispute, and keying on it would swallow

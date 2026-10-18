@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
- * Whether a buyer fee applies to THIS sale — the two conditions, asked together.
+ * Whether a buyer fee applies to this sale — the two conditions, asked together.
  *
  * ## Why the calculator could not answer this on its own
  *
@@ -31,7 +31,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * **The regime.** A buyer fee is the platform's own intermediation supply to the buyer — its first supply in
  * the intermediary posture. That is a fact about `intermediation` sales, and it is simply false under a
- * commission chain: there the platform IS the seller, it sells to the buyer directly, and there is no
+ * commission chain: there the platform is the seller, it sells to the buyer directly, and there is no
  * mediation to charge for. A fee booked there as intermediation revenue would invent a supply relationship
  * that does not exist.
  *
@@ -39,7 +39,7 @@ use Pushery\Billing\ValueObjects\Money;
  * from its reporting record, where a withheld fee was reported in the one regime that has none. Building
  * the same mistake on the buyer's side would have been hard to defend.
  *
- * ## Enabled in the wrong regime REFUSES — it does not quietly charge nothing
+ * ## Enabled in the wrong regime refuses — it does not quietly charge nothing
  *
  * Three outcomes were possible for that combination, and quietly charging nothing is the worst of them: the
  * switch reads as on, the developer believes they are collecting, and the first evidence otherwise is
@@ -66,7 +66,7 @@ final readonly class ChargedBuyerFee
      */
     public function on(Money $saleGross, int $taxBps, ?TaxArchetype $archetype = null): ?FeeLine
     {
-        // The developer's switch is read FIRST, and that ordering matters: an installation that never
+        // The developer's switch is read first, and that ordering matters: an installation that never
         // enabled buyer fees must not have its regime resolved, refused, or even consulted on their
         // account. Off is off, and it costs nothing.
         if (! $this->fees->isEnabled()) {
@@ -83,9 +83,9 @@ final readonly class ChargedBuyerFee
     }
 
     /**
-     * Where the mediated sale happened — the fee's place of supply, and NOT where the buyer banks.
+     * Where the mediated sale happened — the fee's place of supply, and not where the buyer banks.
      *
-     * ## Asked LAST, and that ordering is the point
+     * ## Asked last, and that ordering is the point
      *
      * You only need to know where a sale happened if you are actually charging for having mediated it. An
      * installation with fees switched off never reaches this, and neither does one whose regime has no such

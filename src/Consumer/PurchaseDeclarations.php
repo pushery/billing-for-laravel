@@ -23,8 +23,8 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  *
  * ## Why the key is minted here rather than supplied
  *
- * A declaration must be recorded BEFORE the buyer leaves for the provider — that is the whole point of it —
- * and at that moment the purchase has no reference yet. The add-on row is written by the WEBHOOK effect and
+ * A declaration must be recorded before the buyer leaves for the provider — that is the whole point of it —
+ * and at that moment the purchase has no reference yet. The add-on row is written by the webhook effect and
  * its reference comes from the provider's checkout session, so the obvious key does not exist yet.
  *
  * Two candidates, and the choice is decided:
@@ -32,13 +32,13 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  * **The package mints its own key** (this). It travels to the provider as metadata and comes back on the
  * webhook, which is how the recorded declaration is found again.
  *
- * **The caller supplies one** — their cart id, their order number. Rejected as THE key, though it is welcome
- * beside it. A declaration is a piece of EVIDENCE, and evidence whose uniqueness depends on the discipline
+ * **The caller supplies one** — their cart id, their order number. Rejected as the key, though it is welcome
+ * beside it. A declaration is a piece of evidence, and evidence whose uniqueness depends on the discipline
  * of whoever passes it is weak evidence: a reused order number silently lets last month's declaration cover
  * today's purchase, and nothing goes red. That is the same reasoning that already says the provider's own
  * hosted checkout may show the notices but may not replace this record — the proof has to be ours, entirely.
  *
- * ## What this class does NOT do
+ * ## What this class does not do
  *
  * It renders nothing. The wording of the two notices is the operator's and their adviser's, and a package
  * that shipped one would be handing every install the same legal text for a different product in a
@@ -82,7 +82,7 @@ final readonly class PurchaseDeclarations
      */
     public function assertMayCheckout(Model $owner, string $addonKey, ?string $declarationReference): void
     {
-        // No profile, no rule. This is the Mode S guarantee and it is checked FIRST, before the catalog is
+        // No profile, no rule. This is the Mode S guarantee and it is checked first, before the catalog is
         // asked anything: an install that has not opted into a consumer-rights regime must not have its
         // checkout changed, refused, or even slowed by a classification lookup it never asked for.
         if (! $this->gate->isEnforced()) {

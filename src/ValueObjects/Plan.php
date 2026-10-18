@@ -7,7 +7,7 @@ namespace Pushery\Billing\ValueObjects;
 use Pushery\Billing\Enums\BillingInterval;
 
 /**
- * A billable plan as the package defines it: a price + interval owned locally, with an OPTIONAL
+ * A billable plan as the package defines it: a price + interval owned locally, with an optional
  * mapping to a provider price. This is the "never assume plan == Stripe price id" guarantee — a
  * plan is a first-class local concept; the Stripe driver may map it to a remote price, while the
  * the local engine bills the local amount directly.

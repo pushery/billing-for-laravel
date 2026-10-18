@@ -13,14 +13,14 @@ use Pushery\Billing\Models\InvoiceRecord;
  *
  * A correction issued because the consideration would not be received is a judgment about the future, and
  * the future is allowed to disagree. When the money turns up anyway, the write-off was wrong and the tax has
- * to go back. A correction issued because the consideration was HANDED BACK can never be reopened — a
+ * to go back. A correction issued because the consideration was handed back can never be reopened — a
  * payment afterwards is a new transaction with its own document.
  *
  * The two produce identical figures in identical periods, so nothing in the amounts can tell them apart
  * afterwards. This is what the reason on the document is for, and this class is what reads it: a write-off
  * that is still provisional is an open item, and an open item nobody can list is one nobody reviews.
  *
- * Fail-closed on silence. A correction that states no reason is NOT treated as reopenable — assuming
+ * Fail-closed on silence. A correction that states no reason is not treated as reopenable — assuming
  * otherwise would put a sale back on the strength of a missing field.
  */
 final readonly class RecoveredReceivable

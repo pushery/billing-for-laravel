@@ -33,7 +33,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * denies. Nothing was red: both lanes were internally consistent, and no test compared them.
  *
  * That specific divergence was closed on its own, ahead of this pooling and deliberately so — a legal
- * misstatement is not something to hold behind a refactor. What this class removes is the CONDITION that
+ * misstatement is not something to hold behind a refactor. What this class removes is the condition that
  * produced it. One reader cannot disagree with itself.
  *
  * ## What belongs here and what does not
@@ -54,10 +54,10 @@ final readonly class MarketplaceSaleContext
         /**
          * The buyer-chosen rules, pooled here rather than taken by each lane that needs them.
          *
-         * The two methods below are DELEGATIONS and deliberately hold no logic: whether tipping is on and
+         * The two methods below are delegations and deliberately hold no logic: whether tipping is on and
          * what a tip costs are `FanChosenPricing`'s to answer, and a second reader of either would be a
          * second place the same switch can be read differently. What this class contributes is that a lane
-         * asks ONE object for the answers it would otherwise assemble for itself — the same reason the four
+         * asks one object for the answers it would otherwise assemble for itself — the same reason the four
          * readers above were pooled here, and the reason the lanes' constructors have a ratchet on them.
          */
         private FanChosenPricing $fanPricing,
@@ -69,7 +69,7 @@ final readonly class MarketplaceSaleContext
         return $this->fanPricing->tipsEnabled();
     }
 
-    /** The commission a TIP carries, which is not always the platform's ordinary one. */
+    /** The commission a tip carries, which is not always the platform's ordinary one. */
     public function tipFee(PlatformFee $normalFee): PlatformFee
     {
         return $this->fanPricing->feeForTip($normalFee);
@@ -104,7 +104,7 @@ final readonly class MarketplaceSaleContext
     /**
      * The merchant this sale routes to, or null where this installation does not route at all.
      *
-     * The switch is checked BEFORE the resolver is asked, not after. A resolver consulted on a
+     * The switch is checked before the resolver is asked, not after. A resolver consulted on a
      * non-marketplace installation would be answering a question nobody asked, and whatever it returned
      * would then have to be discarded by a caller that could just as easily forget to.
      */
@@ -150,7 +150,7 @@ final readonly class MarketplaceSaleContext
     /**
      * Refuse a charge type and a posture that cannot both be true of one sale.
      *
-     * The charge type and the posture are independent axes that must agree, and this is asked BEFORE
+     * The charge type and the posture are independent axes that must agree, and this is asked before
      * anything is assembled — the only point at which refusing is still free. Both Stripe lanes wrote this
      * line themselves, each deriving both halves from its own copy of the readers above; that is the shape
      * the divergence took, so the call moves here with them.

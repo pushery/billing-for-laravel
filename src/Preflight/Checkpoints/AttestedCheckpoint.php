@@ -20,8 +20,8 @@ use Pushery\Billing\ValueObjects\CheckpointOutcome;
  *         'registrations.oss' => ['version' => '2026-01', 'attested_at' => '2026-02-14', 'reference' => '…'],
  *     ],
  *
- * Two properties make this more than a checkbox. The DATE is mandatory: an undated confirmation is one
- * nobody can audit and nobody remembers making. And the VERSION is compared against the version the point
+ * Two properties make this more than a checkbox. The date is mandatory: an undated confirmation is one
+ * nobody can audit and nobody remembers making. And the version is compared against the version the point
  * currently requires — when a later release changes what the terms must contain, the required version moves,
  * every recorded attestation stops matching, and the point goes red until somebody re-reads and re-attests.
  * An attestation without that expiry is a tick nobody ever looks at again.
@@ -64,7 +64,7 @@ final readonly class AttestedCheckpoint implements GoLiveCheckpoint
     public function evaluate(): CheckpointOutcome
     {
         // The whole map is read and indexed by hand, never `get('…attestations.'.$key)`. A checkpoint key is
-        // dotted, and a dotted key inside a config path is read as a PATH: the lookup would descend into a
+        // dotted, and a dotted key inside a config path is read as a path: the lookup would descend into a
         // 'terms' array that does not exist and answer "nothing recorded" for every attestation there is.
         $attestations = $this->config->get('billing.marketplace.preflight.attestations', []);
         $recorded = is_array($attestations) ? ($attestations[$this->key] ?? null) : null;

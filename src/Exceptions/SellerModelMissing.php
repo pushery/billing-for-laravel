@@ -10,7 +10,7 @@ use RuntimeException;
  * A reporting period names a seller whose model cannot be found, and that is a data error rather than an
  * empty answer.
  *
- * The pair came off a SETTLEMENT DOCUMENT — money was paid against it — and the class it names still exists,
+ * The pair came off a settlement document — money was paid against it — and the class it names still exists,
  * because that is checked first and a vanished class is skipped for its own stated reason. What is left is a
  * row pointing at a record that is gone, and there is no reading under which a reporting run should carry on.
  *
@@ -19,7 +19,7 @@ use RuntimeException;
  * the one nobody notices because the report still looks complete.
  *
  * Global scopes are already taken off before this can be reached, so a soft-deleted or tenant-scoped seller
- * is NOT what lands here. A closed account still owes a return for the year it was open.
+ * is not what lands here. A closed account still owes a return for the year it was open.
  *
  * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
  * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are

@@ -9,7 +9,7 @@ use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The one-time add-on purchase ledger. A checkout session's `reference` is unique, so a webhook
- * replay credits an add-on exactly once. The credit EFFECT is project-defined; this table only
+ * replay credits an add-on exactly once. The credit effect is project-defined; this table only
  * guarantees the once-per-session record. Server-only.
  */
 return new class extends Migration

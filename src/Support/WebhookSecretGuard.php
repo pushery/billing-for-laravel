@@ -17,7 +17,7 @@ use Throwable;
  *
  * Each driver names its own failure, because the credentials are not the same thing. Stripe cannot verify
  * a webhook without its signing secret; Mollie cannot make a single API call without its key, and demanding
- * a SIGNING secret from Mollie would refuse to boot every install still on its legacy webhook generation,
+ * a signing secret from Mollie would refuse to boot every install still on its legacy webhook generation,
  * which carries no signature at all. One policy, several credentials, one place.
  *
  * The class keeps its original name so a consumer referencing it is not broken by a rename. What it guards
@@ -39,7 +39,7 @@ final class WebhookSecretGuard
      * Point out a missing credential in production without refusing to boot.
      *
      * The middle setting between "required" and "silent", and it exists for a real case rather than as a
-     * softer option: a credential that IS needed on some installs and genuinely does not exist on others,
+     * softer option: a credential that is needed on some installs and genuinely does not exist on others,
      * where nothing in the process can tell which one it is looking at. Requiring it locks out the installs
      * that are already correct; saying nothing lets the ones that need it run without it. A warning is the
      * only answer that is wrong in neither direction.
@@ -60,7 +60,7 @@ final class WebhookSecretGuard
     /**
      * Require a credential in production, or throw what the caller decides.
      *
-     * The exception arrives as a factory rather than a class name so the driver can raise its OWN, fully
+     * The exception arrives as a factory rather than a class name so the driver can raise its own, fully
      * worded failure — a missing Mollie key reported as "webhook signing not configured" would send an
      * operator to the wrong setting entirely.
      *

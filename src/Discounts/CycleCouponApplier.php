@@ -19,7 +19,7 @@ use Pushery\Billing\ValueObjects\OrderItemDraft;
  * Puts a redeemed coupon onto the cycle it discounts, as a line of its own.
  *
  * A discount that only shrinks the amount charged is invisible: the invoice shows a smaller number and
- * neither the customer nor the accounts can see WHY. So it becomes a negative line carrying the coupon's
+ * neither the customer nor the accounts can see why. So it becomes a negative line carrying the coupon's
  * code, and the order total is the sum of the lines — including this one.
  *
  * ## The order of operations, which is a decision and not an accident
@@ -35,7 +35,7 @@ use Pushery\Billing\ValueObjects\OrderItemDraft;
  * thing. A coupon sold as "three months half price" discounted every invoice for the life of the
  * subscription, and the mistake ran in the customer's favor — which is the kind nobody reports.
  *
- * The count is recorded against the PERIOD it discounted rather than incremented blindly, because pricing
+ * The count is recorded against the period it discounted rather than incremented blindly, because pricing
  * happens before the order is claimed and a claim can lose: to a concurrent run, or to an order that
  * already exists. Counting attempts instead of cycles would burn a customer's remaining months on a run
  * that billed nothing.
@@ -99,7 +99,7 @@ final readonly class CycleCouponApplier
         $reduction = $gross->minus($discount->applyTo($gross));
 
         // Not a rounding guard: any percentage of a positive gross takes at least one minor unit off, and a fixed
-        // coupon of zero describes no discount and stops in discountFrom(). It is reached by a FIXED coupon
+        // coupon of zero describes no discount and stops in discountFrom(). It is reached by a fixed coupon
         // denominated in another currency, which resolves to zero rather than being converted, since converting
         // here would invent an exchange rate on an invoice.
         if (! $reduction->isPositive()) {
@@ -125,7 +125,7 @@ final readonly class CycleCouponApplier
     /**
      * Whether this coupon still has a cycle left to give.
      *
-     * A period already counted stays eligible: re-pricing the SAME cycle must produce the same lines, or
+     * A period already counted stays eligible: re-pricing the same cycle must produce the same lines, or
      * a retried run would quietly bill the customer more than the first attempt would have.
      */
     private function stillRuns(Coupon $coupon, CouponRedemption $redemption, string $period): bool

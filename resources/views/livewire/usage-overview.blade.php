@@ -63,7 +63,7 @@
                         <p class="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">{{ __('billing::account.usage.warning') }}</p>
                     @endif
 
-                    {{-- Burn rate and reach, and ONLY when the provider supplied both. The package does not
+                    {{-- Burn rate and reach, and only when the provider supplied both. The package does not
                          compute them: a rate needs history this snapshot does not carry, and "per day" is a
                          claim about a project's own counting (a mid-period reset, a backfilled import, a
                          meter that skips weekends each give a different honest answer). `hasForecast()`

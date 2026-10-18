@@ -10,12 +10,12 @@ namespace Pushery\Billing\ValueObjects;
  * ## Why a finding rather than an exception
  *
  * The parts this checks already refuse: {@see SellerReportingLine::reportable()} throws on a line nobody
- * classified, and it is right to. But a refusal answers ONE question and stops — so an operator preparing
+ * classified, and it is right to. But a refusal answers one question and stops — so an operator preparing
  * a filing learns about the first problem, fixes it, runs again, and learns about the second. With a
  * deadline in January and a hundred sellers, that is the whole month.
  *
  * A finding is the same fact with the stopping taken out: every rule runs, every problem is named, and the
- * run refuses ONCE at the end with the full list.
+ * run refuses once at the end with the full list.
  *
  * ## The identity, and why the message is not part of it
  *
@@ -24,7 +24,7 @@ namespace Pushery\Billing\ValueObjects;
  * mismatch of 1.19 would leave the same mismatch acknowledged at 1.20 unnoticed — or, the other way
  * round, an acknowledgement would evaporate because a number was restated.
  *
- * The identity deliberately carries NO period. The store adds one, because an acknowledgement that
+ * The identity deliberately carries no period. The store adds one, because an acknowledgement that
  * outlived its period would be a switched-off rule with a timestamp in front of it.
  */
 final readonly class PlausibilityFinding

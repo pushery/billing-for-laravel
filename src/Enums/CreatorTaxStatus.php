@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Enums;
 
 /**
- * A creator's tax standing, as it affects the INPUT side of a routed sale — the supply from them to the
+ * A creator's tax standing, as it affects the input side of a routed sale — the supply from them to the
  * platform.
  *
  * It never touches the output side. A personal attribute of one party in a chain applies to that party's
@@ -29,7 +29,7 @@ enum CreatorTaxStatus: string
      *
      * This case exists to resolve a collision, not to describe a nuance. A creator who crosses the
      * small-business threshold becomes taxable on the very transaction that crossed it — while the hardest
-     * guard in the system permits a document to STATE tax only for a creator the registry has confirmed.
+     * guard in the system permits a document to state tax only for a creator the registry has confirmed.
      * A creator who was a small business until that moment typically holds no registration at all, and
      * obtaining one takes weeks.
      *
@@ -39,7 +39,7 @@ enum CreatorTaxStatus: string
      * who did nothing wrong, and it borrows the fail-safe meant for a standing nobody has established.
      *
      * So the transition gets its own state, and it separates two things that were being conflated: the
-     * supply is taxable immediately, and the DOCUMENT that states the tax waits. The money the creator
+     * supply is taxable immediately, and the document that states the tax waits. The money the creator
      * earned is not what is uncertain, so it flows; the tax statement is, so it queues. Selling continues
      * throughout — nothing about this creator is in doubt except a registry's turnaround.
      */
@@ -68,7 +68,7 @@ enum CreatorTaxStatus: string
     case Unclarified = 'unclarified';
 
     /**
-     * Whether a document about this creator must WITHHOLD its tax statement pending an external check.
+     * Whether a document about this creator must withhold its tax statement pending an external check.
      *
      * Deliberately not the same question as whether the supply is taxable. Conflating the two is what
      * produced the collision this enum's transitional case exists to resolve: a supply can be taxable while

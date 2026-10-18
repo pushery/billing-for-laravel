@@ -7,12 +7,12 @@ namespace Pushery\Billing\Drivers\Mollie;
 use Mollie\Api\Webhooks\WebhookEventType;
 
 /**
- * What this package has DECIDED about each of Mollie's next-generation webhook event types.
+ * What this package has decided about each of Mollie's next-generation webhook event types.
  *
  * ## Why a decision list and not an adoption list
  *
  * Mollie's next-generation channel carries dozens of event types. The `payment.*` family names a payment,
- * which the mapper fetches and maps the way it maps the classic ping, so it is ACTED ON whether or not the
+ * which the mapper fetches and maps the way it maps the classic ping, so it is acted on whether or not the
  * installed SDK lists the type yet. Most of the rest produce nothing here. A warning that a delivery "named
  * a resource that is not a payment" is right for a type nobody has considered, and for a type somebody chose
  * not to act on it is a false alarm on every single delivery. A warning that fires on the ordinary case is a
@@ -23,17 +23,17 @@ use Mollie\Api\Webhooks\WebhookEventType;
  * | | |
  * |---|---|
  * | **acted on** | produces domain events |
- * | **decided against** | produces nothing, SILENTLY, because a person looked at it and said no |
- * | **unclassified** | produces nothing and WARNS — Mollie added a type nobody here has considered |
+ * | **decided against** | produces nothing, silently, because a person looked at it and said no |
+ * | **unclassified** | produces nothing and warns — Mollie added a type nobody here has considered |
  *
  * The same shape the payment-status handling next door already uses, and for the same reason: silence by
  * decision and silence by oversight look identical from the outside, so only one of them may be quiet.
  *
- * ## The list is DERIVED
+ * ## The list is derived
  *
  * `WebhookEventType::getAll()` is the SDK's own list, so a type Mollie adds shows up here as
  * *unclassified* the day the SDK ships it, rather than matching a hand-copied literal that nobody updated.
- * What is typed below is only the DECISION — which is the part a person actually made.
+ * What is typed below is only the decision — which is the part a person actually made.
  */
 final class MollieNextGenEventTypes
 {
@@ -56,7 +56,7 @@ final class MollieNextGenEventTypes
         'balance-transaction' => 'a balance movement is the aggregate of things already recorded',
         'payment-link' => 'a payment link is a checkout this package does not create',
 
-        // NOT a permanent no. The SDK ships no dispute resource and no dispute endpoint, so the only source
+        // Not a permanent no. The SDK ships no dispute resource and no dispute endpoint, so the only source
         // of a dispute's data is the entity Mollie may embed in the delivery — a shape nothing here can
         // verify against. And the money direction is a clawback: a `ChargebackReceived` raised from an
         // unverified payload would double-book against the ones already derived from a payment's own

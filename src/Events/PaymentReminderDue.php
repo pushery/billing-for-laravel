@@ -18,7 +18,7 @@ use Pushery\Billing\ValueObjects\ArrearsEntry;
  * consumer talks to their customers — mail, in-app, push, or a support queue — and picking one would make
  * the package a notification product. The consumer listens and decides.
  *
- * ## What a listener MUST put in the message
+ * ## What a listener must put in the message
  *
  * Which relationship, and which merchant it is with. A customer holding five subscriptions cannot act on
  * "your payment is outstanding" — they do not know which one, and the message creates the support contact it
@@ -27,11 +27,11 @@ use Pushery\Billing\ValueObjects\ArrearsEntry;
  * ## `$subscription` is nullable, and when it is null
  *
  * When the application has bound its own {@see ArrearsRoster}, because then
- * there IS no row in this package's table — that is the reason the roster seam exists. On the shipped
+ * there is no row in this package's table — that is the reason the roster seam exists. On the shipped
  * roster it is always present, so a listener written before the seam keeps working untouched; one written
  * against a custom roster reads `$entry` instead.
  *
- * And the message is not a warning that access is at risk: access is ALREADY withdrawn for this merchant.
+ * And the message is not a warning that access is at risk: access is already withdrawn for this merchant.
  * Arrears withdraw the relationship's surfaces immediately, and the window that follows is a chance to cure,
  * not a grace period. A listener that writes "your access may be suspended" describes a state that has
  * already passed.

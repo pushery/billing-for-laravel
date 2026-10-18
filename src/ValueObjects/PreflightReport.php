@@ -9,7 +9,7 @@ use Pushery\Billing\Enums\GoLiveStep;
 /**
  * The result of one preflight run: every registered point, in checklist order, with its verdict.
  *
- * It also records which steps had NO points at all. That is not a detail: a stage printed as passed because
+ * It also records which steps had no points at all. That is not a detail: a stage printed as passed because
  * nothing was registered for it is a gate arm that cannot fire, and an arm that cannot fire reads exactly
  * like a check that passed. Keeping the empty stages nameable lets the report say "nothing is registered
  * here" in words instead of implying an all-clear.

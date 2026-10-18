@@ -9,15 +9,15 @@ use Pushery\Billing\Enums\VatIdValidation;
 /**
  * Checks a merchant's small-business registration against the register that issued it.
  *
- * A SEPARATE contract from the ordinary tax-registration check, and separate on purpose: two registers,
+ * A separate contract from the ordinary tax-registration check, and separate on purpose: two registers,
  * two different consequences. A verified business registration means the buyer accounts for the tax; a
  * verified small-business registration means there is no tax to account for at all. One class answering
  * both would blur exactly the distinction that decides which of those two happens.
  *
- * The result is three-valued for the same reason it is on the other check — but the CONSERVATIVE DIRECTION
- * IS INVERTED HERE, and copying the caller logic across is the mistake this docblock exists to prevent.
+ * The result is three-valued for the same reason it is on the other check — but the conservative direction
+ * is inverted here, and copying the caller logic across is the mistake this docblock exists to prevent.
  * On the paying side, an unreachable register means "do not zero-rate, charge the tax": never charge too
- * little. On this side, an unreachable register means HOLD: a merchant treated as an ordinary business
+ * little. On this side, an unreachable register means hold: a merchant treated as an ordinary business
  * while the register is down gets the wrong settlement document and a tax charge they do not owe.
  */
 interface SmallBusinessIdValidator
@@ -36,7 +36,7 @@ interface SmallBusinessIdValidator
      * correctly working fail-closed gate.
      *
      * It is not a hypothetical risk, because the two numbers do not have the same shape. The exemption
-     * number is the member state's OWN identifier for that business with a suffix appended, and each
+     * number is the member state's own identifier for that business with a suffix appended, and each
      * member state decides what its own identifier looks like. There is no pattern to match: a regex
      * derived from the other register is a guess about twenty-seven national formats at once, and every
      * one it guesses wrong is a permanent, invisible hold.

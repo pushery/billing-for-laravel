@@ -24,13 +24,13 @@ use Throwable;
  *
  * ## Why the flags come from the row and the requirements from the provider
  *
- * The three flags are a SNAPSHOT kept current by the provider's account event, and they are what every
+ * The three flags are a snapshot kept current by the provider's account event, and they are what every
  * routing decision reads — printing a live copy here would show a different answer from the one the money
  * paths use, which is worse than showing a slightly older one. The outstanding requirements are the
  * opposite case: they change every time the merchant touches the provider's form, nothing routes on them,
  * and the local row has never carried them. So each is read where it is true.
  *
- * The live half is also OPTIONAL, through {@see ReportsOnboardingRequirements}. A driver that cannot
+ * The live half is also optional, through {@see ReportsOnboardingRequirements}. A driver that cannot
  * answer it still gets the whole flag table rather than an error, because "which of my merchants can take
  * money" is the more important of the two questions and it does not depend on the provider being reachable.
  */
@@ -81,7 +81,7 @@ final class MerchantStatusCommand extends Command
                 $this->mark($reference->payoutsEnabled),
                 $this->mark($reference->detailsSubmitted),
                 $this->outstanding($manager, $account),
-                // WHEN we last heard, beside WHAT we heard. The pair is the whole diagnosis: three `false`
+                // When we last heard, beside what we heard. The pair is the whole diagnosis: three `false`
                 // with a stamp means the provider was asked and said no; three `false` with `never` means
                 // nobody has ever told us anything, which is the shape a lost webhook leaves and is fixed
                 // by `billing:merchant:refresh` rather than by waiting.
@@ -102,7 +102,7 @@ final class MerchantStatusCommand extends Command
             return self::SUCCESS;
         }
 
-        // SUCCESS even with blocked accounts, and deliberately: a merchant part-way through the provider's
+        // Success even with blocked accounts, and deliberately: a merchant part-way through the provider's
         // form is the normal state of an onboarding funnel, not a fault in this installation. A non-zero
         // exit here would make the command unusable in the deploy check where somebody would first reach
         // for it, and would train people to ignore it.
@@ -143,7 +143,7 @@ final class MerchantStatusCommand extends Command
     /**
      * What the provider is still waiting for on this account, as one readable cell.
      *
-     * Failures here are reported IN THE CELL rather than thrown, because the flags in the same row are
+     * Failures here are reported in the cell rather than thrown, because the flags in the same row are
      * already useful and a provider that is unreachable must not cost the whole table. An outage is a fact
      * about today, not about the merchant.
      */
@@ -178,7 +178,7 @@ final class MerchantStatusCommand extends Command
         }
 
         if ($outstanding['disabled_reason'] !== null) {
-            // Printed FIRST when present, because it is the one answer that no amount of paperwork changes.
+            // Printed first when present, because it is the one answer that no amount of paperwork changes.
             // A list of documents beside it would read as "do these and you are done", which it is not.
             return '<fg=red>'.$outstanding['disabled_reason'].'</>';
         }

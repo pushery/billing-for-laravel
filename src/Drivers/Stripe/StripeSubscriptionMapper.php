@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 /**
  * Turns one raw Stripe subscription object into the neutral SubscriptionStateChanged event the plan-sync
  * effect acts on. This is shared ground: a webhook delivers the object, and the post-checkout reconcile
- * pulls the same object off the API — both must collapse the status and resolve the tier by the SAME
+ * pulls the same object off the API — both must collapse the status and resolve the tier by the same
  * rules, or the redirect and the webhook would disagree about what a customer is on.
  *
  * The tier is read from whichever item carries a configured tier price (never data[0] blindly — a
@@ -45,7 +45,7 @@ final readonly class StripeSubscriptionMapper
             return null;
         }
 
-        // The tier is resolved against the FIRING merchant's catalog, so a connected-account webhook reads
+        // The tier is resolved against the firing merchant's catalog, so a connected-account webhook reads
         // the creator's tiers and never the platform's. A null merchant reads the platform catalog, byte-for-
         // byte the single-seller behavior.
         $index = $this->indexes->for($merchant);
@@ -89,7 +89,7 @@ final readonly class StripeSubscriptionMapper
     }
 
     /**
-     * WHICH contract of this owner at this merchant the subscription is, or null for the default one.
+     * Which contract of this owner at this merchant the subscription is, or null for the default one.
      *
      * Read off the same `metadata` the withdrawal key travels in, and for the same reason: it is the only
      * field that lands on the subscription object and stays there for every later event about it. Without it
@@ -114,7 +114,7 @@ final readonly class StripeSubscriptionMapper
      *
      * Read off the same `metadata` the other two travel in, for the same reason: it is the only field that
      * lands on the subscription object and stays there for every later event about it. That property is what
-     * makes this usable for a SUBSCRIPTION at all — the subscription reference does not exist yet when the
+     * makes this usable for a subscription at all — the subscription reference does not exist yet when the
      * session is opened, so a consumer opening a checkout has nothing else to correlate on.
      *
      * An empty value is no key rather than a key named "": a lookup on the empty string finds nothing and
@@ -149,7 +149,7 @@ final readonly class StripeSubscriptionMapper
 
     /**
      * The subscription's current cycle. Stripe moved `current_period_start`/`_end` off the subscription
-     * and onto each ITEM, so the tier item is where the cycle we bill usage into lives; the subscription
+     * and onto each item, so the tier item is where the cycle we bill usage into lives; the subscription
      * root is read as a fallback for an older API version.
      *
      * @param  array<array-key, mixed>  $subscription
@@ -215,10 +215,10 @@ final readonly class StripeSubscriptionMapper
     {
         $status = $this->string($subscription, 'status');
 
-        // A paused subscription is checked FIRST, and it is checked on `pause_collection` — not on the
+        // A paused subscription is checked first, and it is checked on `pause_collection` — not on the
         // status. Stripe leaves the status `active` when collection is paused, so a pause taken in the
         // hosted portal (which this package links) would otherwise read as a paying customer: they keep
-        // the paid tier while Stripe raises no invoices. Free, forever. The `paused` STATUS is a
+        // the paid tier while Stripe raises no invoices. Free, forever. The `paused` status is a
         // different thing (a trial that ended with no payment method) and lands here too — same truth:
         // nothing is being billed.
         if (is_array($subscription['pause_collection'] ?? null) || $status === 'paused') {
@@ -263,14 +263,14 @@ final readonly class StripeSubscriptionMapper
     }
 
     /**
-     * The LOCAL code of a MINTED merchant coupon the provider applied to this subscription, or null.
+     * The local code of a minted merchant coupon the provider applied to this subscription, or null.
      *
      * Read off the coupon's own `metadata`, where {@see StripePlatformCouponProvisioner} writes
      * `billing_coupon_code` when it mints. So the mapping back is one the package laid down itself on the
      * way out -- no query of ours, and no rebuilding a local row from a provider id.
      *
-     * THE NULL IS AS MEANINGFUL AS THE VALUE, and that is why this reads metadata rather than the coupon id.
-     * A CATALOG coupon (`billing.coupons.<code>.stripe_coupon`) was created by a human at the provider, with
+     * The null is as meaningful as the value, and that is why this reads metadata rather than the coupon id.
+     * A catalog coupon (`billing.coupons.<code>.stripe_coupon`) was created by a human at the provider, with
      * the provider's own max_redemptions, so the provider is the authority there and a consumer has nothing
      * to book. Such a coupon carries no `billing_coupon_code`, so it answers null -- correctly. Keying on the
      * id would have made both look alike and invited a consumer to book a redemption nobody is counting.

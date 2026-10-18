@@ -22,7 +22,7 @@ use Throwable;
  * webhook payload is never expanded, so the invoice has to be fetched again asking for it.
  *
  * The SDK cannot answer this, and reading it as though it could is the trap: its `@param` blocks describe
- * what may be SENT when creating an invoice, not what comes back, and code written against them expects a
+ * what may be sent when creating an invoice, not what comes back, and code written against them expects a
  * payload Stripe never sends.
  *
  * So: **invoice (expanded) → payment intent → subscription**. Three calls, and each buys something the one
@@ -31,7 +31,7 @@ use Throwable;
  * 1. the invoice, expanded, is the only way to the payment intent's id;
  * 2. the payment intent carries `application_fee_amount` and `transfer_data.destination` — the money and
  *    the recipient, which the invoice object itself does not have;
- * 3. the subscription carries `application_fee_percent` — the TERMS, which a partial clawback needs and
+ * 3. the subscription carries `application_fee_percent` — the terms, which a partial clawback needs and
  *    which cannot be recovered from the amounts without inventing a rounding rule.
  *
  * Three calls on a queued webhook effect cost queue time, never response time: the effects run through
@@ -40,7 +40,7 @@ use Throwable;
  * ## A permanent failure answers null; a retryable one is rethrown
  *
  * A missing intent, a refused call, an invoice that was never routed: all answer null, and the caller turns
- * that into a refusal to mark the event done. That is the whole reason this lane READS instead of computing
+ * that into a refusal to mark the event done. That is the whole reason this lane reads instead of computing
  * — a failed read is an event somebody sees, while a computed commission that drifts is a plausible number
  * in a money ledger that nobody ever questions.
  *
@@ -177,7 +177,7 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
         try {
             $percent = $this->stripe->subscriptions->retrieve($subscription)->toArray()['application_fee_percent'] ?? null;
         } catch (RateLimitException $exception) {
-            // Rethrown for a sharper reason than the call above. A throttled TERMS lookup that answered null
+            // Rethrown for a sharper reason than the call above. A throttled terms lookup that answered null
             // would write a row with no rate on it -- and null there means "unknown", so a later partial
             // clawback refuses. A retryable failure would have quietly cost the row its terms forever.
             throw $exception;

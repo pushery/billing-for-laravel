@@ -8,24 +8,24 @@ use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
 
 /**
- * When a platform asks a seller to declare their standing. A platform's OWN setting, and nothing more.
+ * When a platform asks a seller to declare their standing. A platform's own setting, and nothing more.
  *
- * It fires when EITHER measure is reached and it is meant to be early: asking somebody a question a little
+ * It fires when either measure is reached and it is meant to be early: asking somebody a question a little
  * sooner than strictly necessary costs nothing, so the operator is free to move it wherever they like.
  *
- * ## What deliberately does NOT live here
+ * ## What deliberately does not live here
  *
- * Whether a seller's data is exempt from the REPORTING DUTY is a different question with a different
+ * Whether a seller's data is exempt from the reporting duty is a different question with a different
  * authority behind it — set by law, not by preference — and it is answered in one place only, the
  * jurisdiction's reporting profile ({@see GermanReportingProfile}).
  *
- * Answered here, it would read the SAME two config keys as the declaration below, so a platform asking for
+ * Answered here, it would read the same two config keys as the declaration below, so a platform asking for
  * declarations earlier would move the statutory exemption with the same switch: in the over-reporting
  * direction, and silently. Reporting data that need not be reported is an incorrect report in its own right
  * and a data protection breach besides, so that direction is not the cautious one.
  *
  * With the shipped defaults the two questions agree at the money figure: the declaration fires at it, and
- * the statutory exemption, which only covers LESS than the figure, no longer holds there. That agreement is
+ * the statutory exemption, which only covers less than the figure, no longer holds there. That agreement is
  * where the German statute draws its line, not a shared rule, which is why they stay in separate classes
  * reading separate keys. Moving one must never move the other. Pinned by DeMinimisBoundaryHasOneHomeTest.
  */
@@ -36,7 +36,7 @@ final readonly class SellerActivityThreshold
     /**
      * Whether this seller must now declare their standing.
      *
-     * EITHER measure is enough. The test is activity, not intent: somebody who sells regularly is trading
+     * Either measure is enough. The test is activity, not intent: somebody who sells regularly is trading
      * whether or not they make anything on it, so a threshold built around "are they trying to profit"
      * would ask the wrong question entirely.
      */

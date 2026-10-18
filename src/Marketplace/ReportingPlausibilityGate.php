@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\PlausibilityFinding;
 use Pushery\Billing\ValueObjects\SellerPeriodReport;
 
 /**
- * The § 18 check, as a step of its own that runs BEFORE anything is produced.
+ * The § 18 check, as a step of its own that runs before anything is produced.
  *
  * ## Why a step rather than validation inside the export
  *
@@ -31,7 +31,7 @@ use Pushery\Billing\ValueObjects\SellerPeriodReport;
  *
  * ## What an acknowledgement is and is not
  *
- * It clears ONE finding, in ONE period, with a reason and a name attached. It does not switch a rule off:
+ * It clears one finding, in one period, with a reason and a name attached. It does not switch a rule off:
  * the same finding next year has a different key, so nobody inherits last year's judgment. That is the
  * property {@see ReportingFindingAcknowledgement} exists to hold, and the reason the period is in its
  * unique key rather than merely stored beside it.
@@ -87,7 +87,7 @@ final readonly class ReportingPlausibilityGate
     /**
      * Refuse the period unless every finding has been resolved or answered.
      *
-     * The one call an export makes, and it makes it FIRST. Named as an assertion rather than as a predicate
+     * The one call an export makes, and it makes it first. Named as an assertion rather than as a predicate
      * on purpose: a boolean invites a caller to look at it and carry on, and the whole point of the step is
      * that carrying on is not one of the options.
      *

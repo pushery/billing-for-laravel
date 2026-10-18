@@ -34,7 +34,7 @@ interface SeatBilling
     /**
      * Set the billed seat quantity, prorating the change unless told otherwise.
      *
-     * MUST refuse — loudly — to set a quantity below the owner's occupied seat count: billing below what is
+     * Must refuse — loudly — to set a quantity below the owner's occupied seat count: billing below what is
      * occupied is a silent oversell. See {@see SeatDowngradeBelowOccupied}.
      */
     public function updateSeatQuantity(Model $owner, int $quantity, bool $prorate = true): void;

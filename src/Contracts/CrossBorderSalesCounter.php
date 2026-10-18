@@ -9,7 +9,7 @@ use Pushery\Billing\ValueObjects\Money;
 /**
  * How much a seller sold across a border to consumers in one calendar year.
  *
- * ONE pot, not one per country. A threshold that applied per destination would be a different rule with the
+ * One pot, not one per country. A threshold that applied per destination would be a different rule with the
  * same number, and a seller who spread the same turnover over five countries would stay under it forever
  * while owing tax in all five. The pot is the whole point of the threshold it feeds.
  *

@@ -21,7 +21,7 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * Blocks an owner whose payment has failed (a hard-dunning `past_due`/`incomplete` state) from a
  * surface — `->middleware('billing.dunning')` — and sends them somewhere they can fix it.
  *
- * The response mirrors Laravel's own auth middleware: a browser request is REDIRECTED to the payment
+ * The response mirrors Laravel's own auth middleware: a browser request is redirected to the payment
  * recovery screen (so the customer lands on the "update your card" page, not a dead error), while an
  * API / JSON request gets an HTTP 402 (Payment Required) it can react to. The recovery screen itself is
  * never blocked — otherwise the redirect would loop the customer away from the one page that unblocks

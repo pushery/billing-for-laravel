@@ -26,7 +26,7 @@ use Pushery\Billing\ValueObjects\TaxContext;
  * and its reference since the classification gate landed, and no caller ever supplied a voluntary one.
  *
  * The missing piece was never arithmetic. It was the seam that puts those three in a row, in the one order
- * that is correct — decide the tax from what the tip was paid ON, price at the rate that decision returns,
+ * that is correct — decide the tax from what the tip was paid on, price at the rate that decision returns,
  * then charge through the single path that reaches the provider.
  *
  * ## Why the money is derived once, here and no earlier
@@ -34,7 +34,7 @@ use Pushery\Billing\ValueObjects\TaxContext;
  * `FanChosenPricing` returns a priced sale, and it is tempting to hand that split to the charge. It is not
  * handed on. `RoutedPayment::charge()` derives the commission itself, from the same `Money::baseFromMarkup`
  * and the same `PlatformFee` — so passing a second copy would create two answers to one question with only
- * the second one stored. The pricing class is asked for its RULES (is tipping on, what rate does a tip
+ * the second one stored. The pricing class is asked for its rules (is tipping on, what rate does a tip
  * carry, is this above the floor) and the charge is asked for the money. A preview for a screen is a
  * separate call, made where the screen is, and it agrees because it reads the same rate from the same place.
  *
@@ -42,7 +42,7 @@ use Pushery\Billing\ValueObjects\TaxContext;
  *
  * A zero amount, before the provider — a fan who leaves the tip box empty is the ordinary way to get there,
  * and a zero sale is a provider call, a charge row, an earnings figure and a line in a tax return, all
- * describing a sale nobody made. A pay-what-you-want price below the operator's floor, on the SERVER,
+ * describing a sale nobody made. A pay-what-you-want price below the operator's floor, on the server,
  * because a buyer-chosen price is the one place this package's stance against price injection would
  * otherwise lapse. And a tip that does not say what it was paid on, which is refused further down by the
  * tax decision itself: a tip on commissioned work and a tip on a download are placed in different countries,
@@ -61,7 +61,7 @@ final readonly class FanPayment
      *
      * @param  Money  $chosen  the gross amount the fan chose to give, tax included
      * @param  PlatformFee  $normalFee  the platform's ordinary commission; a configured tip rate overrides it
-     * @param  TaxArchetype  $soldAlongside  what the tip was paid ON — required, because a tip has no
+     * @param  TaxArchetype  $soldAlongside  what the tip was paid on — required, because a tip has no
      *                                       treatment of its own
      *
      * @throws FanPriceTooLow when the chosen amount is below the configured floor
@@ -84,7 +84,7 @@ final readonly class FanPayment
             return null;
         }
 
-        // The tax FIRST, because its rate is what the commission is then taken on — and because this is
+        // The tax first, because its rate is what the commission is then taken on — and because this is
         // where a tip stops being a tip and becomes whatever it was paid alongside.
         $facts = $this->taxes->decideOnGross(
             TaxArchetype::Tip,
@@ -116,7 +116,7 @@ final readonly class FanPayment
     /**
      * Charge a pay-what-you-want sale, or return null when nothing was chosen.
      *
-     * Unlike a tip this IS the product being sold, so it carries the product's own archetype and needs no
+     * Unlike a tip this is the product being sold, so it carries the product's own archetype and needs no
      * reference. The floor is the only thing that separates it from an ordinary sale priced backwards.
      *
      * @param  Money  $chosen  the gross price the fan chose, tax included

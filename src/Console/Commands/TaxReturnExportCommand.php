@@ -32,7 +32,7 @@ use Pushery\Billing\ValueObjects\ReportingPeriod;
  * correction that vanishes is indistinguishable from one that was never owed, and the person filing would
  * have no way to know a figure was left out.
  *
- * EVERY run is recorded, including one that only prints. The record says when a file was produced, not that
+ * Every run is recorded, including one that only prints. The record says when a file was produced, not that
  * anybody filed it — and a preview piped into a file and filed from there is exactly the case that would
  * otherwise leave no trace at all. Rows are cheap; a quarter whose figures nobody can reconstruct is not.
  */

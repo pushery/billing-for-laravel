@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\URL;
 
 /**
  * The account-hub navigation renderer: it turns the flat, config-driven `billing.navigation` map into the
- * GROUPED, render-ready sidebar structure the shell draws, and supplies the typed document title.
+ * grouped, render-ready sidebar structure the shell draws, and supplies the typed document title.
  *
  * Config is the single source of truth (the same map {@see \Pushery\Billing\Support\Navigation} reads), so a
  * consumer adds, reorders, regroups or removes hub sections from config alone — the package never hard-codes a
@@ -25,7 +25,7 @@ use Illuminate\Support\Facades\URL;
  * An item is only surfaced when its route is actually registered (`Route::has`), so a section the consumer's
  * app has not built yet stays hidden instead of throwing; a `web_only` item is additionally hidden when the
  * runtime is native (config `billing.runtime`), for flows an app store forbids in-app. Item labels and group
- * labels are returned as i18n KEYS for the view to translate (matching the existing nav rendering);
+ * labels are returned as i18n keys for the view to translate (matching the existing nav rendering);
  * `activeTitle()` returns the already-translated label of the active item because a document title is used
  * as a raw string.
  */

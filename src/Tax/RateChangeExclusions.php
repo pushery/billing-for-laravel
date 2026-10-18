@@ -27,7 +27,7 @@ namespace Pushery\Billing\Tax;
  * Because "the automation does not do that" is a claim, and claims that live only in prose stop being true
  * without anybody noticing. Here it can be asserted.
  *
- * ## The dry run is REQUIRED of the caller — this package does not enforce it
+ * ## The dry run is required of the caller — this package does not enforce it
  *
  * The inherited guidance makes a dry run mandatory before a bulk rate change is applied, and the reason is
  * the same asymmetry the exclusion list rests on: finding out afterwards costs more than looking first.
@@ -42,7 +42,7 @@ namespace Pushery\Billing\Tax;
  * than silence. So it says what it is: an instruction to the caller, in the one place the caller already
  * reads to learn what the automation must skip.
  *
- * `mayTouch()` stays a method because it is the other kind of thing entirely — it ANSWERS a question,
+ * `mayTouch()` stays a method because it is the other kind of thing entirely — it answers a question,
  * about a specific record kind, and a caller cannot work out the answer without it.
  */
 final readonly class RateChangeExclusions

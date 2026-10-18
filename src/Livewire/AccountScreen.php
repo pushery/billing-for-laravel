@@ -45,15 +45,15 @@ abstract class AccountScreen extends Component
     }
 
     /**
-     * The signed-in actor — the specific user who clicked, which is NOT the owner when billing is
+     * The signed-in actor — the specific user who clicked, which is not the owner when billing is
      * team-owned. Audit rows record both, so the trail says "Ada canceled the team's plan", not "the team
      * canceled itself".
      */
     protected function actor(): Model
     {
-        // The same fail-closed check owner() makes, and it is NOT redundant with it. audit() resolves
+        // The same fail-closed check owner() makes, and it is not redundant with it. audit() resolves
         // owner() first in one argument list, so on that path this branch is indeed already refused —
-        // but ConfirmsIdentity::confirmIdentity() calls actor() on its own, at the START of the
+        // but ConfirmsIdentity::confirmIdentity() calls actor() on its own, at the start of the
         // irreversible actions, before any owner() lookup. A Livewire action is its own request, so a
         // session that ends between the mount and the click arrives exactly there.
         $actor = Auth::user();
@@ -120,7 +120,7 @@ abstract class AccountScreen extends Component
     }
 
     /**
-     * Whether there is a PROVIDER subscription to mutate — the honest test for "can this owner swap?".
+     * Whether there is a provider subscription to mutate — the honest test for "can this owner swap?".
      * Keyed on the provider reference, not the tier column: an owner may sit on a tier (a comp, a
      * column set by hand) with no subscription at Stripe, and swapping one that does not exist 500s.
      */
@@ -151,7 +151,7 @@ abstract class AccountScreen extends Component
      */
     protected function view(string $name, array $data = []): View
     {
-        // Fail-closed backstop on EVERY screen render: no account-hub screen renders for an
+        // Fail-closed backstop on every screen render: no account-hub screen renders for an
         // unauthenticated visitor, even one (like DangerZone) whose render does not otherwise resolve the
         // owner, and even if a route were ever mounted without the auth middleware. owner()/actor() enforce
         // the same on data access; centralizing it here means a new screen inherits the guard automatically.
@@ -161,7 +161,7 @@ abstract class AccountScreen extends Component
 
         $layout = Container::getInstance()->make(Repository::class)->get('account.layout', 'billing::layouts.account');
 
-        // The factory is DOCUMENTED as returning the View CONTRACT, but the object it really hands back is
+        // The factory is documented as returning the View contract, but the object it really hands back is
         // the concrete Illuminate\View\View -- and that concrete class is where Livewire registers
         // ->layout() as a macro (SupportPageComponents). So the concrete type is named here: the contract
         // genuinely does not carry the method, and nothing else in the chain reveals which class does.

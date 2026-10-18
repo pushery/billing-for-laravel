@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Events;
 
 /**
- * The PROVIDER reversed a transfer this platform did not ask it to reverse.
+ * The provider reversed a transfer this platform did not ask it to reverse.
  *
  * ## Why this event has to exist
  *
@@ -17,7 +17,7 @@ namespace Pushery\Billing\Events;
  *
  * ## Cumulative, not incremental, and that is the whole idempotency story
  *
- * `amountReversedMinor` is what the provider says has been reversed IN TOTAL for this transfer, which is
+ * `amountReversedMinor` is what the provider says has been reversed in total for this transfer, which is
  * what the event carries. Recorded as an absolute figure, a redelivery — the ordinary case, not the exotic
  * one — writes the same number twice and changes nothing, while a second, larger reversal is followed
  * correctly. An incremental reading would need a dedup table to be safe and would still be wrong for the
@@ -34,7 +34,7 @@ final readonly class MerchantTransferReversedByProvider implements BillingDomain
         public string $provider,
         /** The provider's id for the transfer, which is what attributes it to a recorded sale. */
         public string $transferReference,
-        /** The provider's CUMULATIVE reversed amount for that transfer, in minor units. */
+        /** The provider's cumulative reversed amount for that transfer, in minor units. */
         public int $amountReversedMinor,
     ) {}
 }

@@ -7,7 +7,7 @@ namespace Pushery\Billing\ValueObjects;
 use LogicException;
 
 /**
- * One cell of the product-classification table, in one of three kinds — and the kind is part of the TYPE
+ * One cell of the product-classification table, in one of three kinds — and the kind is part of the type
  * rather than a comment beside the value.
  *
  * That distinction is the whole reason this class exists. Two of the nine product shapes cannot be resolved
@@ -61,9 +61,9 @@ final readonly class TaxonomyCell
     }
 
     /**
-     * The fixed answer this cell holds, when it holds one OF THE ASKED-FOR KIND — null otherwise.
+     * The fixed answer this cell holds, when it holds one of the asked-for kind — null otherwise.
      *
-     * Named `fixedAnswerOf` and not `fixed`, because `fixed()` is already the static that BUILDS such a cell.
+     * Named `fixedAnswerOf` and not `fixed`, because `fixed()` is already the static that builds such a cell.
      * Two methods of one name on one class is a fatal, and the collision is the kind a reader's eye slides
      * over — one is static, one is not.
      *

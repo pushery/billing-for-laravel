@@ -207,7 +207,7 @@ final readonly class BillingBanner
     {
         // The trial clock is the subscription's trial end when there is one; otherwise the owner's own
         // column — a generic trial has no row, and a webhook-synced trialing row carries the status but
-        // sometimes no date. Checking the subscription (not its property) keeps the fallback for BOTH a
+        // sometimes no date. Checking the subscription (not its property) keeps the fallback for both a
         // missing row and a row whose trial date is null.
         $endsAt = ($subscription instanceof Subscription ? $subscription->trial_ends_at : null)
             ?? ($owner instanceof Model ? $this->ownerTrialEnd($owner) : null);

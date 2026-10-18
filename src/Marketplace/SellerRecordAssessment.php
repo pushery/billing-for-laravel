@@ -21,7 +21,7 @@ use Pushery\Billing\ValueObjects\SellerRecordGaps;
  * Whether the seller falls under the reporting duty is read from their own activity in the current year,
  * through the same run the filing uses. It decides the basis of the reporting fields: required of a seller
  * the duty covers, collected ahead of time from one it does not. A line of activity that nobody can classify
- * leaves the answer open, and an open answer counts as NOT reportable for a measure. Holding somebody's
+ * leaves the answer open, and an open answer counts as not reportable for a measure. Holding somebody's
  * earnings needs a basis, and "we could not tell" is not one. The reminder does not wait for it.
  */
 final readonly class SellerRecordAssessment

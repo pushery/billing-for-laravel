@@ -14,7 +14,7 @@ use Illuminate\Queue\SerializesModels;
  *
  * It shipped as documented API and **no code path ever dispatched it**. Anyone who listened waited forever —
  * no error, no red test, no clue. It was deleted rather than quietly attached to the one path that was easy
- * to wire, and that deletion was the right call: a merchant reaches a hold by TWO routes, and an event that
+ * to wire, and that deletion was the right call: a merchant reaches a hold by two routes, and an event that
  * fires for one while staying silent for the other is worse than none. Its silence would read as "no hold".
  *
  * The two routes:

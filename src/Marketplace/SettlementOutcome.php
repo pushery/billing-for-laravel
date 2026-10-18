@@ -37,7 +37,7 @@ final readonly class SettlementOutcome
 
     /**
      * A settled supply whose series and treatment are decided and whose guards have passed, but whose number
-     * is not yet drawn. The monthly collective run plans every transaction this way and draws ONE number for
+     * is not yet drawn. The monthly collective run plans every transaction this way and draws one number for
      * the whole document, so a plan must not consume a number per line.
      */
     public static function planned(DocumentSeries $series, InboundTaxTreatment $treatment): self

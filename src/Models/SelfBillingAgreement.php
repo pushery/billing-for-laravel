@@ -20,7 +20,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  *
  * ## Who writes this row
  *
- * The CONSUMING APPLICATION, at onboarding: accepting a self-billing clause happens in their flow, in their
+ * The consuming application, at onboarding: accepting a self-billing clause happens in their flow, in their
  * words, with their record of how consent was captured (`evidence`). The package only ever asks whether an
  * agreement authorizes a given supply (`SelfBillingAgreementGuard`) and refuses the settlement when none
  * does. Columns with no writer in `src/` are therefore expected here.

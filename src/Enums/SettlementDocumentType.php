@@ -11,7 +11,7 @@ namespace Pushery\Billing\Enums;
  * creator's invoice for them — it can carry a tax statement the creator's own books rely on, so it may only
  * be issued for a party who could have issued that invoice themselves. A settlement note is the honest
  * document for a party who could not: it records what was paid and states no tax at all. A sale whose
- * creator standing is unestablished produces NEITHER — that is a hold, represented by the absence of a
+ * creator standing is unestablished produces neither — that is a hold, represented by the absence of a
  * document rather than a third case here, so the type never has to carry a "no document" value that a
  * caller could mistake for a real one.
  *

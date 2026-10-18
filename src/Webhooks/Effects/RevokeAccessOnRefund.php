@@ -22,17 +22,17 @@ use RuntimeException;
  * right answer where the refund was a return rather than a gesture.
  *
  * Money that went back through a lost dispute arrives here too, because a driver reports it as a refund of the
- * purchase. That is a chargeback, so `revoke_on_chargeback` decides it and the reason recorded is CHARGEBACK.
+ * purchase. That is a chargeback, so `revoke_on_chargeback` decides it and the reason recorded is chargeback.
  *
- * The reason recorded is otherwise REFUND. A statutory withdrawal reaches the same row through
- * `ConsumerWithdrawal::withdraw()`, which revokes with its own reason BEFORE the refund it triggers comes
+ * The reason recorded is otherwise refund. A statutory withdrawal reaches the same row through
+ * `ConsumerWithdrawal::withdraw()`, which revokes with its own reason before the refund it triggers comes
  * back here — so this effect finds a row already revoked and leaves it alone. They end in the same state and
  * are not the same event, and flattening them here would make an audit trail that cannot tell a right the
  * buyer exercised from a decision the platform made.
  *
  * That ordering is what makes the distinction obtainable at all, and for a while it was not. Until the
  * withdrawal path wrote to the register itself, this effect always got there first — and because a
- * revocation keeps its FIRST reason, the true one could not be written afterwards. The sentence above
+ * revocation keeps its first reason, the true one could not be written afterwards. The sentence above
  * described a caller that did not exist, and a later correction failed by doing nothing at all.
  */
 final readonly class RevokeAccessOnRefund implements DedupesOnReference
@@ -66,8 +66,8 @@ final readonly class RevokeAccessOnRefund implements DedupesOnReference
      * The event carries the cumulative figure, so a redelivery repeats it and a further refund raises it. Keyed on
      * the delivery instead, a provider that pings every change to a payment under one key had its second refund
      * dropped as a duplicate of the first: Mollie does, because a refund leaves the payment `paid`. The reversal,
-     * the credit note and the access revocation name the state with the same expression, so the three effects on
-     * this event agree about what "the same refund" means.
+     * the credit note and the access revocation all name it through {@see AddonRefunded::stateReference()}, so the
+     * three effects on this event agree about what "the same refund" means.
      */
     public function dedupReference(BillingDomainEvent $event): string
     {
@@ -75,6 +75,6 @@ final readonly class RevokeAccessOnRefund implements DedupesOnReference
             throw new RuntimeException('RevokeAccessOnRefund only handles AddonRefunded events.');
         }
 
-        return sprintf('%s:refunded:%d:%s:%s', $event->paymentReference, $event->cumulativeRefunded->minorUnits, $event->cumulativeRefunded->currency, $event->reason ?? 'refund');
+        return $event->stateReference();
     }
 }

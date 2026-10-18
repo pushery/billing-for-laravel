@@ -15,9 +15,9 @@ use Throwable;
  * throwing. Without a boundary, one failing panel 500s the whole account page; a customer who came to
  * cancel cannot even reach the button because the usage gauge could not load.
  *
- * `orDegrade()` runs a panel's data assembly and, on an UNEXPECTED failure, returns the given fallback and
+ * `orDegrade()` runs a panel's data assembly and, on an unexpected failure, returns the given fallback and
  * marks the screen degraded so the view shows an inline "temporarily unavailable" notice while everything
- * else renders. Two things it deliberately does NOT do:
+ * else renders. Two things it deliberately does not do:
  *
  * - It never softens an authorization failure. A `403`/`404` (a Symfony {@see HttpExceptionInterface}) or a
  *   Gate {@see AuthorizationException} is RE-THROWN, so a security decision reaches the customer as the
@@ -73,9 +73,9 @@ trait DegradesGracefully
      * ## Why this is a separate method and not a flag on the other one
      *
      * `orDegrade()` sets `$degraded`, which replaces the entire panel with a "try again" card. That is
-     * right for a panel's SUBJECT — a usage screen that cannot read usage has nothing honest to show.
+     * right for a panel's subject — a usage screen that cannot read usage has nothing honest to show.
      *
-     * It is wrong for an OPTIONAL addition. A screen whose core data loaded fine should not go blank
+     * It is wrong for an optional addition. A screen whose core data loaded fine should not go blank
      * because a supplementary source is down: the reader loses everything that was working, and the
      * card says "try again" about something that would fail again for a reason unrelated to what they
      * came for.

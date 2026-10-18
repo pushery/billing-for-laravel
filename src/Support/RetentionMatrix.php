@@ -17,7 +17,7 @@ use Pushery\Billing\ValueObjects\RetentionRule;
  *
  * Deriving is the point. The map already decides what happens to each table when a person is erased, and a
  * second hand-written list of the same tables would drift from it — silently, because both would look
- * complete. Here a table's classification IS its rule, and a table that gains a classification gains a rule
+ * complete. Here a table's classification is its rule, and a table that gains a classification gains a rule
  * in the same commit.
  *
  * The three periods stay in configuration and keep their current meanings: a rule set that changed a number
@@ -28,6 +28,9 @@ final class RetentionMatrix
     /** Which column holds a document's issue date, per table. A table not listed is dated by its creation. */
     private const array ISSUE_COLUMN = [
         'billing_invoices' => 'issued_at',
+        // A declaration is dated by the moment it arrived, which is the fact it keeps.
+        'billing_cancellation_declarations' => 'declared_at',
+        'billing_withdrawal_declarations' => 'declared_at',
     ];
 
     /** @var list<RetentionRule> */
@@ -69,7 +72,7 @@ final class RetentionMatrix
         }
 
         // The audit ledger is keyed to a subject rather than to an erasure axis, so the loop above cannot
-        // see it. It keeps the LONGER of the two book-keeping windows deliberately: the shorter one governs
+        // see it. It keeps the longer of the two book-keeping windows deliberately: the shorter one governs
         // documents, and merging them would prune books years early under a number that looks like a typo.
         $rules['billing_events'] = new RetentionRule(
             object: 'billing_events',
@@ -118,7 +121,7 @@ final class RetentionMatrix
         );
 
         // A produced seller-reporting record is the same kind of document and keeps the same window, for
-        // the same reason: it names a PERIOD rather than a person, so no erasure axis reaches it. The
+        // the same reason: it names a period rather than a person, so no erasure axis reaches it. The
         // sellers it describes are erased where they actually live; deleting this would leave a filing
         // whose evidence of what was reported has gone while the filing itself stands.
         $rules['billing_reporting_exports'] = new RetentionRule(
@@ -182,7 +185,7 @@ final class RetentionMatrix
      * Say which column dates a table, for one the package does not own.
      *
      * The companion to `extendWith()`, and the half that was missing. A consumer could already declare a
-     * retention RULE for their own table; there was no way to say the table is dated by anything other than
+     * retention rule for their own table; there was no way to say the table is dated by anything other than
      * its creation, so such a table silently ran on the wrong clock — by up to a year, in the direction that
      * deletes too early.
      *
@@ -208,7 +211,7 @@ final class RetentionMatrix
     /**
      * Every issue-date column, shipped and declared.
      *
-     * This is the ONE map, and the pruner reads it too. A private copy of the same table-to-column list in the
+     * This is the one map, and the pruner reads it too. A private copy of the same table-to-column list in the
      * pruning command would leave a public accessor answering consumers from one map while the package prunes
      * by the other: a disagreement waiting for a second dated table.
      *

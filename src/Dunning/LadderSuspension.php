@@ -19,7 +19,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * gateway status — so lockout keeps working during a provider outage and a not-yet-delinquent owner
  * (no clock) is never locked out.
  *
- * ## THE CLOCK ARRIVES THROUGH A SEAM, AND THAT IS WHAT MAKES THE LADDER REUSABLE
+ * ## the clock arrives through a seam, and that is what makes the ladder reusable
  *
  * Reading `billing_subscriptions` here would chain the whole ladder to this package's schema. Everything
  * else in the ladder is free of it — the rungs are configuration, the policy is configuration, the cure
@@ -30,17 +30,17 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * The reading lives in {@see LocalArrearsClock}, bound by default, so an install that keeps the package's
  * schema needs nothing.
  *
- * ## THE SUSPENSION IS PER MERCHANT — DECIDED, NOT ASSUMED
+ * ## the suspension is per merchant — decided, not assumed
  *
  * A fan behind with creator A keeps creator B: arrears withdraw the surfaces of the merchant they are owed
  * to, and nothing else. The fan has a separate, performed contract with B, and B must not lose a paying
  * subscriber over an event B had no part in.
  *
- * The scope is therefore part of the QUESTION the clock is asked, not a filter applied to its answer — so
+ * The scope is therefore part of the question the clock is asked, not a filter applied to its answer — so
  * an implementation has no aggregate to get wrong. This package got it wrong twice while the reading lived
  * here; the two wrong answers, and why ordering was never the issue, are kept where the reading now is.
  *
- * Omitting the merchant means the PLATFORM's own relationship, not "any of them". In a single-seller
+ * Omitting the merchant means the platform's own relationship, not "any of them". In a single-seller
  * install there is only ever the one.
  */
 final readonly class LadderSuspension implements MerchantScopedSuspensionLadder, SuspensionLadder

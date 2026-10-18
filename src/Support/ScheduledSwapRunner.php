@@ -44,7 +44,7 @@ final readonly class ScheduledSwapRunner
         $now ??= Carbon::now()->utc();
         $applied = 0;
 
-        // Selected by the due DATE: a NULL scheduled_swap_at fails the comparison in SQL, so only rows with
+        // Selected by the due date: a NULL scheduled_swap_at fails the comparison in SQL, so only rows with
         // a real, past effective moment come through. A well-formed schedule always has a tier alongside the
         // date, but a malformed one (a legacy or partial write) is caught in apply() rather than silently
         // skipped by a tier filter here.

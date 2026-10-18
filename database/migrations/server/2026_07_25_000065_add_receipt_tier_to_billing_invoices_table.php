@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Which kind of document a buyer receipt is, decided when it was issued.
  *
- * The tier is a decision about a SINGLE document, taken from that document's own gross — a monthly
+ * The tier is a decision about a single document, taken from that document's own gross — a monthly
  * subscription stays a short receipt with no buyer identity, and the same contract billed once a year
  * crosses the threshold and pulls the buyer's data in. Recomputing the tier later from the same figure would
  * usually agree; recomputing it after the threshold moved would not, and the document would then be rendered

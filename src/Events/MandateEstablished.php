@@ -27,13 +27,13 @@ final readonly class MandateEstablished implements BillingDomainEvent, Identifie
         public string $provider,
         public ?string $method = null,
         /**
-         * The payment that GRANTED this mandate, where the provider establishes one that way.
+         * The payment that granted this mandate, where the provider establishes one that way.
          *
          * Trailing and nullable because it is not universal: a provider with a synchronous setup call
          * grants a mandate with no payment behind it, and a driver that has nothing to put here must not be
          * forced to invent something.
          *
-         * It carries the weight for anything that has to recognize WHICH request a mandate answers. Keying
+         * It carries the weight for anything that has to recognize which request a mandate answers. Keying
          * that on the customer instead looks equivalent and is not: a customer merely adding a second card
          * also establishes a mandate, and a reader keyed on the customer would take that for the answer to
          * a question somebody asked days earlier.

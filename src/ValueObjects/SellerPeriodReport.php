@@ -10,9 +10,9 @@ use LogicException;
 /**
  * One seller's whole reporting period: what they sold, whether it is reportable, and the four quarters.
  *
- * ## Why the verdict is per LINE and not per seller
+ * ## Why the verdict is per line and not per seller
  *
- * A reporting rule branches on WHAT was sold. There is no small-scale relief for commissioned work, and a
+ * A reporting rule branches on what was sold. There is no small-scale relief for commissioned work, and a
  * thousand standardized downloads are not reportable however much they came to — so a seller who did both
  * in one year has two answers, and a single verdict would apply whichever the caller happened to look at
  * first to all of it.
@@ -39,7 +39,7 @@ final readonly class SellerPeriodReport
     ) {}
 
     /**
-     * Whether ANY line obliges a report.
+     * Whether any line obliges a report.
      *
      * Refuses on an unclassified line rather than answering false, exactly as the line itself does: false is
      * a decision, and a line nobody classified has not been decided. Answering it here would let a whole
@@ -53,7 +53,7 @@ final readonly class SellerPeriodReport
         $reportable = false;
 
         foreach ($this->lines as $line) {
-            // Asked of EVERY line rather than short-circuiting on the first true one. The refusal is the
+            // Asked of every line rather than short-circuiting on the first true one. The refusal is the
             // point: a seller with one reportable line and one unclassified group is not "reportable and
             // done" -- the unclassified part still has to be resolved before anything is filed.
             $reportable = $line->reportable() || $reportable;

@@ -12,7 +12,7 @@ use Pushery\Billing\ValueObjects\SellerReportingLine;
 /**
  * A seller whose activity the package could not classify — and why that is a finding rather than a note.
  *
- * An unclassified line is not "probably not reportable". It is the reporting duty UNDECIDED, and both ways
+ * An unclassified line is not "probably not reportable". It is the reporting duty undecided, and both ways
  * of resolving it by default are offenses: filing a seller the duty does not cover discloses somebody's
  * income to a tax authority with no ground, and leaving out a seller it does cover is the omission the duty
  * exists to prevent. There is no safe guess, which is why {@see SellerReportingLine::reportable()} throws

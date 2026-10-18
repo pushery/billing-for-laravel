@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Schema;
  * ## Why it is recorded rather than derived from the service period
  *
  * The obvious shortcut is to take the period's end: a supply covering July was delivered by the 31st. It is
- * wrong for the case that matters most here. A subscription billed IN ADVANCE issues its document on the
+ * wrong for the case that matters most here. A subscription billed in advance issues its document on the
  * first of the month, and a derived BT-72 would state a delivery date in the future on a document dated
  * before it — asserting, in a machine-readable field an auditor reads, that something happened which has
  * not.

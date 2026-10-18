@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\Money;
 /**
  * The dunning notice sent when a payment fails. Localized via the publishable billing::notifications
  * namespace (informal, overridable) and deliberately plain — no channel-preference gate, because a
- * billing-critical notice is non-suppressible. Sent once per failing INVOICE, not once per provider
+ * billing-critical notice is non-suppressible. Sent once per failing invoice, not once per provider
  * retry of it (see SendDunningNotice).
  *
  * Queued AFTER COMMIT: the effect run that sends it claims, sends and marks itself in one transaction,

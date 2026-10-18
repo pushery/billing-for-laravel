@@ -27,7 +27,7 @@ use Pushery\Billing\ValueObjects\Money;
  * Turns a correction into the document that carries it.
  *
  * The arithmetic of a refund on a routed sale is settled elsewhere ({@see RefundCascade}); what happens here
- * is the part that has to be a DOCUMENT — a numbered, referenced, immutable record the creator and a tax
+ * is the part that has to be a document — a numbered, referenced, immutable record the creator and a tax
  * authority can both read. A correction that exists only as a figure in a ledger corrects nothing anybody can
  * be shown.
  *
@@ -54,16 +54,16 @@ use Pushery\Billing\ValueObjects\Money;
 final readonly class SettlementCorrectionIssuer
 {
     /**
-     * The rate carrier is REQUIRED, and that is the point rather than an oversight.
+     * The rate carrier is required, and that is the point rather than an oversight.
      *
      * Its sibling in `SelfBillingEngine` was optional with a default, and the container handed that engine
      * `null` without ever attempting to resolve it -- `Container::resolveClass()` returns the default up
      * front for any class it has no binding for. The seam existed, resolved fine in isolation, and never
      * fired. A required parameter cannot fail that way: the container must produce one or say why.
      *
-     * The disclosure guard is REQUIRED for the same reason the rate carrier is, and its absence here was the
+     * The disclosure guard is required for the same reason the rate carrier is, and its absence here was the
      * live half of that lesson. The original settlement passes the whitelist before a number is drawn; its
-     * CORRECTION did not pass it at all, because this class had no way to ask. So a creator whose standing
+     * correction did not pass it at all, because this class had no way to ask. So a creator whose standing
      * never permitted stated tax could still receive a correcting document that states some.
      */
     public function __construct(
@@ -81,7 +81,7 @@ final readonly class SettlementCorrectionIssuer
      * Originals only — a correction of that document names the same charge, and returning one would have a
      * later correction correct its own predecessor's correction.
      *
-     * And the SERIES, because one routed sale produces documents on both sides and both name the charge: the
+     * And the series, because one routed sale produces documents on both sides and both name the charge: the
      * buyer's receipt and the merchant's settlement. Matching on the charge alone would return whichever was
      * written first, and correcting a buyer's receipt with the merchant's figures produces a document that
      * is internally consistent and describes the wrong party's supply.
@@ -101,7 +101,7 @@ final readonly class SettlementCorrectionIssuer
     }
 
     /**
-     * The document a correction is about, found by the reference the sale states — AND by whose reference
+     * The document a correction is about, found by the reference the sale states — and by whose reference
      * it is.
      *
      * A charge reference is unique only per provider; the charge table says so with a composite unique key,
@@ -111,11 +111,11 @@ final readonly class SettlementCorrectionIssuer
      *
      * ## Two directions, and the second one is the upgrade
      *
-     * A caller that names NO provider matches on the reference alone. That is a fallback for a
+     * A caller that names no provider matches on the reference alone. That is a fallback for a
      * single-driver installation, not an equivalent query, and it is written down rather than defaulted
      * silently: the two are the same answer only while there is one driver.
      *
-     * A caller that DOES name one also matches a row that recorded NONE — and that is not laxity, it is the
+     * A caller that does name one also matches a row that recorded none — and that is not laxity, it is the
      * only reading that survives the upgrade. Every document a marketplace issuer wrote before the provider was
      * frozen carries null, so a strict pair match would make each of them unreachable the moment this shipped: a refund
      * would silently find no settlement to correct, on every historical sale, with nothing red anywhere.
@@ -127,17 +127,17 @@ final readonly class SettlementCorrectionIssuer
      *
      * ## And the charge names its document, which is the only reading a collective settlement has
      *
-     * Everything above searches the DOCUMENT side: a settlement states the charge it settled, and this
+     * Everything above searches the document side: a settlement states the charge it settled, and this
      * finds it by that column. A collective settlement cannot state one — it carries a month, and its
      * transactions are lines — so for a collectively settled sale this search found nothing, and a refund
      * corrected nothing at all. Silently.
      *
-     * The other direction exists now: a charge records which settlement document paid it out, on BOTH
+     * The other direction exists now: a charge records which settlement document paid it out, on both
      * settlement paths. So it is asked first. It is not a fallback but the better question — a recorded
      * fact rather than a match, and it needs none of the provider reasoning above, because the charge row
      * is already narrowed by the pair.
      *
-     * The series is still checked: a charge's link points at a SETTLEMENT, and a caller looking for a buyer
+     * The series is still checked: a charge's link points at a settlement, and a caller looking for a buyer
      * receipt must not be handed one.
      *
      * No `credited_invoice_id` condition, deliberately. That column is written only by the two settlement
@@ -175,9 +175,9 @@ final readonly class SettlementCorrectionIssuer
                 ->from($table, 'cancellations')
                 ->whereColumn('cancellations.credited_invoice_id', $table.'.id')
                 ->where('cancellations.correction_kind', InvoiceCorrectionKind::Cancellation->value))
-            // The EXACT match first. Admitting NULL rows is what carries the upgrade, and it also makes a
+            // The exact match first. Admitting NULL rows is what carries the upgrade, and it also makes a
             // legacy row a candidate for a provider it may not belong to -- with `orderBy('id')` alone the
-            // older row has the smaller id and WINS against the document that names this provider outright.
+            // older row has the smaller id and wins against the document that names this provider outright.
             ->when(
                 $provider !== null && $provider !== '',
                 fn (Builder $q): Builder => $q->orderByRaw('case when provider = ? then 0 else 1 end', [$provider]),
@@ -263,9 +263,9 @@ final readonly class SettlementCorrectionIssuer
             return null;
         }
 
-        // Asked AT THE ORIGINAL'S OWN MOMENT, never at the correction date. This is the whole of what "ex
-        // nunc" does and does not mean: the correction belongs in TODAY's tax period, and it states the
-        // treatment the supply had WHEN IT HAPPENED. Reading today's standing instead would let a creator
+        // Asked at the original's own moment, never at the correction date. This is the whole of what "ex
+        // nunc" does and does not mean: the correction belongs in today's tax period, and it states the
+        // treatment the supply had when it happened. Reading today's standing instead would let a creator
         // who has since become a small business receive a document stating tax -- tax that was correctly
         // charged then, and that they would now owe merely for having it written down. The whitelist checks
         // today's status, so it is exactly the check that cannot catch it.
@@ -322,7 +322,7 @@ final readonly class SettlementCorrectionIssuer
      *
      * Everything except the amounts is identical on both sides, and shared rather than duplicated: the date
      * rule, the paired series, the origin reference and the frozen shape of the sale are properties of what a
-     * correction IS, not of which party it addresses.
+     * correction is, not of which party it addresses.
      */
     private function write(
         InvoiceRecord $original,
@@ -364,18 +364,18 @@ final readonly class SettlementCorrectionIssuer
             // An amendment corrects a specific earlier document and says which; a cancellation takes all of
             // it back, and says which too.
             'correction_kind' => $kind,
-            // WHY the taxable amount changed. The figures cannot say it — money given back and money that
+            // Why the taxable amount changed. The figures cannot say it — money given back and money that
             // will not arrive produce the same correction — and only this tells a finished matter from one a
             // later payment reopens.
             'tax_base_change_reason' => $reason,
-            // WHICH reversal this document documents, when one was recorded. Stored rather than inferred:
+            // Which reversal this document documents, when one was recorded. Stored rather than inferred:
             // several confirmations can land against one charge, each capped against what was still
             // refundable at that moment, so charge and date do not identify one of them — and the amounts
             // do not either, because `ClawbackCalculator` floors at zero and every sum is capped against
             // its own ceiling. Null on the paths that hold no attempt, which says no reversal row stands
             // behind this correction, never that the reversal moved nothing.
             'refund_attempt_id' => $attempt?->id,
-            // WHICH event this document corrects, on the paths that have no reversal row to name. It holds a
+            // Which event this document corrects, on the paths that have no reversal row to name. It holds a
             // unique index with the original, so one event corrects each document once, however often the
             // caller asks. Null where the attempt above names the event, or where nothing does.
             'correction_key' => $correctionKey,
@@ -384,30 +384,30 @@ final readonly class SettlementCorrectionIssuer
             // The frozen shape of the sale travels to the correction unchanged: a correction that
             // re-derived it would describe a transaction that did not happen.
             //
-            // Including the TAX characteristics, which is the half that was missing. They decide what the
+            // Including the tax characteristics, which is the half that was missing. They decide what the
             // document says about itself — which archetype was sold, which rule placed the supply, which
             // band applied, at what rate, to a recipient of which standing, under which version of the
             // matrix. A correction that leaves them empty states a taxable amount without stating what it
-            // is a taxable amount OF, and the reader is left inferring it from the original — which is
+            // is a taxable amount of, and the reader is left inferring it from the original — which is
             // exactly the inference the freezing exists to make unnecessary.
             //
             // The rate is the tell that this was an omission rather than a decision: it was already being
-            // READ here, to state the rate on the correction's line, and not written to the row beside it.
+            // read here, to state the rate on the correction's line, and not written to the row beside it.
             // So the same document said one thing in its line and nothing in its column.
-            // And the COMMISSION terms, for the identical reason and with the identical tell. The document
+            // And the commission terms, for the identical reason and with the identical tell. The document
             // states an amount without stating the terms the commission on it was taken under, so a reader
             // has to go back to the original to learn them — the inference the freezing exists to remove.
             //
             // `RoutedRefundCorrector::frozenCommission()` reads exactly these three columns and treats an
             // empty set as a zero commission, documented there as the honest read for a settlement written
-            // BEFORE the terms were frozen. That read does not reach a correction (`settlementFor()` narrows
+            // before the terms were frozen. That read does not reach a correction (`settlementFor()` narrows
             // to the settlement series), but a reader of these columns cannot tell "never written" from
             // "taken at zero", so the correction carries the terms itself.
             'commission_bps' => $original->commission_bps,
             'commission_flat_minor' => $original->commission_flat_minor,
             'commission_residual' => $original->commission_residual,
             'tax_archetype' => $original->tax_archetype,
-            // Carried for the same reason as the archetype beside it, and it matters MORE here than it looks:
+            // Carried for the same reason as the archetype beside it, and it matters more here than it looks:
             // the correction lands in the counted period too, and a correction that lost the reference would
             // group under a different key from the document it undoes — leaving the original's inflow
             // standing in the reportable line while the reversal reduced a line nobody reports.
@@ -477,7 +477,7 @@ final readonly class SettlementCorrectionIssuer
     }
 
     /**
-     * Whether the creator's standing AT THE SUPPLY permitted the tax this correction restates.
+     * Whether the creator's standing at the supply permitted the tax this correction restates.
      *
      * A correcting document is not a new claim; it is a restatement of one already made. But it is still a
      * document that states tax, and the party it names still carries what it says. So it passes the same
@@ -522,7 +522,7 @@ final readonly class SettlementCorrectionIssuer
      */
     private function ownerOf(InvoiceRecord $original): ?Model
     {
-        // Read as a RAW attribute, and type-checked rather than trusted. The property is declared `string`,
+        // Read as a raw attribute, and type-checked rather than trusted. The property is declared `string`,
         // which is what the column is meant to hold — and a row written before that was true, or by a path
         // that never filled it, holds null anyway. Taking the declaration at its word turned an empty owner
         // into a TypeError from `class_exists()` instead of this class's own refusal, which is the failure

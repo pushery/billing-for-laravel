@@ -12,12 +12,12 @@ use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Invoicing\CorrectionTax;
 use Pushery\Billing\Invoicing\CreditNoteNumber;
+use Pushery\Billing\Invoicing\LocalInvoiceCredit;
 use Pushery\Billing\Models\InvoiceRecord;
-use Pushery\Billing\Models\Order;
 use RuntimeException;
 
 /**
- * Issues the credit note for money refunded against a LOCALLY raised invoice.
+ * Issues the credit note for money refunded against a locally raised invoice.
  *
  * A provider that issues its own documents also announces the correction — Stripe sends
  * `credit_note.created`, and {@see PersistInvoiceCorrection} stores it. A local engine raised the invoice
@@ -26,20 +26,20 @@ use RuntimeException;
  *
  * ## It selects itself, rather than being wired per driver
  *
- * The effect acts only where the refunded payment leads to an invoice this package RAISED (one carrying an
+ * The effect acts only where the refunded payment leads to an invoice this package raised (one carrying an
  * `order_id`). A Stripe invoice has none, so the effect does nothing there and the provider's own
  * correction stands — no driver name appears anywhere in the decision.
  *
- * ## The amounts are POSITIVE, and that is not a detail
+ * ## The amounts are positive, and that is not a detail
  *
- * A correcting document states what is being credited; its DOCUMENT TYPE inverts the accounting direction,
+ * A correcting document states what is being credited; its document type inverts the accounting direction,
  * not a minus sign. EN 16931 is explicit about it, and {@see PersistInvoiceCorrection} already follows the
  * same rule for the provider path — a credit note with negative amounts would be a different document
  * saying something else, and the two paths would disagree about a customer's own books.
  *
  * ## Idempotency rides on the cumulative figure
  *
- * The refund event carries the CUMULATIVE amount refunded against that payment, so a redelivery repeats
+ * The refund event carries the cumulative amount refunded against that payment, so a redelivery repeats
  * the same value and converges to one row, while a second, larger refund produces a genuinely different
  * key. That is the same discipline the webhook backbone uses elsewhere and it is why no refund id is
  * needed: a provider that pings a bare resource id has none to give.
@@ -56,13 +56,13 @@ final readonly class IssueLocalCreditNote implements DedupesOnReference
 
     public function __invoke(AddonRefunded $event): void
     {
-        $invoice = $this->locallyRaisedInvoiceFor($event->paymentReference);
+        $invoice = LocalInvoiceCredit::invoiceFor($event->paymentReference);
 
         if (! $invoice instanceof InvoiceRecord) {
             return;
         }
 
-        // ONE transaction holding the invoice row, because the delta below is a read-modify-write over an
+        // One transaction holding the invoice row, because the delta below is a read-modify-write over an
         // aggregate and the effect backbone does not serialize this for us. Two genuinely different refunds
         // against one payment arrive with two different cumulative figures, so they get two different claims
         // and run in two parallel transactions: under READ COMMITTED neither sees the other's uncommitted
@@ -70,10 +70,10 @@ final readonly class IssueLocalCreditNote implements DedupesOnReference
         // against a 20.00 invoice is 27.50 again — the exact sum the delta exists to prevent, arriving
         // through concurrency instead of through arithmetic, and the differing keys cannot catch it.
         //
-        // The INVOICE is the mutex, not the notes: the notes are what is being counted, and a lock over
+        // The invoice is the mutex, not the notes: the notes are what is being counted, and a lock over
         // rows that do not exist yet holds nothing back. The row's contents are not read for anything. The
         // notes are read under a lock afterwards all the same, for what that read sees rather than for what it
-        // holds back: see alreadyCredited().
+        // holds back: see {@see LocalInvoiceCredit}.
         //
         // Dedup on the payment reference alone would serialize them too, and would be wrong: a handled claim is
         // never re-claimed, so the second refund would be dropped rather than credited. The claim names the
@@ -92,16 +92,20 @@ final readonly class IssueLocalCreditNote implements DedupesOnReference
     /** The decision and the document, both inside the caller's lock on the invoice. */
     private function issueAgainst(AddonRefunded $event, InvoiceRecord $invoice): void
     {
-        // The event carries the provider's CUMULATIVE refunded total, so a second partial refund arrives as
+        // The event carries the provider's cumulative refunded total, so a second partial refund arrives as
         // a larger figure rather than as its own amount. A note for the cumulative figure is therefore the
-        // second note stating the WHOLE refund again: 7.50 then 20.00 against a 20.00 invoice is 27.50 of
+        // second note stating the whole refund again: 7.50 then 20.00 against a 20.00 invoice is 27.50 of
         // issued, numbered, immutable credit notes for 20.00 of refunded money.
         //
-        // What each note states is the DELTA — what this refund added to what has already been credited.
+        // What each note states is the delta — what this refund added to what has already been credited.
         // The notes then sum to exactly what was refunded, which is the property an auditor reads them for,
         // and the class docblock names the alternative as the one shape that reads as fabricated.
+        //
+        // Credited means what the invoice stands credited at: an invoice that charged a credited amount again after
+        // a reversed chargeback took that amount back, so a refund afterwards is money going back once more.
         $cumulative = min($event->cumulativeRefunded->minorUnits, $invoice->total_minor);
-        $credited = $cumulative - $this->alreadyCredited($invoice);
+        $credit = LocalInvoiceCredit::of($invoice);
+        $credited = $cumulative - $credit->standing();
 
         if ($credited <= 0) {
             return;
@@ -109,29 +113,36 @@ final readonly class IssueLocalCreditNote implements DedupesOnReference
 
         $split = CorrectionTax::of($invoice, $credited);
 
-        // Keyed on the CUMULATIVE figure, not the delta. That is what a redelivery repeats — the same
+        // Keyed on the cumulative figure, not the delta. That is what a redelivery repeats — the same
         // cumulative total arriving twice is the same news — while two genuinely different refunds that
         // happen to add the same amount are different news and must each get their note.
-        $key = [
-            'provider' => $invoice->provider,
-            'provider_id' => sprintf('%s:credited:%d', $event->paymentReference, $cumulative),
-        ];
+        //
+        // Once an invoice charged a credited amount again, the same cumulative figure can come round a second time: a
+        // payment refunded in full, its chargeback reversed, and the customer refunded in full later. That is new news,
+        // so the key names what had been charged again by then. A key from before any such invoice stays as it was.
+        //
+        // It is the event the note corrects, so it is the note's `correction_key`, unique together with the invoice.
+        // `provider_id` stays empty: it names a provider's own document, and this one was issued here.
+        $correctionKey = sprintf('%s:credited:%d', $event->paymentReference, $cumulative)
+            .($credit->reinstated > 0 ? sprintf(':after:%d', $credit->reinstated) : '');
 
-        // NO `exists()` PRE-CHECK, and its absence is the point. One stood here and became unreachable the
-        // moment a note started stating the DELTA: a redelivery repeats a cumulative figure that has
+        // NO `exists()` pre-check, and its absence is the point. One stood here and became unreachable the
+        // moment a note started stating the delta: a redelivery repeats a cumulative figure that has
         // already been credited, so `$credited` is zero and the guard above returns before this line. For
         // the pre-check to fire, a note keyed on a cumulative figure would have to exist while the notes
-        // sum to LESS than it — which nothing can produce, because every note this writes adds exactly the
-        // delta it was keyed on, and the invoice row is held while that sum is read.
+        // sum to less than it — which nothing can produce, because every note this writes adds exactly the
+        // delta it was keyed on, an invoice charging a credit again changes the key (above), and the invoice
+        // row is held while that sum is read.
         //
-        // Nothing is lost by dropping it. The delta guard sits BEFORE the number is drawn, so a redelivery
-        // still burns nothing from the sequence, and the unique index on (provider, provider_id) is the
-        // backstop if the reasoning above is ever wrong: a duplicate raises rather than issues a second
+        // Nothing is lost by dropping it. The delta guard sits before the number is drawn, so a redelivery
+        // still burns nothing from the sequence, and the unique index on (correction_key, credited_invoice_id) is
+        // the backstop if the reasoning above is ever wrong: a duplicate raises rather than issues a second
         // numbered document. What is gained is that a branch no run can enter stops looking like a guard.
         $issuedAt = Carbon::now();
 
         InvoiceRecord::model()::query()->create([
-            ...$key,
+            'provider' => $invoice->provider,
+            'correction_key' => $correctionKey,
             ...[
                 'owner_type' => $invoice->owner_type,
                 'owner_id' => $invoice->owner_id,
@@ -145,11 +156,11 @@ final readonly class IssueLocalCreditNote implements DedupesOnReference
                 'subtotal_minor' => $split?->net,
                 'tax_minor' => $split?->tax,
                 'currency' => $event->cumulativeRefunded->currency,
-                // THE FROZEN TAX POSITION OF THE SUPPLY BEING REDUCED, COPIED RATHER THAN LEFT NULL.
+                // The frozen tax position of the supply being reduced, copied rather than left null.
                 //
                 // These three are exactly what `DatevExport::fanRevenueAccount()` resolves the revenue
                 // account from, and the accounts are Automatikkonten -- the export writes no BU key on
-                // purpose, so DATEV derives the VAT rate FROM THE ACCOUNT. Left null, `tax_rate_bps === 700`
+                // purpose, so DATEV derives the VAT rate from the account. Left null, `tax_rate_bps === 700`
                 // is false and every credit note landed on the standard revenue account: a note against a
                 // 7 % supply reduced 19 % of tax, and one against an OSS sale reduced domestic tax instead
                 // of the destination country's.
@@ -180,50 +191,6 @@ final readonly class IssueLocalCreditNote implements DedupesOnReference
     }
 
     /**
-     * What this invoice has already been credited, across every note issued against it.
-     *
-     * Read from the notes themselves rather than tracked on the invoice: the notes ARE the record, an
-     * issued one cannot change, and a counter beside them would be a second version of the same fact that
-     * drifts the first time one is written by anything else.
-     *
-     * Read under a lock, row by row, and added up here. On MySQL, whose default isolation is REPEATABLE READ,
-     * a plain read answers from the snapshot taken at the transaction's first plain read, which came before
-     * the wait for the invoice: a note another refund committed during that wait would be missing from the
-     * sum. A locking read sees it. PostgreSQL refuses `FOR UPDATE` beside an aggregate, so the rows come back
-     * rather than their sum.
-     */
-    private function alreadyCredited(InvoiceRecord $invoice): int
-    {
-        $credited = 0;
-
-        foreach (InvoiceRecord::model()::query()->where('credited_invoice_id', $invoice->id)->lockForUpdate()->get(['total_minor']) as $note) {
-            $credited += $note->total_minor;
-        }
-
-        return $credited;
-    }
-
-    /**
-     * The invoice this package raised for the order that payment settled, if there is one.
-     *
-     * Two hops rather than one, because a locally raised invoice is keyed to its ORDER while a refund
-     * names a PAYMENT. Joining them is what tells a local document apart from a copied one.
-     */
-    private function locallyRaisedInvoiceFor(string $paymentReference): ?InvoiceRecord
-    {
-        $order = Order::model()::query()->where('payment_reference', $paymentReference)->first();
-
-        if (! $order instanceof Order) {
-            return null;
-        }
-
-        return InvoiceRecord::model()::query()
-            ->where('order_id', $order->getKey())
-            ->whereNull('credited_invoice_id')
-            ->first();
-    }
-
-    /**
      * A credit note carries its own number from the one credit-note series.
      *
      * The prefix and the width live in {@see CreditNoteNumber}, which the § 17 correction draws from as well. Two
@@ -241,8 +208,8 @@ final readonly class IssueLocalCreditNote implements DedupesOnReference
      * The event carries the cumulative figure, so a redelivery repeats it and a further refund raises it. Keyed on
      * the delivery instead, a provider that pings every change to a payment under one key had its second refund
      * dropped as a duplicate of the first: Mollie does, because a refund leaves the payment `paid`. The reversal,
-     * the credit note and the access revocation name the state with the same expression, so the three effects on
-     * this event agree about what "the same refund" means.
+     * the credit note and the access revocation all name it through {@see AddonRefunded::stateReference()}, so the
+     * three effects on this event agree about what "the same refund" means.
      */
     public function dedupReference(BillingDomainEvent $event): string
     {
@@ -250,6 +217,6 @@ final readonly class IssueLocalCreditNote implements DedupesOnReference
             throw new RuntimeException('IssueLocalCreditNote only handles AddonRefunded events.');
         }
 
-        return sprintf('%s:refunded:%d:%s:%s', $event->paymentReference, $event->cumulativeRefunded->minorUnits, $event->cumulativeRefunded->currency, $event->reason ?? 'refund');
+        return $event->stateReference();
     }
 }

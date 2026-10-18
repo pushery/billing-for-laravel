@@ -11,8 +11,8 @@ use RuntimeException;
  * The seller a document names contradicts the seller-of-record posture frozen onto it.
  *
  * The two are one decision seen twice: the posture is the role, the seller is the party that role resolves
- * to. When the platform is the deemed supplier, IT is the seller; when it merely arranges the sale, or the
- * merchant sells in their own name, the MERCHANT is. A document that names the merchant as seller under a
+ * to. When the platform is the deemed supplier, it is the seller; when it merely arranges the sale, or the
+ * merchant sells in their own name, the merchant is. A document that names the merchant as seller under a
  * deemed-supplier posture would put a creator in front of the buyer as the seller — the exact outcome the
  * deemed-supplier rule exists to prevent — so the write is refused rather than left to issue it.
  *

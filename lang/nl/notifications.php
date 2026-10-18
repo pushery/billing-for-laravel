@@ -123,4 +123,29 @@ return [
         'cta' => 'Betaling bevestigen',
     ],
 
+    'direct_debit_announced' => [
+        'subject' => 'Je volgende automatische incasso',
+        'intro' => ':payee incasseert op :date :amount van je rekening met een SEPA-incasso.',
+        'recurring' => 'Daarna wordt hetzelfde bedrag op elke vervaldatum van je abonnement geïncasseerd. Verandert het bedrag, dan krijg je dat vooraf te horen.',
+        'account' => 'Rekening eindigend op :account.',
+        'mandate' => 'Machtigingskenmerk: :reference.',
+        'creditor' => 'Incassant-ID: :creditor.',
+        'outro' => 'Je hoeft niets te doen.',
+        'cta' => 'Bekijk je betaalmethoden',
+    ],
+
+    'cancellation_received' => [
+        'subject' => 'We hebben je opzegging ontvangen',
+        'intro' => 'Hiermee bevestigen we de opzegging die je hebt verklaard, met de volledige inhoud en de datum en het tijdstip waarop die bij ons binnenkwam.',
+        'outro' => 'Bewaar deze e-mail. Hiermee kun je je opzegging aantonen en laten zien wanneer die bij ons binnenkwam.',
+        'cta' => 'Bekijk je opzegging',
+    ],
+
+    'withdrawal_received' => [
+        'subject' => 'We hebben je herroeping ontvangen',
+        'intro' => 'Hiermee bevestigen we de herroeping die je hebt verklaard, met de volledige inhoud en de datum en het tijdstip waarop die bij ons binnenkwam.',
+        'outro' => 'Bewaar deze e-mail. Hiermee kun je je herroeping aantonen en laten zien wanneer die bij ons binnenkwam.',
+        'cta' => 'Bekijk je herroeping',
+    ],
+
 ];

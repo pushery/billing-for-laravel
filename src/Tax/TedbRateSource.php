@@ -15,8 +15,8 @@ use Throwable;
  *
  * ## Why this is its own class
  *
- * Two commands need the same answer for opposite purposes: one COMPARES what we ship against the source,
- * the other PROPOSES a change from it. The envelope, the POST, the row extraction and the `situationOn`
+ * Two commands need the same answer for opposite purposes: one compares what we ship against the source,
+ * the other proposes a change from it. The envelope, the POST, the row extraction and the `situationOn`
  * reading are identical for both, and identical code written twice is two places one of them can be fixed.
  *
  * The specific way that hurts here is quiet. A parser that drifts does not throw; it returns fewer rows, or
@@ -28,7 +28,7 @@ use Throwable;
  * TEDB speaks SOAP, but a hand-built envelope over an ordinary HTTP POST is enough and keeps the package
  * free of an extension a consumer would otherwise have to install for a job they may never run.
  *
- * ## Saying WHICH failure
+ * ## Saying which failure
  *
  * A failed ask reports its reason rather than a bare "unreachable". That distinction was paid for once
  * already: three nightly runs reported unreachable while the endpoint answered in 0.2 s from a laptop, and
@@ -151,7 +151,7 @@ final readonly class TedbRateSource
     /**
      * The day the newest rate situation in the response began, or '' when the response names none.
      *
-     * The service states `situationOn` on EVERY row now, as the day that row's situation began: one
+     * The service states `situationOn` on every row now, as the day that row's situation began: one
      * answer for today carries 2026-07-01, 2026-01-01 and 2025-01-01 side by side. Reading the first of
      * them, as this did when the service stated one date for the whole answer, handed the window check an
      * arbitrary row's date. The newest is the one that decides whether the answer can hold for a day: no

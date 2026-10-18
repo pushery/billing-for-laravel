@@ -7,7 +7,7 @@ namespace Pushery\Billing\Contracts;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Resolves a customer reference WITHIN the merchant account that issued it.
+ * Resolves a customer reference within the merchant account that issued it.
  *
  * The package's ordinary {@see CustomerDirectory} is global, which is right for a single seller and quietly
  * wrong once a second merchant account exists: provider customer ids are unique per account, so the same id

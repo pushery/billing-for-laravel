@@ -22,13 +22,13 @@ use Pushery\Billing\Support\WebhookEventLedger;
 use Throwable;
 
 /**
- * The HTTP entry point of the webhook spine: verify the signature, RECORD the delivery, map the payload
- * to neutral domain events, queue each to the registered effects. Verification happens BEFORE anything
+ * The HTTP entry point of the webhook spine: verify the signature, record the delivery, map the payload
+ * to neutral domain events, queue each to the registered effects. Verification happens before anything
  * else is trusted, so a forged payload never reaches an effect or the ledger; a rejected request answers
  * 400. The master switch is honored first: when billing is disabled the endpoint answers 404, so a
  * paused clone mutates no state and sends no dunning even if a secret is still configured.
  *
- * The delivery is recorded WITH its raw payload before any effect runs. That record is what makes the
+ * The delivery is recorded with its raw payload before any effect runs. That record is what makes the
  * package recoverable: an effect that fails can be re-driven from the stored payload later
  * (`billing:webhooks:replay`), rather than depending on the provider to redeliver — which it stops doing
  * once its own retry window closes.
@@ -124,14 +124,14 @@ final readonly class WebhookReceiver
      * The key this delivery is recorded and deduped under, asking the mapper first.
      *
      * A mapper that implements {@see DerivesDeliveryKey} knows its provider's redelivery semantics better
-     * than this receiver can: a provider that pings with a bare resource id sends the SAME id every time
+     * than this receiver can: a provider that pings with a bare resource id sends the same id every time
      * that resource changes, so the default key would recognize every change after the first as a
      * duplicate and drop it. That failure is silent and it loses money rather than double-booking it.
      *
      * The mapper returning null is not an error — it is the answer for a request it would not map — so
      * the default key stands and the delivery is still recorded exactly once.
      *
-     * The default key is read from the REQUEST rather than only from the decoded body, because not every
+     * The default key is read from the request rather than only from the decoded body, because not every
      * provider posts JSON. A form-encoded ping (`id=tr_abc`) decodes to nothing, so a body-only read fell
      * through to the hash — leaving a delivery that is correct and unfindable: somebody investigating holds
      * the provider's resource id and has no route from it to the row, and `billing:webhooks:replay` cannot be aimed
@@ -158,7 +158,7 @@ final readonly class WebhookReceiver
     /**
      * The receiver's own key: the provider's event id, or a hash of a body that names nothing.
      *
-     * Read from the REQUEST rather than only from the decoded body, because not every provider posts
+     * Read from the request rather than only from the decoded body, because not every provider posts
      * JSON. A form-encoded ping (`id=tr_abc`) decodes to nothing, so a body-only read fell through to the
      * hash — leaving a delivery that is correct and unfindable: somebody investigating holds the
      * provider's resource id and has no route from it to the row, and `billing:webhooks:replay` cannot be aimed
@@ -183,13 +183,13 @@ final readonly class WebhookReceiver
      * deliberate 400 into a 500, and a 5xx tells the sender "try again" about a request that can never
      * become valid. So a broken listener costs a log line and nothing else.
      *
-     * Logged AS WELL as dispatched. The event is what a consumer wires an audit trail to; the log line is
+     * Logged as well as dispatched. The event is what a consumer wires an audit trail to; the log line is
      * what an install that wired nothing still gets, and shipping a security signal that is invisible
      * without setup would be the same complaint one level down. The cost is named rather than hidden: a
      * scanner hammering the endpoint writes a line per attempt, which is why it is a warning and not an
      * error.
      *
-     * NOT recorded in the delivery ledger, deliberately. That table holds provider payloads for replay and
+     * Not recorded in the delivery ledger, deliberately. That table holds provider payloads for replay and
      * carries personal data; filling it from unauthenticated traffic would let anybody who can reach the
      * URL write rows into it.
      *

@@ -8,7 +8,7 @@ use Pushery\Billing\ValueObjects\Money;
 use RuntimeException;
 
 /**
- * A buyer-chosen GROSS amount could not be split into a net and a tax the regime agrees with.
+ * A buyer-chosen gross amount could not be split into a net and a tax the regime agrees with.
  *
  * Splitting a gross means inverting the rate, and inverting a rounded function is not free: for some totals
  * no whole-cent net reproduces the total exactly, so the split may sit one minor unit away from what the
@@ -16,7 +16,7 @@ use RuntimeException;
  * the one figure that may not move — they agreed to pay it, and a receipt whose parts do not sum to it is
  * wrong in a way a reader can see.
  *
- * A LARGER divergence is a different statement entirely: it means the rate does not scale with the amount,
+ * A larger divergence is a different statement entirely: it means the rate does not scale with the amount,
  * so the rate read back from one amount does not describe another. A tiered or threshold regime behaves that
  * way. There the inversion has no answer at all, and producing one would print a plausible net on a document
  * that the return then contradicts. So it refuses instead — loudly, at the seam, rather than quietly on a

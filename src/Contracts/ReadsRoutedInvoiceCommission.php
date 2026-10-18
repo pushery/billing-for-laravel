@@ -23,7 +23,7 @@ use Pushery\Billing\ValueObjects\RoutedInvoiceCommission;
  * ## Null is an answer, and it is the one that must stay loud
  *
  * Null means the invoice was not routed, or the provider could not say. The caller records nothing and the
- * event is NOT quietly marked done: the whole reason this lane reads rather than computes is that a failed
+ * event is not quietly marked done: the whole reason this lane reads rather than computes is that a failed
  * read is a loud event, while a wrong computation is a plausible number nobody questions. Swallowing the
  * null here would give away that advantage exactly where it is needed.
  */

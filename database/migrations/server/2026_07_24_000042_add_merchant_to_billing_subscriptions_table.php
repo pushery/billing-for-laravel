@@ -11,7 +11,7 @@ use Pushery\Billing\Support\BillingSchema;
  * Keys a subscription-state row by merchant as well as by owner, so a single billable can hold many
  * concurrent subscriptions — one per creator — while a single-seller install stays byte-for-byte unchanged.
  *
- * The merchant axis is carried as a NOT-NULL sentinel string (`merchant_uid`, default `'platform'`) rather
+ * The merchant axis is carried as a not-null sentinel string (`merchant_uid`, default `'platform'`) rather
  * than as a nullable column inside the unique index. A nullable column would make the uniqueness disappear
  * on MySQL, where two NULLs do not collide, so the single-seller one-row invariant — and the create-race
  * convergence that rides on it — would silently vanish the moment a marketplace row appeared. The sentinel
