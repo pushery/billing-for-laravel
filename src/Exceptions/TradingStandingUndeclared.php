@@ -11,7 +11,7 @@ use RuntimeException;
  * A seller who has sold goods regularly this year was about to sell more without saying whether they trade as
  * a business.
  *
- * Thrown BEFORE any provider call, like the other seller-side refusals. Selling regularly makes somebody a
+ * Thrown before any provider call, like the other seller-side refusals. Selling regularly makes somebody a
  * business whether or not they earn anything by it, and what follows from that (the documents of a sale,
  * the buyer's rights) depends on the answer. So the platform asks once the activity threshold is reached,
  * and the next sale of goods waits for the answer rather than being made on a guess.

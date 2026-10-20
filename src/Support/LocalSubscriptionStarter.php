@@ -181,7 +181,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
             return new SubscriptionStart(SubscriptionState::Trialing);
         }
 
-        // Resolved BEFORE the provider is touched, and the order is the whole reason it is its own statement.
+        // Resolved before the provider is touched, and the order is the whole reason it is its own statement.
         // As an argument it would be evaluated after `customerFor()`, which writes: a misconfigured install
         // would create a customer at the provider and only then refuse. That is not free — the account
         // exists, it is now on somebody's dashboard, and the refusal message says nothing about it.

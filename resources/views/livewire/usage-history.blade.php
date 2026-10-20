@@ -16,13 +16,13 @@
                 <h2 class="text-lg font-medium">{{ __('billing::account.usage_history.periods_heading') }}</h2>
 
                 @foreach ($byPeriod as $period => $rows)
-                    <div wire:key="period-{{ $period }}" class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                        <p class="font-medium">{{ $period }}</p>
+                    <div wire:key="period-{{ $loop->index }}" class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+                        <p class="font-medium">{{ $periodLabels[$period] ?? $period }}</p>
 
                         <dl class="mt-2 space-y-1">
                             @foreach ($rows as $row)
-                                <div wire:key="period-{{ $period }}-{{ $row->meterKey }}" class="flex items-center justify-between text-sm">
-                                    <dt class="text-gray-600 dark:text-gray-300">{{ $row->meterKey }}</dt>
+                                <div wire:key="period-{{ $loop->parent->index }}-{{ $loop->index }}" class="flex items-center justify-between text-sm">
+                                    <dt class="text-gray-600 dark:text-gray-300">{{ $meterLabels[$row->meterKey] ?? $row->meterKey }}</dt>
                                     <dd class="text-gray-500 dark:text-gray-400">
                                         @if ($row->metered)
                                             {{ __('billing::account.usage_history.used', ['used' => \Pushery\Billing\Support\LocalizedNumber::format($row->used)]) }}
@@ -55,7 +55,7 @@
                             <span>
                                 {{ __('billing::account.usage_history.'.($movement->isCredit() ? 'movement_credited' : 'movement_spent'), [
                                     'units' => \Pushery\Billing\Support\LocalizedNumber::format($movement->units()),
-                                    'meter' => $movement->meter,
+                                    'meter' => $meterLabels[$movement->meter] ?? $movement->meter,
                                 ]) }}
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">{{ $movement->reference }}</span>
                             </span>
@@ -75,7 +75,7 @@
                 <ul class="space-y-2">
                     @foreach ($topups as $index => $topup)
                         <li wire:key="topup-{{ $index }}" class="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3 text-sm shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                            <span class="font-medium">{{ $topup->addonKey }}</span>
+                            <span class="font-medium">{{ $addonLabels[$topup->addonKey] ?? $topup->addonKey }}</span>
                             <span class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
                                 <span>{{ \Pushery\Billing\Support\LocalizedMoney::format($topup->amount) }}</span>
                                 <span class="text-xs">{{ \Pushery\Billing\Support\LocalizedDate::short($topup->purchasedAt) }}</span>

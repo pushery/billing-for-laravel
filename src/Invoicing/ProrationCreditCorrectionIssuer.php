@@ -153,7 +153,7 @@ final readonly class ProrationCreditCorrectionIssuer
         // provider's own document, and this one is issued here.
         $correctionKey = sprintf('credit-offset:%d:%d', $offset->id, $original->id);
 
-        // Asked BEFORE the number is drawn, so a repeated call burns nothing from the series. The unique index on
+        // Asked before the number is drawn, so a repeated call burns nothing from the series. The unique index on
         // (`correction_key`, `credited_invoice_id`) is the backstop, on an invoice with a provider and on one
         // raised outside an order without.
         if (InvoiceRecord::model()::query()->where('correction_key', $correctionKey)->exists()) {

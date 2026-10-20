@@ -54,7 +54,7 @@ final readonly class ClawbackCalculator
 
         $remainingSale = $gross->minus($refundedAfter);
 
-        // The heart of it: the merchant's share of what is LEFT, computed from scratch.
+        // The heart of it: the merchant's share of what is left, computed from scratch.
         //
         // On the same base the sale was made on, which the row carries. The commission is a net rate, so
         // the remainder's commission is taken on the remainder's net — and the rate for that is frozen,

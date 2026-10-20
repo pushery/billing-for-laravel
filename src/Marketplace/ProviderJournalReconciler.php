@@ -112,7 +112,7 @@ final readonly class ProviderJournalReconciler
     {
         $reference = (string) $row->transfer_reference;
 
-        // What WE believe the merchant kept: what the provider reported moving, less every reversal we know
+        // What we believe the merchant kept: what the provider reported moving, less every reversal we know
         // about. `transfer_moved_minor` first, because a transfer that moved a different amount than was
         // owed is exactly the case being looked for.
         //
@@ -121,7 +121,9 @@ final readonly class ProviderJournalReconciler
         // transfer call, so no figure is ever reported — while the provider still creates a transfer off
         // the charge, whose reference the row carries. Every such row, and every row settled before the
         // column existed, would report a drift of the full transfer value. The model states it in as many
-        // words, and `MerchantCharge::reversibleMinor()` takes the same fallback for the same reason.
+        // words, and `MerchantCharge::reversibleMinor()` takes the same fallback for the same reason. That
+        // transfer carries the whole payment, with the platform's fee collected back from the merchant
+        // afterwards, and the driver's reading takes the fee off, so both sides describe the same share.
         $ours = new Money(
             ($row->transfer_moved_minor ?? $row->net_minor) - $row->transfer_reversed_minor,
             $row->currency

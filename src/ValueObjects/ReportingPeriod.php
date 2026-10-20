@@ -6,6 +6,7 @@ namespace Pushery\Billing\ValueObjects;
 
 use Carbon\CarbonImmutable;
 use InvalidArgumentException;
+use Pushery\Billing\Contracts\TaxReturnPeriod;
 
 /**
  * One quarter of a year, as a tax return counts them.
@@ -14,7 +15,7 @@ use InvalidArgumentException;
  * what every deadline in this area is measured from. Keeping the two together in one object is what stops a
  * caller measuring from the wrong one.
  */
-final readonly class ReportingPeriod
+final readonly class ReportingPeriod implements TaxReturnPeriod
 {
     public function __construct(
         public int $year,
@@ -69,14 +70,19 @@ final readonly class ReportingPeriod
         return $moment->lessThanOrEqualTo($this->dueOn()->addYears($windowYears));
     }
 
-    public function equals(self $other): bool
+    public function equals(TaxReturnPeriod $other): bool
     {
-        return $this->year === $other->year && $this->quarter === $other->quarter;
+        return $other instanceof self && $this->year === $other->year && $this->quarter === $other->quarter;
     }
 
     /** A stable label for an export line: the year and the quarter, in that order. */
     public function label(): string
     {
         return sprintf('%04d-Q%d', $this->year, $this->quarter);
+    }
+
+    public function periodContaining(CarbonImmutable $moment): self
+    {
+        return self::containing($moment);
     }
 }

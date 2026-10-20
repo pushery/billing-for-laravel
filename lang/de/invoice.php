@@ -29,6 +29,7 @@ return [
     'small_business_note' => 'Steuerfrei nach § 19 UStG (Kleinunternehmerregelung).',
     'union_small_business_note' => 'Steuerfrei nach der Kleinunternehmerregelung des Ansässigkeitsstaats des Leistenden.',
     'not_consideration_note' => 'Nicht steuerbar: Schadensersatz, kein Entgelt für eine Leistung.',
+    'supply_to_a_deemed_supplier_note' => 'Steuerfreie Lieferung der Ware an die elektronische Schnittstelle, die sie unterstützt (Art. 136a der Richtlinie 2006/112/EG).',
     'margin_scheme_note' => 'Gebrauchtgegenstände/Sonderregelung',
     'margin_scheme_note_works_of_art' => 'Kunstgegenstände/Sonderregelung',
     'margin_scheme_note_collectors_items' => 'Sammlungsstücke und Antiquitäten/Sonderregelung',

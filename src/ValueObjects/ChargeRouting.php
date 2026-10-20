@@ -27,21 +27,26 @@ final readonly class ChargeRouting
      * @param  bool  $onBehalfOf  whether the provider treats the merchant as the merchant of record for
      *                            the payment. It changes the country the payment is processed in, that
      *                            country's fee schedule, and the descriptor, address and phone the buyer
-     *                            sees on their statement. It does NOT move the processing fee or the
+     *                            sees on their statement. It does not move the processing fee or the
      *                            dispute off the platform — on a destination charge both stay with the
      *                            platform whatever this says, and the country-specific fee is still billed
-     *                            to the platform account. This parameter has now been wrong in BOTH
+     *                            to the platform account. This parameter has now been wrong in both
      *                            directions: first described as cosmetic, then as the axis fee and
      *                            liability follow. Neither is right: both are stated on the connected
      *                            ACCOUNT, in `controller.fees.payer` and `controller.losses.payments`, and
      *                            they follow its type rather than anything chosen per payment. See
      *                            ChargeType::Destination for the measurement.
+     * @param  bool  $feeRefundedByCaller  on a refund: the caller gives the platform's fee back itself, in the
+     *                                     amount its ledger computed, so the provider is not asked to share the
+     *                                     fee out in proportion to the fee it first withheld. Off, a refund leaves
+     *                                     the fee to the provider as it always has
      */
     public function __construct(
         public MerchantAccountReference $destination,
         public Money $applicationFee,
         public ChargeType $type = ChargeType::Destination,
         public bool $onBehalfOf = false,
+        public bool $feeRefundedByCaller = false,
     ) {
         if ($applicationFee->isNegative()) {
             throw new InvalidArgumentException('A platform fee cannot be negative.');

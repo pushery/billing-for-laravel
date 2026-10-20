@@ -33,6 +33,14 @@ return [
         'cta' => 'View your plan',
     ],
 
+    'subscription_ending' => [
+        'subject' => 'Your subscription ends soon',
+        'intro' => 'Your canceled subscription ends on :date.',
+        'intro_merchant' => 'Your canceled subscription to :merchant ends on :date.',
+        'outro' => 'Resume it before then to keep everything it includes without a break.',
+        'cta' => 'Resume your subscription',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'Your tax standing has changed',
         'intro' => 'Your tax standing changed from :from to :to. We made this change from our own records — you did not ask for it.',

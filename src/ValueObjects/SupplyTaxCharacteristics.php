@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\ValueObjects;
 
 use Carbon\CarbonImmutable;
+use Pushery\Billing\Enums\DeemedSupplyOfGoods;
 use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxExemptionReason;
@@ -29,7 +30,7 @@ use Pushery\Billing\Enums\TaxRateCategory;
  * one is exactly as valid as a full one, and it means the same thing the absent arguments meant — the
  * caller does not know, and the document says so by leaving the columns null.
  *
- * What changed underneath the argument is the count. It was written when there were three; there are
+ * What changed underneath the argument is the count. It was written when there were three; there were
  * eight, spread across a signature of seventeen parameters that two callers filled positionally. At that
  * width the ordering itself becomes a hazard: a characteristic inserted in the middle shifts every
  * positional argument after it, and two of the pairs it could shift past are type-compatible, so the
@@ -60,6 +61,17 @@ final readonly class SupplyTaxCharacteristics
      * @param  ?string  $destinationSubdivision  and at the finer grain, where one is owed. Absent is
      *                                           counted as unknown rather than attributed somewhere
      *                                           plausible.
+     * @param  ?DeemedSupplyOfGoods  $deemedSupply  the rule that makes the platform the supplier of the goods,
+     *                                              as the classification of the sale found it
+     * @param  ?string  $goodsLocatedIn  the member state the goods were in when the transport began, as an
+     *                                   ISO 3166 code: where the seller's supply to the platform takes place
+     *                                   under Art. 31, and whose registration of the seller its document names
+     * @param  ?bool  $oneStopShop  whether the sale is declared in the cross-border consumer return. The return
+     *                              reads this flag alone, so a document issued without it is a sale the return
+     *                              never sees; null is written as not declared.
+     * @param  ?bool  $importScheme  whether the sale is declared in the import scheme's return, the distance sale of
+     *                               goods imported in a consignment of up to 150 euros; null is written as not
+     *                               declared.
      */
     public function __construct(
         public ?TaxArchetype $archetype = null,
@@ -70,6 +82,10 @@ final readonly class SupplyTaxCharacteristics
         public ?CarbonImmutable $deliveredOn = null,
         public ?string $destinationCountry = null,
         public ?string $destinationSubdivision = null,
+        public ?DeemedSupplyOfGoods $deemedSupply = null,
+        public ?string $goodsLocatedIn = null,
+        public ?bool $oneStopShop = null,
+        public ?bool $importScheme = null,
     ) {}
 
     /**

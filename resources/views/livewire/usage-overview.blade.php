@@ -54,13 +54,13 @@
                         <p @class([
                             'mt-2 text-xs font-medium',
                             'text-red-600 dark:text-red-400' => $overIntent === 'danger',
-                            'text-amber-600 dark:text-amber-400' => $overIntent === 'warning',
+                            'text-amber-700 dark:text-amber-400' => $overIntent === 'warning',
                             'text-gray-500 dark:text-gray-400' => $overIntent === 'neutral',
                         ])>
                             {{ __('billing::account.usage.'.($overIntent === 'neutral' ? 'over_soft' : 'over')) }}
                         </p>
                     @elseif ($dimension->isWarning())
-                        <p class="mt-2 text-xs font-medium text-amber-600 dark:text-amber-400">{{ __('billing::account.usage.warning') }}</p>
+                        <p class="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">{{ __('billing::account.usage.warning') }}</p>
                     @endif
 
                     {{-- Burn rate and reach, and only when the provider supplied both. The package does not

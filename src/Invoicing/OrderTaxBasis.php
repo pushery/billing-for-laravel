@@ -12,7 +12,6 @@ use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Enums\OrderItemType;
 use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\TaxArchetype;
-use Pushery\Billing\Enums\TaxIdVerificationStatus;
 use Pushery\Billing\Enums\VoucherInstrumentType;
 use Pushery\Billing\Marketplace\CreditTopUpVolume;
 use Pushery\Billing\Models\Order;
@@ -21,6 +20,7 @@ use Pushery\Billing\Models\TaxIdVerification;
 use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
 use Pushery\Billing\Tax\PlaceEvidenceStore;
 use Pushery\Billing\Tax\SaleTaxDecision;
+use Pushery\Billing\Tax\StandingTaxIdVerification;
 use Pushery\Billing\Tax\SupplyPlaceDecision;
 use Pushery\Billing\Tax\UnionMembership;
 use Pushery\Billing\ValueObjects\Money;
@@ -367,45 +367,10 @@ final readonly class OrderTaxBasis
         );
     }
 
-    /**
-     * The verification the reverse charge may rest on: of the customer's tax ids, the most recent whose latest
-     * deciding answer is `verified`.
-     *
-     * An answer decides when it is `verified`, `unverified` or `removed`. A `pending` or `unavailable` one says
-     * the register was not heard, so it neither confirms an id nor takes a confirmation back. An id that turns
-     * `verified` again after an `unverified` answer has a row for that answer too, and the reverse charge rests
-     * on it again.
-     */
+    /** The verification the reverse charge may rest on, read by the class that answers it for every buyer. */
     private function standingVerification(Order $order): ?TaxIdVerification
     {
-        $answers = TaxIdVerification::model()::query()
-            ->where('owner_type', $order->owner_type)
-            ->where('owner_id', $order->owner_id)
-            ->whereIn('status', array_values(array_filter(
-                TaxIdVerificationStatus::cases(),
-                static fn (TaxIdVerificationStatus $status): bool => $status->decides(),
-            )))
-            ->orderByDesc('reported_at')
-            ->orderByDesc('id')
-            ->get();
-
-        $decided = [];
-
-        foreach ($answers as $answer) {
-            $id = $answer->provider.'|'.$answer->tax_id_reference;
-
-            if (isset($decided[$id])) {
-                continue;
-            }
-
-            $decided[$id] = true;
-
-            if ($answer->status === TaxIdVerificationStatus::Verified) {
-                return $answer;
-            }
-        }
-
-        return null;
+        return new StandingTaxIdVerification()->of($order->owner_type, $order->owner_id);
     }
 
     /**

@@ -29,6 +29,7 @@ return [
     'small_business_note' => 'Vrijgesteld van btw op grond van de kleineondernemersregeling (§ 19 UStG).',
     'union_small_business_note' => 'Vrijgesteld van btw op grond van de kleineondernemersregeling van de lidstaat van de leverancier.',
     'not_consideration_note' => 'Buiten de btw-heffing: schadevergoeding, geen vergoeding voor een levering of dienst.',
+    'supply_to_a_deemed_supplier_note' => 'Vrijgestelde levering van de goederen aan de elektronische interface die deze faciliteert (artikel 136 bis van Richtlijn 2006/112/EG).',
     'margin_scheme_note' => 'Margeregeling — gebruikte goederen',
     'margin_scheme_note_works_of_art' => 'Margeregeling — kunstvoorwerpen',
     'margin_scheme_note_collectors_items' => 'Margeregeling — voorwerpen voor verzamelingen en antiquiteiten',

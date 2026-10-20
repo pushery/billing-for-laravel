@@ -6,6 +6,7 @@ namespace Pushery\Billing\ValueObjects;
 
 use DateTimeInterface;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Support\PaymentMethodNames;
 
 /**
  * A stored payment method as the account hub renders it — a provider-neutral mirror of the card /
@@ -23,14 +24,15 @@ final readonly class PaymentMethod
         public ?int $expYear = null,
     ) {}
 
-    /** A short human label, e.g. "Visa •••• 4242" for a card, otherwise the method type. */
+    /**
+     * A short human label: the brand, or without one the kind of method, by the name a customer reads, and the
+     * last four digits where the provider gave them. "Visa •••• 4242", "SEPA Direct Debit •••• 3000".
+     */
     public function label(): string
     {
-        if ($this->brand !== null && $this->last4 !== null) {
-            return "{$this->brand} •••• {$this->last4}";
-        }
+        $name = $this->brand !== null ? PaymentMethodNames::brand($this->brand) : PaymentMethodNames::kind($this->type);
 
-        return $this->type;
+        return $this->last4 !== null ? "{$name} •••• {$this->last4}" : $name;
     }
 
     /**

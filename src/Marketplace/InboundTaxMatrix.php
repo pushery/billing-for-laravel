@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace;
 
 use Pushery\Billing\Enums\CreatorTaxStatus;
+use Pushery\Billing\Enums\DeemedSupplyOfGoods;
 use Pushery\Billing\Enums\SettlementDocumentType;
 use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\TaxExemptionReason;
@@ -44,6 +45,8 @@ final class InboundTaxMatrix
      * @param  Money  $transactionNet  the sale's net (the fan's net, before the platform's own output tax)
      * @param  PlatformFee  $commission  the platform's take — the payout is what remains of the net after it
      * @param  int  $supplyRateBps  the rate of the creator's own supply, in basis points (a jurisdiction input)
+     * @param  ?DeemedSupplyOfGoods  $deemedSupply  the rule that makes the platform the supplier of the goods sold,
+     *                                              where one does; null for every other sale
      */
     public function resolve(
         SupplyRegime $regime,
@@ -51,8 +54,9 @@ final class InboundTaxMatrix
         Money $transactionNet,
         PlatformFee $commission,
         int $supplyRateBps,
+        ?DeemedSupplyOfGoods $deemedSupply = null,
     ): InboundTaxTreatment {
-        return $this->resolveOnPayout($regime, $creatorStatus, $commission->netOf($transactionNet), $supplyRateBps);
+        return $this->resolveOnPayout($regime, $creatorStatus, $commission->netOf($transactionNet), $supplyRateBps, $deemedSupply);
     }
 
     /**
@@ -64,18 +68,28 @@ final class InboundTaxMatrix
      * commission that produced it was already taken.
      *
      * @param  Money  $payout  the creator's payout net of any tax, as a settlement states it
+     * @param  ?DeemedSupplyOfGoods  $deemedSupply  the rule that makes the platform the supplier of the goods sold,
+     *                                              where one does; null for every other sale
      */
     public function resolveOnPayout(
         SupplyRegime $regime,
         CreatorTaxStatus $creatorStatus,
         Money $payout,
         int $supplyRateBps,
+        ?DeemedSupplyOfGoods $deemedSupply = null,
     ): InboundTaxTreatment {
         if ($regime !== SupplyRegime::CommissionChain) {
             throw RegimeNotPermitted::intermediationHasNoInboundTaxMatrix($regime);
         }
 
         $currency = $payout->currency;
+
+        // A deemed supply decides the row before the standing does, because it decides what the seller supplied
+        // and where. An unestablished standing still holds: the classification was made from the standing, and
+        // a document issued while nobody knows it would rest on a guess.
+        if ($deemedSupply instanceof DeemedSupplyOfGoods && $creatorStatus !== CreatorTaxStatus::Unclarified) {
+            return $this->deemedSupply($deemedSupply, $payout);
+        }
 
         return match ($creatorStatus) {
             // Charges tax normally: the one case that states tax. The self-billed invoice carries the rate on
@@ -139,6 +153,36 @@ final class InboundTaxMatrix
             // It lifts on its own when a standing is recorded. There is no override and no key naming a
             // default standing, because either would be the silent default this exists to prevent.
             CreatorTaxStatus::Unclarified => InboundTaxTreatment::hold($currency),
+        };
+    }
+
+    /**
+     * The seller's link of a sale the platform is treated as supplying itself (Art. 14a VAT Directive).
+     *
+     * Goods already in the Union: the seller's supply to the platform is exempt with the right to deduct (Art. 136a,
+     * 169(b)) and placed where the goods are when the transport begins (Art. 31). It is documented, because
+     * Art. 220(2) does not relieve it of an invoice, and the platform raises the document as a self-billed one. It
+     * states no tax and names its relief, so it renders as category E with the provision as its reason, and a
+     * treatment that stated tax beside that reason is refused by the treatment itself.
+     *
+     * An imported consignment: the seller's supply to the platform takes place outside the Union, where the goods
+     * are when the transport begins, so no member state's tax and no Union invoicing rule reaches it. The payout is
+     * still documented to the seller, as a settlement note that states no tax.
+     *
+     * The amount is the payout in both: what the seller gets for the goods, never the price the buyer pays.
+     */
+    private function deemedSupply(DeemedSupplyOfGoods $supply, Money $payout): InboundTaxTreatment
+    {
+        $currency = $payout->currency;
+
+        return match ($supply) {
+            DeemedSupplyOfGoods::WithinTheUnion => new InboundTaxTreatment(
+                SettlementDocumentType::SelfBilledInvoice, false, Money::zero($currency), false, $payout,
+                exempt: true, exemptionReason: TaxExemptionReason::SupplyToADeemedSupplier,
+            ),
+            DeemedSupplyOfGoods::ImportedConsignment => new InboundTaxTreatment(
+                SettlementDocumentType::SettlementNote, false, Money::zero($currency), false, $payout,
+            ),
         };
     }
 

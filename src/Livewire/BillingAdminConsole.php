@@ -312,7 +312,7 @@ final class BillingAdminConsole extends Component
         // The batch does not tie out, and nobody has said "give it to me anyway" for this period.
         //
         // The command writes the file and fails; this refuses the download and says why, and the two agree
-        // in substance: the file is one click away, not withheld. The difference is what a download IS. It
+        // in substance: the file is one click away, not withheld. The difference is what a download is. It
         // lands in a folder without being read and gets forwarded from there, so an unbalanced batch that
         // arrives silently is an unbalanced batch at the accounting firm. A message beside a file the
         // operator already has is a message nobody needs to read.

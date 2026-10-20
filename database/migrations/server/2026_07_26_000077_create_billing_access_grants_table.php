@@ -22,7 +22,7 @@ use Pushery\Billing\Support\BillingSchema;
  * ## Every dimension is here now, on purpose
  *
  * Ownership rows are the kind that exist for years. Adding a column later is cheap; adding one that has to
- * be RIGHT for rows already written is not — there is no true value to backfill for a grant whose terms
+ * be right for rows already written is not — there is no true value to backfill for a grant whose terms
  * nobody recorded. So the axes that would be breaking to introduce afterwards are present from the start,
  * even where the enforcement around them comes later (`max_seats` is the clearest case: reserved, read by
  * nothing yet, and impossible to add honestly once grants exist).

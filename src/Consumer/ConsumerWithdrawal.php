@@ -315,7 +315,7 @@ final readonly class ConsumerWithdrawal
             return;
         }
 
-        // What is LEFT of it, read off the row. A withdrawal gets retried — a provider timeout, an operator
+        // What is left of it, read off the row. A withdrawal gets retried — a provider timeout, an operator
         // clicking twice — and a second full return would be five euros that only ever went out once.
         $outstanding = new Money($charge->buyerFeeRefundableMinor(), $charge->currency);
 
@@ -431,10 +431,10 @@ final readonly class ConsumerWithdrawal
      *
      * A platform may refund out of goodwill whenever it likes, and that path is untouched. What must not
      * happen is the two being booked as one event: `RefundKind::StatutoryWithdrawal` says the buyer
-     * exercised a RIGHT, and after the window that is false. Same money, different event — and telling
+     * exercised a right, and after the window that is false. Same money, different event — and telling
      * them apart is the entire reason the kind exists.
      *
-     * ## Checked BEFORE anything moves
+     * ## Checked before anything moves
      *
      * A refusal after the refund would be the worst of both: money gone and the record saying it never
      * happened. So this sits at the top of the method, ahead of the settlement.

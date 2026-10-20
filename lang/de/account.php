@@ -94,6 +94,8 @@ return [
     'subscription' => [
         'heading' => 'Abo',
         'status' => 'Status',
+        'plan' => 'Tarif: :plan.',
+        'plan_priced' => 'Tarif: :plan, :price / :interval.',
         'next_invoice' => 'Nächste Rechnung: :amount am :date.',
         'access_ends' => 'Dein Zugang endet am :date.',
         'access_ended' => 'Dein Zugang endete am :date.',
@@ -157,6 +159,7 @@ return [
         'unavailable' => 'Der Nutzungsverlauf ist gerade nicht verfügbar. Bitte versuche es in einem Moment noch einmal.',
         'empty' => 'Noch keine Nutzung erfasst.',
         'periods_heading' => 'Vergangene Perioden',
+        'period_from' => 'Zeitraum ab :date',
         'used' => ':used genutzt',
         'not_metered' => 'Nicht gemessen',
         'prepaid_used' => ':units vorausbezahlt',
@@ -236,6 +239,8 @@ return [
     'toast' => [
         'payment_failed' => 'Deine Zahlung konnte nicht verarbeitet werden. Bitte aktualisiere deine Zahlungsdaten.',
         'subscription_activated' => 'Dein Abo ist aktiv — alles, was dazugehört, ist freigeschaltet.',
+        'addon_credited' => 'Dein Kauf ist abgeschlossen. Deinem Kontoguthaben gutgeschrieben: :amount.',
+        'addon_units_granted' => 'Dein Kauf ist abgeschlossen. Deinem vorausbezahlten Guthaben gutgeschrieben: :units.',
         'dismiss' => 'Schließen',
     ],
 

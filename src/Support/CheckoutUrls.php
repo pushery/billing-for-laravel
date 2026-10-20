@@ -28,14 +28,14 @@ final readonly class CheckoutUrls
     }
 
     /**
-     * Where the provider returns a completed one-time purchase: the add-ons on the plan screen, where it was
-     * bought, unless the install pinned `success_url`. Not the checkout-return route, which reconciles a
-     * subscription and shows the overview as activating until one is recorded; a buyer of an add-on would wait
-     * there for something that is not coming.
+     * Where the provider returns a completed one-time purchase: `purchase_success_url` where the install set one,
+     * then `success_url`, then the add-ons on the plan screen, where it was bought. Not the checkout-return route,
+     * which reconciles a subscription and shows the overview as activating until one is recorded; a buyer of an
+     * add-on would wait there for something that is not coming.
      */
     public function purchaseReturnUrl(): string
     {
-        $configured = $this->configured('success_url');
+        $configured = $this->configured('purchase_success_url') ?? $this->configured('success_url');
 
         if ($configured !== null) {
             return $configured;
@@ -53,6 +53,15 @@ final readonly class CheckoutUrls
         return $this->configured('cancel_url')
             ?? $this->route('billing.account.plan')
             ?? throw new RuntimeException('Configure billing.checkout.cancel_url, or enable the account hub so its plan route exists.');
+    }
+
+    /**
+     * Where the provider returns an abandoned one-time purchase: `purchase_cancel_url` where the install set one,
+     * else where any abandoned checkout goes.
+     */
+    public function purchaseCancelUrl(): string
+    {
+        return $this->configured('purchase_cancel_url') ?? $this->cancelUrl();
     }
 
     /**

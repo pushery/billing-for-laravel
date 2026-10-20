@@ -18,7 +18,7 @@ use Pushery\Billing\Support\LocalizedDate;
  * platform picked out of its own records. A merchant who is not told simply keeps filing as they were, and
  * finds out from an authority.
  *
- * Three things are stated because a merchant cannot act on fewer: what changed, FROM WHEN, and what it means
+ * Three things are stated because a merchant cannot act on fewer: what changed, from when, and what it means
  * for the money they receive. The last one is the part that makes the notice usable rather than alarming —
  * the amount that arrives goes up because tax now travels with it, and without that sentence the first
  * larger settlement looks like an error.

@@ -32,6 +32,23 @@ final class ContradictoryExemption extends RuntimeException
     }
 
     /**
+     * A supply of goods to the electronic interface that is treated as supplying them, on a document that also
+     * states tax.
+     *
+     * The supply is exempt (Art. 136a VAT Directive), and the platform documents it as a self-billed invoice. Tax
+     * stated on that document is owed by its recipient as stated, so a taxed band is refused rather than rendered.
+     */
+    public static function taxedSupplyToADeemedSupplier(float $rate): self
+    {
+        return new self(
+            'This document is frozen as a supply of goods to the electronic interface that is treated as supplying '
+            ."them, exempt under Art. 136a VAT Directive, but carries a band taxed at {$rate}%. A self-billed invoice "
+            .'that states tax on that supply makes its recipient owe the tax it states (in Germany § 14c Abs. 2 UStG), '
+            .'so it cannot be issued. The supply is exempt: state no tax on it.'
+        );
+    }
+
+    /**
      * A service frozen as outside the scope of VAT, on a document that also states tax.
      *
      * EN 16931 category `O` is exclusive (BR-O-11) and the BR-O-* rules forbid such a document stating a

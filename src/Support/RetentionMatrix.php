@@ -31,6 +31,10 @@ final class RetentionMatrix
         // A declaration is dated by the moment it arrived, which is the fact it keeps.
         'billing_cancellation_declarations' => 'declared_at',
         'billing_withdrawal_declarations' => 'declared_at',
+        // A seller's declaration supports every supply made while it stood, and the last of those can be no later than
+        // the seller's erasure. Counted from the declaration it could go years before the records it supports.
+        'billing_seller_declarations' => 'merchant_erased_at',
+        'billing_seller_declaration_contradictions' => 'merchant_erased_at',
     ];
 
     /** @var list<RetentionRule> */
@@ -105,6 +109,21 @@ final class RetentionMatrix
             // inferred one from the Delete/CreatedAt signature would touch these rows behind the axis.
             executor: RetentionExecutor::ErasureAxis,
         );
+
+        // A seller's declarations and their contradictions are the evidence behind the records of the supplies the
+        // platform made of that seller's goods, which are kept for ten years from the end of the year of the supply
+        // (Art. 63c Implementing Regulation 282/2011), the window of the place evidence beside them. Lengthened here
+        // as that evidence is, without a second deletion path.
+        foreach (['billing_seller_declarations', 'billing_seller_declaration_contradictions'] as $evidence) {
+            $rules[$evidence] = new RetentionRule(
+                object: $evidence,
+                action: RetentionAction::RetainUnlinked,
+                clock: RetentionClock::IssueYearEnd,
+                days: $this->days('place_evidence_days', 3650),
+                basisKey: 'billing::retention.basis.books',
+                executor: RetentionExecutor::ErasureAxis,
+            );
+        }
 
         // A produced tax-return file is a book-keeping document scoped to nobody: it names a period, not a
         // person, so the erasure axes above cannot see it. It keeps the full book-keeping window rather than

@@ -8,7 +8,7 @@ namespace Pushery\Billing\Enums;
  * Where a recorded usage event stands on its way to the provider that bills it.
  *
  *  - Local     nothing to report — the tier does not bill this meter, so the event is a counter entry
- *              and an audit record only. It is NOT an error, and it must never be retried.
+ *              and an audit record only. It is not an error, and it must never be retried.
  *  - Pending   reportable and not yet accepted by the provider. The flusher owns it.
  *  - Reported  the provider has it and will bill it. Terminal.
  *  - Reversed  reported, then withdrawn before the invoice closed. Terminal.

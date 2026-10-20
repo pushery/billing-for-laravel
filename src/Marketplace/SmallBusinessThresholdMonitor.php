@@ -17,7 +17,7 @@ use Pushery\Billing\ValueObjects\CountingPeriod;
  * here; the counting is the jurisdiction-neutral {@see AnnualEarningsCounter}, which knows no limit at all.
  *
  * Two limits with different shapes. The current-year limit (or, in a creator's founding year, the immediate
- * limit) is broken FROM a single transaction: the exemption falls away at the charge that carries the running
+ * limit) is broken from a single transaction: the exemption falls away at the charge that carries the running
  * settled total over the line, and that charge is itself taxable, so this reports its identity, not merely
  * "over". The prior-year limit is a yearly verdict on last year's total, with no single breaking transaction.
  *

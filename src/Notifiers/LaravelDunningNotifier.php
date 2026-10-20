@@ -13,6 +13,7 @@ use Pushery\Billing\Contracts\DunningNotifier;
 use Pushery\Billing\Contracts\MandateNotifier;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
 use Pushery\Billing\Contracts\ReceiptNotifier;
+use Pushery\Billing\Contracts\SubscriptionEndingNotifier;
 use Pushery\Billing\Contracts\SubscriptionNotifier;
 use Pushery\Billing\Contracts\SuspensionNotifier;
 use Pushery\Billing\Contracts\TrialNotifier;
@@ -24,8 +25,10 @@ use Pushery\Billing\Notifications\PaymentSucceededNotification;
 use Pushery\Billing\Notifications\QuotaWarningNotification;
 use Pushery\Billing\Notifications\SubscriptionActivatedNotification;
 use Pushery\Billing\Notifications\SubscriptionCanceledNotification;
+use Pushery\Billing\Notifications\SubscriptionEndingNotification;
 use Pushery\Billing\Notifications\SuspensionWarningNotification;
 use Pushery\Billing\Notifications\TrialEndingNotification;
+use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -38,7 +41,7 @@ use Pushery\Billing\ValueObjects\Money;
  * once-per-failure / once-per-payment / once-per-rung / once-per-trial-end / once-per-cancellation
  * guarantees live in the callers (the webhook effects and the dunning-advance command); this simply delivers.
  */
-final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, PaymentActionNotifier, ReceiptNotifier, SubscriptionNotifier, SuspensionNotifier, TrialNotifier, UsageNotifier
+final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, PaymentActionNotifier, ReceiptNotifier, SubscriptionEndingNotifier, SubscriptionNotifier, SuspensionNotifier, TrialNotifier, UsageNotifier
 {
     public function paymentFailed(Model $owner, Money $amount, string $invoiceReference): void
     {
@@ -89,6 +92,11 @@ final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, 
     public function subscriptionCanceled(Model $owner, DateTimeInterface $accessEndsAt): void
     {
         Notification::send($owner, new SubscriptionCanceledNotification($accessEndsAt));
+    }
+
+    public function subscriptionEnding(Model $owner, DateTimeInterface $endsAt, ?MerchantScope $merchant = null, ?string $merchantName = null): void
+    {
+        Notification::send($owner, new SubscriptionEndingNotification($endsAt, $merchant, $merchantName));
     }
 
     public function subscriptionActivated(Model $owner, string $tierLabel): void

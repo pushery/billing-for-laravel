@@ -35,7 +35,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  *  1. There is no path that pays a balance back OUT — credit is spent against what this package bills, and
  *     nothing else. The balance is a claim on future invoices, not a store of withdrawable value.
- *  2. Every method takes exactly ONE owner, so a balance cannot move between owners.
+ *  2. Every method takes exactly one owner, so a balance cannot move between owners.
  *
  * Together those keep this a prepayment against the seller's own supplies. A withdraw()/payout() method, or
  * a debit() wired to a "pay out my remaining balance" button, changes what the instrument is — and it does

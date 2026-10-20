@@ -1661,7 +1661,7 @@ final readonly class LocalBillingEngine implements BillingEngine
      * Collect the owner's open charges of their own, each as a payment of its own, now that a cycle of theirs has been
      * paid: the late fees, and the rest of a period whose charge for a change inside it bounced.
      *
-     * NOT BEFORE, and that is the whole timing. A fee is opened while the owner is in arrears, which is when their
+     * Not before, and that is the whole timing. A fee is opened while the owner is in arrears, which is when their
      * mandate has just been refused; charging it then adds a second refusal to the first. Once a cycle is paid the
      * mandate has just worked, and the fee follows it.
      *

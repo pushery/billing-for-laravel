@@ -172,16 +172,8 @@ final readonly class StripeCheckoutSessionTax implements ReadsProviderComputedTa
             return null;
         }
 
-        $percentage = $rate->effective_percentage ?? null;
-
-        if (! is_int($percentage) && ! is_float($percentage)) {
-            return null;
-        }
-
-        $points = (float) $percentage * 100.0;
-
-        // Exactly representable, or nothing. A rate the column rounds would no longer reproduce the
+        // A whole number of basis points, or nothing. A rate the column rounds would no longer reproduce the
         // amounts printed beside it, and the pair would contradict each other on the document.
-        return $points === floor($points) ? (int) $points : null;
+        return StripeTaxRatePoints::of($rate->effective_percentage ?? null);
     }
 }

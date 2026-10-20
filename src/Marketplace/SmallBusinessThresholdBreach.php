@@ -10,7 +10,7 @@ use Carbon\CarbonInterface;
  * The single transaction that carried a creator's cumulative year over a small-business limit — its identity
  * and its moment, not merely the fact that a limit was reached.
  *
- * The distinction is load-bearing (§ 19 Abs. 1 UStG): the exemption falls away FROM the transaction that
+ * The distinction is load-bearing (§ 19 Abs. 1 UStG): the exemption falls away from the transaction that
  * breaks the limit, and that transaction is itself taxable, while everything earlier in the year stays
  * exempt. A monitor that reported only "over the limit" could not tell the document chain where the line is.
  *

@@ -20,8 +20,7 @@ use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
-use Pushery\Billing\Support\SubscriptionPresenter;
-use Pushery\Billing\Trials\Trials;
+use Pushery\Billing\Support\OwnerSubscriptionState;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
@@ -86,23 +85,15 @@ abstract class AccountScreen extends Component
         return Container::getInstance()->make(TierResolver::class)->resolve($this->owner())->key;
     }
 
-    /** The owner's default subscription row, or null when there is no local row yet. */
+    /** The owner's default subscription row with the platform, or null when there is no local row yet. */
     protected function subscription(): ?Subscription
     {
-        $owner = $this->owner();
-
-        return Subscription::model()::query()
-            ->forOwner($owner)
-            ->forMerchant(null)
-            ->ofDefaultType()
-            ->latest('id')
-            ->first();
+        return Container::getInstance()->make(OwnerSubscriptionState::class)->subscriptionOf($this->owner());
     }
 
     /**
-     * The canonical state of the owner's billing. With a subscription row it is presented from that; with
-     * none, from the owner itself — so an owner on a generic trial (no subscription) resolves to
-     * GenericTrial rather than being read as never-subscribed.
+     * The canonical state of the owner's billing, read by {@see OwnerSubscriptionState}: the reader an
+     * application's own screens ask, so the hub and those screens cannot come to read a state differently.
      *
      * $pendingActivation is the post-checkout signal: a customer just back from checkout whose subscription
      * has not been recorded yet resolves to Activating (a transient state the screen polls out of), rather
@@ -110,13 +101,7 @@ abstract class AccountScreen extends Component
      */
     protected function currentState(bool $pendingActivation = false): SubscriptionState
     {
-        $subscription = $this->subscription();
-
-        $snapshot = $subscription instanceof Subscription
-            ? $subscription->toSnapshot()
-            : Container::getInstance()->make(Trials::class)->ownerSnapshot($this->owner());
-
-        return Container::getInstance()->make(SubscriptionPresenter::class)->present($snapshot, $pendingActivation);
+        return Container::getInstance()->make(OwnerSubscriptionState::class)->for($this->owner(), pendingActivation: $pendingActivation);
     }
 
     /**

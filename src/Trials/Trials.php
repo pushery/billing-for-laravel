@@ -18,7 +18,7 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * row, because there is no subscription yet. The state presenter reads it through {@see ownerSnapshot()} so
  * an owner mid-generic-trial resolves to the GenericTrial state (which grants access), and the tier resolver
  * unlocks the configured trial tier (`billing.trial.generic_tier`) while it runs. When it lapses with no
- * subscription and no provider customer, the owner falls to `none`; with a customer on file, to `churned`.
+ * subscription, the owner falls to `none`, whether or not the provider knows them as a customer.
  *
  * A generic trial only exists when a tier is configured for it: without `generic_tier` there is nothing for
  * it to unlock, so granting one is a no-op rather than an entitlement to nothing.
@@ -83,7 +83,7 @@ final readonly class Trials
 
     /**
      * The driver-neutral snapshot for an owner with no subscription, from which the presenter reads the
-     * generic-trial / churned / none state. This is the path that was missing: nothing built a
+     * generic-trial or none state. This is the path that was missing: nothing built a
      * no-subscription snapshot, so the presenter's generic-trial branch could never be reached for a real
      * owner.
      */

@@ -12,6 +12,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
+use Illuminate\Contracts\Translation\Loader;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Notifications\Events\NotificationSent;
@@ -23,6 +24,7 @@ use Laravel\Cashier\Cashier;
 use Livewire\Livewire;
 use Override;
 use Pushery\Billing\Catalogs\ConfigAddonCatalog;
+use Pushery\Billing\Catalogs\ConfigFeatureBullets;
 use Pushery\Billing\Catalogs\ConfigPlanCatalog;
 use Pushery\Billing\Catalogs\ConfigTierCatalog;
 use Pushery\Billing\Catalogs\MeterCatalog;
@@ -37,6 +39,7 @@ use Pushery\Billing\Console\Commands\CancelSubscriptionCommand;
 use Pushery\Billing\Console\Commands\CheckMetersCommand;
 use Pushery\Billing\Console\Commands\CheckTaxRatesCommand;
 use Pushery\Billing\Console\Commands\DatevExportCommand;
+use Pushery\Billing\Console\Commands\DeemedSupplyRecordsExportCommand;
 use Pushery\Billing\Console\Commands\DoctorCommand;
 use Pushery\Billing\Console\Commands\EraseOwnerCommand;
 use Pushery\Billing\Console\Commands\EscalateSellerDataCommand;
@@ -48,11 +51,13 @@ use Pushery\Billing\Console\Commands\FreezeReportingRatesCommand;
 use Pushery\Billing\Console\Commands\GrantTierCommand;
 use Pushery\Billing\Console\Commands\ImportExchangeRateFileCommand;
 use Pushery\Billing\Console\Commands\ImportExchangeRatesCommand;
+use Pushery\Billing\Console\Commands\ImportSchemeReturnExportCommand;
 use Pushery\Billing\Console\Commands\InstallCommand;
 use Pushery\Billing\Console\Commands\MarketplacePreflightCommand;
 use Pushery\Billing\Console\Commands\MerchantOnboardCommand;
 use Pushery\Billing\Console\Commands\MerchantReopenCommand;
 use Pushery\Billing\Console\Commands\MerchantStatusCommand;
+use Pushery\Billing\Console\Commands\PlatformSupplyRecordsExportCommand;
 use Pushery\Billing\Console\Commands\ProbeRatesCommand;
 use Pushery\Billing\Console\Commands\PruneBillingCommand;
 use Pushery\Billing\Console\Commands\RecapitulativeStatementExportCommand;
@@ -72,6 +77,7 @@ use Pushery\Billing\Console\Commands\RestateSettlementsCommand;
 use Pushery\Billing\Console\Commands\RetryMerchantTransfersCommand;
 use Pushery\Billing\Console\Commands\SyncSubscriptionsCommand;
 use Pushery\Billing\Console\Commands\TaxReturnExportCommand;
+use Pushery\Billing\Console\Commands\WarnEndingSubscriptionsCommand;
 use Pushery\Billing\Console\Commands\WarnEndingTrialsCommand;
 use Pushery\Billing\Console\Commands\WarnExpiringCardsCommand;
 use Pushery\Billing\Console\Commands\WarnUnestablishedStandingsCommand;
@@ -118,6 +124,7 @@ use Pushery\Billing\Contracts\DunningGuard;
 use Pushery\Billing\Contracts\DunningNotifier;
 use Pushery\Billing\Contracts\EInvoice;
 use Pushery\Billing\Contracts\ExchangeRateSource;
+use Pushery\Billing\Contracts\FeatureBullets;
 use Pushery\Billing\Contracts\GoLiveChecklist;
 use Pushery\Billing\Contracts\IdentifiesBusinessBuyers;
 use Pushery\Billing\Contracts\Invoices;
@@ -159,8 +166,10 @@ use Pushery\Billing\Contracts\SmallBusinessExemptionValidator;
 use Pushery\Billing\Contracts\SmallBusinessIdValidator;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\SubscriptionContentScope;
+use Pushery\Billing\Contracts\SubscriptionEndingNotifier;
 use Pushery\Billing\Contracts\SubscriptionNotifier;
 use Pushery\Billing\Contracts\SubscriptionStateReader;
+use Pushery\Billing\Contracts\SuppliesSellerVatRegistrations;
 use Pushery\Billing\Contracts\SupplyRegimeResolver;
 use Pushery\Billing\Contracts\SuspensionLadder;
 use Pushery\Billing\Contracts\SuspensionNotifier;
@@ -250,6 +259,7 @@ use Pushery\Billing\Marketplace\MerchantPayoutGate;
 use Pushery\Billing\Marketplace\NullMerchantDisplayName;
 use Pushery\Billing\Marketplace\NullMerchantPartyResolver;
 use Pushery\Billing\Marketplace\NullMerchantResolver;
+use Pushery\Billing\Marketplace\PartyVatRegistrations;
 use Pushery\Billing\Marketplace\ProductClassifier;
 use Pushery\Billing\Marketplace\Reporting\DelimitedSellerRecord;
 use Pushery\Billing\Marketplace\ReportingPlausibilityRules;
@@ -274,6 +284,7 @@ use Pushery\Billing\Support\BillingConfigValidator;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\CustodyGuard;
 use Pushery\Billing\Support\GoLivePreflightGuard;
+use Pushery\Billing\Support\LanguageFallbackLoader;
 use Pushery\Billing\Support\LocalSubscriptionPayments;
 use Pushery\Billing\Support\LocalSubscriptionStateReader;
 use Pushery\Billing\Support\MarketplaceSupportGuard;
@@ -289,6 +300,8 @@ use Pushery\Billing\Support\RetentionMatrix;
 use Pushery\Billing\Support\TaxSupportGuard;
 use Pushery\Billing\Tax\CoverageMap;
 use Pushery\Billing\Tax\DatabaseExchangeRateSource;
+use Pushery\Billing\Tax\DatedTaxRateTable;
+use Pushery\Billing\Tax\DeemedSupplyOfGoodsTaxDecision;
 use Pushery\Billing\Tax\DelegatingSmallBusinessExemptionValidator;
 use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
 use Pushery\Billing\Tax\EcbRatePublisher;
@@ -338,6 +351,10 @@ final class BillingServiceProvider extends ServiceProvider
         $this->mergeConfigRecursivelyFrom(__DIR__.'/../config/billing.php', 'billing');
         $this->mergeConfigRecursivelyFrom(__DIR__.'/../config/account.php', 'account');
         $this->mergeConfigRecursivelyFrom(__DIR__.'/../config/license.php', 'license');
+
+        // A regional locale reads this package's catalog of its language, `pt-BR` from `pt`, in the `billing` namespace
+        // only. Registered here so it wraps the loader before the translator is built from it.
+        $this->app->extend('translation.loader', static fn (Loader $loader): Loader => new LanguageFallbackLoader($loader, 'billing'));
 
         // Master switch off → the whole billing surface disappears, including Cashier's own routes
         // (webhook + payment confirmation). Set before Cashier boots so they are never registered. Payments-only
@@ -576,7 +593,7 @@ final class BillingServiceProvider extends ServiceProvider
         // the whitelist of permitted standings is the German one. The guard that enforces it is neutral.
         $this->app->bind(TaxDisclosurePolicy::class, GermanTaxDisclosurePolicy::class);
 
-        // The receiving side's neutral defaults. Both are bound ALWAYS and both are inert without the
+        // The receiving side's neutral defaults. Both are bound always and both are inert without the
         // marketplace: nothing routes money to a merchant, so nothing consults the gate, and the directory
         // reads a table a single-seller install never writes to.
         //
@@ -685,6 +702,9 @@ final class BillingServiceProvider extends ServiceProvider
         // — the same default notifier delivers them; an app rebinds either seam on its own.
         $this->app->bind(ReceiptNotifier::class, LaravelDunningNotifier::class);
         $this->app->bind(SubscriptionNotifier::class, LaravelDunningNotifier::class);
+        // The reminder before a canceled subscription ends, a seam of its own so an application that implements
+        // SubscriptionNotifier keeps working.
+        $this->app->bind(SubscriptionEndingNotifier::class, LaravelDunningNotifier::class);
         // The quota warning — the customer hears they are running out before the meter's policy refuses them.
         $this->app->bind(UsageNotifier::class, LaravelDunningNotifier::class);
         $this->app->bind(PaymentActionNotifier::class, LaravelDunningNotifier::class);
@@ -694,6 +714,9 @@ final class BillingServiceProvider extends ServiceProvider
         // Which owners buy as a business. Nobody, until the application says: an offer only businesses may buy is
         // then shown to no one rather than to everyone.
         $this->app->bind(IdentifiesBusinessBuyers::class, NoBusinessBuyers::class);
+        // A seller's VAT registration per member state, from its invoice party until the application binds a
+        // record of its own: the document of a deemed supply of goods names the one where the goods are.
+        $this->app->bind(SuppliesSellerVatRegistrations::class, PartyVatRegistrations::class);
         // Which payment accounts the application knows, by provider and key. None, until it binds its own: an
         // install that runs one provider from its configuration has no account a webhook could name.
         $this->app->bind(PaymentAccounts::class, NoPaymentAccounts::class);
@@ -718,6 +741,13 @@ final class BillingServiceProvider extends ServiceProvider
         $this->app->bind(
             AddonCatalog::class,
             ConfigAddonCatalog::class,
+        );
+
+        // The bullets of a pricing card, from `tiers.<key>.features` until the application binds bullets that
+        // follow from its own limits.
+        $this->app->bind(
+            FeatureBullets::class,
+            ConfigFeatureBullets::class,
         );
 
         $this->app->bind(
@@ -896,6 +926,26 @@ final class BillingServiceProvider extends ServiceProvider
             },
         );
 
+        // The tax on the platform's own supply of goods in a sale it is treated as making itself. Read from the tables
+        // the calculator prices from, in the same order, and with the installation's distance-sale threshold. The
+        // member state the platform is established in decides whether that threshold can reach a sale at all.
+        $this->app->bind(
+            DeemedSupplyOfGoodsTaxDecision::class,
+            static function (Application $app): DeemedSupplyOfGoodsTaxDecision {
+                $config = $app->make(Repository::class);
+                $tables = new TaxCalculatorFactory($config, $app->make(CheckpointRegistry::class), $app->make(ShippedTaxRates::class));
+                $country = $config->get('billing.company.country');
+
+                return new DeemedSupplyOfGoodsTaxDecision(
+                    $app->make(ShippedTaxRates::class),
+                    $tables->answeringRateMatrix(),
+                    $tables->answeringRateHistory() ?? new DatedTaxRateTable,
+                    is_string($country) && $country !== '' ? $country : null,
+                    $app->make(DistanceSaleThresholdMonitor::class),
+                );
+            },
+        );
+
         // The proration strategy a driver falls back to, bound here and before the driver below — the
         // order is the whole mechanism, because the driver's own bind() replaces this one.
         //
@@ -1063,11 +1113,19 @@ final class BillingServiceProvider extends ServiceProvider
             //
             // Payments-only mode mounts neither: a shop's buyers have no account to manage here, and the screens
             // would be reachable on every domain the application serves.
+            //
+            // An application with screens of its own switches either off (`account.enabled`, `billing.admin.enabled`),
+            // and the switched-off one registers neither its routes nor its components.
             if (class_exists(Livewire::class) && ! $this->app->make(BillingManager::class)->paymentsOnly()) {
-                $this->registerAccountHub();
+                if ($this->switchedOn('account.enabled')) {
+                    $this->registerAccountHub();
+                }
+
                 // The optional admin console — a separate, admin-gated route, not one of the account-hub
                 // screens. Same Livewire-only condition; the billing core never needs it.
-                $this->registerAdminConsole();
+                if ($this->switchedOn('billing.admin.enabled')) {
+                    $this->registerAdminConsole();
+                }
             }
 
             // The per-surface suspension lockout, applied by the host as
@@ -1148,9 +1206,13 @@ final class BillingServiceProvider extends ServiceProvider
                 FlushUsageCommand::class,
                 WarnExpiringCardsCommand::class,
                 WarnEndingTrialsCommand::class,
+                WarnEndingSubscriptionsCommand::class,
                 AdvanceBuyerProtectionCommand::class,
                 AdvanceDunningCommand::class,
                 TaxReturnExportCommand::class,
+                ImportSchemeReturnExportCommand::class,
+                DeemedSupplyRecordsExportCommand::class,
+                PlatformSupplyRecordsExportCommand::class,
                 RecapitulativeStatementExportCommand::class,
                 RecordMarketAccessCommand::class,
                 SyncSubscriptionsCommand::class,
@@ -1283,6 +1345,9 @@ final class BillingServiceProvider extends ServiceProvider
             // announce it — which made the mode without a card, the one where the customer has no other
             // signal, the one that ended in silence.
             $withHeartbeat($schedule->command('billing:trials:warn')->dailyAt('09:05')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:trials:warn');
+            // And for the period a cancellation leaves: the owner keeps the plan until the end they paid for, and
+            // resuming before that day keeps it without a gap, which nothing told them since the cancellation notice.
+            $withHeartbeat($schedule->command('billing:subscriptions:warn')->dailyAt('09:10')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:subscriptions:warn');
             // The tax-standing deadline, announced before it bites. Daily and early, because the value of
             // this message is entirely in how much time it leaves: a merchant needs longer to produce a
             // declaration than a checkout takes to fail. It is silent until an operator sets the date.
@@ -1553,6 +1618,12 @@ final class BillingServiceProvider extends ServiceProvider
         return glob(self::MIGRATIONS.'/*.php') ?: [];
     }
 
+    /** Whether a switch of the package's own configuration is on, which it is unless set to false. */
+    private function switchedOn(string $key): bool
+    {
+        return $this->app->make(Repository::class)->get($key, true) !== false;
+    }
+
     /** Whether the application runs in payments-only mode, as the manager decides it everywhere else. */
     private function paymentsOnly(): bool
     {
@@ -1590,7 +1661,7 @@ final class BillingServiceProvider extends ServiceProvider
     /**
      * Lay the shipped defaults under a published config file, all the way down.
      *
-     * NOT `mergeConfigFrom()`, and the difference only shows up months later. Laravel's own
+     * Not `mergeConfigFrom()`, and the difference only shows up months later. Laravel's own
      * merge is a single `array_merge` at the top level, so it asks one question per top-level
      * key: is it there? A host that ran `vendor:publish` has every top-level key, which means
      * a key added inside one of those blocks by a later release never arrives. The block the

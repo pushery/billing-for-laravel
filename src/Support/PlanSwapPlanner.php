@@ -10,7 +10,7 @@ use Pushery\Billing\Entitlements\ConfigEntitlementsFactory;
 use Pushery\Billing\Enums\SwapTiming;
 
 /**
- * Decides WHEN a plan swap takes effect, from the direction of the swap and one configured default.
+ * Decides when a plan swap takes effect, from the direction of the swap and one configured default.
  *
  * The direction is not a matter of price — it is the tier's position in the configured ranking, so a
  * cheaper tier that sits higher in the list is still an upgrade. That ranking already drives

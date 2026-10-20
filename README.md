@@ -20,13 +20,13 @@
 
 Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Two drivers, one set of contracts.
 
-Everything crosses a small set of contracts, so your app talks to _billing_ — not to a provider. **Stripe** runs the subscription cycle on its own side, behind a hosted checkout. **Mollie** establishes a mandate through a first payment and this package runs the cycle itself, which is the path any provider without a native subscription API takes. Your application code does not change between them; `billing.default` does.
+Everything crosses a small set of contracts, so your app talks to _billing_ — not to a provider. **Stripe** runs the subscription cycle on its own side, behind a hosted checkout. **Mollie** establishes a mandate through a first payment and this package runs the cycle itself, which is the path any provider without a native subscription API takes. Your application code does not change between them; `billing.default` does. The marketplace, for platforms where other people sell through your app, runs on Stripe only.
 
 ## Highlights
 
 - **Two-layer, provider-neutral core** — `PaymentRails` (moves money, stores mandates) and `BillingEngine` (the recurring cycle). Money crosses the boundary as a `Money` value object, never a raw provider response.
 - **Subscriptions** — in-app upgrade/downgrade **swap** with a proration **preview**, cancel-into-grace, resume, and immediate cancel — the client submits a tier _key_, never a price (anti-price-injection).
-- **Account hub** — a publishable Livewire hub (overview, subscription, change-plan, payment methods, invoices, usage, payment recovery, danger zone) with config-driven routes and a self-contained Blade view set. Drop a `<x-billing::banner />` into your layout to surface a failed payment, a lapsing grace period or a trial about to end.
+- **Account hub** — a publishable Livewire hub (overview, subscription, change-plan, payment methods, invoices, usage, payment recovery, danger zone) with config-driven routes and a self-contained Blade view set. Drop a `<x-billing::banner />` into your layout to surface a failed payment, a lapsing grace period or a trial about to end. Screens of your own read an owner's state through `OwnerSubscriptionState`, the reader the hub itself asks.
 - **Webhooks** — an idempotent, signature-verified backbone with effects out of the box (plan-sync, add-on credit, dunning notice, invoice persistence) and a fail-loud webhook-secret guard.
 - **Usage-based billing** — charge a base fee _plus_ what a customer actually used, with a retry that cannot double-bill, an outage that cannot silently lose revenue, oversell-safe reserve/work/settle metering, quota policies, and prepaid units that never expire.
 - **Entitlements & seats** — a separate `License` gate for what a tier _unlocks_ (feature grants + numeric limits), independent of what it costs, plus team seats and a User-XOR-Team owner model.

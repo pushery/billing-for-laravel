@@ -59,7 +59,7 @@ final readonly class OwnerToast
      */
     private function line(string $key, Model $owner, array $replace): string
     {
-        $locale = $owner instanceof HasLocalePreference ? $owner->preferredLocale() : null;
+        $locale = self::localeOf($owner);
 
         $line = Lang::get($key, $replace, $locale);
 
@@ -67,5 +67,14 @@ final readonly class OwnerToast
         // `billing::account.toast.payment_failed` into a toast, where it would read as a system fault to
         // the customer rather than as the missing translation it is.
         return is_string($line) && $line !== $key ? $line : '';
+    }
+
+    /**
+     * The language a toast for this owner is written in: the owner's own preference, or null for the ambient
+     * locale. A caller formatting a value for the line, an amount or a count, formats it in this one.
+     */
+    public static function localeOf(Model $owner): ?string
+    {
+        return $owner instanceof HasLocalePreference ? $owner->preferredLocale() : null;
     }
 }

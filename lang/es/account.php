@@ -94,6 +94,8 @@ return [
     'subscription' => [
         'heading' => 'Suscripción',
         'status' => 'Estado',
+        'plan' => 'Plan: :plan.',
+        'plan_priced' => 'Plan: :plan, :price / :interval.',
         'next_invoice' => 'Próxima factura: :amount el :date.',
         'access_ends' => 'Tu acceso termina el :date.',
         'access_ended' => 'Tu acceso terminó el :date.',
@@ -157,6 +159,7 @@ return [
         'unavailable' => 'El historial de uso no está disponible ahora mismo. Inténtalo de nuevo en un momento.',
         'empty' => 'Todavía no hay uso registrado.',
         'periods_heading' => 'Periodos anteriores',
+        'period_from' => 'Periodo desde el :date',
         'used' => ':used usados',
         'not_metered' => 'No medido',
         'prepaid_used' => ':units de prepago',
@@ -236,6 +239,8 @@ return [
     'toast' => [
         'payment_failed' => 'No hemos podido procesar tu pago. Actualiza tus datos de pago.',
         'subscription_activated' => 'Tu suscripción está activa: todo lo que incluye está disponible.',
+        'addon_credited' => 'Tu compra se ha completado. Añadido al saldo de tu cuenta: :amount.',
+        'addon_units_granted' => 'Tu compra se ha completado. Añadido a tu saldo prepago: :units.',
         'dismiss' => 'Descartar',
     ],
 

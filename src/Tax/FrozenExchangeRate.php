@@ -38,7 +38,7 @@ use Pushery\Billing\Enums\ExchangeRateBasis;
  * ## Which way it points, and why it is never turned around
  *
  * `fromCurrency` → `toCurrency` reads as the publisher states it: **how many units of `toCurrency` one unit
- * of `fromCurrency` buys**. The central bank publishes "1 EUR = 11.0550 SEK", so that is a rate FROM EUR TO
+ * of `fromCurrency` buys**. The central bank publishes "1 EUR = 11.0550 SEK", so that is a rate from EUR to
  * SEK, and converting an amount in EUR into SEK multiplies by it.
  *
  * Nothing here inverts a rate to answer the other direction, and that is a rule rather than an omission. An

@@ -47,7 +47,7 @@ final readonly class EnInvoiceTaxTreatment
      * @param  list<array{rate: ?float, taxable: int, tax: int}>  $bands  the per-rate breakdown BT-110 sums over; a band
      *                                                                    with no rate holds amounts collected on behalf of another party
      * @param  int  $net  the document net in minor units
-     * @param  int  $tax  the document tax in minor units — ALWAYS zero under a reverse charge
+     * @param  int  $tax  the document tax in minor units — always zero under a reverse charge
      * @param  ?string  $exemptionReason  BT-120, the reason text, or null where none is stated
      */
     public function __construct(

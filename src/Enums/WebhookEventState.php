@@ -9,7 +9,7 @@ namespace Pushery\Billing\Enums;
  *
  *  - Pending  received (or claimed) and not finished yet — a worker may be on it right now.
  *  - Handled  finished successfully. Never re-run: a replay skips it.
- *  - Failed   the effect threw and its transaction rolled back, so it did NOT happen. It is RE-CLAIMABLE
+ *  - Failed   the effect threw and its transaction rolled back, so it did not happen. It is re-claimable
  *             — the queue's retry and `billing:webhooks:replay` both pick it back up. This is the state
  *             an operator looks for: it is the work the package knows it still owes.
  */

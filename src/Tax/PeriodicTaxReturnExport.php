@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Tax;
 
-use Pushery\Billing\ValueObjects\ReportingPeriod;
+use Pushery\Billing\Contracts\TaxReturnPeriod;
+use Pushery\Billing\Enums\TaxReturnScheme;
 use Pushery\Billing\ValueObjects\TaxReturnLine;
 
 /**
@@ -40,7 +41,7 @@ final readonly class PeriodicTaxReturnExport
      *
      * @param  list<TaxReturnLine>  $lines
      */
-    public function render(ReportingPeriod $period, array $lines): string
+    public function render(TaxReturnPeriod $period, array $lines): string
     {
         $rows = [implode(';', self::COLUMNS)];
 
@@ -62,11 +63,14 @@ final readonly class PeriodicTaxReturnExport
     }
 
     /**
-     * The suggested name for a period's file — the period first, so a directory sorts into filing order.
+     * The suggested name for a period's file — the period first, so a directory sorts into filing order, and the
+     * return named, so the import scheme's monthly files never pass for the one-stop-shop return's.
      */
-    public function filenameFor(ReportingPeriod $period, string $currency): string
+    public function filenameFor(TaxReturnPeriod $period, string $currency, TaxReturnScheme $scheme = TaxReturnScheme::OneStopShop): string
     {
-        return sprintf('%s-tax-return-%s.csv', $period->label(), strtolower($currency));
+        $return = $scheme === TaxReturnScheme::ImportScheme ? 'import-scheme-return' : 'tax-return';
+
+        return sprintf('%s-%s-%s.csv', $period->label(), $return, strtolower($currency));
     }
 
     /** Minor units as a decimal string, sign kept. */

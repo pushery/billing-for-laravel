@@ -63,7 +63,7 @@ class RefundAttempt extends Model
         'status' => RefundAttemptStatus::class,
         'completed_at' => UtcDateTime::class,
         'cause' => ReversalCause::class,
-        // Deliberately NOT defaulted to 0. Null means no dispute happened; zero means one did and the
+        // Deliberately not defaulted to 0. Null means no dispute happened; zero means one did and the
         // provider charged nothing for it, which is a claim worth checking against a statement.
         'dispute_fee_minor' => 'integer',
     ];

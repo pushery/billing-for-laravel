@@ -44,7 +44,7 @@ final class FeeRefundPolicyNotPermitted extends RuntimeException
     {
         return new self(
             "The fee refund policy '{$policy}' is not one this package knows. Use 'refund' (the platform ".
-            "returns its commission in proportion to what was refunded) or 'retain' (the platform keeps it). ".
+            "gives back the commission the rest of the sale no longer carries) or 'retain' (the platform keeps it). ".
             'Refused rather than defaulted, because guessing here decides how much money a merchant gets '.
             'back on every refund.'
         );

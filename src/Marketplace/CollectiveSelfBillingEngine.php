@@ -8,10 +8,12 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\MerchantPartyResolver;
+use Pushery\Billing\Enums\DeemedSupplyOfGoods;
 use Pushery\Billing\Enums\DocumentSeries;
 use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Enums\SettlementDocumentType;
 use Pushery\Billing\Enums\SupplyRegime;
+use Pushery\Billing\Exceptions\CollectiveSettlementHoldsADeemedSupply;
 use Pushery\Billing\Exceptions\CollectiveSettlementSpansCurrencies;
 use Pushery\Billing\Exceptions\CollectiveSettlementSpansTaxCategories;
 use Pushery\Billing\Exceptions\SettlementTransactionOutsidePeriod;
@@ -90,6 +92,14 @@ final readonly class CollectiveSelfBillingEngine
             // periodisation is decided, and the caller's grouping would silently stop mattering.
             if ($transaction->countedOn()->format('Y-m') !== $period) {
                 throw SettlementTransactionOutsidePeriod::make($period, $transaction->countedOn()->format('Y-m'));
+            }
+
+            // A sale the platform is treated as supplying itself is settled on its own, under the registration where
+            // its goods were, and planned here it would take the treatment of the creator's standing instead.
+            $deemedSupply = $transaction->characteristics?->deemedSupply;
+
+            if ($deemedSupply instanceof DeemedSupplyOfGoods) {
+                throw CollectiveSettlementHoldsADeemedSupply::make($period, $deemedSupply);
             }
 
             $plan = $this->engine->plan(

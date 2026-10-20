@@ -29,6 +29,7 @@ return [
     'small_business_note' => 'Exento de IVA en virtud del régimen de pequeñas empresas (§ 19 UStG).',
     'union_small_business_note' => 'Exento de IVA en virtud del régimen de pequeñas empresas del Estado miembro del proveedor.',
     'not_consideration_note' => 'No sujeto a IVA: indemnización, no contraprestación de una operación.',
+    'supply_to_a_deemed_supplier_note' => 'Entrega exenta de los bienes a la interfaz electrónica que la facilita (artículo 136 bis de la Directiva 2006/112/CE).',
     'margin_scheme_note' => 'Régimen del margen de beneficio — bienes de ocasión',
     'margin_scheme_note_works_of_art' => 'Régimen del margen de beneficio — objetos de arte',
     'margin_scheme_note_collectors_items' => 'Régimen del margen de beneficio — objetos de colección y antigüedades',

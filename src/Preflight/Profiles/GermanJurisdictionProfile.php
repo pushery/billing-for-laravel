@@ -9,6 +9,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Override;
+use Pushery\Billing\Contracts\DocumentsDeemedSupplyOfGoods;
 use Pushery\Billing\Contracts\JurisdictionProfile;
 use Pushery\Billing\Contracts\RequiresElectronicInvoicing;
 use Pushery\Billing\Contracts\RequiresTaxStatusHold;
@@ -42,8 +43,14 @@ use Pushery\Billing\ValueObjects\ReportingPeriod;
  * matching, and the point goes red until somebody has actually re-read it. Bumping one is therefore a
  * deliberate act with a real cost to every operator — which is the correct cost for "the obligation
  * changed".
+ *
+ * It documents a supply of goods the platform is treated as making itself (§ 3 Abs. 3a UStG): the seller's exempt
+ * supply under § 4 Nr. 4c UStG and the platform's supply to the buyer, the Union scheme's and the import scheme's
+ * returns, the DATEV transactions of both legs, the records of Art. 63c Implementing Regulation 282/2011 and the
+ * corrections a refund owes, so such a sale goes ahead under it. A DATEV account the shipped chart has no confirmed
+ * number for is configured by the operator, and the export refuses the booking until it is.
  */
-final readonly class GermanJurisdictionProfile implements JurisdictionProfile, RequiresElectronicInvoicing, RequiresTaxStatusHold, SuppliesArchetypeRegimes, SuppliesDistanceSaleThreshold, SuppliesExchangeRateBasis, SuppliesMarginSchemeWording, SuppliesMonthlyRecapitulativeStatement, SuppliesRecapitulativeStatementDeadline, SuppliesRecapitulativeStatementExchangeRateBasis, SuppliesReportingExchangeRateBasis, SuppliesTaxRates
+final readonly class GermanJurisdictionProfile implements DocumentsDeemedSupplyOfGoods, JurisdictionProfile, RequiresElectronicInvoicing, RequiresTaxStatusHold, SuppliesArchetypeRegimes, SuppliesDistanceSaleThreshold, SuppliesExchangeRateBasis, SuppliesMarginSchemeWording, SuppliesMonthlyRecapitulativeStatement, SuppliesRecapitulativeStatementDeadline, SuppliesRecapitulativeStatementExchangeRateBasis, SuppliesReportingExchangeRateBasis, SuppliesTaxRates
 {
     /**
      * The revision of the marketplace terms package an operator must have published. It moves whenever the
@@ -79,7 +86,7 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
      * on such a supply, and since the buyer's price does not move, the entire difference comes off the
      * seller's payout with nothing looking wrong.
      *
-     * Deliberately NOT the other member states' rates. A cross-border scheme owes the destination's rate,
+     * Deliberately not the other member states' rates. A cross-border scheme owes the destination's rate,
      * and this profile would be asserting twenty-six tables it has no way to keep current — a stale rate
      * stated confidently is worse than an absent one, which at least falls back to the bundled table. An
      * operator filing across borders configures those rates, and the age check tells them when they have
@@ -194,7 +201,7 @@ final readonly class GermanJurisdictionProfile implements JurisdictionProfile, R
      * § 16 Abs. 6 S. 1 UStG: the ministry's published monthly average, and it is mandatory rather than
      * preferred — using a daily rate for domestic turnover needs the tax office's permission.
      *
-     * Deliberately NOT the central bank's rate, which is what somebody reaching for the obvious source
+     * Deliberately not the central bank's rate, which is what somebody reaching for the obvious source
      * would take: the one-stop-shop rule uses exactly that and expressly excludes the monthly average, on
      * the same turnover. Two rules, one sale, and the difference is which document you are issuing.
      */

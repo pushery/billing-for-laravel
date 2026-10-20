@@ -200,7 +200,7 @@ final class OwnerScopedTables
         // never matched by a merchant erasure.
         'billing_subscriptions',
 
-        // Content bought FROM this merchant. The same shape as the subscriptions above and purged for the
+        // Content bought from this merchant. The same shape as the subscriptions above and purged for the
         // same reason: a grant is the access half, and once the creator is erased it would go on granting
         // access to the work of somebody who no longer exists. What the fan actually paid survives on the
         // retained billing_merchant_charges and on the invoice, so no money history is lost. Single-seller
@@ -283,6 +283,13 @@ final class OwnerScopedTables
         // the self-billed documents about them were valid invoices, and those documents are kept for years —
         // so it is retained and unlinked rather than deleted, exactly like the tax standing it sits beside.
         'billing_self_billing_agreements',
+
+        // What a seller outside the Union declared before the platform supplied its goods, and each signal that
+        // contradicted it later. Together they are the platform's evidence that it relied on the seller and did
+        // not know better (Art. 5c Implementing Regulation 282/2011), and they support the records of the supplies
+        // made under them, which are kept for ten years. So both outlive the seller, unlinked rather than deleted.
+        'billing_seller_declarations',
+        'billing_seller_declaration_contradictions',
     ];
 
     /** @var array<string, list<literal-string>> */

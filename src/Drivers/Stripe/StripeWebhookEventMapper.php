@@ -21,6 +21,8 @@ use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Events\ChargebackReceived;
+use Pushery\Billing\Events\CustomerDeleted;
+use Pushery\Billing\Events\DefaultPaymentMethodChanged;
 use Pushery\Billing\Events\DisputeOpened;
 use Pushery\Billing\Events\FanTipPaid;
 use Pushery\Billing\Events\InPersonSaleCanceled;
@@ -37,6 +39,7 @@ use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Events\RefundFailed;
 use Pushery\Billing\Events\RoutedChargeAbandoned;
 use Pushery\Billing\Events\RoutedChargeConfirmed;
+use Pushery\Billing\Events\RoutedSubscriptionInvoiceDrafted;
 use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
 use Pushery\Billing\Events\SaleCountryReported;
 use Pushery\Billing\Events\SubscriptionStateChanged;
@@ -111,11 +114,12 @@ use Pushery\Billing\ValueObjects\Money;
 final readonly class StripeWebhookEventMapper implements WebhookEventMapper
 {
     /**
-     * Every event type this mapper answers, which is what the platform's webhook endpoint has to receive.
+     * Every event type this mapper answers on any install, which is what the platform's endpoint has to receive.
      *
      * An endpoint that subscribes to a selection without one of these loses what hangs off it, and nothing says so:
      * an event that never arrives produces nothing. `billing:doctor` holds each endpoint against this list, and
-     * `StripeEventTypesAreListedTest` holds the list against the arms of {@see self::map()}.
+     * against {@see self::MARKETPLACE_EVENT_TYPES} once the marketplace is enabled. `StripeEventTypesAreListedTest`
+     * holds the two lists together against the arms of {@see self::map()}.
      *
      * @var list<string>
      */
@@ -128,6 +132,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         'checkout.session.completed',
         'checkout.session.expired',
         'credit_note.created',
+        'customer.deleted',
         'customer.subscription.created',
         'customer.subscription.deleted',
         'customer.subscription.trial_will_end',
@@ -135,6 +140,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         'customer.tax_id.created',
         'customer.tax_id.deleted',
         'customer.tax_id.updated',
+        'customer.updated',
         'invoice.finalized',
         'invoice.payment_action_required',
         'invoice.payment_failed',
@@ -143,10 +149,24 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         'payment_intent.canceled',
         'payment_intent.payment_failed',
         'payment_intent.succeeded',
+        'payment_method.automatically_updated',
         'payment_method.detached',
         'refund.failed',
         'refund.updated',
         'transfer.reversed',
+    ];
+
+    /**
+     * The event types the platform's endpoint has to receive as well once the marketplace is enabled.
+     *
+     * Kept apart from {@see self::EVENT_TYPES} because nothing hangs off them on an install that routes nothing: a
+     * drafted cycle's commission is set only for a subscription that names a merchant. Asking every install to
+     * subscribe to them would fail `billing:doctor` on endpoints that lose nothing without them.
+     *
+     * @var list<string>
+     */
+    public const array MARKETPLACE_EVENT_TYPES = [
+        'invoice.created',
     ];
 
     /**
@@ -181,6 +201,8 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             'customer.subscription.deleted' => $this->subscriptionEvents($object, $this->int($payload, 'created')),
             'customer.subscription.trial_will_end' => $this->trialWillEndEvents($object),
             'invoice.upcoming' => $this->upcomingInvoiceEvents($object),
+            // A cycle's invoice as a draft, the one moment a routed cycle's commission can still be set on the net.
+            'invoice.created' => $this->draftedCycleEvents($object),
             'invoice.finalized' => $this->invoiceSnapshotEvents($object),
             'invoice.payment_failed' => $this->invoiceEvents($object, failed: true),
             'invoice.payment_action_required' => $this->paymentActionRequiredEvents($object),
@@ -248,6 +270,12 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             'transfer.reversed' => $this->transferReversedEvents($object),
             'credit_note.created' => $this->correctionEvents($object),
             'payment_method.detached' => $this->paymentMethodDetachedEvents($object, $data),
+            // The customer's default payment method, the card the owner's copy shows, changed. Any other change to a customer
+            // maps to nothing, because reading the method again costs a call to Stripe.
+            'customer.updated' => $this->defaultMethodChangedEvents($object, $data),
+            // The bank's card updater gave a stored card a new number or expiry, which the copy shows when it is the default.
+            'payment_method.automatically_updated' => $this->cardUpdatedEvents($object),
+            'customer.deleted' => $this->customerDeletedEvents($object),
             default => [],
         };
     }
@@ -276,6 +304,55 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         }
 
         return [new MandateRevoked($customer, $id)];
+    }
+
+    /**
+     * A customer whose default payment method changed. Stripe names in `previous_attributes` what an update changed,
+     * and only a change of `invoice_settings.default_payment_method` concerns the card the owner's copy shows: an
+     * address, an email or a tax setting changes nothing there.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @param  array<array-key, mixed>  $data
+     * @return list<BillingDomainEvent>
+     */
+    private function defaultMethodChangedEvents(array $object, array $data): array
+    {
+        $customer = $this->string($object, 'id');
+        $previous = $data['previous_attributes'] ?? null;
+        $settings = is_array($previous) ? ($previous['invoice_settings'] ?? null) : null;
+
+        if ($customer === null || ! is_array($settings) || ! array_key_exists('default_payment_method', $settings)) {
+            return [];
+        }
+
+        return [new DefaultPaymentMethodChanged($customer)];
+    }
+
+    /**
+     * A stored card the bank's card updater replaced. Whether it is the customer's default is for the read that
+     * follows to find out, so the event names the customer and not the card.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function cardUpdatedEvents(array $object): array
+    {
+        $customer = $this->string($object, 'customer');
+
+        return $customer === null ? [] : [new DefaultPaymentMethodChanged($customer)];
+    }
+
+    /**
+     * A customer deleted at Stripe, in the dashboard or through the API. The object is the customer itself.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function customerDeletedEvents(array $object): array
+    {
+        $customer = $this->string($object, 'id');
+
+        return $customer === null ? [] : [new CustomerDeleted($customer)];
     }
 
     /**
@@ -586,6 +663,29 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
     }
 
     /**
+     * A subscription invoice created as a draft, which a routed cycle's commission can still be set on.
+     *
+     * Only a draft. An invoice Stripe creates finalized, as the first invoice of a subscription usually is, takes no
+     * change, and its event would only cost the handler a provider call for nothing. Whether the subscription routes is
+     * the handler's question, answered from the local row before any call.
+     *
+     * @param  array<array-key, mixed>  $object
+     * @return list<BillingDomainEvent>
+     */
+    private function draftedCycleEvents(array $object): array
+    {
+        $customer = $this->string($object, 'customer');
+        $invoice = $this->string($object, 'id');
+        $subscription = StripeInvoiceSubscription::idOf($object);
+
+        if ($customer === null || $invoice === null || $subscription === null || $this->string($object, 'status') !== 'draft') {
+            return [];
+        }
+
+        return [new RoutedSubscriptionInvoiceDrafted($customer, $invoice, $subscription)];
+    }
+
+    /**
      * A subscription's free trial is about to end (Stripe sends this a few days out). Maps to the neutral
      * TrialEnding so the reminder goes out before the first charge. Needs the customer (to notify), the
      * subscription id (to dedup the reminder once per trial end) and the trial-end timestamp; without all
@@ -769,6 +869,9 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             // means nothing to this package; it exists so a consumer that wrote its row before the redirect
             // can find that row here, including on a purchase that carried no declaration at all.
             $this->string($metadata, 'caller_reference'),
+            // A tax ID the buyer entered on the provider's page, which nothing asked before the session opened. A
+            // sale classified as one to somebody who is not a business has to be able to see it was not.
+            $this->sessionTaxId($object),
         ), new SaleCountryReported(
             $customer,
             $id,
@@ -951,6 +1054,24 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         }
 
         return $events;
+    }
+
+    /**
+     * The first tax ID the buyer entered on a checkout session, or null where they entered none.
+     *
+     * Stripe collects it in `customer_details.tax_ids` when the session asks for tax IDs, as a list of a type and a
+     * value. Only the value is read: whether it names a business is the register's answer, not the form's.
+     *
+     * @param  array<array-key, mixed>  $object
+     */
+    private function sessionTaxId(array $object): ?string
+    {
+        $details = $object['customer_details'] ?? null;
+        $ids = is_array($details) ? ($details['tax_ids'] ?? null) : null;
+        $first = is_array($ids) ? ($ids[0] ?? null) : null;
+        $value = is_array($first) ? $this->string($first, 'value') : null;
+
+        return $value === null || trim($value) === '' ? null : trim($value);
     }
 
     /**

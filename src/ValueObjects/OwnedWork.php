@@ -44,7 +44,7 @@ final readonly class OwnedWork
         /** The bundle it arrived with, so a library can group what was bought together. */
         public ?string $bundleReference = null,
         /**
-         * Where the work came FROM. Provenance, never the seller: the platform is the contracting party for
+         * Where the work came from. Provenance, never the seller: the platform is the contracting party for
          * every content flow, and this must never be rendered as "sold by".
          */
         public ?MerchantScope $merchant = null,

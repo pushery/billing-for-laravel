@@ -9,7 +9,7 @@ use RuntimeException;
 /**
  * Money was about to be destined to a merchant the receiving gate denies.
  *
- * Thrown BEFORE any provider call, and that ordering is the whole value. Once a routed charge is in
+ * Thrown before any provider call, and that ordering is the whole value. Once a routed charge is in
  * flight, a merchant who cannot receive does not produce a clean rejection: the money settles to whoever
  * the provider can reach — usually the platform — while the local records say it was split. Unwinding that
  * is manual, per transaction, and only starts once somebody reconciles.

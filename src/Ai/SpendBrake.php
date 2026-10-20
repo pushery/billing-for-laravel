@@ -21,6 +21,9 @@ use Illuminate\Support\Facades\DB;
  * below its cap, so two calls at the cap cannot both pass it: the second statement waits for the first one's row
  * lock and then evaluates its condition against what the first one committed. Days are counted in UTC, the day a
  * provider bills by.
+ *
+ * A cost known only after the call has already been spent, so {@see self::record()} counts it whatever the cap says,
+ * and an account it takes past its cap is full: {@see self::isFull()} answers that before the next call.
  */
 final readonly class SpendBrake
 {
@@ -32,8 +35,9 @@ final readonly class SpendBrake
      * Count a cost against the provider's account and, where one is given, the owner's, if it fits under both caps.
      *
      * Both or neither: a cost the owner's cap refuses is not left on the provider's account. Call it with what a call
-     * may cost before making it, or with what it cost afterwards, and the next call meets the cap. A cost of nothing
-     * counts nothing and is never refused.
+     * may cost before making it. A cost that has already been spent goes to {@see self::record()} instead, because a
+     * refusal here would leave it uncounted and the account under its cap. A cost of nothing counts nothing and is
+     * never refused.
      *
      * @return bool whether the cost was counted; false means a cap refused it and nothing was counted
      */
@@ -67,6 +71,90 @@ final readonly class SpendBrake
 
             return true;
         }, 3);
+    }
+
+    /**
+     * Count a cost that has already been spent against the provider's account and, where one is given, the owner's,
+     * whatever their caps say.
+     *
+     * Nothing is refused: the money is gone, and leaving it uncounted would keep the account under its cap for every
+     * later call. An account this takes to or past its cap is full, and {@see self::isFull()} says so before the next
+     * call. A cost of nothing counts nothing.
+     */
+    public function record(string $provider, AiCost $cost, ?Model $owner = null): void
+    {
+        if ($cost->micros === 0) {
+            return;
+        }
+
+        $day = CarbonImmutable::now('UTC')->toDateString();
+
+        DB::transaction(function () use ($provider, $cost, $owner, $day): void {
+            foreach ($this->accounts($provider, $owner) as [$account, , $ownerOf]) {
+                $this->raise($account, $ownerOf, $day, $cost, null);
+            }
+        }, 3);
+    }
+
+    /**
+     * Whether a call would meet a cap today: the provider's account, or the owner's where one is given, has counted up
+     * to its cap or past it. An account without a cap is never full.
+     */
+    public function isFull(string $provider, ?Model $owner = null): bool
+    {
+        foreach ($this->accounts($provider, $owner) as [, $cap, $ownerOf]) {
+            if ($cap !== null && $this->spent($provider, $ownerOf)->micros >= $cap) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The daily cap of the account the arguments name, the owner's where an owner is given and the provider's otherwise,
+     * in the brake's currency; null for an account without one. The same account {@see self::spent()} reads.
+     */
+    public function capFor(string $provider, ?Model $owner = null): ?AiCost
+    {
+        $cap = null;
+
+        // The accounts come provider first, so the last one is the owner's where an owner is given.
+        foreach ($this->accounts($provider, $owner) as [, $accountCap]) {
+            $cap = $accountCap;
+        }
+
+        return $cap === null ? null : new AiCost($cap, $this->currency());
+    }
+
+    /**
+     * What the providers' accounts counted, day by day from the oldest: every provider, or the one given, and from a day
+     * on where one is given. An operator's view of the spend reads this rather than the brake's table.
+     *
+     * @return list<SpendDay>
+     */
+    public function history(?string $provider = null, ?CarbonInterface $from = null): array
+    {
+        $query = DB::table(self::TABLE);
+
+        if ($provider === null) {
+            $query->where('account', 'like', 'provider:%');
+        } else {
+            $query->where('account', 'provider:'.$provider);
+        }
+
+        return $this->daysOf($query, $from);
+    }
+
+    /**
+     * What an owner's account counted, day by day from the oldest, from a day on where one is given. An owner's account
+     * counts the owner's calls to every provider together, so its days name no provider.
+     *
+     * @return list<SpendDay>
+     */
+    public function ownerHistory(Model $owner, ?CarbonInterface $from = null): array
+    {
+        return $this->daysOf(DB::table(self::TABLE)->where('account', $this->ownerAccount($owner)), $from);
     }
 
     /** What a provider's account, or an owner's, has counted on a day in the brake's currency. */
@@ -154,6 +242,35 @@ final readonly class SpendBrake
             'created_at' => CarbonImmutable::now(),
             'updated_at' => CarbonImmutable::now(),
         ]);
+    }
+
+    /**
+     * The rows a query selects as days, the oldest first, and within a day in account and then currency order.
+     *
+     * @return list<SpendDay>
+     */
+    private function daysOf(Builder $query, ?CarbonInterface $from): array
+    {
+        if ($from instanceof CarbonInterface) {
+            $query->where('day', '>=', CarbonImmutable::instance($from)->utc()->toDateString());
+        }
+
+        $days = [];
+
+        foreach ($query->orderBy('day')->orderBy('account')->orderBy('currency')->get(['account', 'day', 'currency', 'spent_micros']) as $row) {
+            $account = is_string($row->account ?? null) ? $row->account : '';
+            $day = is_string($row->day ?? null) ? $row->day : '';
+            $currency = is_string($row->currency ?? null) ? $row->currency : $this->currency();
+            $micros = is_numeric($row->spent_micros ?? null) ? (int) $row->spent_micros : 0;
+
+            $days[] = new SpendDay(
+                str_starts_with($account, 'provider:') ? substr($account, strlen('provider:')) : null,
+                CarbonImmutable::parse($day, 'UTC')->startOfDay(),
+                new AiCost($micros, $currency),
+            );
+        }
+
+        return $days;
     }
 
     private function row(string $account, string $day, string $currency): Builder

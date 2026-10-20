@@ -10,7 +10,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 /**
  * Builds a reverse price index scoped to one merchant.
  *
- * The reverse lookup — which tier does this provider price belong to — has to run against the RIGHT
+ * The reverse lookup — which tier does this provider price belong to — has to run against the right
  * catalog, or a marketplace resolves a creator's price against the platform's tiers and a swap reprices the
  * wrong item. So the index is built per scope from that merchant's own tier and plan catalogs, and a null
  * scope builds it over the platform's, byte-for-byte what a single-seller install had before.

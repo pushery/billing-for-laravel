@@ -11,12 +11,14 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Consumer\GermanWithdrawalPolicy;
 use Pushery\Billing\Consumer\WithdrawalGate;
 use Pushery\Billing\Consumer\WithdrawalTypeResolver;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\AddonContentMap;
+use Pushery\Billing\Contracts\BillingActionUrls;
 use Pushery\Billing\Contracts\BuyerPartyResolver;
 use Pushery\Billing\Contracts\ClassifiesReportability;
 use Pushery\Billing\Contracts\ConsumerWithdrawalPolicy;
@@ -31,6 +33,7 @@ use Pushery\Billing\Contracts\PaymentActionNotifier;
 use Pushery\Billing\Contracts\ProductTaxonomy;
 use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\ReportingProfile;
+use Pushery\Billing\Contracts\SubscriptionEndingNotifier;
 use Pushery\Billing\Contracts\SubscriptionNotifier;
 use Pushery\Billing\Contracts\SuppliesBuyerAudiences;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
@@ -55,6 +58,7 @@ use Pushery\Billing\Models\ExchangeRateRecord;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\Notifiers\HubBillingActionUrls;
 use Pushery\Billing\Notifiers\LaravelDunningNotifier;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
@@ -143,6 +147,7 @@ final class DoctorCommand extends Command
         MandateNotifier::class,
         PaymentActionNotifier::class,
         ReceiptNotifier::class,
+        SubscriptionEndingNotifier::class,
         SubscriptionNotifier::class,
         SuspensionNotifier::class,
         TrialNotifier::class,
@@ -213,6 +218,8 @@ final class DoctorCommand extends Command
         $this->reportSynchronousWebhookEffects($config);
 
         $this->reportUnnamedBuyers($drivers, $buyers);
+
+        $this->reportHubBesideScreensOfYourOwn();
 
         $failing = $this->reportWorksTheProfileDoesNotCover($config, $addons, $works, $withdrawals) || $failing;
 
@@ -327,7 +334,8 @@ final class DoctorCommand extends Command
      *
      * The endpoint's address says which list that is: the platform's own path, or the path of the connected
      * accounts. An endpoint at any other address is not this package's to judge, one subscribed to every event
-     * misses nothing, and an endpoint that does not say which events it receives makes no claim to check.
+     * misses nothing, and an endpoint that does not say which events it receives makes no claim to check. With the
+     * marketplace enabled, the platform's list includes the types only a routed sale needs.
      *
      * @return list<string>
      */
@@ -343,8 +351,13 @@ final class DoctorCommand extends Command
         $platform = trim(is_string($platform) ? $platform : 'billing/webhook', '/');
         $marketplace = trim(is_string($marketplace) ? $marketplace : 'billing/webhook/marketplace', '/');
 
+        // The marketplace adds to the platform's own list: a routed subscription's commission is set on each cycle's
+        // drafted invoice, which arrives on the platform's endpoint and is worth nothing to an install that routes
+        // nothing.
         $expected = match ($path) {
-            $platform => StripeWebhookEventMapper::EVENT_TYPES,
+            $platform => (bool) $config->get('billing.marketplace.enabled', false)
+                ? [...StripeWebhookEventMapper::EVENT_TYPES, ...StripeWebhookEventMapper::MARKETPLACE_EVENT_TYPES]
+                : StripeWebhookEventMapper::EVENT_TYPES,
             $marketplace => StripeMarketplaceWebhookEventMapper::EVENT_TYPES,
             default => [],
         };
@@ -483,6 +496,37 @@ final class DoctorCommand extends Command
             ."Each effect then runs inside the provider's request: one that throws stops the effects after it, the "
             .'provider reads a 500, and billing.webhooks.tries does nothing. Point BILLING_WEBHOOK_QUEUE_CONNECTION, '
             .'or the default queue connection, at an asynchronous driver.');
+    }
+
+    /**
+     * Two account surfaces at once: the hub is mounted while the notices send their readers to screens of the
+     * application's own.
+     *
+     * An application that binds BillingActionUrls manages billing on screens of its own, as a rule, and the hub then
+     * sits beside them at its prefix, open to anyone signed in although nothing links to it: a plan change, a card
+     * manager and an immediate cancellation. A warning rather than a failure, because keeping both can be meant.
+     */
+    private function reportHubBesideScreensOfYourOwn(): void
+    {
+        if (! Route::has('billing.account.overview')) {
+            return;
+        }
+
+        if (! $this->bindsActionUrlsOfItsOwn(Container::getInstance()->make(BillingActionUrls::class))) {
+            return;
+        }
+
+        $this->components->warn(
+            'The account hub is mounted at account.prefix while the notices send their readers to screens of your own '
+            .'(a BillingActionUrls of yours is bound). If those screens replace the hub, set BILLING_ACCOUNT_ENABLED=false, '
+            .'and its routes and screens are not registered; BILLING_ADMIN_ENABLED=false does the same for the admin console.',
+        );
+    }
+
+    /** Whether the application bound a BillingActionUrls of its own in place of the hub's. */
+    private function bindsActionUrlsOfItsOwn(BillingActionUrls $urls): bool
+    {
+        return ! $urls instanceof HubBillingActionUrls;
     }
 
     /**
@@ -639,7 +683,7 @@ final class DoctorCommand extends Command
         }
 
         if (! $enforced) {
-            return false; // no profile, no gate, nothing to be uncovered BY
+            return false; // no profile, no gate, nothing to be uncovered by
         }
 
         if (! (bool) $config->get('billing.content_ownership.enabled', false)) {

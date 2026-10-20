@@ -7,6 +7,7 @@ namespace Pushery\Billing\Marketplace;
 use DateTimeInterface;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
@@ -14,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\FindsMovedShare;
 use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\DeemedSupplyOfGoods;
 use Pushery\Billing\Enums\MerchantChargePurpose;
 use Pushery\Billing\Enums\RefundAttemptStatus;
 use Pushery\Billing\Enums\ReversalCause;
@@ -28,6 +30,7 @@ use Pushery\Billing\Models\RefundAttempt;
 use Pushery\Billing\Support\RedactedError;
 use Pushery\Billing\Support\UniqueRow;
 use Pushery\Billing\ValueObjects\FeeLine;
+use Pushery\Billing\ValueObjects\GoodsConsignment;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
@@ -163,6 +166,26 @@ final readonly class RoutedChargeLedger
          * or "a lane that does not know", never a guess.
          */
         ?TaxArchetype $taxArchetype = null,
+        /**
+         * The paragraph that makes the platform the supplier of the goods sold, where one does.
+         *
+         * Decided once, before the money moved, and every later reader takes it from here: the buyer's document of a
+         * hosted purchase, the correction a refund owes and the seller's settlement. Null on every other sale.
+         */
+        ?DeemedSupplyOfGoods $deemedSupply = null,
+        /**
+         * The consignment of a sale of goods, as the lane passed it. Beside a deemed supply it is what the
+         * classification was made from, so a document written after the payment decides the tax from the same facts;
+         * for every sale of goods it describes the goods the platform's records name.
+         */
+        ?GoodsConsignment $consignment = null,
+        /**
+         * Where the goods were sent or the buyer was, as an ISO 3166 code, where the lane knows it.
+         *
+         * Under intermediation the platform issues no document of the seller's sale, so this row is where its records
+         * read the place of the supply from (Art. 54c(2) Implementing Regulation 282/2011).
+         */
+        ?string $destinationCountry = null,
     ): MerchantCharge {
         return UniqueRow::firstOrCreate(
             MerchantCharge::model()::query(),
@@ -177,6 +200,9 @@ final readonly class RoutedChargeLedger
                 'purpose' => $purpose,
                 'tax_archetype' => $taxArchetype,
                 'seller_posture' => $sellerPosture,
+                'deemed_supply' => $deemedSupply,
+                'goods_consignment' => $consignment?->toArray(),
+                'destination_country' => $destinationCountry === null || trim($destinationCountry) === '' ? null : strtoupper(trim($destinationCountry)),
                 'fee_bps' => $policy?->bps,
                 'fee_flat_minor' => $policy?->flatMinor,
                 // The direction, frozen beside the rate and the flat part, because a clawback is a
@@ -195,6 +221,27 @@ final readonly class RoutedChargeLedger
                 'buyer_fee_place_of_supply' => $buyerFee?->placeOfSupply,
             ],
         );
+    }
+
+    /**
+     * Write down where a routed sale went, once, where the row does not say yet.
+     *
+     * A hosted purchase learns the buyer's address only on the provider's page, after its row was written, so the
+     * country arrives later than the sale. A country already on the row is kept: the first statement of the place is
+     * the one the records name.
+     */
+    public function recordDestination(MerchantCharge $charge, string $country): bool
+    {
+        $country = strtoupper(trim($country));
+
+        if (preg_match('/^[A-Z]{2}$/', $country) !== 1) {
+            return false;
+        }
+
+        return MerchantCharge::model()::query()
+            ->whereKey($charge->getKey())
+            ->whereNull('destination_country')
+            ->update(['destination_country' => $country]) === 1;
     }
 
     /**
@@ -248,6 +295,42 @@ final readonly class RoutedChargeLedger
         }
 
         return $named;
+    }
+
+    /**
+     * Take a destination sale's commission on its net, once the provider gave back the part of the fee taken on the tax.
+     *
+     * The fee, the merchant's share and the rate change together, so the row reads its base back through the rate it
+     * now carries, and a later clawback recomputes the commission on the same base the provider holds.
+     *
+     * Only once, and only on a row nothing has been refunded or reversed from yet: a refund made before the correction
+     * priced the sale as it stood, and rewriting the row under it would leave that refund's figures belonging to a
+     * different sale. A row whose fee is already at or below the corrected one is left as it is.
+     */
+    public function takeCommissionOnNet(MerchantCharge $charge, Money $fee, int $taxBps): bool
+    {
+        $values = [
+            'fee_minor' => $fee->minorUnits,
+            'net_minor' => $charge->gross_minor - $fee->minorUnits,
+            'commission_tax_bps' => $taxBps,
+        ];
+
+        $written = MerchantCharge::model()::query()
+            ->whereKey($charge->getKey())
+            ->where('fee_minor', '>', $fee->minorUnits)
+            ->where('refunded_minor', 0)
+            ->where('fee_refunded_minor', 0)
+            ->where('transfer_reversed_minor', 0)
+            ->where(static function (Builder $query): void {
+                $query->whereNull('commission_tax_bps')->orWhere('commission_tax_bps', 0);
+            })
+            ->update($values) === 1;
+
+        if ($written) {
+            $charge->forceFill($values)->syncOriginal();
+        }
+
+        return $written;
     }
 
     /**
@@ -670,7 +753,7 @@ final readonly class RoutedChargeLedger
     /**
      * Whether the class this charge's merchant is stored as still exists.
      *
-     * Asked BEFORE touching the relation, rather than catching what the relation throws. A stored
+     * Asked before touching the relation, rather than catching what the relation throws. A stored
      * `merchant_type` is a class name (or a morph-map alias for one), and a consumer that renames or
      * removes a model leaves rows naming a class that is gone — where `morphTo` raises an `Error`, not a
      * null. Asking first states the condition in the open; catching would bury the same rule in an

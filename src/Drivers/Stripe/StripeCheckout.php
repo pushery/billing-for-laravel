@@ -392,21 +392,22 @@ final readonly class StripeCheckout implements Checkout
      * component has no place in a percentage, and dropping it silently would undercharge the agreed commission on
      * every renewal, so a flat component is refused loudly instead of quietly discarded.
      *
-     * ## The basis on this lane is the gross, and the configured rate is documented as a net rate
+     * ## The percentage is a gross rate, and each renewal is set on the net before it is charged
      *
-     * That difference is stated here because it cannot be fixed here. Stripe defines the field as a
-     * percentage of the subscription's invoice total, and a total includes the buyer's tax — so a net rate
-     * is not expressible through it. Converting one (`gross_pct = bps / (1 + t)`) fails at the next step:
-     * `t` differs per buyer, while a subscription carries a single percentage for every invoice and every
-     * buyer. No one number is right for 19%, 20% and a reverse-charge buyer at once, and the plausible-looking
-     * one is the worst outcome — right for whoever happens to match, wrong for everyone else, and drifting
-     * further with every market an adopter adds.
+     * Stripe defines the field as a percentage of the subscription's invoice total, and a total includes the
+     * buyer's tax — so a net rate is not expressible through it. Converting one (`gross_pct = bps / (1 + t)`)
+     * fails at the next step: `t` differs per buyer, while a subscription carries a single percentage for every
+     * invoice and every buyer. No one number is right for 19%, 20% and a reverse-charge buyer at once, and the
+     * plausible-looking one is the worst outcome — right for whoever happens to match, wrong for everyone else,
+     * and drifting further with every market an adopter adds.
      *
-     * So on a 119.00 invoice at 19% with a 10% rate this lane takes 11.90, where the routed money path takes
-     * 10.00. Which answer the package should settle on is still open; until it is settled, the lane says what
-     * it does rather than inheriting a promise it cannot keep. Silence is what made the same divergence
-     * expensive once already. The separate-transfer lane splits each cycle on the amount paid as well, so both
-     * hosted subscription lanes answer 11.90.
+     * So the percentage is the configured rate as it stands, and the net is reached per invoice instead. Stripe
+     * creates a renewal's invoice as a draft, a draft takes an absolute fee, and StripeCycleCommissionOnNet sets
+     * it on the net the invoice's own tax rate separates: on a 119.00 invoice at 19% with a 10% rate a renewal
+     * takes 10.00, as the routed money path does. The first cycle has no draft, because it is paid as the
+     * session completes, so it withholds 11.90, and TakeCommissionOnNet gives the 1.90 back as part of the fee
+     * after the payment and brings its row to the net. The separate-transfer lane takes every cycle on the net,
+     * the first included, because nothing is withheld at the payment there.
      *
      * @return array{application_fee_percent: float, transfer_data: array{destination: string}}|array{metadata: array<string, string>}
      */

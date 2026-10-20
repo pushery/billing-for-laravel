@@ -8,7 +8,9 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\AdoptsCollectedPaymentMethod;
+use Pushery\Billing\Contracts\MirrorsCardOnFile;
 use Pushery\Billing\Contracts\PaymentMethods as PaymentMethodsContract;
+use Pushery\Billing\Support\CardOnFileColumns;
 use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\ClientIntent;
@@ -33,7 +35,7 @@ use Stripe\Subscription as StripeSubscription;
  * card. A consequence of the check: removing an already-detached or unknown method now throws rather than
  * silently no-opping, because an id nobody owns is not one this billable may act on.
  */
-final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMethod, PaymentMethodsContract
+final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMethod, MirrorsCardOnFile, PaymentMethodsContract
 {
     /**
      * The mark this driver puts on the hosted page it opens for adding a method, and the one thing the
@@ -157,12 +159,30 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
     public function setDefault(Model $billable, string $methodId): void
     {
         $customerId = $this->customers->find($billable);
+        $method = $customerId === null ? null : $this->ownedMethod($customerId, $methodId);
 
-        if ($customerId === null || ! $this->ownsMethod($customerId, $methodId)) {
+        if ($customerId === null || ! $method instanceof StripePaymentMethod) {
             throw new InvalidArgumentException('Cannot set a default payment method that does not belong to this billable.');
         }
 
         $this->makeDefault($customerId, $methodId);
+
+        // The copy on the owner follows at once, from the method the ownership check already read, so the hub shows
+        // the new card without another call. The webhook about the change writes the same values again.
+        if (CardOnFileColumns::presentOn($billable)) {
+            $billable->forceFill(CardOnFileColumns::of($this->toValue($method, true)))->save();
+        }
+    }
+
+    /**
+     * Copies the customer's default method onto the owner, read from Stripe, or clears the copy when there is none.
+     * An owner whose table has no such columns is left alone, and nothing is read for it.
+     */
+    public function mirror(Model $owner): void
+    {
+        if (CardOnFileColumns::presentOn($owner)) {
+            $owner->forceFill(CardOnFileColumns::of($this->default($owner)))->save();
+        }
     }
 
     /**
@@ -202,7 +222,7 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
         // Detaching is global to the method id: Stripe does not ask whose it is, so the customer check
         // is ours to make. Without it one owner's browser could detach another's card and break their
         // next renewal — the same guard the read path makes before streaming a document (StripeInvoices).
-        if ($customerId === null || ! $this->ownsMethod($customerId, $methodId)) {
+        if ($customerId === null || ! $this->ownedMethod($customerId, $methodId) instanceof StripePaymentMethod) {
             throw new InvalidArgumentException('Cannot remove a payment method that does not belong to this billable.');
         }
 
@@ -254,8 +274,8 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
         return ($subscription->default_source ?? null) !== null;
     }
 
-    /** Whether the payment method is attached to this customer. An unknown or detached id is not owned. */
-    private function ownsMethod(string $customerId, string $methodId): bool
+    /** The payment method, when it is attached to this customer. An unknown or detached id is not owned. */
+    private function ownedMethod(string $customerId, string $methodId): ?StripePaymentMethod
     {
         try {
             $method = $this->stripe->paymentMethods->retrieve($methodId);
@@ -264,7 +284,7 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
             throw $e;
         } catch (InvalidRequestException) {
-            return false;
+            return null;
         }
 
         $owner = $method->customer ?? null;
@@ -272,7 +292,7 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
         // Stripe returns the customer as a bare id, or as an expanded object on some API versions.
         $ownerId = $owner instanceof Customer ? $owner->id : $owner;
 
-        return is_string($ownerId) && $ownerId === $customerId;
+        return is_string($ownerId) && $ownerId === $customerId ? $method : null;
     }
 
     /** The customer's default payment-method id from its invoice settings, or null. */
@@ -301,6 +321,18 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
         return null;
     }
 
+    /**
+     * The last four digits of a debit method's account. Stripe keeps them under the method's own type rather
+     * than under `card`: `sepa_debit`, `bacs_debit`, `au_becs_debit` and `us_bank_account` each carry `last4`.
+     */
+    private function accountLast4(StripePaymentMethod $method): ?string
+    {
+        $details = $method->toArray()[$method->type] ?? null;
+        $last4 = is_array($details) ? ($details['last4'] ?? null) : null;
+
+        return is_string($last4) ? $last4 : null;
+    }
+
     private function toValue(StripePaymentMethod $method, bool $isDefault): PaymentMethodValue
     {
         $card = $method->card ?? null;
@@ -310,7 +342,7 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
             type: $method->type,
             isDefault: $isDefault,
             brand: $card?->brand,
-            last4: $card?->last4,
+            last4: $card->last4 ?? $this->accountLast4($method),
             expMonth: $card?->exp_month,
             expYear: $card?->exp_year,
         );

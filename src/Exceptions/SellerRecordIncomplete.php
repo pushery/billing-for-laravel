@@ -10,7 +10,7 @@ use RuntimeException;
  * A private individual was about to sell goods through the platform with a record that lacks what the
  * reporting regime requires of them.
  *
- * Thrown BEFORE any provider call. The record has to exist before the sale, not be chased afterwards: the
+ * Thrown before any provider call. The record has to exist before the sale, not be chased afterwards: the
  * platform keeps it because it answers for sales it arranged, and a sale made without it is exactly the sale
  * it could not answer for. The seller completes their record through the platform's own flow and the sale
  * goes through.

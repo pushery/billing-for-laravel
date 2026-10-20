@@ -94,6 +94,8 @@ return [
     'subscription' => [
         'heading' => 'Abonnement',
         'status' => 'Statut',
+        'plan' => 'Forfait : :plan.',
+        'plan_priced' => 'Forfait : :plan, :price / :interval.',
         'next_invoice' => 'Prochaine facture : :amount le :date.',
         'access_ends' => 'Ton accès se termine le :date.',
         'access_ended' => 'Ton accès s’est terminé le :date.',
@@ -157,6 +159,7 @@ return [
         'unavailable' => 'L’historique de consommation n’est pas disponible pour le moment. Réessaie dans un instant.',
         'empty' => 'Aucune consommation enregistrée pour l’instant.',
         'periods_heading' => 'Périodes précédentes',
+        'period_from' => 'Période à partir du :date',
         'used' => ':used utilisés',
         'not_metered' => 'Non mesuré',
         'prepaid_used' => ':units prépayés',
@@ -236,6 +239,8 @@ return [
     'toast' => [
         'payment_failed' => 'Ton paiement n’a pas pu être traité. Merci de mettre à jour tes informations de paiement.',
         'subscription_activated' => 'Ton abonnement est actif — tout ce qu’il inclut est activé.',
+        'addon_credited' => 'Ton achat est terminé. Ajouté à ton avoir : :amount.',
+        'addon_units_granted' => 'Ton achat est terminé. Ajouté à ton solde prépayé : :units.',
         'dismiss' => 'Fermer',
     ],
 

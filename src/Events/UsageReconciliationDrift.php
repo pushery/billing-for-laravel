@@ -25,7 +25,7 @@ final readonly class UsageReconciliationDrift implements BillingDomainEvent
         public Model $owner,
         public string $meterKey,
         public string $period,
-        /** What WE believe we successfully reported (already netted of prepaid units). */
+        /** What we believe we successfully reported (already netted of prepaid units). */
         public int $reported,
         /** What the provider says it actually recorded. */
         public int $recorded,

@@ -13,7 +13,7 @@ use Pushery\Billing\Support\BillingSchema;
  * silently drop revenue) nor billed twice (a retry must not double-charge). Both hang on this table:
  *
  *  - `identifier` is minted once, when the usage is recorded, and is what the provider dedups on. A
- *    retry replays the SAME identifier, so the provider recognizes it. It is never regenerated.
+ *    retry replays the same identifier, so the provider recognizes it. It is never regenerated.
  *  - `source_key` is the CALLER's idempotency key. A send job that runs twice records the usage once.
  *  - `occurred_at` — never the flush time — is what crosses the wire, so a late flush still bills the
  *    usage into the cycle it actually happened in.

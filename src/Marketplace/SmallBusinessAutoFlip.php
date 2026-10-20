@@ -21,7 +21,7 @@ use Pushery\Billing\Enums\CreatorTaxStatusSource;
  * stays under, nothing is proven (external turnover is invisible here), so an automatic flip back, or an
  * automatic confirmation of the small-business status, is a fallacy the system must not commit.
  *
- * A flip writes a new status line (source = auto_flip, no attestation clock) at the RIGHT effective moment —
+ * A flip writes a new status line (source = auto_flip, no attestation clock) at the right effective moment —
  * the breaking transaction's own time for an intra-year break, January 1 for a prior-year one — never the
  * day's start and never the job's run time. The ledger fires its status-changed event, which the creator
  * notification listens on. Running it again over the same count is a no-op: the creator is already standard-

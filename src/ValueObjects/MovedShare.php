@@ -21,7 +21,10 @@ final readonly class MovedShare
 {
     public function __construct(
         public string $reference,
-        /** The gross the provider moved, before any reversal. */
+        /**
+         * What the provider moved to the merchant, before any reversal: the transfer, less the part of a fee the
+         * provider collected back from it for the platform and has not refunded.
+         */
         public Money $moved,
         /** Cumulative reversal against that transfer, as the provider reports it. Zero if none. */
         public Money $reversed,

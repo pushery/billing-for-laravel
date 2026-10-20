@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Enums;
 
 /**
- * What a retention period is counted FROM.
+ * What a retention period is counted from.
  *
  * The anchor decides as much as the length does, and getting it wrong is invisible: a period counted from
  * the wrong moment still produces a plausible date, just an earlier or later one than the obligation

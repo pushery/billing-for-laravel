@@ -94,6 +94,8 @@ return [
     'subscription' => [
         'heading' => 'Subscription',
         'status' => 'Status',
+        'plan' => 'Plan: :plan.',
+        'plan_priced' => 'Plan: :plan, :price / :interval.',
         'next_invoice' => 'Next invoice: :amount on :date.',
         'access_ends' => 'Your access ends on :date.',
         'access_ended' => 'Your access ended on :date.',
@@ -157,6 +159,7 @@ return [
         'unavailable' => 'The usage history isn’t available right now. Please try again in a moment.',
         'empty' => 'No usage recorded yet.',
         'periods_heading' => 'Past periods',
+        'period_from' => 'Period from :date',
         'used' => ':used used',
         'not_metered' => 'Not metered',
         'prepaid_used' => ':units prepaid',
@@ -236,6 +239,8 @@ return [
     'toast' => [
         'payment_failed' => 'Your payment could not be processed. Please update your payment details.',
         'subscription_activated' => 'Your subscription is active — everything it includes is switched on.',
+        'addon_credited' => 'Your purchase is complete. Added to your account credit: :amount.',
+        'addon_units_granted' => 'Your purchase is complete. Added to your prepaid balance: :units.',
         // The button on the shipped toast region. Named rather than an icon, because a toast that a screen
         // reader announces needs a control that announces too.
         'dismiss' => 'Dismiss',

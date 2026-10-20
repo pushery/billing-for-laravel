@@ -85,7 +85,7 @@ final readonly class SmallBusinessFlipSweep
 
             $this->flip->reconcile($merchant, $currency, $now->year, $record->business_founded_year);
 
-            // Asked AFTER the flip, deliberately. A creator who just crossed the limit is standard rated
+            // Asked after the flip, deliberately. A creator who just crossed the limit is standard rated
             // now, and warning them that they are nearing a threshold they have already passed would be
             // the wrong message on the one day it matters most.
             if ($this->ledger->statusAt($merchant, $now)->reliesOnSizeRelief()) {

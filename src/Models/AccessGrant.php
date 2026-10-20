@@ -154,7 +154,7 @@ class AccessGrant extends Model
     /**
      * Whether this grant grants at a given moment.
      *
-     * Deliberately NOT just `status === Active`. A row can be active and out of its window — a rental whose
+     * Deliberately not just `status === Active`. A row can be active and out of its window — a rental whose
      * end passed and whose sweep has not run yet — and answering from the status alone would hand somebody
      * access to a work whose term ended, for as long as the sweep is late. The dates decide; the status
      * records why, not whether.

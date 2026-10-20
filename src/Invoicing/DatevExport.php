@@ -14,6 +14,7 @@ use Pushery\Billing\Enums\ExchangeRateLayer;
 use Pushery\Billing\Enums\RecipientTaxStatus;
 use Pushery\Billing\Enums\SettlementDocumentType;
 use Pushery\Billing\Enums\SupplyRegime;
+use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Enums\VoucherEvent;
 use Pushery\Billing\Exceptions\InvalidBillingConfig;
@@ -894,6 +895,10 @@ final readonly class DatevExport
             return $this->accounts->resolve(DatevTransaction::OtherIncome);
         }
 
+        if ($invoice->supply_regime === SupplyRegime::CommissionChain && $invoice->tax_archetype === TaxArchetype::ConsumerGoods && $this->chartSelected()) {
+            return $this->goodsRevenueAccount($invoice);
+        }
+
         $country = $invoice->destination_country;
 
         if ((bool) $invoice->oss && is_string($country) && $country !== '' && $this->chartSelected()) {
@@ -913,6 +918,30 @@ final readonly class DatevExport
         // of its rounded amounts, 6.96 % for a 9.99 ebook, and read alone it booked that sale at 19 %.
         return $this->accounts->resolve(
             ($invoice->supply_rate_bps ?? $invoice->tax_rate_bps) === 700 ? DatevTransaction::FanRevenueReduced : DatevTransaction::FanRevenueStandard
+        );
+    }
+
+    /**
+     * Which revenue account the platform's own sale of goods books to, in a sale it is treated as making itself.
+     *
+     * Goods sold through the commission chain are that sale: the platform received them from the seller and sells
+     * them to the buyer. A sale the import scheme declares goes to that scheme's account for the destination, one
+     * the Union scheme declares to the destination's account for supplies taxable in another member state, and a
+     * supply taxed at home to the goods revenue account of its rate. Each of these refuses where the chart has no
+     * account, rather than book a sale of goods as a domestic service.
+     */
+    private function goodsRevenueAccount(InvoiceRecord $invoice): DatevAccount
+    {
+        if ((bool) $invoice->ioss) {
+            return $this->accounts->resolve(DatevTransaction::ImportSchemeGoodsRevenue, $invoice->destination_country);
+        }
+
+        if ((bool) $invoice->oss) {
+            return $this->accounts->resolve(DatevTransaction::OssGoodsRevenue, $invoice->destination_country);
+        }
+
+        return $this->accounts->resolve(
+            ($invoice->supply_rate_bps ?? $invoice->tax_rate_bps) === 700 ? DatevTransaction::GoodsRevenueReduced : DatevTransaction::GoodsRevenueStandard
         );
     }
 
@@ -1004,6 +1033,13 @@ final readonly class DatevExport
      */
     private function creatorInputTransaction(InvoiceRecord $invoice, ?int $rate = null): DatevTransaction
     {
+        // The seller's supply to a platform that supplies the goods on itself is exempt under a provision of its
+        // own, and it has its own case, which ships unmapped: on the tax-free input account of a small business it
+        // would reconcile while sitting on the wrong line of the return.
+        if ($invoice->tax_exemption_reason === TaxExemptionReason::SupplyToADeemedSupplier) {
+            return DatevTransaction::DeemedSupplyInputExempt;
+        }
+
         if ($invoice->tax_exempt) {
             return DatevTransaction::CreatorInputExempt;
         }

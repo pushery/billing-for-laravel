@@ -5,12 +5,13 @@ declare(strict_types=1);
 namespace Pushery\Billing\Tax;
 
 use Carbon\CarbonImmutable;
+use Pushery\Billing\Contracts\TaxReturnPeriod;
 use Pushery\Billing\Enums\TaxRateCategory;
+use Pushery\Billing\Enums\TaxReturnScheme;
 use Pushery\Billing\Exceptions\CorrectionOutsideWindow;
 use Pushery\Billing\Exceptions\CurrencyMismatch;
 use Pushery\Billing\Exceptions\ReportingRateMissing;
 use Pushery\Billing\Models\InvoiceRecord;
-use Pushery\Billing\ValueObjects\ReportingPeriod;
 use Pushery\Billing\ValueObjects\TaxReturnLine;
 
 /**
@@ -54,17 +55,21 @@ final readonly class PeriodicTaxReturn
      * With a conversion, every sale is declared in its currency, whatever it was issued in, at the reporting
      * rate frozen onto it. Without one, the sales have to share a currency, and the lines are in it.
      *
+     * @param  TaxReturnPeriod  $period  a quarter of the one-stop-shop return, or a month of the import scheme's
      * @param  iterable<InvoiceRecord>  $sales  the documents of the period, including corrections issued in it
      * @param  int  $correctionWindowYears  how long a jurisdiction allows corrections
+     * @param  TaxReturnScheme  $scheme  which return the lines are for: it declares the documents that carry its
+     *                                   flag, and no other
      * @return list<TaxReturnLine>
      *
      * @throws ReportingRateMissing when a sale in another currency carries no reporting rate
      */
     public function linesFor(
-        ReportingPeriod $period,
+        TaxReturnPeriod $period,
         iterable $sales,
         int $correctionWindowYears,
         ?ReportingConversion $conversion = null,
+        TaxReturnScheme $scheme = TaxReturnScheme::OneStopShop,
     ): array {
         /** @var array<string, TaxReturnLine> $lines */
         $lines = [];
@@ -93,7 +98,7 @@ final readonly class PeriodicTaxReturn
                 continue;
             }
 
-            $line = $this->lineFor($sale, $period, $correctionWindowYears, $conversion);
+            $line = $this->lineFor($sale, $period, $correctionWindowYears, $conversion, $scheme);
 
             if (! $line instanceof TaxReturnLine) {
                 continue;
@@ -119,19 +124,20 @@ final readonly class PeriodicTaxReturn
     /**
      * One sale's contribution, or null when it belongs to no line at all.
      *
-     * A sale that was not taxed at the buyer's country is not this return's business, and neither is one
-     * that names no country — both are declared elsewhere, and guessing a country here would declare a sale
-     * into a country it never touched.
+     * A sale that does not carry this return's flag is not this return's business, and neither is one that
+     * names no country — both are declared elsewhere, and guessing a country here would declare a sale into a
+     * country it never touched.
      */
     private function lineFor(
         InvoiceRecord $sale,
-        ReportingPeriod $period,
+        TaxReturnPeriod $period,
         int $correctionWindowYears,
         ?ReportingConversion $conversion,
+        TaxReturnScheme $scheme,
     ): ?TaxReturnLine {
         $country = $sale->destination_country;
 
-        if (! (bool) $sale->oss || ! is_string($country) || $country === '') {
+        if (! $scheme->declares($sale) || ! is_string($country) || $country === '') {
             return null;
         }
 
@@ -167,9 +173,9 @@ final readonly class PeriodicTaxReturn
      */
     private function originPeriodOf(
         InvoiceRecord $sale,
-        ReportingPeriod $period,
+        TaxReturnPeriod $period,
         int $correctionWindowYears,
-    ): ?ReportingPeriod {
+    ): ?TaxReturnPeriod {
         if (! $sale->isCorrection()) {
             return null;
         }
@@ -180,7 +186,8 @@ final readonly class PeriodicTaxReturn
             return null;
         }
 
-        $origin = ReportingPeriod::containing($corrected);
+        // Of the same length as the period declared: a correction to a month of the import scheme names a month.
+        $origin = $period->periodContaining($corrected);
 
         if ($origin->equals($period)) {
             return null;

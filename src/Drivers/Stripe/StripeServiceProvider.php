@@ -25,6 +25,7 @@ use Pushery\Billing\Contracts\MerchantCouponProvisioner;
 use Pushery\Billing\Contracts\MerchantOnboarding;
 use Pushery\Billing\Contracts\MerchantPriceProvisioner;
 use Pushery\Billing\Contracts\MeterInspector;
+use Pushery\Billing\Contracts\MirrorsCardOnFile;
 use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PairsReadersByTheirCode;
@@ -41,6 +42,7 @@ use Pushery\Billing\Contracts\SubmitsDisputeEvidence;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\SubscriptionSync;
 use Pushery\Billing\Contracts\SupplyRegimeResolver;
+use Pushery\Billing\Contracts\TakesCycleCommissionOnNet;
 use Pushery\Billing\Contracts\UpcomingInvoice;
 use Pushery\Billing\Contracts\UsageReporter;
 use Pushery\Billing\Contracts\WebhookEventMapper;
@@ -51,6 +53,8 @@ use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Events\AddonRefunded;
 use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\Events\ChargebackReversed;
+use Pushery\Billing\Events\CustomerDeleted;
+use Pushery\Billing\Events\DefaultPaymentMethodChanged;
 use Pushery\Billing\Events\DisputeOpened;
 use Pushery\Billing\Events\InPersonSaleCanceled;
 use Pushery\Billing\Events\InPersonSalePaid;
@@ -69,6 +73,7 @@ use Pushery\Billing\Events\PaymentMethodCollected;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Events\RoutedChargeAbandoned;
 use Pushery\Billing\Events\RoutedChargeConfirmed;
+use Pushery\Billing\Events\RoutedSubscriptionInvoiceDrafted;
 use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
 use Pushery\Billing\Events\SaleCountryReported;
 use Pushery\Billing\Events\SubscriptionStateChanged;
@@ -86,11 +91,13 @@ use Pushery\Billing\Webhooks\Effects\CreditAddonPurchase;
 use Pushery\Billing\Webhooks\Effects\DebitCreditAppliedByProvider;
 use Pushery\Billing\Webhooks\Effects\DocumentInPersonSale;
 use Pushery\Billing\Webhooks\Effects\FlushUpcomingUsage;
+use Pushery\Billing\Webhooks\Effects\ForgetDeletedCustomer;
 use Pushery\Billing\Webhooks\Effects\GrantPurchasedContent;
 use Pushery\Billing\Webhooks\Effects\InvoiceLocalPurchase;
 use Pushery\Billing\Webhooks\Effects\IssueDocumentForRoutedHostedPurchase;
 use Pushery\Billing\Webhooks\Effects\IssueLocalCreditNote;
 use Pushery\Billing\Webhooks\Effects\MarkMerchantDeauthorized;
+use Pushery\Billing\Webhooks\Effects\MirrorDefaultPaymentMethod;
 use Pushery\Billing\Webhooks\Effects\PersistInvoice;
 use Pushery\Billing\Webhooks\Effects\PersistInvoiceCorrection;
 use Pushery\Billing\Webhooks\Effects\RecordFailedMerchantPayout;
@@ -99,6 +106,7 @@ use Pushery\Billing\Webhooks\Effects\RecordProviderFee;
 use Pushery\Billing\Webhooks\Effects\RecordProviderTransferReversal;
 use Pushery\Billing\Webhooks\Effects\RecordRoutedSubscriptionCharge;
 use Pushery\Billing\Webhooks\Effects\RecordTaxIdVerification;
+use Pushery\Billing\Webhooks\Effects\RecordTheDestinationOfARoutedSale;
 use Pushery\Billing\Webhooks\Effects\RefreshMerchantCapabilities;
 use Pushery\Billing\Webhooks\Effects\ReinstateLocalInvoiceOnChargebackReversal;
 use Pushery\Billing\Webhooks\Effects\ReopenWriteOffOnLateReceipt;
@@ -118,6 +126,8 @@ use Pushery\Billing\Webhooks\Effects\SendTrialEndingNotice;
 use Pushery\Billing\Webhooks\Effects\SettleRoutedChargeOnConfirmation;
 use Pushery\Billing\Webhooks\Effects\StoreMandate;
 use Pushery\Billing\Webhooks\Effects\SyncPlanFromSubscription;
+use Pushery\Billing\Webhooks\Effects\TakeHostedPurchaseCommissionOnNet;
+use Pushery\Billing\Webhooks\Effects\TakeRoutedCycleCommissionOnNet;
 use Pushery\Billing\Webhooks\WebhookEffectRegistry;
 use Stripe\StripeClient;
 
@@ -161,6 +171,9 @@ final class StripeServiceProvider extends ServiceProvider
         // rate a provider applied, which lives on the sale's line items rather than in its completion event.
         $this->app->bind(ReadsProviderComputedTax::class, fn (Application $app): StripeCheckoutSessionTax => new StripeCheckoutSessionTax($app->make(StripeClient::class)));
 
+        // And the seam that sets a drafted cycle's commission on the net, bound here for the same reason as the reader.
+        $this->app->bind(TakesCycleCommissionOnNet::class, fn (Application $app): StripeCycleCommissionOnNet => new StripeCycleCommissionOnNet($app->make(StripeClient::class)));
+
         $this->app->bind(StripeClient::class, fn (Application $app): StripeClient => new StripeClient([
             'api_key' => $this->apiKey($app),
             'stripe_version' => $this->apiVersion($app),
@@ -172,6 +185,8 @@ final class StripeServiceProvider extends ServiceProvider
         // A card added on the hosted page becomes the one the next charge reads. Bound here only: the seam
         // exists because this provider's setup session attaches a method and sets nothing.
         $this->app->bind(AdoptsCollectedPaymentMethod::class, StripePaymentMethods::class);
+        // The engine keeps a copy of the default card on the owner, in Cashier's columns, and this is what writes it.
+        $this->app->bind(MirrorsCardOnFile::class, StripePaymentMethods::class);
         // Answering a dispute is a capability of the provider, not of every driver: Mollie takes no evidence
         // through its API, so the Mollie provider takes this binding out again and a host can ask the container
         // whether the step exists.
@@ -347,6 +362,13 @@ final class StripeServiceProvider extends ServiceProvider
         // sale that happened, and the effect that records what the buyer got should not be waiting behind
         // one that writes paper. Each effect is its own queued job, so neither can take the other down.
         $registry->on(AddonPurchased::class, IssueDocumentForRoutedHostedPurchase::class);
+        // Where the routed sale went, from the address the buyer entered on the provider's page, which the platform's
+        // records of a sale it only arranged read from the sale's row.
+        $registry->on(AddonPurchased::class, RecordTheDestinationOfARoutedSale::class);
+        // The same routed purchase's commission, brought down to the net where a tax-inclusive price had it taken on the
+        // buyer's tax as well. The fee was fixed when the session opened, before the rate existed; the rate is read
+        // from the same seam the document reads, and the correction gives the difference back after the commit.
+        $registry->on(AddonPurchased::class, TakeHostedPurchaseCommissionOnNet::class);
         // Ownership beside the money, deliberately as a second effect: they are different facts with
         // different lifetimes, and folded together a failure in either half would roll back the other —
         // leaving a buyer charged, credited, and without the row saying they own what they paid for.
@@ -360,6 +382,10 @@ final class StripeServiceProvider extends ServiceProvider
         // why this is the first effect in the package that reads from one. It asks the local subscription
         // first and stops there for every unrouted cycle, so an install that routes nothing pays nothing.
         $registry->on(RoutedSubscriptionInvoicePaid::class, RecordRoutedSubscriptionCharge::class);
+        // The same cycle an hour earlier, as a draft. A destination subscription can state its rate only as a
+        // percentage of the invoice total, the buyer's tax included, and the draft is the one moment the fee can
+        // still be set as an amount on the net. It asks the local subscription first, as the effect above does.
+        $registry->on(RoutedSubscriptionInvoiceDrafted::class, TakeRoutedCycleCommissionOnNet::class);
         $registry->on(AddonRefunded::class, ReverseAddonPurchase::class);
         // Access beside the money, and switchable independently of it: a refund that leaves the work in place
         // is a real policy, and a build that welded the two together would make it impossible to express.
@@ -396,6 +422,11 @@ final class StripeServiceProvider extends ServiceProvider
         $registry->on(TaxIdVerificationReported::class, RecordTaxIdVerification::class);
         $registry->on(InvoiceCorrected::class, PersistInvoiceCorrection::class);
         $registry->on(MandateRevoked::class, RevokeMandate::class);
+        // The copy of the default card on the owner, kept current when the default changes outside the package: in
+        // Stripe's portal, through the bank's card updater, or by removing the card that was the default.
+        $registry->on(DefaultPaymentMethodChanged::class, MirrorDefaultPaymentMethod::class);
+        // A customer deleted at Stripe takes its reference and the card copy with it, so the next checkout starts a new one.
+        $registry->on(CustomerDeleted::class, ForgetDeletedCustomer::class);
         // The hosted page for adding a card only attaches it. This is what makes it the default, for the
         // customer and for every subscription that names a card of its own, so the next retry takes it.
         $registry->on(PaymentMethodCollected::class, AdoptCollectedPaymentMethod::class);
@@ -462,7 +493,15 @@ final class StripeServiceProvider extends ServiceProvider
         $registry->on(ChargebackReversed::class, ReinstateLocalInvoiceOnChargebackReversal::class);
     }
 
-    /** In production with Stripe active, refuse to boot without a webhook signing secret. */
+    /**
+     * In production with Stripe active, refuse to boot without the webhook signing secret of the installation's
+     * own Stripe account, and of the marketplace endpoint where the marketplace is on.
+     *
+     * Without its secret the own endpoint rejects every delivery, and the events that move money and access go
+     * unread with nothing failing in front of whoever deployed. A payments-only installation without a Stripe
+     * key of its own has no such account: its merchants' events arrive on their own endpoints, signed with their
+     * own secrets, and nothing signs for the own one. It is not asked for a secret nobody signs with.
+     */
     private function guardWebhookSecret(Application $app): void
     {
         $config = $app->make(Repository::class);
@@ -474,14 +513,17 @@ final class StripeServiceProvider extends ServiceProvider
             return;
         }
 
-        $secret = $config->get('cashier.webhook.secret');
         $guard = $app->make(WebhookSecretGuard::class);
 
-        $guard->ensureConfigured(
-            'stripe',
-            $app->environment(),
-            is_string($secret) && $secret !== '' ? $secret : null,
-        );
+        if (! $app->make(BillingManager::class)->paymentsOnly() || $this->apiKey($app) !== null) {
+            $secret = $config->get('cashier.webhook.secret');
+
+            $guard->ensureConfigured(
+                'stripe',
+                $app->environment(),
+                is_string($secret) && $secret !== '' ? $secret : null,
+            );
+        }
 
         if (! (bool) $config->get('billing.marketplace.enabled', false)) {
             return;

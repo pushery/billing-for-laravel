@@ -15,19 +15,26 @@ use Pushery\Billing\Contracts\CanReceiveMoney;
 use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Contracts\RoutesMoney;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\DeemedSupplyOfGoods;
 use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxRateCategory;
+use Pushery\Billing\Exceptions\DeemedSupplyOfGoodsRefused;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\ReceiveEligibilityDenied;
 use Pushery\Billing\Models\MerchantCharge;
+use Pushery\Billing\Tax\DeemedSupplyOfGoodsTaxDecision;
+use Pushery\Billing\Tax\OneStopShopDeclaration;
 use Pushery\Billing\ValueObjects\ArchetypeClassification;
 use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
+use Pushery\Billing\ValueObjects\DeemedSupplyOfGoodsTax;
+use Pushery\Billing\ValueObjects\GoodsConsignment;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
+use Pushery\Billing\ValueObjects\SupplyPlacement;
 use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 use Pushery\Billing\ValueObjects\TaxonomyCell;
 use Pushery\Billing\ValueObjects\TransferResult;
@@ -46,7 +53,7 @@ use Throwable;
  *
  * Leaving the recording to the caller looks reasonable and is not. It is not a bookkeeping nicety that can
  * be added later by whoever remembers: the reversal caps, the earnings count and the threshold verdict are
- * all computed FROM this table, so a payment that skipped it is not merely unlogged — it is invisible to
+ * all computed from this table, so a payment that skipped it is not merely unlogged — it is invisible to
  * every rule that money is supposed to obey afterwards. One caller forgetting once is a merchant who can be
  * refunded past what they were paid.
  *
@@ -210,6 +217,17 @@ final readonly class RoutedPayment
      *                                        otherwise, and refused when the archetype needs it and it is
      *                                        missing: a tip on commissioned work and a tip on a file
      *                                        download owe different things, and neither is a safe guess.
+     * @param  ?GoodsConsignment  $consignment  for goods, where they ship from and what the consignment is
+     *                                          worth, which decides whether the platform is treated as their
+     *                                          supplier. Optional for a seller in the Union, whose goods are
+     *                                          a deemed supply only where imported; the goods of a seller
+     *                                          outside the Union are refused without it.
+     * @param  ?SupplyPlacement  $placement  where a caller that decided the sale's tax placed it. It decides whether
+     *                                       the cross-border consumer return declares the sale, and it can move a
+     *                                       supply the product places at the buyer to the platform, as the
+     *                                       distance-sale threshold does. Null leaves both to the placement of the
+     *                                       product, the buyer's country, a tax id a register confirmed for the
+     *                                       buyer and the installation's threshold.
      */
     public function charge(
         Model $merchant,
@@ -225,6 +243,8 @@ final readonly class RoutedPayment
         ?string $idempotencyKey = null,
         ?string $destinationCountry = null,
         ?string $destinationSubdivision = null,
+        ?GoodsConsignment $consignment = null,
+        ?SupplyPlacement $placement = null,
     ): ChargeResult {
         // The archetype is required and nullable, which looks like a contradiction and is the point. Required
         // so it cannot be forgotten — a default would make "unclassified" the quiet normal case within a
@@ -313,16 +333,29 @@ final readonly class RoutedPayment
 
         $this->pairing->assertCompatible($routing->type, $posture);
 
-        // Fourth gate, and it pairs the posture with who sells what: goods of a seller established outside the
-        // Union are never recorded as an intermediation, because the law treats the platform as their supplier.
-        // The reasons and the two limits are on SellerSaleGate.
-        $sellers->assertPostureCarriesTheSupply($merchant, $posture, $archetype);
+        // Fourth gate, and it pairs the posture with who sells what: goods the law treats the platform as
+        // supplying itself are never recorded as an intermediation, and neither are the goods of a seller outside
+        // the Union that are not such a supply. The reasons and the limits are on SellerSaleGate.
+        $supply = $sellers->assertPostureCarriesTheSupply($merchant, $posture, $archetype, $buyerOwner, $consignment);
+
+        // A deemed supply the tax profile documents is the platform's own sale, whatever posture the installation
+        // configured. It is booked under the deemed-supplier posture, which the charge type has to carry as well, and
+        // its tax is decided now, before the money moves, so the rate the sale is charged at and the rate its document
+        // states cannot differ. The posture changes here, once, and is read from this variable for the rest of the sale.
+        $deemed = null;
+
+        if ($supply instanceof DeemedSupplyOfGoods && $consignment instanceof GoodsConsignment) {
+            $posture = SellerOfRecordPosture::PlatformDeemedSupplier;
+            $this->pairing->assertCompatible($routing->type, $posture);
+            $deemed = $this->deemedSupplyTax($supply, $consignment, $destinationCountry, $gross, $taxBps, $classification);
+        }
+
         $sellers->assertTradingStandingDeclared($merchant, $posture, $archetype);
         $sellers->assertGoodsSellerRecordComplete($merchant, $posture, $archetype);
 
         $routesSeparately = $routing->type === ChargeType::SeparateTransfer;
 
-        // Asked BEFORE the provider, which is what `MarketplaceUnsupported::cannotMoveMerchantShare()` has
+        // Asked before the provider, which is what `MarketplaceUnsupported::cannotMoveMerchantShare()` has
         // always promised and this path did not keep: the check sat inside the transfer, after the buyer had
         // been charged, so an installation without a way to move shares took the whole payment first and
         // only then refused to pay the merchant.
@@ -376,7 +409,7 @@ final readonly class RoutedPayment
             return $result;
         }
 
-        $charge = $this->record($merchant, $result, $gross, $fee, $platformFee, $taxBps, $routing->type, $posture, $archetype);
+        $charge = $this->record($merchant, $result, $gross, $fee, $platformFee, $taxBps, $routing->type, $posture, $archetype, $deemed, $consignment, $destinationCountry);
 
         // A settled payment is settled now, from what the provider just said — not later, from a webhook
         // re-deriving it. The result already carries the transfer reference on a destination charge,
@@ -462,10 +495,39 @@ final readonly class RoutedPayment
 
         $this->issueBuyerDocument(
             $buyerOwner, $posture, $gross, $taxBps, $buyerIsDomestic, $charge, $archetype, $classification,
-            $soldAlongside, $destinationCountry, $destinationSubdivision,
+            $soldAlongside, $destinationCountry, $destinationSubdivision, $placement, $deemed, $consignment?->description,
         );
 
         return $result;
+    }
+
+    /**
+     * The tax of the platform's own supply of the goods to the buyer, decided before the money moves.
+     *
+     * Decided for the moment the payment is accepted, at which the tax on both supplies arises (Art. 66a VAT
+     * Directive), from the consignment the classification was made from and in the band the classification settled.
+     * A caller that priced the sale at another rate is refused: the commission is taken on the net at that rate, and
+     * the document would state a tax the buyer was never charged.
+     *
+     * @throws DeemedSupplyOfGoodsRefused where the supply cannot be taxed as this one, or was priced at another rate
+     */
+    private function deemedSupplyTax(DeemedSupplyOfGoods $supply, GoodsConsignment $consignment, ?string $destinationCountry, Money $gross, int $taxBps, ArchetypeClassification $classification): DeemedSupplyOfGoodsTax
+    {
+        $tax = Container::getInstance()->make(DeemedSupplyOfGoodsTaxDecision::class)->decide(
+            $supply,
+            $consignment,
+            $consignment->goodsLocatedIn,
+            $destinationCountry,
+            $gross,
+            CarbonImmutable::now(),
+            $this->fixedAnswer($classification->rateCategory, TaxRateCategory::class) ?? TaxRateCategory::Standard,
+        );
+
+        if ($tax->rateBps !== $taxBps) {
+            throw DeemedSupplyOfGoodsRefused::rateDiffersFromTheDecision($taxBps, $tax->rateBps, $tax->taxedIn);
+        }
+
+        return $tax;
     }
 
     /**
@@ -491,7 +553,7 @@ final readonly class RoutedPayment
      * ## Why it is here and not left to the consumer
      *
      * The money moved because a supply happened, and a supply that produces no document is the defect this
-     * method exists to end: this lane took payment and issued nothing for two releases. Issued AFTER the
+     * method exists to end: this lane took payment and issued nothing for two releases. Issued after the
      * settlement deliberately — a document for a payment that has not happened is worse than none, and the
      * provider's answer is the only thing that knows.
      *
@@ -506,8 +568,8 @@ final readonly class RoutedPayment
      * - **The merchant is the seller of record** — the platform is not a party to the supply. It has no
      *   document to issue, and issuing one in its own name would name the wrong seller on a real receipt.
      * - **The platform merely arranges** — its fee is its turnover and the document is an intermediation
-     *   receipt, which `issueIntermediated()` writes. Not reached yet, and NOT because it was forgotten.
-     *   ONE thing still has to be settled. That document states the commission's OWN tax rate, and whether
+     *   receipt, which `issueIntermediated()` writes. Not reached yet, and not because it was forgotten.
+     *   One thing still has to be settled. That document states the commission's own tax rate, and whether
      *   this seam carries one is an open question — the ledger seam treats it as optional, and issuing a
      *   document that states a rate nobody supplied would put a number on a receipt that no decision stands
      *   behind. Wiring it before that is answered would ship exactly the defect this method closes, one
@@ -530,8 +592,28 @@ final readonly class RoutedPayment
         ?TaxArchetype $soldAlongside,
         ?string $destinationCountry,
         ?string $destinationSubdivision,
+        ?SupplyPlacement $placement,
+        ?DeemedSupplyOfGoodsTax $deemed = null,
+        ?string $goods = null,
     ): void {
         if ($posture !== SellerOfRecordPosture::PlatformDeemedSupplier) {
+            return;
+        }
+
+        // A deemed supply of goods has a document of its own, written from the tax decided before the money moved:
+        // the platform supplies the goods at the full price with the tax of the member state that decision placed
+        // the supply in. A sale within one member state is that member state's domestic supply, and only such a sale
+        // can get the small-value tier; a distance sale crosses a border.
+        if ($deemed instanceof DeemedSupplyOfGoodsTax) {
+            $this->receipts->issueDeemedSupplyOfGoods(
+                buyerOwner: $buyerOwner,
+                tier: $this->tiers->tierFor($gross, ! $deemed->distanceSale(), false),
+                tax: $deemed,
+                chargeReference: $charge->charge_reference,
+                provider: $this->driver->name(),
+                goods: $goods,
+            );
+
             return;
         }
 
@@ -539,6 +621,10 @@ final readonly class RoutedPayment
         // boundary, and this document would then state a sale date and a delivery date that disagree about
         // when the same instant was.
         $soldOn = CarbonImmutable::now();
+        [$place, $oneStopShop] = $this->placed(
+            $this->fixedAnswer($classification->placeOfSupply, PlaceOfSupplyRule::class),
+            $placement, $destinationCountry, $buyerOwner, $gross->baseFromMarkup($taxBps)[0], $soldOn,
+        );
 
         $this->receipts->issue(
             buyerOwner: $buyerOwner,
@@ -564,7 +650,7 @@ final readonly class RoutedPayment
                 // Where the supply is taxed and which rate band it falls in — carried from the classification
                 // that already ran above rather than worked out a second time. See `fixedAnswer()` for why
                 // either can legitimately be null.
-                placeOfSupply: $this->fixedAnswer($classification->placeOfSupply, PlaceOfSupplyRule::class),
+                placeOfSupply: $place,
                 rateCategory: $this->fixedAnswer($classification->rateCategory, TaxRateCategory::class),
                 // BT-72, the date the supply actually happened. For a one-time sale that is the moment it was
                 // sold: there is no stretch of time, and the buyer has what they paid for as soon as they pay.
@@ -581,6 +667,9 @@ final readonly class RoutedPayment
                 // which is an honest answer; guessed, it would raise a threshold in a state nobody sold into.
                 destinationCountry: $destinationCountry,
                 destinationSubdivision: $destinationSubdivision,
+                // Whether the cross-border consumer return declares the sale. The return reads this flag alone, so
+                // without it the sale was never declared. See `placed()` for where it comes from.
+                oneStopShop: $oneStopShop,
             ),
             // Whose charge reference the line above is. It is the same driver that produced it — taken from
             // the driver rather than named here, so the reference and the provider recorded beside it can
@@ -592,6 +681,28 @@ final readonly class RoutedPayment
             // nothing. Named arguments take the decision away from the merge.
             provider: $this->driver->name(),
         );
+    }
+
+    /**
+     * Where the sale stands on its document, and whether the cross-border consumer return declares it.
+     *
+     * A caller that decided the sale's tax placed it already, and its placement is taken for the declaration and for
+     * the one move a placement makes to the product's own rule here: below the distance-sale threshold (Art. 59c), a
+     * supply the product places at the buyer stays where the platform is. A business buyer's placement does not move
+     * the rule, so the document keeps stating the product's. Without a caller's placement both answers come from
+     * {@see OneStopShopDeclaration}, with the installation's threshold and this sale's net.
+     *
+     * @return array{?PlaceOfSupplyRule, bool}
+     */
+    private function placed(?PlaceOfSupplyRule $place, ?SupplyPlacement $placement, ?string $destinationCountry, Model $buyer, Money $net, CarbonImmutable $soldOn): array
+    {
+        if ($placement instanceof SupplyPlacement) {
+            $atThePlatform = $place === PlaceOfSupplyRule::Destination && $placement->rule === PlaceOfSupplyRule::Domestic;
+
+            return [$atThePlatform ? PlaceOfSupplyRule::Domestic : $place, $placement->reportableUnderOneStopShop];
+        }
+
+        return Container::getInstance()->make(OneStopShopDeclaration::class)->placed($place, $destinationCountry, $buyer, $net, $soldOn);
     }
 
     /**
@@ -701,7 +812,7 @@ final readonly class RoutedPayment
      * the same charge converges on the row it already wrote rather than starting a second one with all its
      * reversal totals back at zero.
      */
-    private function record(Model $merchant, ChargeResult $result, Money $gross, PlatformFee $fee, Money $platformFee, int $taxBps, ChargeType $chargeType, SellerOfRecordPosture $posture, ?TaxArchetype $archetype): MerchantCharge
+    private function record(Model $merchant, ChargeResult $result, Money $gross, PlatformFee $fee, Money $platformFee, int $taxBps, ChargeType $chargeType, SellerOfRecordPosture $posture, ?TaxArchetype $archetype, ?DeemedSupplyOfGoodsTax $deemed, ?GoodsConsignment $consignment, ?string $destinationCountry): MerchantCharge
     {
         // What the merchant receives is still the whole payment less the commission -- the buyer's tax
         // travels with the merchant's share, because on this lane it is the merchant who owes it. Computed
@@ -735,6 +846,12 @@ final readonly class RoutedPayment
             // And what was sold. Under intermediation this row is the only record of the sale, so it is what a
             // count of a seller's sales of goods reads.
             taxArchetype: $archetype,
+            // And which supply of goods the platform makes itself, with the consignment that decided it, so a refund
+            // corrects both documents of the sale it was and never decides the classification again.
+            deemedSupply: $deemed?->supply,
+            // And the goods and where they went, which the platform's records of a sale it only arranged read from here.
+            consignment: $consignment,
+            destinationCountry: $destinationCountry,
         );
     }
 }

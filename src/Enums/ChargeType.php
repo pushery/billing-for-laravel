@@ -33,7 +33,7 @@ enum ChargeType: string
      * Checked against the provider's own documentation for Connect charge types on 2026-07-28:
      *
      * - **Destination charge**: the platform is the settlement merchant, and the fee is charged on the
-     *   platform's own pricing. Whether the dispute is debited from the platform's balance is NOT decided
+     *   platform's own pricing. Whether the dispute is debited from the platform's balance is not decided
      *   here — see the measurement below; it follows the connected account's type.
      * - **`on_behalf_of`**: makes the connected account the merchant of record for the payment — it is
      *   processed in that account's country, under that country's fee schedule, with that account's

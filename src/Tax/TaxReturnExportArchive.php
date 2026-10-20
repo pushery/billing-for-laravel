@@ -9,6 +9,8 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Filesystem\Factory as FilesystemFactory;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Pushery\Billing\Contracts\TaxReturnPeriod;
+use Pushery\Billing\Enums\TaxReturnScheme;
 use Pushery\Billing\Models\TaxReturnExportRecord;
 use Pushery\Billing\ValueObjects\ReportingPeriod;
 use Pushery\Billing\ValueObjects\TaxReturnLine;
@@ -46,14 +48,18 @@ final readonly class TaxReturnExportArchive
     /**
      * Produce a period's file, record it, and put a copy where configuration points.
      *
+     * A run is recorded under the return it is for, so a month of the import scheme never reads as a run of the
+     * one-stop-shop return for the quarter it falls in.
+     *
      * @param  list<TaxReturnLine>  $lines
      */
-    public function store(ReportingPeriod $period, array $lines, string $currency, ?CarbonInterface $at = null): TaxReturnExportRecord
+    public function store(TaxReturnPeriod $period, array $lines, string $currency, ?CarbonInterface $at = null, TaxReturnScheme $scheme = TaxReturnScheme::OneStopShop): TaxReturnExportRecord
     {
         $contents = $this->export->render($period, $lines);
         $moment = $at ?? Carbon::now();
 
         return TaxReturnExportRecord::model()::query()->create([
+            'return_type' => $scheme->value,
             'year' => $period->year,
             'quarter' => $period->quarter,
             'period_label' => $period->label(),
@@ -64,7 +70,7 @@ final readonly class TaxReturnExportArchive
             'tax_minor' => array_sum(array_map(fn (TaxReturnLine $line): int => $line->taxMinor, $lines)),
             'checksum' => hash('sha256', $contents),
             'contents' => $contents,
-            'written_to' => $this->put($period, $contents, $currency),
+            'written_to' => $this->put($period, $contents, $currency, $scheme),
         ]);
     }
 
@@ -77,7 +83,7 @@ final readonly class TaxReturnExportArchive
      *
      * @param  list<TaxReturnLine>  $lines
      */
-    public function matchesStored(TaxReturnExportRecord $stored, ReportingPeriod $period, array $lines): bool
+    public function matchesStored(TaxReturnExportRecord $stored, TaxReturnPeriod $period, array $lines): bool
     {
         return $stored->checksum === hash('sha256', $this->export->render($period, $lines));
     }
@@ -103,7 +109,7 @@ final readonly class TaxReturnExportArchive
     }
 
     /** The copy on a disk, if configuration asks for one. Null when it does not — writing nowhere is valid. */
-    private function put(ReportingPeriod $period, string $contents, string $currency): ?string
+    private function put(TaxReturnPeriod $period, string $contents, string $currency, TaxReturnScheme $scheme): ?string
     {
         $disk = $this->config->get('billing.tax_oss.export_disk');
 
@@ -113,7 +119,7 @@ final readonly class TaxReturnExportArchive
 
         $directory = $this->config->get('billing.tax_oss.export_path');
         $path = trim(is_string($directory) ? $directory : 'tax-returns', '/')
-            .'/'.$this->export->filenameFor($period, $currency);
+            .'/'.$this->export->filenameFor($period, $currency, $scheme);
 
         $this->filesystems->disk($disk)->put($path, $contents);
 

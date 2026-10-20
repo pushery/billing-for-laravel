@@ -10,7 +10,7 @@ use RuntimeException;
 /**
  * A sale was attempted into a country the operator has not opened.
  *
- * Refused BEFORE the payment, because there is no document that repairs it afterwards: the tax has arisen
+ * Refused before the payment, because there is no document that repairs it afterwards: the tax has arisen
  * in a country where nobody is registered, and no correction undoes that. It carries the country and the
  * state so a consumer can render its own message — a buyer should be told their country is not served yet,
  * not shown a tax registration problem.

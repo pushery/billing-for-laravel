@@ -154,9 +154,12 @@ final readonly class MarketplaceSaleContext
      * anything is assembled — the only point at which refusing is still free. Both Stripe lanes wrote this
      * line themselves, each deriving both halves from its own copy of the readers above; that is the shape
      * the divergence took, so the call moves here with them.
+     *
+     * The posture is this installation's unless the sale has its own: a supply of goods the platform is treated
+     * as making itself is sold under the deemed-supplier posture whatever the installation configured.
      */
-    public function assertRoutingCompatible(ChargeType $type): void
+    public function assertRoutingCompatible(ChargeType $type, ?SellerOfRecordPosture $posture = null): void
     {
-        $this->routingGuard->assertCompatible($type, $this->posture());
+        $this->routingGuard->assertCompatible($type, $posture ?? $this->posture());
     }
 }

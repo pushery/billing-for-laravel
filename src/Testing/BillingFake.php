@@ -573,7 +573,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
 
     public function createAccount(Model $merchant): MerchantAccountReference
     {
-        // Deliberately NOT receivable. A fake account that claimed all three capabilities would let a test
+        // Deliberately not receivable. A fake account that claimed all three capabilities would let a test
         // route money the moment onboarding started, which is exactly the sequence the real gate forbids:
         // the provider confirms capabilities later, and often not at all.
         return new MerchantAccountReference(provider: 'fake', accountId: 'acct_fake');

@@ -11,7 +11,7 @@ use Pushery\Billing\Enums\BillingAction;
 /**
  * Warns the owner that a metered allowance is running out, while they can still do something about it —
  * top up, upgrade, or simply slow down. Without it the first thing a customer learns about their limit is
- * being refused by it, which is the support ticket this notice exists to prevent.
+ * being refused by it, which is the support request this notice exists to prevent.
  *
  * Localized via the publishable billing::notifications namespace and, like every billing notice,
  * non-suppressible: running out of what you paid for is not marketing.

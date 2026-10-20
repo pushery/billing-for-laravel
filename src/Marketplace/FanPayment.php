@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Marketplace;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Exceptions\FanPriceTooLow;
+use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
 use Pushery\Billing\Tax\SaleTaxDecision;
+use Pushery\Billing\Tax\SaleTaxFacts;
 use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\Money;
@@ -54,6 +57,11 @@ final readonly class FanPayment
         private FanChosenPricing $pricing,
         private SaleTaxDecision $taxes,
         private RoutedPayment $payments,
+        /**
+         * The installation's distance-sale threshold, which keeps a cross-border sale to a consumer at the platform's
+         * rate while it holds. Null where the payment was built by hand, and then nothing watches it.
+         */
+        private ?DistanceSaleThresholdMonitor $thresholds = null,
     ) {}
 
     /**
@@ -86,12 +94,7 @@ final readonly class FanPayment
 
         // The tax first, because its rate is what the commission is then taken on — and because this is
         // where a tip stops being a tip and becomes whatever it was paid alongside.
-        $facts = $this->taxes->decideOnGross(
-            TaxArchetype::Tip,
-            $chosen,
-            $buyer,
-            soldAlongside: $soldAlongside,
-        );
+        $facts = $this->decide(TaxArchetype::Tip, $chosen, $buyer, $soldAlongside);
 
         // Called for the floor, exactly as the pay-what-you-want lane below calls its pricing method for
         // one. This lane derives its own money, so the priced sale is not what is wanted here -- the
@@ -103,13 +106,17 @@ final readonly class FanPayment
             $buyerOwner,
             $chosen,
             $this->pricing->feeForTip($normalFee),
-            $facts->rateBps,
+            $this->statedRate($facts),
             $buyerIsDomestic,
             $token,
             $routing,
             TaxArchetype::Tip,
             $soldAlongside,
             $idempotencyKey,
+            // Where the buyer is and where the decision above placed the sale, so the receipt states the treatment the
+            // rate came from rather than one derived again downstream.
+            destinationCountry: $buyer->countryCode,
+            placement: $facts->placement,
         );
     }
 
@@ -139,25 +146,60 @@ final readonly class FanPayment
             return null;
         }
 
-        $facts = $this->taxes->decideOnGross($archetype, $chosen, $buyer);
+        $facts = $this->decide($archetype, $chosen, $buyer);
 
         // Called for the floor, which lives there and only there. What it returns is deliberately discarded:
         // the money is derived once, by the charge, and a split computed here as well would be the second
         // answer this package keeps having to hunt down. Raising `FanPriceTooLow` is the whole contribution.
-        $this->pricing->payWhatYouWant($chosen, $fee, $facts->rateBps);
+        $this->pricing->payWhatYouWant($chosen, $fee, $this->statedRate($facts));
 
         return $this->payments->charge(
             $merchant,
             $buyerOwner,
             $chosen,
             $fee,
-            $facts->rateBps,
+            $this->statedRate($facts),
             $buyerIsDomestic,
             $token,
             $routing,
             $archetype,
             null,
             $idempotencyKey,
+            destinationCountry: $buyer->countryCode,
+            placement: $facts->placement,
         );
+    }
+
+    /**
+     * The rate a gross-priced sale's receipt states: the regime's statutory rate, and the quotient of the
+     * two rounded amounts only where the regime named none.
+     *
+     * The receipt splits the gross by the rate it is handed and prints that rate beside the total. The
+     * quotient of a small gross's rounded parts is no rate a country has, 192 on 1008 is 19.05 %, so
+     * handing it on put a rate the law does not know on the document.
+     */
+    private function statedRate(SaleTaxFacts $facts): int
+    {
+        return $facts->appliedRateBps > 0 ? $facts->appliedRateBps : $facts->rateBps;
+    }
+
+    /**
+     * The tax of a buyer-chosen amount, with the distance-sale threshold applied.
+     *
+     * Below the threshold (Art. 59c VAT Directive) a cross-border sale to a consumer that the product places at the
+     * buyer stays taxed where the platform is. The year's total is asked with this sale's net at the platform's rate,
+     * so the sale that crosses the threshold is taxed at the destination already, as an order's cycle is.
+     */
+    private function decide(TaxArchetype $archetype, Money $chosen, TaxContext $buyer, ?TaxArchetype $soldAlongside = null): SaleTaxFacts
+    {
+        $facts = $this->taxes->decideOnGross($archetype, $chosen, $buyer, soldAlongside: $soldAlongside);
+
+        if (! $facts->reportableUnderOneStopShop() || ! $this->thresholds instanceof DistanceSaleThresholdMonitor) {
+            return $facts;
+        }
+
+        $atThePlatform = $this->taxes->decideOnGross($archetype, $chosen, $buyer, soldAlongside: $soldAlongside, belowDistanceSaleThreshold: true);
+
+        return $this->thresholds->keepsAtTheSeller(CarbonImmutable::now()->year, $chosen->currency, $chosen->minus($atThePlatform->tax)->minorUnits) ? $atThePlatform : $facts;
     }
 }

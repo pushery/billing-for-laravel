@@ -475,7 +475,7 @@ class Subscription extends Model
      * the column keeps saying that a trial was granted once. A separate counter would be a second version
      * of one fact, and it would drift the first time anything else wrote the row.
      *
-     * Deliberately NOT the owner's own `trial_ends_at`, which the generic trial owns and `onGenericTrial()`
+     * Deliberately not the owner's own `trial_ends_at`, which the generic trial owns and `onGenericTrial()`
      * reads as "a tier is unlocked without a subscription".
      */
     public static function ownerHasHadATrial(Model $owner): bool

@@ -34,7 +34,7 @@ use Pushery\Billing\ValueObjects\Money;
  * would be the one that gets forgotten at the next change in tax law, and it would be forgotten silently,
  * because the first one would still work.
  *
- * It also does not decide WHEN. The correction belongs to the period of the link it corrects, which is
+ * It also does not decide when. The correction belongs to the period of the link it corrects, which is
  * settled elsewhere and stays settled.
  */
 final readonly class ProratedTermRefund

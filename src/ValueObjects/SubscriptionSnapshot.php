@@ -11,9 +11,10 @@ namespace Pushery\Billing\ValueObjects;
  * engine from the local subscription row) — so the presenter stays pure and provider-agnostic.
  *
  * When {@see $hasSubscription} is true the status predicates below it (incomplete, pastDue, …) are the
- * meaningful ones; when it is false there is no subscription and the two no-subscription flags apply
- * instead — {@see $onGenericTrial} (a trial with no subscription) and {@see $hasCustomerId} (whether a
- * provider customer exists, which distinguishes a churned owner from one who never subscribed).
+ * meaningful ones; when it is false there is no subscription and {@see $onGenericTrial} (a trial with no
+ * subscription) applies instead. {@see $hasCustomerId} says whether the provider knows the owner as a
+ * customer. It decides no state: a one-time purchase or a saved card makes a customer of somebody who never
+ * subscribed.
  */
 final readonly class SubscriptionSnapshot
 {

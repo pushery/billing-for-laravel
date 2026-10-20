@@ -24,7 +24,7 @@ use Pushery\Billing\ValueObjects\Money;
  * network call at all, which is the difference between a page that works while the provider is down and
  * one that does not.
  *
- * Deliberately NOT named for a provider and deliberately not in a driver's namespace. Every local-engine
+ * Deliberately not named for a provider and deliberately not in a driver's namespace. Every local-engine
  * driver needs exactly this, and a copy per driver is how two implementations of one thing start.
  *
  * ## Ownership is a filter, not a check afterwards

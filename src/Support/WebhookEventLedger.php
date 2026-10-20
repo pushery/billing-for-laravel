@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Models\BillingWebhookEvent;
+use Pushery\Billing\Webhooks\WebhookPayloadSecrets;
 
 /**
  * Records each verified provider delivery, payload and all. Keeping the raw payload is what makes an
@@ -34,6 +35,10 @@ final class WebhookEventLedger
         array $payload,
         string $accountReference = '',
     ): BillingWebhookEvent {
+        // Without the fields a provider asks not to be stored, on the first delivery and on a refill alike. See
+        // WebhookPayloadSecrets for why a replay does not miss them.
+        $payload = WebhookPayloadSecrets::strip($payload);
+
         $delivery = UniqueRow::firstOrCreate(
             BillingWebhookEvent::model()::query(),
             ['provider' => $provider, 'account_reference' => $accountReference, 'event_id' => $eventId],

@@ -33,6 +33,14 @@ return [
         'cta' => 'Tarif ansehen',
     ],
 
+    'subscription_ending' => [
+        'subject' => 'Dein Abo endet bald',
+        'intro' => 'Dein gekündigtes Abo endet am :date.',
+        'intro_merchant' => 'Dein gekündigtes Abo bei :merchant endet am :date.',
+        'outro' => 'Setz es vorher fort, dann behältst du alles, was dazugehört, ohne Unterbrechung.',
+        'cta' => 'Abo fortsetzen',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'Dein Steuerstatus hat sich geändert',
         'intro' => 'Dein Steuerstatus hat sich von :from auf :to geändert. Wir haben das aus unseren eigenen Aufzeichnungen abgeleitet — du hast es nicht beantragt.',

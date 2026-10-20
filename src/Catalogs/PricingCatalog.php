@@ -6,6 +6,7 @@ namespace Pushery\Billing\Catalogs;
 
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Translation\Translator;
+use Pushery\Billing\Contracts\FeatureBullets;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Entitlements\ConfigEntitlements;
 use Pushery\Billing\Entitlements\ConfigEntitlementsFactory;
@@ -25,7 +26,8 @@ use Pushery\Billing\ValueObjects\PricingCard;
  * The account hub's plan list reads label and price from the same tier catalog and shows no bullets, highlight
  * or badge. The feature bullets live in config (`tiers.<key>.features`, a list of translation keys) — never
  * hard-coded in a view — which is what makes drift impossible: change the config and every surface that renders
- * them moves with it.
+ * them moves with it. An application whose bullets carry numbers that follow from its limits binds
+ * {@see FeatureBullets}, and every card asks that instead.
  */
 final readonly class PricingCatalog
 {
@@ -34,6 +36,8 @@ final readonly class PricingCatalog
         private ConfigEntitlementsFactory $entitlements,
         private Repository $config,
         private Translator $translator,
+        /** The bullets, from the configured translation keys unless the application binds its own. */
+        private ?FeatureBullets $bullets = null,
     ) {}
 
     /** @return list<ConfigEntitlements> */
@@ -97,24 +101,14 @@ final readonly class PricingCatalog
     }
 
     /**
-     * A tier's feature bullets, resolved from its configured translation keys to the current locale, in the
-     * order they are listed. An unconfigured / malformed `features` entry yields no bullets rather than a
-     * raw key on the page.
+     * A tier's feature bullets as the bound {@see FeatureBullets} answers them: by default its configured
+     * translation keys, resolved to the current locale in the order they are listed.
      *
      * @return list<string>
      */
     public function bulletsFor(string $tierKey): array
     {
-        $keys = KeyedConfig::setting($this->config, 'billing.tiers', $tierKey, 'features');
-
-        if (! is_array($keys)) {
-            return [];
-        }
-
-        return array_values(array_map(
-            $this->resolve(...),
-            array_filter($keys, is_string(...)),
-        ));
+        return ($this->bullets ?? new ConfigFeatureBullets($this->config, $this->translator))->forTier($tierKey);
     }
 
     /** The tier's badge label (a translation key), resolved to the current locale, or null when unset. */

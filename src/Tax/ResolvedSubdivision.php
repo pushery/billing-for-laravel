@@ -27,7 +27,7 @@ use Pushery\Billing\ValueObjects\CountrySignals;
  *
  *  - only for a country in `billing.tax_evidence.subdivision_countries` — the shipped list is the US alone,
  *    so nothing changes for any other sale;
- *  - only from the sources that named THAT country, and only when they agree;
+ *  - only from the sources that named that country, and only when they agree;
  *  - only the ISO 3166-2 suffix, never a postcode, a city or a coordinate;
  *  - never invented — a consumer who supplies no subdivision signal records nothing, because this package
  *    has no finer input than the country and does not go looking for one.

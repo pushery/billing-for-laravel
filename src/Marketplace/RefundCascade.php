@@ -6,6 +6,7 @@ namespace Pushery\Billing\Marketplace;
 
 use InvalidArgumentException;
 use Pushery\Billing\Enums\CreatorTaxStatus;
+use Pushery\Billing\Enums\DeemedSupplyOfGoods;
 use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\TaxBaseChangeReason;
 use Pushery\Billing\ValueObjects\ChainCorrection;
@@ -69,6 +70,9 @@ final readonly class RefundCascade
      * @param  int  $inboundRateBps  the rate of the creator's supply to the platform
      * @param  TaxBaseChangeReason  $reason  why the base is changing, which decides whether the creator's
      *                                       link is corrected at all — see below
+     * @param  ?DeemedSupplyOfGoods  $deemedSupply  the paragraph that made the platform the supplier of the goods,
+     *                                              where one did: the creator's link is then the supply to a deemed
+     *                                              supplier, whatever the creator's standing would give otherwise
      */
     public function forRefund(
         SupplyRegime $regime,
@@ -80,6 +84,7 @@ final readonly class RefundCascade
         int $outboundRateBps,
         int $inboundRateBps,
         TaxBaseChangeReason $reason = TaxBaseChangeReason::Repaid,
+        ?DeemedSupplyOfGoods $deemedSupply = null,
     ): ChainCorrection {
         $this->guard($regime, $saleGross, $refundedBefore, $refundNow);
 
@@ -96,8 +101,8 @@ final readonly class RefundCascade
         [$netBefore, $taxBefore] = $saleGross->minus($refundedAlready)->baseFromMarkup($outboundRateBps);
         [$netAfter, $taxAfter] = $saleGross->minus($refundedAfter)->baseFromMarkup($outboundRateBps);
 
-        $treatmentBefore = $this->treatment($creatorStatusAtSupply, $netBefore, $commission, $inboundRateBps);
-        $treatmentAfter = $this->treatment($creatorStatusAtSupply, $netAfter, $commission, $inboundRateBps);
+        $treatmentBefore = $this->treatment($creatorStatusAtSupply, $netBefore, $commission, $inboundRateBps, $deemedSupply);
+        $treatmentAfter = $this->treatment($creatorStatusAtSupply, $netAfter, $commission, $inboundRateBps, $deemedSupply);
 
         $expenseBefore = $this->expenseOf($treatmentBefore);
         $expenseAfter = $this->expenseOf($treatmentAfter);
@@ -166,8 +171,9 @@ final readonly class RefundCascade
         Money $net,
         PlatformFee $commission,
         int $rateBps,
+        ?DeemedSupplyOfGoods $deemedSupply,
     ): InboundTaxTreatment {
-        return $this->matrix->resolve(SupplyRegime::CommissionChain, $status, $net, $commission, $rateBps);
+        return $this->matrix->resolve(SupplyRegime::CommissionChain, $status, $net, $commission, $rateBps, $deemedSupply);
     }
 
     /**

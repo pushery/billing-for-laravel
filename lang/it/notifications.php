@@ -33,6 +33,14 @@ return [
         'cta' => 'Vedi il piano',
     ],
 
+    'subscription_ending' => [
+        'subject' => 'Il tuo abbonamento termina presto',
+        'intro' => 'Il tuo abbonamento annullato termina il :date.',
+        'intro_merchant' => 'Il tuo abbonamento annullato con :merchant termina il :date.',
+        'outro' => 'Riattivalo prima di allora per mantenere tutto ciò che include senza interruzioni.',
+        'cta' => 'Riattiva l’abbonamento',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'La tua posizione fiscale è cambiata',
         'intro' => 'La tua posizione fiscale è passata da :from a :to. Lo abbiamo stabilito dai nostri registri: non lo hai richiesto tu.',

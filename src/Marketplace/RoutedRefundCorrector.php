@@ -7,6 +7,7 @@ namespace Pushery\Billing\Marketplace;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Enums\CreatorTaxStatus;
+use Pushery\Billing\Enums\DeemedSupplyOfGoods;
 use Pushery\Billing\Enums\RoundingResidual;
 use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\TaxBaseChangeReason;
@@ -127,26 +128,37 @@ final readonly class RoutedRefundCorrector
             );
         }
 
-        $saleGross = $this->saleGross($settlement, $refunded->currency, $line);
+        $receipt = $this->issuer->buyerReceiptFor($charge->charge_reference, $charge->provider);
+
+        // A supply of goods the platform is treated as making itself is corrected as the sale it was, read from
+        // the row and the documents that froze it and never classified again. The buyer's side is taxed at the
+        // rate of the member state the platform's supply was placed in, which only the buyer's document states,
+        // and the price the buyer paid is that document's total. The seller's side is the supply to a deemed
+        // supplier, whatever the seller's standing would give for any other sale.
+        $deemedSupply = $charge->deemed_supply ?? $settlement->deemed_supply;
+        $deemedReceipt = null;
+
+        if ($deemedSupply instanceof DeemedSupplyOfGoods && $receipt instanceof InvoiceRecord && $receipt->tax_rate_bps !== null) {
+            $deemedReceipt = $receipt;
+        }
 
         $correction = $this->cascade->forRefund(
             $settlement->supply_regime ?? SupplyRegime::CommissionChain,
-            $saleGross,
+            $deemedReceipt instanceof InvoiceRecord ? new Money($deemedReceipt->total_minor, $deemedReceipt->currency) : $this->saleGross($settlement, $refunded->currency, $line),
             // What the buyer had already been given back before this refund. The ledger's running total
             // already includes this one by the time it is applied, so the earlier state is the difference.
             $this->refundedBefore($charge, $refunded),
             $refunded,
             $this->frozenCommission($settlement, $line),
             $statusAtSupply,
-            $this->frozenRate($settlement, $line),
+            $deemedReceipt->tax_rate_bps ?? $this->frozenRate($settlement, $line),
             $this->frozenRate($settlement, $line),
             // Handed to the cascade as well, not only to the issuers below. It was reaching the documents
             // and not the arithmetic that decides which documents exist, so an uncollectible loss produced
             // a creator-side correction anyway — the one thing the reason is carried to prevent.
             $reason,
+            $deemedSupply,
         );
-
-        $receipt = $this->issuer->buyerReceiptFor($charge->charge_reference, $charge->provider);
 
         return [
             $correction,

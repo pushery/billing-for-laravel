@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Schema;
  * document is what a reader validates years later, so the reason has to be on it rather than re-derived
  * from a situation that has since moved.
  *
- * Deliberately NOT derived from the columns already here, although it looks like it could be:
+ * Deliberately not derived from the columns already here, although it looks like it could be:
  * `tax_archetype` gives goods-versus-services and `destination_country` gives the destination. But
  * `destination_country` is nullable and only populated in the one-stop-shop path — on an ordinary invoice
  * it is null. An export would therefore present as rate zero, no destination, no exemption: indistinguishable

@@ -87,7 +87,7 @@ final readonly class CreditBalanceProrationStrategy implements ProrationStrategy
         [$remaining, $length] = $this->clock($period);
 
         // The invoice whose consideration this credit gives back -- and, where there is one, the
-        // amount it gives back a share OF. Without it the credit is prorated from the plan's list
+        // amount it gives back a share of. Without it the credit is prorated from the plan's list
         // price, and a customer who paid a discounted invoice would be credited more than they ever
         // paid: the excess is then a gift rather than a returned consideration, which is a different
         // thing in the books and in the tax on them.

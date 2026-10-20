@@ -33,7 +33,7 @@ use RuntimeException;
  * consideration, so there was no supply to the reseller at all. Not a contested exclusion; simply not the
  * situation the scheme describes.
  *
- * Which also means the opposite must not be inferred: goods bought FROM a private person, for a price, are
+ * Which also means the opposite must not be inferred: goods bought from a private person, for a price, are
  * within the scheme. That is the ordinary second-hand purchase the scheme exists for, and a rule keyed to
  * "was it private" would wrongly exclude exactly it.
  */

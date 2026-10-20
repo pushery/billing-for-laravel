@@ -11,7 +11,7 @@ use Pushery\Billing\Enums\SubscriptionState;
  * One customer's subscription state on one merchant, as a content gate reads it.
  *
  * This is the read side of the boundary the package holds: billing owns money and subscription-state, the
- * consumer owns CONTENT-ACL. So a grant answers "what tier, in what state, over what window" and nothing
+ * consumer owns content access control. So a grant answers "what tier, in what state, over what window" and nothing
  * about what that tier unlocks — the consumer decides that. It is deliberately provider-free: it is built
  * from the local subscription row, never a live provider read, so a content check on a hot path never calls
  * out to a payment provider.

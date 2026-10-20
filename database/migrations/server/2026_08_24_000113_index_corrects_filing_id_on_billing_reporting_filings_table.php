@@ -16,7 +16,7 @@ use Pushery\Billing\Support\TableLookup;
  *
  * What it costs on Postgres: `restrictOnDelete()` has to prove no row references the one being deleted, and
  * without the index that proof is a sequential scan of the whole filings table on every delete. So does
- * walking the correction chain, which is what an amended reporting period IS. Neither ever fails — this is
+ * walking the correction chain, which is what an amended reporting period is. Neither ever fails — this is
  * a plan property, so nothing turns red and no exception is thrown; the table just gets slower in exact
  * proportion to how many periods have been filed.
  *

@@ -12,7 +12,7 @@ use DateTimeInterface;
  *
  *  - the Stripe driver DELEGATES to Stripe Billing and no-ops {@see tick()} (Stripe drives its own
  *    cycle);
- *  - a local-engine driver OWNS the cycle as a package-local engine, and {@see tick()} advances
+ *  - a local-engine driver owns the cycle as a package-local engine, and {@see tick()} advances
  *    every due subscription (invoked by the `billing:run` scheduler command).
  *
  * The seam exists in v1 even though Stripe does not need it, so a local-engine driver slots in without a

@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Lang;
 use Override;
 use Pushery\Billing\Casts\UtcDateTime;
+use Pushery\Billing\Enums\DeemedSupplyOfGoods;
 use Pushery\Billing\Enums\DocumentSeries;
 use Pushery\Billing\Enums\FanReceiptTier;
 use Pushery\Billing\Enums\InvoiceCorrectionKind;
@@ -82,6 +83,11 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?string $buyer_reference
  * @property ?string $vat_note
  * @property bool $oss
+ * @property bool $ioss whether the import scheme's return declares the sale
+ * @property ?DeemedSupplyOfGoods $deemed_supply the paragraph that makes the platform the supplier of the goods,
+ *                                               on both documents of such a sale and on their corrections
+ * @property ?string $goods_located_in where goods already in the Union were when the transport began, as an
+ *                                     ISO 3166 code, on a document of a deemed supply of such goods
  * @property ?string $destination_country
  * @property ?string $destination_subdivision the subdivision of that country, where the obligation is a
  *                                            subdivision's rather than the country's — `CA`, `NY`, `BY`.
@@ -110,7 +116,7 @@ use Pushery\Billing\ValueObjects\Money;
  *                                   its own; unique together with the corrected document
  * @property ?RefundAttempt $refundAttempt
  * @property ?string $charge_claim_key `provider|reference` for the document that claims a settled charge
- *                                     as the sale's FIRST one; null on a reissue, on every correction and
+ *                                     as the sale's first one; null on a reissue, on every correction and
  *                                     on anything carrying a period, which is what lets a unique index
  *                                     hold the invariant without refusing documents that must exist.
  *                                     Derived when the row is created — never assigned by a caller
@@ -142,7 +148,7 @@ class InvoiceRecord extends Model
         'status', 'issued_at', 'due_at', 'credited_invoice_id', 'credited_invoice_number', 'reissue_of_invoice_id', 'restates_invoice_id',
         'reinstates_invoice_id', 'refund_attempt_id', 'correction_key',
         'buyer', 'subtotal_minor',
-        'tax_minor', 'reverse_charge', 'tax_exempt', 'tax_exemption_reason', 'buyer_reference', 'vat_note', 'oss', 'destination_country', 'destination_subdivision', 'oss_rate',
+        'tax_minor', 'reverse_charge', 'tax_exempt', 'tax_exemption_reason', 'buyer_reference', 'vat_note', 'oss', 'ioss', 'deemed_supply', 'goods_located_in', 'destination_country', 'destination_subdivision', 'oss_rate',
         'tax_archetype', 'sold_alongside_archetype', 'place_of_supply_rule', 'tax_rate_category', 'tax_rate_bps', 'supply_rate_bps', 'platform_reporting',
         'rate_matrix_version', 'recipient_tax_status', 'taxation_basis', 'margin_minor', 'supply_regime', 'seller_posture', 'seller',
         'settlement_document_type', 'document_series', 'receipt_tier', 'settlement_period',
@@ -169,7 +175,11 @@ class InvoiceRecord extends Model
         // column as the EN 16931 exemption reason, so an editable one lets a numbered document claim
         // afterwards that it was an export, with every amount on it still adding up.
         'tax_exemption_reason',
-        'buyer_reference', 'vat_note', 'oss', 'destination_country', 'destination_subdivision', 'oss_rate', 'issued_at',
+        'buyer_reference', 'vat_note', 'oss', 'ioss', 'destination_country', 'destination_subdivision', 'oss_rate', 'issued_at',
+        // Which supply of goods the platform is treated as making, and where the goods set out from. Both documents of
+        // such a sale are written from one classification, and a document that could be moved to the other paragraph
+        // afterwards would be declared in a return it no longer belongs to.
+        'deemed_supply', 'goods_located_in',
         // The tax characteristics of the sale, frozen for the same reason as the amounts: they were
         // read back from the product until now, and a product can be reclassified after it has been
         // sold. A correction that re-derived them would reverse an amount nobody ever declared, and
@@ -242,7 +252,7 @@ class InvoiceRecord extends Model
      * @var list<string>
      */
     public const array TAX_POSITION = [
-        'reverse_charge', 'tax_exempt', 'tax_exemption_reason', 'oss', 'destination_country', 'destination_subdivision',
+        'reverse_charge', 'tax_exempt', 'tax_exemption_reason', 'oss', 'ioss', 'deemed_supply', 'goods_located_in', 'destination_country', 'destination_subdivision',
         'oss_rate', 'tax_archetype', 'sold_alongside_archetype', 'place_of_supply_rule', 'tax_rate_category', 'tax_rate_bps',
         'supply_rate_bps', 'platform_reporting', 'rate_matrix_version', 'recipient_tax_status', 'taxation_basis',
         'supply_regime', 'seller_posture',
@@ -262,6 +272,7 @@ class InvoiceRecord extends Model
         'reverse_charge' => false,
         'tax_exempt' => false,
         'oss' => false,
+        'ioss' => false,
     ];
 
     /** @var array<string,string> */
@@ -274,6 +285,8 @@ class InvoiceRecord extends Model
         'tax_exemption_reason' => TaxExemptionReason::class,
         'tax_exempt' => 'boolean',
         'oss' => 'boolean',
+        'ioss' => 'boolean',
+        'deemed_supply' => DeemedSupplyOfGoods::class,
         // decimal:2 keeps the applied VAT rate exact (a string, e.g. "19.00") — a float cast would let
         // 19.00 drift, and the rate on a frozen tax document must round-trip byte-for-byte.
         'oss_rate' => 'decimal:2',
