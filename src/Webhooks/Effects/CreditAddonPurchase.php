@@ -8,17 +8,23 @@ use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\AddonContentMap;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\CreditReason;
+use Pushery\Billing\Enums\ToastLevel;
+use Pushery\Billing\Events\AccountBillingUpdated;
 use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Jobs\PushCreditToProvider;
 use Pushery\Billing\Marketplace\CreditTopUpVolume;
 use Pushery\Billing\Support\AddonPurchases;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\CreditLedger;
+use Pushery\Billing\Support\LocalizedMoney;
+use Pushery\Billing\Support\LocalizedNumber;
+use Pushery\Billing\Support\OwnerToast;
 use Pushery\Billing\Support\PrepaidLedger;
 use Pushery\Billing\ValueObjects\UnitGrant;
 
@@ -27,6 +33,10 @@ use Pushery\Billing\ValueObjects\UnitGrant;
  * is claimed by its reference and the credit applied in the same transaction (at-least-once): the
  * unique reference makes the claim the dedup, so a redelivered webhook records nothing and credits
  * nothing, while a mid-effect failure rolls the claim back so the provider's retry re-applies it.
+ *
+ * The delivery that records the purchase also tells the owner: their open screens re-fetch, and a toast names
+ * what arrived. A buyer back from the provider's page sees the new balance without reloading, and one whose
+ * payment cleared days later learns of it at all.
  */
 final readonly class CreditAddonPurchase
 {
@@ -43,6 +53,8 @@ final readonly class CreditAddonPurchase
         private PrepaidLedger $prepaid,
         /** The register of works, resolved from the container when the caller supplied none. */
         private ?AddonContentMap $content = null,
+        /** The toast in the owner's language, resolved from the container when the caller supplied none. */
+        private ?OwnerToast $toasts = null,
     ) {}
 
     /** Whether this purchase lands on the buyer's balance: money credit by its catalog, and never a work. */
@@ -80,6 +92,10 @@ final readonly class CreditAddonPurchase
                     'reference' => $event->reference,
                 ], AuditSource::Webhook);
 
+                $this->announce($owner, 'billing::account.toast.addon_units_granted', [
+                    'units' => LocalizedNumber::format($grant->units, 0, OwnerToast::localeOf($owner)),
+                ]);
+
                 return;
             }
 
@@ -93,6 +109,10 @@ final readonly class CreditAddonPurchase
                     'reference' => $event->reference,
                 ], AuditSource::Webhook);
 
+                // Nothing on a balance moved, and whoever hands the purchase over has its own word for it. The
+                // purchase is recorded all the same, so the screens that list purchases re-fetch.
+                $this->announce($owner);
+
                 return;
             }
 
@@ -104,6 +124,10 @@ final readonly class CreditAddonPurchase
                 'currency' => $event->amount->currency,
                 'reference' => $event->reference,
             ], AuditSource::Webhook);
+
+            $this->announce($owner, 'billing::account.toast.addon_credited', [
+                'amount' => LocalizedMoney::format($event->amount, OwnerToast::localeOf($owner)),
+            ]);
         });
 
         // Only money credit touched the money balance, so only money credit is mirrored onto the provider's.
@@ -118,5 +142,21 @@ final readonly class CreditAddonPurchase
         // the provider in step — so it is idempotent by the purchase reference, and the provider dedups the key
         // rather than double-crediting.
         Bus::dispatch(new PushCreditToProvider($owner, $event->amount, 'addon:'.$event->reference));
+    }
+
+    /**
+     * Tell the owner's open screens to re-fetch, and with a key the owner what arrived. Called on the delivery that
+     * recorded the purchase and on no other. Both events wait for the outermost commit, so a run that rolls back
+     * announces nothing.
+     *
+     * @param  array<string, string>  $replace
+     */
+    private function announce(Model $owner, ?string $toast = null, array $replace = []): void
+    {
+        Event::dispatch(new AccountBillingUpdated($owner));
+
+        if ($toast !== null) {
+            ($this->toasts ?? Container::getInstance()->make(OwnerToast::class))->notify($owner, $toast, ToastLevel::Success, $replace);
+        }
     }
 }

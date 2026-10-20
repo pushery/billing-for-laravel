@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Drivers\Mollie\Connect;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
@@ -87,6 +88,7 @@ final readonly class MollieConnect
      * The tokens for the code Mollie sent the merchant back with.
      *
      * @throws MollieConnectFailed when Mollie refuses the code or answers without the tokens
+     * @throws ConnectionException when Mollie is out of reach
      */
     public function exchangeCode(MollieOAuthApp $app, #[SensitiveParameter] string $code): MollieTokens
     {
@@ -102,6 +104,7 @@ final readonly class MollieConnect
      * given one otherwise.
      *
      * @throws MollieConnectFailed when Mollie refuses the refresh token or answers without the tokens
+     * @throws ConnectionException when Mollie is out of reach
      */
     public function refresh(MollieOAuthApp $app, #[SensitiveParameter] string $refreshToken): MollieTokens
     {
@@ -113,6 +116,7 @@ final readonly class MollieConnect
      * access token ends that token only.
      *
      * @throws MollieConnectFailed when Mollie refuses the revocation
+     * @throws ConnectionException when Mollie is out of reach
      */
     public function revoke(MollieOAuthApp $app, #[SensitiveParameter] string $token, bool $isRefreshToken = true): void
     {
@@ -211,6 +215,7 @@ final readonly class MollieConnect
      * @param  array<string, string>  $form
      *
      * @throws MollieConnectFailed when Mollie refuses or answers without the tokens
+     * @throws ConnectionException when Mollie is out of reach
      */
     private function tokens(MollieOAuthApp $app, array $form, ?string $currentRefreshToken = null): MollieTokens
     {

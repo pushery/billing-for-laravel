@@ -29,6 +29,8 @@ enum BillingAction: string
 
     /** See a meter that is about to use up what the plan includes. */
     case Usage = 'usage';
+    /** Look at the subscription: resume one that was canceled before its end. */
+    case Subscription = 'subscription';
 
     /** The hub route that answers it. */
     public function route(): string

@@ -31,7 +31,7 @@ use Illuminate\Support\Facades\Schema;
  *   relies on: `SettlementCorrectionIssuer` finds an original with `whereNull('credited_invoice_id')`, and
  *   `InvoiceRecord::isReissue()` reads `reissue_of_invoice_id`.
  * - **Null on any document that names a period.** Those are recognized by the period and guarded by the
- *   index above. A prepaid term is twelve monthly documents over ONE charge, and claiming the charge would
+ *   index above. A prepaid term is twelve monthly documents over one charge, and claiming the charge would
  *   refuse eleven of them.
  * - **Qualified by the provider**, because the lookup is. Two drivers can mint the same id for different
  *   money; a key on the bare reference would refuse the second installation's real document. The provider

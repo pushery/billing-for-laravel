@@ -94,6 +94,8 @@ return [
     'subscription' => [
         'heading' => 'Abonnement',
         'status' => 'Status',
+        'plan' => 'Plan: :plan.',
+        'plan_priced' => 'Plan: :plan, :price / :interval.',
         'next_invoice' => 'Volgende factuur: :amount op :date.',
         'access_ends' => 'Je toegang eindigt op :date.',
         'access_ended' => 'Je toegang is geëindigd op :date.',
@@ -157,6 +159,7 @@ return [
         'unavailable' => 'De verbruiksgeschiedenis is op dit moment niet beschikbaar. Probeer het zo meteen opnieuw.',
         'empty' => 'Nog geen verbruik geregistreerd.',
         'periods_heading' => 'Voorgaande periodes',
+        'period_from' => 'Periode vanaf :date',
         'used' => ':used gebruikt',
         'not_metered' => 'Niet gemeten',
         'prepaid_used' => ':units vooruitbetaald',
@@ -236,6 +239,8 @@ return [
     'toast' => [
         'payment_failed' => 'Je betaling kon niet worden verwerkt. Werk je betaalgegevens bij.',
         'subscription_activated' => 'Je abonnement is actief — alles wat erbij hoort staat aan.',
+        'addon_credited' => 'Je aankoop is voltooid. Toegevoegd aan het tegoed op je account: :amount.',
+        'addon_units_granted' => 'Je aankoop is voltooid. Toegevoegd aan je vooruitbetaalde tegoed: :units.',
         'dismiss' => 'Sluiten',
     ],
 

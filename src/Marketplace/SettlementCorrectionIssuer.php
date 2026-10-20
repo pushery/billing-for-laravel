@@ -345,6 +345,13 @@ final readonly class SettlementCorrectionIssuer
         $series = $this->correctionSeriesFor($original);
 
         $correction = InvoiceRecord::model()::query()->create([
+            // How the corrected supply was taxed, every column of it, and first, so the columns written below
+            // decide only what this correction states differently. A correction of a sale declared in the
+            // one-stop-shop or the import scheme's return is declared there too, as a negative line naming the
+            // original's period, and the returns read nothing but these columns: the flags, the member state and
+            // the rate. A supply of goods the platform was treated as making keeps its paragraph and the place its
+            // goods set out from on both sides.
+            ...$original->taxPosition(),
             'subtotal_minor' => $netMinor,
             'tax_minor' => $taxMinor,
             'total_minor' => $totalMinor,

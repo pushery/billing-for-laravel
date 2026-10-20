@@ -30,7 +30,7 @@ use Pushery\Billing\Enums\BillingAction;
  *
  * 3. **What it is** — {@see category()} / {@see isSuppressible()}. A billing notice is transactional (a
  *    failed payment, a receipt, a trial about to end, an account about to be suspended). It is therefore
- *    NON-SUPPRESSIBLE: a preference screen must never offer to switch it off, because the customer would
+ *    non-suppressible: a preference screen must never offer to switch it off, because the customer would
  *    be opting out of being told their money did not move. That decision is made once, here, and is final
  *    — an individual notice cannot opt itself out of it.
  *

@@ -83,7 +83,7 @@ final readonly class MollieCustomers implements CustomerRegistry, EnsuresProvide
 
         $reference = MollieValue::id($customer->id);
 
-        // Persisted BEFORE anything is done with it. A payment started against a customer whose reference
+        // Persisted before anything is done with it. A payment started against a customer whose reference
         // never reached the row would produce a mandate the webhook cannot resolve to anybody — the money
         // moves, the customer exists at the provider, and this package has no idea who they are.
         $billable->forceFill([$column => $reference])->save();

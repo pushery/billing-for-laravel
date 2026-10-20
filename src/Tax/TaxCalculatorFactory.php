@@ -97,6 +97,18 @@ final readonly class TaxCalculatorFactory
     }
 
     /**
+     * The configured rate history as dated intervals, or null when the installation keeps none.
+     *
+     * Public for the same reason as the matrix above: the tax of a deemed supply of goods is read from the tables
+     * the calculator prices from, in the same order, and a second reading of the history beside this one would be
+     * the second copy of the precedence that note warns about.
+     */
+    public function answeringRateHistory(): ?DatedTaxRateTable
+    {
+        return $this->rateHistory();
+    }
+
+    /**
      * The configured country-and-category rate table, or null when none is configured.
      *
      * A malformed table is refused rather than ignored. Ignoring it would leave the standard rate charged on

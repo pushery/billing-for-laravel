@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Schema;
  * correction it owes has to find the document issued for that charge — by matching amounts and dates, which
  * is a guess, or not at all. Both of those are worse than a column.
  *
- * Deliberately NOT `provider_id`, which already exists and means the provider's id for this document. A
+ * Deliberately not `provider_id`, which already exists and means the provider's id for this document. A
  * settlement is numbered by the platform and has no provider document behind it; overloading that column
  * would make one field mean two things depending on who wrote the row, and the reader could not tell which.
  *

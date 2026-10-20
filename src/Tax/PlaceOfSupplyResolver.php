@@ -33,7 +33,7 @@ final readonly class PlaceOfSupplyResolver
 {
     /**
      * @param  ?string  $sellerCountry  the seller's own country, for the cross-border test. Unknown means
-     *                                  cross-border cannot be PROVEN, and an unproven shift never happens.
+     *                                  cross-border cannot be proven, and an unproven shift never happens.
      * @param  ?list<string>  $unionMembers  which countries share the seller's tax union. Null takes the
      *                                       shipped membership; a consumer elsewhere supplies their own.
      */

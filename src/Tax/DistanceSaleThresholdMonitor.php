@@ -88,6 +88,18 @@ final readonly class DistanceSaleThresholdMonitor
             : PlaceOfSupplyRule::Domestic;
     }
 
+    /**
+     * Whether this sale is kept where the seller is: the threshold is watched and the year, this sale included, is
+     * still below it.
+     *
+     * The question an issuing path asks about a cross-border sale to a consumer that the product places at the buyer.
+     * Where nothing watches the threshold the answer is no, which taxes at the destination.
+     */
+    public function keepsAtTheSeller(int $year, string $currency, int $netMinor): bool
+    {
+        return $this->watched() && $this->ruleForSale($year, $currency, $netMinor) === PlaceOfSupplyRule::Domestic;
+    }
+
     /** Whether the threshold is watched at all: not waived, and a limit the active profile supplies. */
     public function watched(): bool
     {

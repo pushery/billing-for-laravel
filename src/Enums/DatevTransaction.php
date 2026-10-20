@@ -40,6 +40,35 @@ enum DatevTransaction: string
     /** Revenue from a service to a business outside the union, which is not taxable here at all. */
     case FanRevenueThirdCountry = 'fan_revenue_third_country';
 
+    /**
+     * The platform's own sale of goods at the standard rate, in a sale it is treated as making itself.
+     *
+     * Taxed at home: below the distance-sale threshold the supply stays where the platform is, and a supply within
+     * its own member state is a domestic one. A case of its own beside the fan revenue, so an accountant who keeps
+     * goods and services apart can give it its own account. The shipped charts book both to the same one.
+     */
+    case GoodsRevenueStandard = 'goods_revenue_standard';
+
+    /** The same sale of goods at the reduced rate. */
+    case GoodsRevenueReduced = 'goods_revenue_reduced';
+
+    /**
+     * The platform's sale of goods declared in the Union scheme, resolved per destination country.
+     *
+     * A distance sale taxed in the member state where the transport ends. The charts keep one account per country
+     * and rate in a block of their own for supplies taxable in another member state, so like the services this
+     * resolves one account per destination and ships none.
+     */
+    case OssGoodsRevenue = 'oss_goods_revenue';
+
+    /**
+     * The platform's sale of imported goods declared in the import scheme, resolved per destination country.
+     *
+     * Ships unmapped in both charts: no account for it could be confirmed, so it is refused by name until the
+     * operator configures one agreed with their accountant.
+     */
+    case ImportSchemeGoodsRevenue = 'import_scheme_goods_revenue';
+
     /** Commission / fee revenue (regime V), a buyer fee posted as a sub-account. */
     case CommissionRevenue = 'commission_revenue';
 
@@ -62,6 +91,15 @@ enum DatevTransaction: string
 
     /** Creator payout to a small business, private person or EU small business — no tax. */
     case CreatorInputExempt = 'creator_input_exempt';
+
+    /**
+     * The seller's supply of goods to the platform that is treated as supplying them itself (§ 4 Nr. 4c UStG).
+     *
+     * Exempt like the payout to a small business, but under a provision of its own and with the seller's right to
+     * deduct behind it, so it does not share that account. Ships unmapped in both charts for the reason the
+     * reduced-rate domestic input does: no account could be confirmed, and it is refused by name until one is.
+     */
+    case DeemedSupplyInputExempt = 'deemed_supply_input_exempt';
 
     /** Creator payout to an EU business — §13b Abs. 1, the account books the reverse-charge VAT itself. */
     case CreatorInputEuReverseCharge = 'creator_input_eu_reverse_charge';
@@ -108,4 +146,10 @@ enum DatevTransaction: string
 
     /** The same difference in the other direction — an expense, on its own account for the same reason. */
     case ExchangeLoss = 'exchange_loss';
+
+    /** Whether a chart keeps this transaction as one account per destination country rather than as one account. */
+    public function perCountry(): bool
+    {
+        return in_array($this, [self::OssRevenue, self::OssGoodsRevenue, self::ImportSchemeGoodsRevenue], true);
+    }
 }

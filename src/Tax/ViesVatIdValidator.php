@@ -13,7 +13,7 @@ use Throwable;
  * Validates a VAT id against the EU VIES REST service. A well-formed id splits into a two-letter country code
  * and the number; VIES answers whether it is registered.
  *
- * If VIES cannot be reached (down, timeout, throttled) the result is Unavailable — NOT Invalid — so a
+ * If VIES cannot be reached (down, timeout, throttled) the result is Unavailable — not Invalid — so a
  * temporary outage never wrongly denies a legitimate business its reverse charge. The caller decides what an
  * unproven id means; this package's default is conservative (no reverse charge → charge VAT), so a VIES outage
  * never causes an under-charge. The endpoint is a fixed EU host, so there is no user-controlled request target.

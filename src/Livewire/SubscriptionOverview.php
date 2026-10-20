@@ -14,7 +14,9 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Url;
+use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\SubscriptionActions;
+use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Contracts\UpcomingInvoice;
 use Pushery\Billing\Enums\CancellationReason;
 use Pushery\Billing\Enums\SubscriptionState;
@@ -22,10 +24,13 @@ use Pushery\Billing\Livewire\Concerns\DegradesGracefully;
 use Pushery\Billing\Livewire\Concerns\PollsWhileActivating;
 use Pushery\Billing\Models\CancellationSurveyRecord;
 use Pushery\Billing\Support\BillingManager;
+use Pushery\Billing\Support\CatalogLabel;
 use Pushery\Billing\Support\CreditLedger;
+use Pushery\Billing\Support\LocalizedMoney;
 use Pushery\Billing\Support\TrialCallouts;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\Plan;
 
 /**
  * The account-hub subscription screen. It shows the owner's canonical subscription state (collapsed by
@@ -38,6 +43,19 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final class SubscriptionOverview extends AccountScreen
 {
+    /**
+     * The states in which a subscription runs, so the screen names its plan. With none, or after it ended,
+     * the owner is on whatever the tier column falls back to, and naming that would read as a subscription.
+     */
+    private const array STATES_WITH_A_PLAN = [
+        SubscriptionState::Active,
+        SubscriptionState::Trialing,
+        SubscriptionState::PastDue,
+        SubscriptionState::Incomplete,
+        SubscriptionState::Grace,
+        SubscriptionState::Paused,
+    ];
+
     /**
      * True once a cancellation has been armed and is waiting for its second click.
      *
@@ -80,6 +98,7 @@ final class SubscriptionOverview extends AccountScreen
 
         return $this->view('billing::livewire.subscription-overview', [
             'state' => $state,
+            'plan' => in_array($state, self::STATES_WITH_A_PLAN, true) ? $this->planShown() : null,
             // Post-checkout the state is "activating" until the webhook lands, so a bounded poll refreshes
             // until it settles, then stops (never a permanent poll). Not conditional on broadcasting: a
             // broadcast notifies the owner rather than re-rendering this screen, so a poll gated on it would
@@ -109,6 +128,24 @@ final class SubscriptionOverview extends AccountScreen
             // portal (e.g. a local-engine provider) would otherwise show a link that only 404s.
             'supportsHostedPortal' => $this->supportsHostedPortal(),
         ]);
+    }
+
+    /**
+     * The plan the subscription is on, named as the plan screen names it, and its price and interval where
+     * the catalog declares a price.
+     *
+     * @return array{label: string, price: ?string, interval: ?string}
+     */
+    private function planShown(): array
+    {
+        $key = $this->currentTierKey();
+        $plan = Container::getInstance()->make(PlanCatalog::class)->planFor($key);
+
+        return [
+            'label' => CatalogLabel::translate(Container::getInstance()->make(TierCatalog::class)->label($key)),
+            'price' => $plan instanceof Plan ? LocalizedMoney::format($plan->amount) : null,
+            'interval' => $plan?->interval->value,
+        ];
     }
 
     /** Whether the active driver exposes a hosted billing portal — a config-driven capability, never a call. */

@@ -15,7 +15,7 @@ use Pushery\Billing\Enums\CreditReason;
  * balance has to be split before either half can be booked.
  *
  * The `source` travels because it is the whole point for a proration credit: the correction that
- * credit eventually needs belongs to the invoice it returned consideration FROM, at that invoice's
+ * credit eventually needs belongs to the invoice it returned consideration from, at that invoice's
  * tax rate. A split that reported only "40 minor units were proration" would have to go looking for
  * the invoice again, and the ledger's own source is the only place that answer exists.
  */

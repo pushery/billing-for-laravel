@@ -435,7 +435,7 @@ final class UsageMeter
      * they have none.
      *
      * Deliberately does not create the row: an owner who never bought prepaid units must not get one written
-     * for them on every single usage record. Locked AFTER the counter, always in that order, so the two
+     * for them on every single usage record. Locked after the counter, always in that order, so the two
      * rows can never be taken in opposite orders by two requests and deadlock.
      */
     private function lockedPrepaid(string $ownerType, mixed $ownerId, string $meterKey): ?PrepaidUnits

@@ -26,12 +26,11 @@ final class SubscriptionPresenter
             return SubscriptionState::Activating;
         }
 
+        // Without a subscription the owner never held one: the package keeps a subscription's row for as long as its
+        // owner exists, and one that ended reads as Ended from that row. A customer reference says only that the
+        // provider knows the owner, which a one-time purchase or a saved card makes true as well.
         if (! $snapshot->hasSubscription) {
-            if ($snapshot->onGenericTrial) {
-                return SubscriptionState::GenericTrial;
-            }
-
-            return $snapshot->hasCustomerId ? SubscriptionState::Churned : SubscriptionState::None;
+            return $snapshot->onGenericTrial ? SubscriptionState::GenericTrial : SubscriptionState::None;
         }
 
         return match (true) {

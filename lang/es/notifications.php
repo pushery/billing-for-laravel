@@ -33,6 +33,14 @@ return [
         'cta' => 'Ver el plan',
     ],
 
+    'subscription_ending' => [
+        'subject' => 'Tu suscripción termina pronto',
+        'intro' => 'Tu suscripción cancelada termina el :date.',
+        'intro_merchant' => 'Tu suscripción cancelada con :merchant termina el :date.',
+        'outro' => 'Reactívala antes para conservar todo lo que incluye sin interrupción.',
+        'cta' => 'Reactivar la suscripción',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'Tu situación fiscal ha cambiado',
         'intro' => 'Tu situación fiscal ha pasado de :from a :to. Lo determinamos a partir de nuestros propios registros: no lo pediste.',

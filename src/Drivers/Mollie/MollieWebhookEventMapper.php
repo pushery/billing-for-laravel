@@ -134,7 +134,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
     /** @return iterable<AddonPurchased|AddonRefunded|ChargebackReceived|InPersonSaleCanceled|InPersonSalePaid|MandateEstablished|PaymentFailed|PaymentSucceeded> */
     public function map(Request $request): iterable
     {
-        // Answered BEFORE the id is looked at, because the id cannot answer it. A next-generation delivery
+        // Answered before the id is looked at, because the id cannot answer it. A next-generation delivery
         // names its own kind of entity — `dis_…`, `po_…` — and running that through the payment check
         // produces a warning about the id when the real subject is the type, which somebody has already
         // decided about.

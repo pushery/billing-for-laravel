@@ -16,9 +16,13 @@ use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
+use Pushery\Billing\Contracts\SuppliesGoodsConsignments;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\DeemedSupplyOfGoods;
 use Pushery\Billing\Enums\MerchantChargePurpose;
+use Pushery\Billing\Enums\SellerOfRecordPosture;
+use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\VoucherInstrumentType;
 use Pushery\Billing\Exceptions\EligibilityDenied;
@@ -33,6 +37,7 @@ use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\FeeLine;
+use Pushery\Billing\ValueObjects\GoodsConsignment;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
@@ -113,6 +118,12 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         return $this->addons instanceof SuppliesProductArchetypes ? $this->addons->archetypeFor($addonKey) : null;
     }
 
+    /** How the add-on ships, where it is goods and its catalog says; null where the catalog states nothing. */
+    private function consignmentOf(string $addonKey): ?GoodsConsignment
+    {
+        return $this->addons instanceof SuppliesGoodsConsignments ? $this->addons->consignmentFor($addonKey) : null;
+    }
+
     /**
      * The line the buyer fee rides on, priced inclusive of tax.
      *
@@ -162,7 +173,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // customer behind its refusal.
         $urls = new CheckoutUrls($this->config);
         $successUrl = $urls->purchaseReturnUrl();
-        $cancelUrl = $urls->cancelUrl();
+        $cancelUrl = $urls->purchaseCancelUrl();
 
         $customerId = $this->customers->resolve($billable);
 
@@ -171,7 +182,9 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // Resolved once, and that is what makes the ledger row and the payment describe the same sale. The
         // amounts below are kept rather than handed to Stripe and thrown away; recomputing them after the
         // session exists would mean a second provider call and a second chance for the two to disagree.
-        $routed = $merchant instanceof Model ? $this->routing($merchant, $price, $this->archetypeOf($addonKey)) : null;
+        $routed = $merchant instanceof Model
+            ? $this->routing($merchant, $price, $this->archetypeOf($addonKey), $billable, $this->consignmentOf($addonKey))
+            : null;
 
         // The buyer fee, if this installation charges one and this sale's regime has one. Resolved from the
         // item's price, never from a total: the fee is charged on top, so computing it from a figure that
@@ -186,6 +199,9 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // buyer was quoted is the figure they pay. Zero here means "this lane states no rate", which is
             // what makes the recorded net equal the gross rather than a number nobody computed.
             0,
+            // The regime the gate booked the sale under, where it booked one: a deemed supply is the platform's own
+            // sale, which has no intermediation supply to the buyer to charge a fee for.
+            regime: $routed['deemedSupply'] instanceof DeemedSupplyOfGoods ? SupplyRegime::CommissionChain : null,
         );
 
         // Built before the payload so the rise is one statement rather than a condition inside an array
@@ -475,6 +491,9 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *     platformFee: Money,
      *     policy: PlatformFee,
      *     archetype: ?TaxArchetype,
+     *     posture: SellerOfRecordPosture,
+     *     deemedSupply: ?DeemedSupplyOfGoods,
+     *     consignment: ?GoodsConsignment,
      * }
      */
     private function tipRouting(Model $merchant, Money $chosen): array
@@ -510,6 +529,9 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             'policy' => $policy,
             // A tip is its own kind of sale, and never goods: it must not count towards a seller's goods trading.
             'archetype' => TaxArchetype::Tip,
+            'posture' => $this->context->posture(),
+            'deemedSupply' => null,
+            'consignment' => null,
         ];
     }
 
@@ -553,12 +575,12 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      * What the basis is now depends on the Stripe price's own `tax_behavior`, which this package does not
      * own. On an EXCLUSIVE price the buyer pays the unit amount plus tax, so the unit amount this fee is
      * computed from is the net — which is the rate as documented, and the same answer the routed money path
-     * gives. On an inclusive price the unit amount is still the gross and the old divergence stands.
+     * gives. On an inclusive price the unit amount is the gross, and the fee set here takes 11.90 on a 119.00
+     * sale at 19% where the routed money path takes 10.00.
      *
-     * So the routed money path's 10.00 on a 119.00 sale at 19% and this lane's 11.90 now agree or differ
-     * according to a setting made in the Stripe dashboard. That is better than diverging unconditionally and
-     * still not a decision this method can make — it remains open, and it is now a question about price
-     * configuration rather than about a missing flag.
+     * That one is corrected after the payment, where the rate exists. TakeHostedPurchaseCommissionOnNet reads the
+     * rate the provider applied once the purchase completes, and TakeCommissionOnNet gives the 1.90 back as part
+     * of the fee and brings the sale's row to the net. Until then the row says what was withheld, with its zero.
      *
      * ## What it returns, and why it is not just the payload
      *
@@ -576,9 +598,12 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *     platformFee: Money,
      *     policy: PlatformFee,
      *     archetype: ?TaxArchetype,
+     *     posture: SellerOfRecordPosture,
+     *     deemedSupply: ?DeemedSupplyOfGoods,
+     *     consignment: ?GoodsConsignment,
      * }
      */
-    private function routing(Model $merchant, string $priceId, ?TaxArchetype $archetype = null): array
+    private function routing(Model $merchant, string $priceId, ?TaxArchetype $archetype = null, ?Model $buyer = null, ?GoodsConsignment $consignment = null): array
     {
         $chargeType = $this->context->chargeType();
 
@@ -597,11 +622,22 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         }
 
         // The seller-side gates the direct payment asks, before the provider is: nobody sells for a merchant
-        // whose taxation is unknown, and goods of a seller outside the Union are never intermediated.
+        // whose taxation is unknown, and goods the platform is treated as supplying itself are never intermediated.
         $this->sellers()->assertTaxStandingEstablished($merchant);
-        $this->sellers()->assertPostureCarriesTheSupply($merchant, $this->context->posture(), $archetype);
-        $this->sellers()->assertTradingStandingDeclared($merchant, $this->context->posture(), $archetype);
-        $this->sellers()->assertGoodsSellerRecordComplete($merchant, $this->context->posture(), $archetype);
+
+        $posture = $this->context->posture();
+        $supply = $this->sellers()->assertPostureCarriesTheSupply($merchant, $posture, $archetype, $buyer, $consignment);
+
+        // A deemed supply the tax profile documents is the platform's own sale, whatever posture the installation
+        // configured, and the charge type has to carry the deemed-supplier posture too. Its tax is decided once the
+        // provider reports where the buyer is, from the consignment the row keeps.
+        if ($supply instanceof DeemedSupplyOfGoods) {
+            $posture = SellerOfRecordPosture::PlatformDeemedSupplier;
+            $this->context->assertRoutingCompatible($chargeType, $posture);
+        }
+
+        $this->sellers()->assertTradingStandingDeclared($merchant, $posture, $archetype);
+        $this->sellers()->assertGoodsSellerRecordComplete($merchant, $posture, $archetype);
 
         $price = $this->stripe->prices->retrieve($priceId);
         $unitAmount = $price->unit_amount;
@@ -632,6 +668,11 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // What is being sold, so the recorded sale says so. Under intermediation that row is the only
             // record of it the package writes.
             'archetype' => $archetype,
+            // Who sells it, the supply of goods the platform makes itself where it makes one, and the consignment, so the
+            // document written after the payment decides from the same facts and the records describe the goods.
+            'posture' => $posture,
+            'deemedSupply' => $supply,
+            'consignment' => $consignment,
         ];
     }
 
@@ -718,6 +759,9 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *     platformFee: Money,
      *     policy: PlatformFee,
      *     archetype: ?TaxArchetype,
+     *     posture: SellerOfRecordPosture,
+     *     deemedSupply: ?DeemedSupplyOfGoods,
+     *     consignment: ?GoodsConsignment,
      * }  $routed
      */
     private function recordPendingSale(
@@ -771,13 +815,15 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // hands tax to the provider and holds no rate, so the line records a gross with no split rather
             // than asserting one. The gross and the place are exact, and those are what a return needs.
             $buyerFee,
-            // Who sold, from the same context that checked the charge type against it above, so the small-business
-            // turnover counts this sale on the basis its seller actually had.
-            sellerPosture: $this->context->posture(),
+            // Who sold, as the routing settled it against the charge type, so the small-business turnover counts this
+            // sale on the basis its seller actually had.
+            sellerPosture: $routed['posture'],
             // What was sold, from the lane that opened the checkout. A tip is the reason this is passed
             // rather than derived later: nothing else persists that it was one.
             purpose: $purpose,
             taxArchetype: $routed['archetype'],
+            deemedSupply: $routed['deemedSupply'],
+            consignment: $routed['consignment'],
         );
     }
 

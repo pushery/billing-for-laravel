@@ -68,7 +68,7 @@ final readonly class PaymentReminderSweep
         $window = $this->window->days();
         $today = Carbon::instance($now)->toDateString();
 
-        // Strictly AFTER the cutoff: a subscription whose clock started on the day `window` days ago has run out
+        // Strictly after the cutoff: a subscription whose clock started on the day `window` days ago has run out
         // and belongs to the expiry path, not to this one. The expiry takes the other half of this same
         // comparison, from the same object, so the two can never overlap into two messages on one day nor
         // leave a silent gap between them.

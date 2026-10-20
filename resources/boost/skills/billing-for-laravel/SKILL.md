@@ -87,6 +87,7 @@ the command reference at <https://docs.pushery.com/billing-for-laravel/reference
 | `billing:dunning:expire` | Daily: expires marketplace subscriptions whose cure window ran out, with one final notice |
 | `billing:cards:warn` | Daily: warns owners whose card is about to expire |
 | `billing:trials:warn` | Daily: warns owners whose generic trial is about to end |
+| `billing:subscriptions:warn` | Daily: reminds owners whose canceled subscription is about to end |
 | `billing:usage:reconcile` | Daily: reads the provider's usage totals back and alarms on drift; `--redrive` retries the rollups a flush gave up on |
 | `billing:money-back:reconcile` | Daily where the driver reads them back: records refunds that failed or were canceled and chargebacks the bank reversed, which no webhook reports |
 | `billing:prune` | Daily: ages out stored webhook payloads and expired financial records |
@@ -103,6 +104,9 @@ the command reference at <https://docs.pushery.com/billing-for-laravel/reference
 | `billing:datev:export` | Exports a period of invoices as a DATEV EXTF booking batch |
 | `billing:tax-return:export` | Exports a quarter's sales as tax-return lines, corrections included |
 | `billing:recapitulative-statement:export` | Exports reverse-charged sales to businesses in other member states, per VAT ID |
+| `billing:import-scheme-return:export` | Exports a month of import scheme sales as return lines, corrections included |
+| `billing:deemed-supply-records:export` | Exports the records of the supplies of goods the platform is treated as making itself |
+| `billing:platform-records:export` | Exports the records of the supplies the platform facilitated without being their supplier |
 | `billing:reporting:run {year}` | Produces a reporting period's official record, refusing while it is implausible |
 | `billing:reporting:file {year}` | Records that a produced record was actually submitted |
 | `billing:filings:announce` | Daily: warns about filing obligations falling due soon |

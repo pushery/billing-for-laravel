@@ -27,8 +27,9 @@ final class MarketplaceUnsupported extends RuntimeException
     {
         return new self(
             "The active billing driver [{$driver}] does not route money to merchants, so the ".
-            'marketplace path is unavailable. A driver announces the capability by implementing '.
-            'Pushery\\Billing\\Contracts\\RoutesMoney. Either use a driver that routes money, or leave '.
+            'marketplace path is unavailable. Of the drivers this package ships, the marketplace runs on '.
+            'the Stripe driver only; a driver of your own announces the capability by implementing '.
+            'Pushery\\Billing\\Contracts\\RoutesMoney. Either switch billing.default to stripe, or leave '.
             'billing.marketplace.enabled off (the default) and run as a single seller.'
         );
     }
@@ -72,7 +73,7 @@ final class MarketplaceUnsupported extends RuntimeException
     /**
      * The sale routes separately and the driver has no way to move the share.
      *
-     * Thrown BEFORE the buyer is charged, which is the entire point of checking here. Discovering this
+     * Thrown before the buyer is charged, which is the entire point of checking here. Discovering this
      * afterwards would leave a completed payment sitting on the platform account with no way to pay the
      * merchant and no signal that anything was wrong.
      */

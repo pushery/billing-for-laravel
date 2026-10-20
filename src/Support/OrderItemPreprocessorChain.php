@@ -84,7 +84,7 @@ final readonly class OrderItemPreprocessorChain
             $step = $entry;
 
             if (is_string($entry)) {
-                // Checked BEFORE resolving, because the container throws on a name that is not a class —
+                // Checked before resolving, because the container throws on a name that is not a class —
                 // and it throws from inside the chain, where it would abort the billing run rather than be
                 // skipped. A typo in a consumer's config file must cost that one step, nothing more.
                 if (! class_exists($entry)) {

@@ -6,6 +6,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | The account hub
+    |--------------------------------------------------------------------------
+    |
+    | Whether the package mounts its account hub at all. An application with
+    | account screens of its own turns it off: the hub's routes and Livewire
+    | screens are then not registered, and a checkout returns to the URLs set
+    | under billing.checkout instead of the hub's return route.
+    |
+    */
+
+    'enabled' => ! in_array(is_string($accountEnabled = env('BILLING_ACCOUNT_ENABLED')) ? strtolower(trim($accountEnabled)) : $accountEnabled, [false, '0', 'false', 'no', 'off'], true),
+
+    /*
+    |--------------------------------------------------------------------------
     | Account-hub route prefix
     |--------------------------------------------------------------------------
     |

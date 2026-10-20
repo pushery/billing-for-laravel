@@ -20,7 +20,7 @@ use Throwable;
  * else renders. Two things it deliberately does not do:
  *
  * - It never softens an authorization failure. A `403`/`404` (a Symfony {@see HttpExceptionInterface}) or a
- *   Gate {@see AuthorizationException} is RE-THROWN, so a security decision reaches the customer as the
+ *   Gate {@see AuthorizationException} is rethrown, so a security decision reaches the customer as the
  *   status it is — never quietly redrawn as a "temporarily unavailable" card.
  * - It never logs the exception's message, stack, or any provider detail (a Stripe error carries the
  *   customer's email and the request that failed). Only the exception's CLASS NAME is logged — enough to

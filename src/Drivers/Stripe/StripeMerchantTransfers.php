@@ -16,6 +16,7 @@ use Pushery\Billing\ValueObjects\MovedShare;
 use Pushery\Billing\ValueObjects\TransferResult;
 use Pushery\Billing\ValueObjects\TransferReversal;
 use RuntimeException;
+use Stripe\ApplicationFee;
 use Stripe\Charge;
 use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\RateLimitException;
@@ -182,7 +183,10 @@ final readonly class StripeMerchantTransfers implements FindsMovedShare, MovesMe
     public function movedShare(string $transferReference): ?MovedShare
     {
         try {
-            $transfer = $this->stripe->transfers->retrieve($transferReference);
+            // The payment behind the transfer comes along with its application fee, in the same call. A destination
+            // charge transfers the whole payment and collects the fee back from the connected account afterwards, so
+            // the transfer alone overstates the merchant's share by the fee.
+            $transfer = $this->stripe->transfers->retrieve($transferReference, ['expand' => ['source_transaction.application_fee']]);
         } catch (RateLimitException $e) {
             // A 429 is transient and only lands here because the SDK makes RateLimitException a
             // subclass of InvalidRequestException. Swallowing it files "try again" as "never".
@@ -212,9 +216,29 @@ final readonly class StripeMerchantTransfers implements FindsMovedShare, MovesMe
         // makes it not, and it would then read as more clawed back than actually was.
         return new MovedShare(
             (string) $transfer->id,
-            new Money((int) $transfer->amount, $currency),
+            new Money((int) $transfer->amount - $this->feeHeldOn($transfer, $currency), $currency),
             new Money((int) ($transfer->amount_reversed ?? 0), $currency),
         );
+    }
+
+    /**
+     * The part of the application fee on the payment behind a transfer that the platform still holds, in minor units.
+     *
+     * What the fee's refunds gave back is the merchant's again, so a fee half refunded with a half refund of the payment
+     * holds half. Zero for a transfer that names no payment, or whose payment carries no fee, which is every separate
+     * transfer: the platform kept its commission by moving less, and collected nothing back. A fee in another currency
+     * than the transfer's is not taken off either, because its minor units do not count the same money.
+     */
+    private function feeHeldOn(Transfer $transfer, string $currency): int
+    {
+        $source = $transfer->source_transaction ?? null;
+        $fee = $source instanceof Charge ? ($source->application_fee ?? null) : null;
+
+        if (! $fee instanceof ApplicationFee || strtoupper((string) $fee->currency) !== $currency) {
+            return 0;
+        }
+
+        return max(0, (int) $fee->amount - (int) ($fee->amount_refunded ?? 0));
     }
 
     public function reverseShare(

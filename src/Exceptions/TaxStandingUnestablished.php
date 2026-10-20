@@ -9,7 +9,7 @@ use RuntimeException;
 /**
  * A sale was about to be made on behalf of a merchant whose taxation nobody has established.
  *
- * Thrown BEFORE any provider call, like its receiving-side sibling, and for the same reason: once a routed
+ * Thrown before any provider call, like its receiving-side sibling, and for the same reason: once a routed
  * charge is in flight there is no clean way back, and the document it produces is the problem.
  *
  * There is no safe guess here, and that is a symmetry rather than caution. Assume the merchant charges tax

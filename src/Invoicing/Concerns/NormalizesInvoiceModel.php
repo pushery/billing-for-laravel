@@ -175,6 +175,7 @@ trait NormalizesInvoiceModel
             TaxExemptionReason::DomesticSmallBusiness => Lang::get('billing::invoice.small_business_note'),
             TaxExemptionReason::UnionSmallBusinessScheme => Lang::get('billing::invoice.union_small_business_note'),
             TaxExemptionReason::NotConsideration => Lang::get('billing::invoice.not_consideration_note'),
+            TaxExemptionReason::SupplyToADeemedSupplier => Lang::get('billing::invoice.supply_to_a_deemed_supplier_note'),
             default => null,
         };
 

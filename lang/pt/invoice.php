@@ -29,6 +29,7 @@ return [
     'small_business_note' => 'Isento de IVA ao abrigo do regime das pequenas empresas (§ 19 UStG).',
     'union_small_business_note' => 'Isento de IVA ao abrigo do regime das pequenas empresas do Estado-Membro do fornecedor.',
     'not_consideration_note' => 'Não sujeito a IVA: indemnização, não contraprestação de uma operação.',
+    'supply_to_a_deemed_supplier_note' => 'Entrega isenta dos bens à interface eletrónica que a facilita (artigo 136.º-A da Diretiva 2006/112/CE).',
     'margin_scheme_note' => 'Regime da margem de lucro — bens em segunda mão',
     'margin_scheme_note_works_of_art' => 'Regime da margem de lucro — objetos de arte',
     'margin_scheme_note_collectors_items' => 'Regime da margem de lucro — objetos de coleção e antiguidades',

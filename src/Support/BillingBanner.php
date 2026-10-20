@@ -12,7 +12,6 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\MerchantDisplayName;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Models\Subscription;
-use Pushery\Billing\Trials\Trials;
 use Pushery\Billing\ValueObjects\BannerNotice;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
@@ -66,19 +65,16 @@ final readonly class BillingBanner
     public function __construct(
         private SubscriptionPresenter $presenter,
         private Repository $config,
-        private Trials $trials,
+        private OwnerSubscriptionState $states,
         private MerchantDisplayName $merchantNames,
     ) {}
 
     public function for(Model $owner): ?BannerNotice
     {
-        $managed = $this->managedSubscription($owner);
-
-        $snapshot = $managed instanceof Subscription
-            ? $managed->toSnapshot()
-            : $this->trials->ownerSnapshot($owner);
-
-        $state = $this->presenter->present($snapshot);
+        // The one contract the account screens act on, the platform's own of the default type, read the way they
+        // read it.
+        $managed = $this->states->subscriptionOf($owner);
+        $state = $this->states->presented($owner, $managed);
 
         // Covers both a subscription trial (Trialing) and a generic trial (GenericTrial, no row): both
         // read isTrialing(), and for this one contract the trial clock falls back to the owner's column.
@@ -146,17 +142,6 @@ final readonly class BillingBanner
         $order = array_flip(array_keys(self::NOTICES));
 
         return $order[$kind] < $order[$than];
-    }
-
-    /** The one contract the account screens act on: the platform's own, of the default type. */
-    private function managedSubscription(Model $owner): ?Subscription
-    {
-        return Subscription::model()::query()
-            ->forOwner($owner)
-            ->forMerchant(null)
-            ->ofDefaultType()
-            ->latest('id')
-            ->first();
     }
 
     /**

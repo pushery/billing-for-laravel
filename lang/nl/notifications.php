@@ -33,6 +33,14 @@ return [
         'cta' => 'Abonnement bekijken',
     ],
 
+    'subscription_ending' => [
+        'subject' => 'Je abonnement eindigt binnenkort',
+        'intro' => 'Je opgezegde abonnement eindigt op :date.',
+        'intro_merchant' => 'Je opgezegde abonnement bij :merchant eindigt op :date.',
+        'outro' => 'Hervat het vóór die datum om alles wat erbij hoort zonder onderbreking te houden.',
+        'cta' => 'Abonnement hervatten',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'Je fiscale status is gewijzigd',
         'intro' => 'Je fiscale status is gewijzigd van :from naar :to. Wij hebben dit uit onze eigen administratie afgeleid — je hebt er niet om gevraagd.',

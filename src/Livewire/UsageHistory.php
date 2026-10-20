@@ -5,12 +5,18 @@ declare(strict_types=1);
 namespace Pushery\Billing\Livewire;
 
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Contracts\View\View;
 use Livewire\WithPagination;
+use Pushery\Billing\Catalogs\MeterCatalog;
+use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\SuppliesUsageMovements;
 use Pushery\Billing\Contracts\UsageHistoryProvider;
 use Pushery\Billing\Livewire\Concerns\DegradesGracefully;
+use Pushery\Billing\Support\CatalogLabel;
+use Pushery\Billing\Support\UsagePeriodLabel;
+use Pushery\Billing\ValueObjects\AddonTopup;
 
 /**
  * The account-hub usage-history screen: an owner's usage across finished billing periods plus the add-on
@@ -72,6 +78,51 @@ final class UsageHistory extends AccountScreen
             'byPeriod' => $byPeriod,
             'topups' => $topups,
             'movements' => $movements,
+            // The names a customer reads where the rows carry keys: the meter and the add-on as the install
+            // configured them, and the period as a date or a month.
+            'periodLabels' => array_map(static fn (int|string $key): string => UsagePeriodLabel::for((string) $key), array_combine(array_keys($byPeriod), array_keys($byPeriod))),
+            'meterLabels' => $this->meterLabels(),
+            'addonLabels' => $this->addonLabels($topups),
         ]);
+    }
+
+    /**
+     * The label each meter key is configured with, the owner's own tier first, so the history keeps the names
+     * the usage screen shows. A key no tier declares any more has no entry, and the view shows the key.
+     *
+     * @return array<string, string>
+     */
+    private function meterLabels(): array
+    {
+        $catalog = Container::getInstance()->make(MeterCatalog::class);
+        $tiers = Container::getInstance()->make(Repository::class)->get('billing.tiers');
+        $labels = [];
+
+        foreach ([$this->currentTierKey(), ...(is_array($tiers) ? array_map(strval(...), array_keys($tiers)) : [])] as $tier) {
+            foreach ($catalog->forTier($tier) as $component) {
+                $labels[$component->key] ??= CatalogLabel::translate($component->label);
+            }
+        }
+
+        return $labels;
+    }
+
+    /**
+     * The label of each add-on the top-ups name, as the plan screen offers it. The catalog answers an add-on it
+     * no longer carries with its key.
+     *
+     * @param  list<AddonTopup>  $topups
+     * @return array<string, string>
+     */
+    private function addonLabels(array $topups): array
+    {
+        $catalog = Container::getInstance()->make(AddonCatalog::class);
+        $labels = [];
+
+        foreach ($topups as $topup) {
+            $labels[$topup->addonKey] ??= CatalogLabel::translate($catalog->label($topup->addonKey));
+        }
+
+        return $labels;
     }
 }

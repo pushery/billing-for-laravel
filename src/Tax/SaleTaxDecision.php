@@ -152,7 +152,7 @@ final readonly class SaleTaxDecision
         $placement = $this->places->place($productRule, $buyer);
         $context = $this->places->taxContextFor($productRule, $buyer, $soldAt);
 
-        // Decided BEFORE the rate is asked for, which is the whole change. The tax point was already being
+        // Decided before the rate is asked for, which is the whole change. The tax point was already being
         // worked out here — it just arrived after the calculation and went straight into the facts, so the
         // rate came from the moment the code ran rather than the moment the supply was taxed. The law binds
         // it the other way round (Art. 93 VAT Directive), and on an installation with a rate history the two

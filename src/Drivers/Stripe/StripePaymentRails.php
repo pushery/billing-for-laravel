@@ -6,6 +6,7 @@ namespace Pushery\Billing\Drivers\Stripe;
 
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\PaymentRails;
+use Pushery\Billing\Contracts\RefundsPlatformFee;
 use Pushery\Billing\Contracts\SupplyRegimeResolver;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\FeeRefundPolicy;
@@ -20,6 +21,7 @@ use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\RefundResult;
 use Pushery\Billing\ValueObjects\TokenizedMethod;
 use RuntimeException;
+use Stripe\ApplicationFee;
 use Stripe\Charge;
 use Stripe\Exception\CardException;
 use Stripe\Exception\InvalidRequestException;
@@ -42,7 +44,7 @@ use Stripe\TransferReversal;
  * authenticate (3-D Secure) or be a bank debit still processing (SEPA). Those are carried out as
  * requires-action / pending on the ChargeResult, never collapsed onto "declined".
  */
-final readonly class StripePaymentRails implements PaymentRails
+final readonly class StripePaymentRails implements PaymentRails, RefundsPlatformFee
 {
     /**
      * A PaymentIntent's `description` carries 1000 characters — four times Mollie's field.
@@ -51,6 +53,9 @@ final readonly class StripePaymentRails implements PaymentRails
      * every Stripe description to Mollie's length for no reason other than that Mollie also exists.
      */
     public const int DESCRIPTION_LIMIT = 1000;
+
+    /** The metadata key on a fee refund that names the refund it was made for. */
+    public const string FEE_REFUND_KEY = 'billing_refund';
 
     /**
      * @param  StripeCheckoutCharge|null  $checkout  Stripe's checkout page, which a payment account opens for a charge
@@ -219,7 +224,12 @@ final readonly class StripePaymentRails implements PaymentRails
             // presupposes a document the platform issued the merchant for a service. A commission chain has
             // none — the platform buys and resells, and unwinding the sale unwinds both supplies. Money kept
             // afterwards sits on no supply at all, which is turnover on a tax return with nothing behind it.
-            $params['refund_application_fee'] = $this->feeRefundPolicy()->refundsPlatformFee();
+            //
+            // A caller that gives the fee back itself is not asked to share it out here. The provider would give back
+            // a share of the fee as it was first withheld, while the ledger books the fee recomputed on what remains,
+            // and the two part on a fee with a fixed part and on one corrected after the payment. The policy is
+            // still read, so a retained fee under a commission chain is refused the same either way.
+            $params['refund_application_fee'] = $this->feeRefundPolicy()->refundsPlatformFee() && ! $routing->feeRefundedByCaller;
 
             // Without this the provider answers with the reversal's ID and nothing else, so the amount that
             // came back is unknowable from the response — and a caller that needs it would have to either
@@ -268,6 +278,46 @@ final readonly class StripePaymentRails implements PaymentRails
             // than none at all.
             failureCode: $successful ? null : $refund->failure_reason ?? $refund->status,
         );
+    }
+
+    /**
+     * Gives back part of the application fee on a destination payment, after the refund was made without it.
+     *
+     * The refund key goes into the fee refund's metadata as well as into its idempotency key. Stripe forgets an
+     * idempotency key after a day, and a retry after that would give the fee back a second time; the metadata stays,
+     * so a fee refund already made for the key is found and reported instead of made again.
+     */
+    public function refundPlatformFee(string $chargeReference, Money $amount, string $refundKey): ?Money
+    {
+        $intent = $this->stripe->paymentIntents->retrieve($this->paymentIntentFor($chargeReference), ['expand' => ['latest_charge.application_fee']]);
+        $charge = $intent->latest_charge ?? null;
+        $fee = $charge instanceof Charge ? ($charge->application_fee ?? null) : null;
+
+        if (! $fee instanceof ApplicationFee) {
+            return null;
+        }
+
+        foreach ($this->stripe->applicationFees->allRefunds($fee->id, ['limit' => 100])->autoPagingIterator() as $made) {
+            if (($made->metadata[self::FEE_REFUND_KEY] ?? null) === $refundKey) {
+                return new Money((int) $made->amount, strtoupper((string) $made->currency));
+            }
+        }
+
+        // Never more than the fee still holds. Stripe refuses more, and the refusal would take the part that can
+        // come back down with it.
+        $give = min(StripeAmount::of($amount), (int) $fee->amount - (int) ($fee->amount_refunded ?? 0));
+
+        if ($give <= 0) {
+            return new Money(0, $amount->currency);
+        }
+
+        $refund = $this->stripe->applicationFees->createRefund(
+            $fee->id,
+            ['amount' => $give, 'metadata' => [self::FEE_REFUND_KEY => $refundKey]],
+            ['idempotency_key' => 'fee-refund:'.$refundKey],
+        );
+
+        return new Money((int) $refund->amount, strtoupper((string) $refund->currency));
     }
 
     /**

@@ -12,7 +12,12 @@ namespace Pushery\Billing\Enums;
  */
 enum FeeRefundPolicy: string
 {
-    /** The platform gives back its commission in proportion to what was refunded. */
+    /**
+     * The platform gives back the part of its commission that what remains of the sale no longer carries.
+     *
+     * Recomputed on the remainder rather than taken in proportion, because a fixed part of the fee is not halved by a
+     * half refund, and given back in exactly that amount.
+     */
     case Refund = 'refund';
 
     /**

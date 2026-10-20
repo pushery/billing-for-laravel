@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\PlausibilityFinding;
  *
  * ## Why this is not circular
  *
- * The report's quarters come FROM these counters, so comparing them against the counters again would prove
+ * The report's quarters come from these counters, so comparing them against the counters again would prove
  * nothing. What is compared here is the same counter asked a different question: four quarterly windows
  * against one annual window. Those are two independent walks over the same documents, and they can
  * disagree.

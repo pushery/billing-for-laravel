@@ -291,6 +291,10 @@ return [
     'checkout' => [
         'success_url' => env('BILLING_CHECKOUT_SUCCESS_URL'),
         'cancel_url' => env('BILLING_CHECKOUT_CANCEL_URL'),
+        // Where an add-on purchase returns instead, finished or abandoned, for an application that sends a
+        // subscription and a one-time purchase to different pages. Each falls back to the key above it.
+        'purchase_success_url' => env('BILLING_CHECKOUT_PURCHASE_SUCCESS_URL'),
+        'purchase_cancel_url' => env('BILLING_CHECKOUT_PURCHASE_CANCEL_URL'),
         'portal_return_url' => env('BILLING_PORTAL_RETURN_URL'),
         // Where a hosted "add a card" page returns the customer. `CheckoutUrls::paymentMethodsReturnUrl()`
         // has read this since it was written; it was simply never declared here, so the one key of the four
@@ -446,10 +450,15 @@ return [
     | Set to 'immediate' to downgrade at once instead. Both the screen and the
     | swap read this one value, so they cannot disagree about when a change lands.
     |
+    | warn_ending_within_days is how far ahead billing:subscriptions:warn
+    | (scheduled daily) reminds an owner that a subscription they canceled ends,
+    | while resuming still keeps the plan. Override per run with --days.
+    |
     */
 
     'subscriptions' => [
         'downgrade_timing' => env('BILLING_DOWNGRADE_TIMING', 'period_end'),
+        'warn_ending_within_days' => 3,
     ],
 
     /*
@@ -528,7 +537,7 @@ return [
     | subscription is always sold at `provider_price`.
     |
     | 'pro' => [
-    |     'provider_price' => env('BILLING_PRICE_PRO'),  // what a NEW subscription is sold at
+    |     'provider_price' => env('BILLING_PRICE_PRO'),  // what a new subscription is sold at
     |     'legacy_prices' => ['price_old_pro_2025'],     // still resolve to 'pro'
     | ],
     |
@@ -737,7 +746,7 @@ return [
         // The invoice window: an erased owner's retained invoices are kept eight years (2920 days) — §14b
         // Abs. 1 UStG n. F. The clock is counted from the END of the year the invoice was issued (§147 Abs. 4
         // AO), which billing:prune anchors to; a shorter window refuses to boot. This is a floor and a
-        // default: set your own for another jurisdiction. Deliberately NOT the same as audit_days below —
+        // default: set your own for another jurisdiction. Deliberately not the same as audit_days below —
         // over-retaining an invoice to the ten-year book window keeps personal data two years past its
         // obligation, in breach of storage limitation (Art. 5(1)(e)).
         'erased_financial_days' => is_numeric($erasedFinancialDays = env('BILLING_RETENTION_ERASED_FINANCIAL_DAYS')) && (int) $erasedFinancialDays >= 1 ? (int) $erasedFinancialDays : 2920,
@@ -839,6 +848,24 @@ return [
     | are wrong quietly. With no consumer-rights profile set, nothing reads it. A
     | value that is not one of the archetypes is refused rather than resolved to
     | null, because a typo is not the same thing as "nobody classified this".
+    |
+    | An add-on that is goods sold for a merchant can say how it ships, with the
+    | facts that decide whether the platform is treated as supplying it itself:
+    |
+    |   'mug' => [
+    |       'label' => 'A mug',
+    |       'provider_price' => 'price_...',
+    |       'archetype' => 'consumer_goods',
+    |       'consignment' => ['imported' => false, 'goods_located_in' => 'DE', 'description' => 'A mug'],
+    |   ],
+    |
+    | `imported` with `intrinsic_value_minor` in euro cents for a consignment that
+    | enters the Union with the sale, `goods_located_in` for goods already in it,
+    | and `new_means_of_transport`, `installed_or_assembled`, `subject_to_excise`
+    | and `basis` where they apply. `description` and `quantity` name the goods,
+    | which a sale the platform makes itself needs. Absent, the hosted purchase
+    | classifies as it does without a consignment; a value that is not one is
+    | refused.
     |
     */
 
@@ -1062,6 +1089,9 @@ return [
     */
 
     'admin' => [
+        // Whether the console is mounted at all. An application with a back office of its own turns it off, and the
+        // console's route and Livewire component are then not registered.
+        'enabled' => ! in_array(is_string($adminEnabled = env('BILLING_ADMIN_ENABLED')) ? strtolower(trim($adminEnabled)) : $adminEnabled, [false, '0', 'false', 'no', 'off'], true),
         'ability' => env('BILLING_ADMIN_ABILITY', 'billing-admin'),
         'prefix' => env('BILLING_ADMIN_PREFIX', 'admin/billing'),
         'middleware' => ['web', 'auth'],
@@ -1738,9 +1768,9 @@ return [
     //
     //   sole trader / partnership on a cash-basis P&L, under the ceiling ... usually receipt
     //   freelance professional ...................................... usually receipt, via alternative 3
-    //   GmbH / UG / AG ............................................. usually accrual -- but NOT always:
+    //   GmbH / UG / AG ............................................. usually accrual -- but not always:
     //       a corporation is a merchant by form (§ 6 HGB) and therefore keeps books, so alternative 2 is
-    //       closed to it. Alternative 1 is not. A corporation under 800,000 EUR CAN be granted receipt
+    //       closed to it. Alternative 1 is not. A corporation under 800,000 EUR can be granted receipt
     //       taxation, and that is regularly believed to be impossible
     //   over the ceiling AND obliged to keep books ................. accrual, with no route open
     //
@@ -1749,7 +1779,7 @@ return [
     // than this comment: verified against gesetze-im-internet.de on 2026-09-17, which is a date, not a
     // guarantee.
     //
-    // IT IS A per-taxpayer election, not a property of a country. Two operators in the same
+    // It is a per-taxpayer election, not a property of a country. Two operators in the same
     // jurisdiction differ, so this cannot be derived from a locale, a currency or a tax profile -- it is
     // declared, once, by the operator who holds the notice.
     //
@@ -1866,6 +1896,17 @@ return [
                 // statement is read from.
                 'fan_revenue_eu_reverse_charge' => ['account' => '8336', 'automatic' => true],
                 'fan_revenue_third_country' => ['account' => '8338', 'automatic' => true],
+                // The platform's own sale of goods, in a sale it is treated as making itself. Taxed at home it books
+                // to the same Automatikkonten as any other sale at its rate; the cases are separate so an accountant
+                // can keep goods and services apart. Declared in the Union scheme it books per destination country,
+                // like the services below, from the ranges DATEV reserves for supplies taxable in another member
+                // state: 8320 to 8329 here, 4320 to 4329 in SKR04. The import scheme's sales
+                // (`import_scheme_goods_revenue`, per country) and the seller's exempt supply to the platform under
+                // § 4 Nr. 4c UStG (`deemed_supply_input_exempt`) have no account that could be confirmed, so they
+                // ship unmapped and are refused by name until the operator configures one.
+                'goods_revenue_standard' => ['account' => '8400', 'automatic' => true],
+                'goods_revenue_reduced' => ['account' => '8300', 'automatic' => true],
+                'oss_goods_revenue' => [],
                 'commission_revenue' => ['account' => '8510', 'automatic' => true],
                 'creator_input_de_standard' => ['account' => '3106', 'automatic' => true],
                 'creator_input_exempt' => ['account' => '3109', 'automatic' => false],
@@ -1895,6 +1936,9 @@ return [
                 'fan_revenue_reduced' => ['account' => '4300', 'automatic' => true],
                 'fan_revenue_eu_reverse_charge' => ['account' => '4336', 'automatic' => true],
                 'fan_revenue_third_country' => ['account' => '4338', 'automatic' => true],
+                'goods_revenue_standard' => ['account' => '4400', 'automatic' => true],
+                'goods_revenue_reduced' => ['account' => '4300', 'automatic' => true],
+                'oss_goods_revenue' => [],
                 'commission_revenue' => ['account' => '4510', 'automatic' => true],
                 'creator_input_de_standard' => ['account' => '5906', 'automatic' => true],
                 'creator_input_exempt' => ['account' => '5909', 'automatic' => false],
@@ -2155,12 +2199,16 @@ return [
     // rather than complete the payment unrouted: silently ignoring one settles the whole amount on the
     // platform account and the merchant is never paid, with nothing in the result saying so.
     //
+    // Of the drivers this package ships, the marketplace runs on the Stripe driver only. The Mollie
+    // driver does not implement `RoutesMoney`, so switching this on while `billing.default` is `mollie`
+    // refuses to boot with `MarketplaceUnsupported` instead of settling every sale on the platform.
+    //
     // The settings below are not one feature. They fall into three groups, and the middle one is the
     // reason this block is long:
     //
     //   - the money flow — `charge_type`, `fee`, `buyer_fee`, `negative_balance`, `buyer_protection`,
     //     `custody`. Which provider mechanism moves the merchant's share, and what the platform keeps.
-    //   - WHOSE SUPPLY IT IS — `seller_of_record`, `regime`, `charge_type_by_posture`, `tax_status_hold`.
+    //   - whose supply it is — `seller_of_record`, `regime`, `charge_type_by_posture`, `tax_status_hold`.
     //     These decide who the buyer contracts with, who owes the VAT, and which documents exist at all.
     //     They are not presentation: a pairing the posture table forbids is refused before a payment is
     //     assembled, because a settled sale cannot be re-classified afterwards — moving it does not adjust
@@ -2295,6 +2343,22 @@ return [
             'no_supply_authorization' => false,
         ],
 
+        // Goods whose sale makes the platform their supplier (Art. 14a VAT Directive, § 3 Abs. 3a UStG): an
+        // imported consignment worth up to 150 euros, whoever sells it, and goods in the Union sold by a seller
+        // established outside it to somebody who is not a business. A routed sale of goods is classified from the
+        // consignment its lane passes. Under a tax profile that documents such a sale it goes ahead as the
+        // platform's own supply, with both documents and both returns; under any other it is refused before any
+        // money moves.
+        //
+        // `ioss_number` is the number the platform is registered under in the import scheme, IM followed by ten
+        // digits, and an imported consignment is refused without it. `union_scheme` is your statement that the
+        // platform declares its supplies of goods already in the Union in the Union scheme: the receipt this package
+        // issues for such a supply is enough only there, so those sales are refused until it is true.
+        'deemed_supply_of_goods' => [
+            'ioss_number' => env('BILLING_MARKETPLACE_IOSS_NUMBER'),
+            'union_scheme' => in_array(is_string($deemedSupplyUnionScheme = env('BILLING_MARKETPLACE_DEEMED_SUPPLY_UNION_SCHEME')) ? strtolower(trim($deemedSupplyUnionScheme)) : $deemedSupplyUnionScheme, [true, '1', 'true', 'yes', 'on'], true),
+        ],
+
         // What a platform asks a seller for at onboarding.
         //
         // The fields a reporting duty adds are collected from every seller by default, not only from the
@@ -2410,7 +2474,7 @@ return [
         // assuming they do not produce errors that point in opposite directions.
         //
         // `enforce_from` is the date the hold starts biting, and it is null until you set one. That is not
-        // the switches below being ignored: they say what is held, this says FROM WHEN, and with no date
+        // the switches below being ignored: they say what is held, this says from when, and with no date
         // the answer is "not yet". The separation exists because of what happens on the day it starts. A
         // merchant with no recorded standing is `Unclarified`, which is exactly the state that blocks — so
         // on an established marketplace, switching this on with today's date stops every creator who has
@@ -2677,14 +2741,15 @@ return [
             // deduction would make every payout figure wrong by a guess. On a small sale the difference is
             // the whole margin.
             //
-            // Two lanes cannot honor that, and saying so here is the point. Stripe's hosted subscription
-            // takes a percentage of the invoice total, which includes the buyer's tax; the hosted one-off
-            // purchase needs an absolute fee at the moment the session opens, which is before the buyer's
-            // rate is a fact at all. Both therefore compute on the gross. The routed money path — the one
-            // that writes the ledger — computes on the net as stated. Which answer the package should settle
-            // on is open; until then this comment is the only place a reader can learn that the promise has
-            // an exception, and a promise with an undisclosed exception is how the two bases diverged in the
-            // first place.
+            // Two places cannot state it when the payment is made, and saying so here is the point. Stripe's
+            // hosted subscription on the destination lane takes a percentage of the invoice total, which
+            // includes the buyer's tax: each renewal's draft invoice is set to the fee on the net before
+            // Stripe charges it, and the first cycle, paid as the checkout completes, withholds the gross
+            // percentage. The hosted one-off purchase needs an absolute fee at the moment the session opens,
+            // before the buyer's rate is a fact, so at a tax-inclusive price it withholds the fee on the price.
+            // Both have the commission on the tax given back as part of the fee after the payment. Every
+            // ledger row says which base its commission was taken on, in `commission_tax_bps`. A promise with
+            // an undisclosed exception is how the two bases diverged in the first place.
             'default_bps' => is_numeric($marketplaceFeeBps = env('BILLING_MARKETPLACE_FEE_BPS')) && (int) $marketplaceFeeBps >= 0 ? (int) $marketplaceFeeBps : 0,
             'default_flat_minor' => is_numeric($marketplaceFeeFlatMinor = env('BILLING_MARKETPLACE_FEE_FLAT_MINOR')) && (int) $marketplaceFeeFlatMinor >= 0 ? (int) $marketplaceFeeFlatMinor : 0,
 
@@ -2753,7 +2818,7 @@ return [
             // unsupported value is refused at boot rather than defaulted quietly.
             //
             //   express  — the provider owns onboarding, identity and the merchant's own dashboard. The
-            //              default: the least the platform has to build, and the MOST it carries.
+            //              default: the least the platform has to build, and the most it carries.
             //   standard — the merchant has a full account of their own with the provider, and a direct
             //              relationship with them. More capable for the merchant, less controllable here.
             //

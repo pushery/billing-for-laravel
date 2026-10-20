@@ -28,9 +28,9 @@ use Throwable;
  *
  *   - If the effect throws, the transaction rolls back and takes the CLAIM with it. The work is
  *     re-claimable, so the queue's retry (and `billing:webhooks:replay`) will do it again. A dedup marker
- *     recorded BEFORE running the effect is how a payment-failure notice gets lost forever: the marker
+ *     recorded before running the effect is how a payment-failure notice gets lost forever: the marker
  *     survives, the mail does not, and nothing will ever send it.
- *   - The failure is then recorded OUTSIDE that rolled-back transaction, so an operator can see the work
+ *   - The failure is then recorded outside that rolled-back transaction, so an operator can see the work
  *     the package knows it still owes.
  *   - The package's notifications are queued AFTER COMMIT, so a mail is only ever really sent if the run
  *     it belongs to committed. That is what closes the other half: no duplicate mail from a run that

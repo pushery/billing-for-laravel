@@ -9,16 +9,20 @@ use Carbon\CarbonImmutable;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Bus;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\CreatorTaxStatusResolver;
+use Pushery\Billing\Contracts\RefundsPlatformFee;
 use Pushery\Billing\Contracts\RoutesMoney;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\FeeRefundPolicy;
 use Pushery\Billing\Enums\RefundAttemptStatus;
 use Pushery\Billing\Enums\RefundKind;
 use Pushery\Billing\Enums\TaxBaseChangeReason;
 use Pushery\Billing\Exceptions\CommissionTermsUnknown;
+use Pushery\Billing\Jobs\RefundPlatformFee;
 use Pushery\Billing\Marketplace\ClawbackCalculator;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Marketplace\RoutedRefundCorrector;
@@ -169,29 +173,38 @@ final readonly class BillingAdmin
         //
         // Null for every single-seller charge, because nothing routed it and the ledger holds no row. The
         // shipped payload is then byte-for-byte what it always was.
-        $result = $this->manager->driver()->rails()->refund($chargeReference, $amount, $key, $this->routingFor($charge));
+        $rails = $this->manager->driver()->rails();
+        $routing = $this->routingFor($charge, $rails instanceof RefundsPlatformFee);
+        $result = $rails->refund($chargeReference, $amount, $key, $routing);
 
         // The attempt gets an outcome either way, and the failure branch is the one worth having: an attempt
         // row with no ending is a reversal nobody can later say was tried. `failRefund` moves no totals, so
         // a refused refund leaves the three cumulative columns exactly where they were.
-        if ($attempt instanceof RefundAttempt) {
-            $result->successful
-                // Book what came back, not what was asked for. On the separate-transfer lane the rails
-                // report no reversal reference on purpose -- the share moved in its own call and refunding
-                // the payment does not touch it -- and booking the intent there told a consumer to unwind a
-                // payout still sitting with the merchant, while spending the room a later chargeback needs.
-                //
-                // A null reference is that honest "nothing came back", so it books zero. A reference with no
-                // amount beside it means the provider reversed but did not say how much, and there the
-                // attempt's own figure is the best available answer, which is what null preserves.
-                ? $this->routed->completeRefund(
-                    $attempt,
-                    $result->reversedTransferReference === null
-                        ? new Money(0, $amount->currency)
-                        : $result->transferReversed,
-                    reversalRequested: $result->reversedTransferReference !== null,
-                )
-                : $this->routed->failRefund($attempt, 'The provider refused an admin-initiated refund'.($result->failureMessage !== null ? ': '.$result->failureMessage : '.'));
+        if ($attempt instanceof RefundAttempt && $result->successful) {
+            // Book what came back, not what was asked for. On the separate-transfer lane the rails
+            // report no reversal reference on purpose -- the share moved in its own call and refunding
+            // the payment does not touch it -- and booking the intent there told a consumer to unwind a
+            // payout still sitting with the merchant, while spending the room a later chargeback needs.
+            //
+            // A null reference is that honest "nothing came back", so it books zero. A reference with no
+            // amount beside it means the provider reversed but did not say how much, and there the
+            // attempt's own figure is the best available answer, which is what null preserves.
+            $moved = $this->routed->completeRefund(
+                $attempt,
+                $result->reversedTransferReference === null
+                    ? new Money(0, $amount->currency)
+                    : $result->transferReversed,
+                reversalRequested: $result->reversedTransferReference !== null,
+            );
+
+            // The fee the ledger just booked as given back, given back at the provider. The refund was made without
+            // it, because the provider would have given back a share of the fee as it was first withheld, and a job
+            // retries it alone, since the buyer's refund must not be asked for twice.
+            if ($routing instanceof ChargeRouting && $routing->feeRefundedByCaller && $moved['fee'] > 0) {
+                Bus::dispatch(new RefundPlatformFee((int) $attempt->id, $moved['fee']));
+            }
+        } elseif ($attempt instanceof RefundAttempt) {
+            $this->routed->failRefund($attempt, 'The provider refused an admin-initiated refund'.($result->failureMessage !== null ? ': '.$result->failureMessage : '.'));
         }
 
         if ($result->successful) {
@@ -442,6 +455,14 @@ final readonly class BillingAdmin
 
         [$merchantClawback, $feeReturned] = new ClawbackCalculator()->forRefund($charge, $terms, $amount);
 
+        // A platform that keeps its fee gives none of it back, so the merchant carries the whole refund, up to what
+        // they still hold. Booking the recomputed fee as given back anyway made the ledger say money came back that
+        // the provider was told to keep.
+        if (! $this->refundsPlatformFee()) {
+            $merchantClawback = new Money(min($amount->minorUnits, max(0, $charge->net_minor - $charge->transfer_reversed_minor)), $amount->currency);
+            $feeReturned = new Money(0, $amount->currency);
+        }
+
         return $this->routed->beginRefund($charge, $amount, $merchantClawback, $feeReturned, idempotencyKey: $idempotencyKey);
     }
 
@@ -528,7 +549,7 @@ final readonly class BillingAdmin
      * method reads — the lane, the merchant, the frozen fee — is touched by the claim written in between, so
      * taking the charge as an argument costs nothing and removes the window outright.
      */
-    private function routingFor(?MerchantCharge $charge): ?ChargeRouting
+    private function routingFor(?MerchantCharge $charge, bool $refundsFeeSeparately = false): ?ChargeRouting
     {
         $driver = $this->manager->driver();
 
@@ -554,6 +575,22 @@ final readonly class BillingAdmin
             destination: $account,
             applicationFee: new Money($charge->fee_minor, $charge->currency),
             type: $lane,
+            // A destination charge's fee comes back in the amount the ledger books, given back after the refund under
+            // its key, wherever the policy gives it back at all and the rails can give it back on their own.
+            feeRefundedByCaller: $refundsFeeSeparately && $lane === ChargeType::Destination && $this->refundsPlatformFee(),
         ) : null;
+    }
+
+    /**
+     * Whether the configured policy gives the platform's fee back with a refund. The shipped default does.
+     *
+     * An unknown value answers yes here and is refused by the rails, which read the same key before any money moves.
+     */
+    private function refundsPlatformFee(): bool
+    {
+        $configured = $this->config->get('billing.marketplace.fee.refund_policy', 'refund');
+        $policy = is_string($configured) ? FeeRefundPolicy::tryFrom($configured) : null;
+
+        return ! $policy instanceof FeeRefundPolicy || $policy->refundsPlatformFee();
     }
 }

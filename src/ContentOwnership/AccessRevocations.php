@@ -158,7 +158,7 @@ final readonly class AccessRevocations
      * names. Chunked for the same reason as the work axis: a seller's whole catalog is not a handful of
      * rows, and it is the one call that matters on the day somebody's account goes.
      *
-     * Deliberately NOT the same thing as erasing the merchant. Erasure is about a person's data; this is
+     * Deliberately not the same thing as erasing the merchant. Erasure is about a person's data; this is
      * about what their buyers may still reach, and the two have different answers — a financial record
      * survives an erasure, while access does not survive a deletion.
      *

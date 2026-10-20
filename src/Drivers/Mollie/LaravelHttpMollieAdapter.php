@@ -52,7 +52,7 @@ final readonly class LaravelHttpMollieAdapter implements HttpAdapterContract
 {
     /**
      * @param  list<string>  $versionPackages  Which package's version identifies the transport, most
-     *                                         specific first. Injectable for ONE reason, the same one the
+     *                                         specific first. Injectable for one reason, the same one the
      *                                         client factory states: it is how the "nothing to report" path
      *                                         becomes reachable in a test. Nothing shipped passes anything
      *                                         else, and this is not a seam for changing what is reported.

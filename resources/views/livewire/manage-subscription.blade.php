@@ -33,7 +33,7 @@
         {{-- The card a swap/subscription will charge, mirrored from local columns — never a provider call. --}}
         @if ($cardOnFile !== null)
             <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                {{ __('billing::account.manage.card_on_file', ['brand' => ucfirst($cardOnFile['brand']), 'last4' => $cardOnFile['last4']]) }}
+                {{ __('billing::account.manage.card_on_file', ['brand' => \Pushery\Billing\Support\PaymentMethodNames::brand($cardOnFile['brand']), 'last4' => $cardOnFile['last4']]) }}
             </p>
         @endif
     </header>

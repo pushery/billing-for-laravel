@@ -33,6 +33,14 @@ return [
         'cta' => 'Voir l\'offre',
     ],
 
+    'subscription_ending' => [
+        'subject' => 'Ton abonnement se termine bientôt',
+        'intro' => 'Ton abonnement résilié se termine le :date.',
+        'intro_merchant' => 'Ton abonnement résilié auprès de :merchant se termine le :date.',
+        'outro' => 'Réactive-le avant pour garder tout ce qu’il inclut sans interruption.',
+        'cta' => 'Réactiver mon abonnement',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'Ton statut fiscal a changé',
         'intro' => 'Ton statut fiscal est passé de :from à :to. Nous l\'avons établi à partir de nos propres registres — tu ne l\'as pas demandé.',

@@ -144,7 +144,7 @@ final readonly class SyncPlanFromSubscription
 
         $subscription->forceFill($this->attributes($subscription, $event));
 
-        // Asked BEFORE the save, never after. `save()` on a model with nothing dirty returns early without
+        // Asked before the save, never after. `save()` on a model with nothing dirty returns early without
         // resyncing its change set, so `wasChanged()` keeps answering for the previous save — and the second
         // delivery of an identical event would report a change that only the first one made.
         $moved = $appeared || $subscription->isDirty();
@@ -190,7 +190,7 @@ final readonly class SyncPlanFromSubscription
             return $moved || $pulled;
         }
 
-        // Access IS granted. Mirror the row's tier onto the owner column. The row already carries the
+        // Access is granted. Mirror the row's tier onto the owner column. The row already carries the
         // right value: the save above wrote `event tier ?? last known tier`, so an event whose price
         // maps to no tier (a rotated/grandfathered price, a metered-only subscription) keeps the last
         // tier we resolved. Without that fall-back a single past-due blip would pull the owner to the

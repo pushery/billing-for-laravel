@@ -35,8 +35,8 @@ final readonly class ConfigDatevAccountResolver implements DatevAccountResolver
             return $this->singleSeller($transaction);
         }
 
-        if ($transaction === DatevTransaction::OssRevenue) {
-            return $this->ossAccount($chart, $country);
+        if ($transaction->perCountry()) {
+            return $this->countryAccount($chart, $transaction, $country);
         }
 
         $entry = $this->config->get("billing.datev.accounts.{$chart}.{$transaction->value}");
@@ -60,16 +60,17 @@ final readonly class ConfigDatevAccountResolver implements DatevAccountResolver
         return new DatevAccount(is_scalar($revenue) ? (string) $revenue : '', automatic: true);
     }
 
-    private function ossAccount(string $chart, ?string $country): DatevAccount
+    /** The account a per-country transaction keeps for one destination, refused where the chart has none for it. */
+    private function countryAccount(string $chart, DatevTransaction $transaction, ?string $country): DatevAccount
     {
         if ($country === null) {
-            throw DatevTransactionUnresolvable::forTransaction(DatevTransaction::OssRevenue);
+            throw DatevTransactionUnresolvable::forTransaction($transaction);
         }
 
-        $entry = $this->config->get("billing.datev.accounts.{$chart}.oss_revenue.".strtoupper($country));
+        $entry = $this->config->get("billing.datev.accounts.{$chart}.{$transaction->value}.".strtoupper($country));
 
         return $this->account($entry)
-            ?? throw DatevTransactionUnresolvable::forTransaction(DatevTransaction::OssRevenue, $country);
+            ?? throw DatevTransactionUnresolvable::forTransaction($transaction, $country);
     }
 
     private function account(mixed $entry): ?DatevAccount

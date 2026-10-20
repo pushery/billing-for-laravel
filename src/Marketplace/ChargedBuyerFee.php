@@ -60,11 +60,13 @@ final readonly class ChargedBuyerFee
      * @param  Money  $saleGross  the price of the mediated item — never the total the buyer will pay, which
      *                            is this fee ON TOP of that
      * @param  int  $taxBps  the rate for this supply at its place
+     * @param  ?SupplyRegime  $regime  the regime the lane booked this sale under, where it decided one itself; the
+     *                                 configured resolver answers otherwise
      *
      * @throws BuyerFeeNotApplicable when the developer switched fees on for a sale whose regime has none
      * @throws InvalidBillingConfig when fees apply and nothing says where the mediated sale happened
      */
-    public function on(Money $saleGross, int $taxBps, ?TaxArchetype $archetype = null): ?FeeLine
+    public function on(Money $saleGross, int $taxBps, ?TaxArchetype $archetype = null, ?SupplyRegime $regime = null): ?FeeLine
     {
         // The developer's switch is read first, and that ordering matters: an installation that never
         // enabled buyer fees must not have its regime resolved, refused, or even consulted on their
@@ -73,7 +75,7 @@ final readonly class ChargedBuyerFee
             return null;
         }
 
-        $regime = $this->regimes->resolveFor($archetype);
+        $regime ??= $this->regimes->resolveFor($archetype);
 
         if ($regime !== SupplyRegime::Intermediation) {
             throw BuyerFeeNotApplicable::inRegime($regime);

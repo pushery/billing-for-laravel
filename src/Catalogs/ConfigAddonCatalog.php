@@ -9,18 +9,21 @@ use InvalidArgumentException;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\ClassifiesMoneyCredit;
 use Pushery\Billing\Contracts\SuppliesBuyerAudiences;
+use Pushery\Billing\Contracts\SuppliesGoodsConsignments;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Enums\BuyerAudience;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Support\KeyedConfig;
+use Pushery\Billing\ValueObjects\GoodsConsignment;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\UnitGrant;
+use ValueError;
 
 /**
  * The config-driven add-on catalog (config('billing.addons')). One-time purchases resolve their
  * price here from the add-on key — the client never submits a price, mirroring the tier allowlist.
  */
-final readonly class ConfigAddonCatalog implements AddonCatalog, ClassifiesMoneyCredit, SuppliesBuyerAudiences, SuppliesProductArchetypes
+final readonly class ConfigAddonCatalog implements AddonCatalog, ClassifiesMoneyCredit, SuppliesBuyerAudiences, SuppliesGoodsConsignments, SuppliesProductArchetypes
 {
     public function __construct(
         private Repository $config,
@@ -147,5 +150,33 @@ final readonly class ConfigAddonCatalog implements AddonCatalog, ClassifiesMoney
         }
 
         return $resolved;
+    }
+
+    /**
+     * How this add-on ships, from `billing.addons.<key>.consignment`, where it is goods.
+     *
+     * The facts in the shape a sale's row keeps them: `imported` with `intrinsic_value_minor` in euro cents, or
+     * `goods_located_in` for goods already in the Union, beside the three flags and the basis. An unset key answers
+     * null, and the hosted purchase then classifies as it does without a consignment. A value that is not a
+     * consignment is refused rather than read as none: an add-on its operator believed to ship from a warehouse in
+     * the Union would otherwise be sold as if nobody had said where it ships from.
+     */
+    public function consignmentFor(string $addonKey): ?GoodsConsignment
+    {
+        $consignment = KeyedConfig::setting($this->config, 'billing.addons', $addonKey, 'consignment');
+
+        if ($consignment === null) {
+            return null;
+        }
+
+        if (! is_array($consignment)) {
+            throw new InvalidArgumentException("Add-on '{$addonKey}': consignment must be a map of the facts of the consignment.");
+        }
+
+        try {
+            return GoodsConsignment::fromArray($consignment);
+        } catch (InvalidArgumentException|ValueError $invalid) {
+            throw new InvalidArgumentException("Add-on '{$addonKey}': {$invalid->getMessage()}", $invalid->getCode(), previous: $invalid);
+        }
     }
 }

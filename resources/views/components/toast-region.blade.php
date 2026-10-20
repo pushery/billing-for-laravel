@@ -35,7 +35,7 @@
         var STYLES = {
             'info': 'bg-slate-800 text-white',
             'success': 'bg-emerald-700 text-white',
-            'warning': 'bg-amber-600 text-white',
+            'warning': 'bg-amber-700 text-white',
             'danger': 'bg-red-700 text-white',
         };
 

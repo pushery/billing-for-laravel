@@ -17,7 +17,7 @@ namespace Pushery\Billing\Enums;
  * an export invoice without its exemption note is not a zero-rated invoice, it is an invoice that forgot to
  * charge tax — and the two look identical to everyone except an auditor.
  *
- * Deliberately NOT modeled here: a nil rate a country grants for a category of goods. That is a rate of
+ * Deliberately not modeled here: a nil rate a country grants for a category of goods. That is a rate of
  * zero on a taxable supply, not an exemption, and folding the two together would let a supply that must
  * appear in a return quietly adopt the treatment of one that must not.
  */
@@ -73,4 +73,15 @@ enum TaxExemptionReason: string
      * payment. The document states category O, which EN 16931 lets no other category share.
      */
     case NotConsideration = 'not_consideration';
+
+    /**
+     * The seller's supply of goods to the platform that is treated as supplying them itself.
+     *
+     * Where a platform facilitates the sale of goods already in the Union by a seller established outside it to
+     * somebody who is not a business, the sale splits into two supplies with the platform in the middle (Art. 14a(2)
+     * VAT Directive). The seller's supply to the platform is exempt with the right to deduct (Art. 136a, 169(b)), in
+     * Germany under § 4 Nr. 4c UStG. It is a taxable supply relieved by a named provision, so it is category E, and
+     * the document has to name the provision: it is a self-billed invoice the platform raises in the seller's name.
+     */
+    case SupplyToADeemedSupplier = 'supply_to_a_deemed_supplier';
 }

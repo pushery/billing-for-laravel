@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * A provider-driven driver has nothing to put here: Stripe issues the invoice and the package copies it,
  * keyed by `provider_id`. A local engine has no such document — it has an order it just collected money
- * for, and the invoice is raised FROM that. Without this column the two were connected by nothing, so
+ * for, and the invoice is raised from that. Without this column the two were connected by nothing, so
  * nothing could answer "has this order been invoiced" except a guess.
  *
  * **Unique, and that is the idempotency.** A cycle can be processed more than once — a retried queue job,

@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Config;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\ChargeType;
+use Pushery\Billing\Enums\DeemedSupplyOfGoods;
 use Pushery\Billing\Enums\MerchantChargePurpose;
 use Pushery\Billing\Enums\RoundingResidual;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
@@ -18,6 +19,7 @@ use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\FeeLine;
+use Pushery\Billing\ValueObjects\GoodsConsignment;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
 
@@ -36,6 +38,10 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * @property ?MerchantChargePurpose $purpose what was sold, null on rows written before it was recorded
  * @property ?TaxArchetype $tax_archetype what was sold, null on rows written before it was recorded
  * @property ?SellerOfRecordPosture $seller_posture who the tax law treated as the seller, null on rows written before it was recorded
+ * @property ?DeemedSupplyOfGoods $deemed_supply the paragraph that makes the platform the supplier of the goods sold,
+ *                                               decided once before the money moved; null on every other sale
+ * @property ?array<string, mixed> $goods_consignment the consignment the lane passed for a sale of goods
+ * @property ?string $destination_country where the goods were sent or the buyer was, as an ISO 3166 code
  * @property int $gross_minor
  * @property int $fee_minor
  * @property ?int $fee_bps
@@ -76,7 +82,7 @@ class MerchantCharge extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'payment_reference', 'transfer_reference', 'transfer_moved_minor', 'charge_type', 'purpose', 'tax_archetype', 'seller_posture',
+        'merchant_type', 'merchant_id', 'provider', 'charge_reference', 'payment_reference', 'transfer_reference', 'transfer_moved_minor', 'charge_type', 'purpose', 'tax_archetype', 'seller_posture', 'deemed_supply', 'goods_consignment', 'destination_country',
         'gross_minor', 'fee_minor', 'fee_bps', 'fee_flat_minor', 'fee_residual', 'commission_tax_bps', 'net_minor', 'currency', 'settlement_state', 'settled_at',
         'settlement_invoice_id',
         'refunded_minor', 'transfer_reversed_minor', 'fee_refunded_minor', 'merchant_erased_at',
@@ -106,7 +112,7 @@ class MerchantCharge extends Model
         // unequal to every RoundingResidual case and quietly fall through to the configured fallback.
         'fee_residual' => RoundingResidual::class,
         'net_minor' => 'integer',
-        // Deliberately NOT defaulted. Null means no provider figure was reported — a destination charge
+        // Deliberately not defaulted. Null means no provider figure was reported — a destination charge
         // never makes a transfer call — and that is a different claim from "zero moved".
         'transfer_moved_minor' => 'integer',
         'transfer_requested_at' => UtcDateTime::class,
@@ -126,6 +132,8 @@ class MerchantCharge extends Model
         'purpose' => MerchantChargePurpose::class,
         'tax_archetype' => TaxArchetype::class,
         'seller_posture' => SellerOfRecordPosture::class,
+        'deemed_supply' => DeemedSupplyOfGoods::class,
+        'goods_consignment' => 'array',
         'settled_at' => UtcDateTime::class,
         'merchant_erased_at' => UtcDateTime::class,
         'term_canceled_at' => UtcDateTime::class,
@@ -334,6 +342,18 @@ class MerchantCharge extends Model
     public function postureOr(SellerOfRecordPosture $unrecorded): SellerOfRecordPosture
     {
         return $this->seller_posture ?? $unrecorded;
+    }
+
+    /**
+     * The consignment this sale was classified from, as the lane passed it, or null where the row keeps none.
+     *
+     * Kept for every sale of goods that names one: a document written after the provider reports the payment decides
+     * the tax from the facts the classification was made from, not from a catalog that may have changed since, and the
+     * platform's records describe the goods of a sale it only arranged from here.
+     */
+    public function goodsConsignment(): ?GoodsConsignment
+    {
+        return is_array($this->goods_consignment) ? GoodsConsignment::fromArray($this->goods_consignment) : null;
     }
 
     /**

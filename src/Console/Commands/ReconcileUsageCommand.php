@@ -21,7 +21,7 @@ use Pushery\Billing\Support\UsageReconciler;
  *  - A STALLED BACKLOG: usage the flusher has been holding, unreported, for longer than the provider's
  *    acceptance window allows — an outage that stopped being temporary and became lost revenue.
  *  - FAILED rollups: usage the flusher gave up on after exhausting its retries. `--redrive` resets them to
- *    pending so the next flush retries them — run it AFTER fixing the cause (a missing meter that
+ *    pending so the next flush retries them — run it after fixing the cause (a missing meter that
  *    `billing:meters:check` found, a restored provider).
  *
  * Drift and stall also dispatch domain events, so monitoring escalates in real time; the exit code is the

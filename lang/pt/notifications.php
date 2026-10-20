@@ -33,6 +33,14 @@ return [
         'cta' => 'Ver o plano',
     ],
 
+    'subscription_ending' => [
+        'subject' => 'A tua subscrição termina em breve',
+        'intro' => 'A tua subscrição cancelada termina a :date.',
+        'intro_merchant' => 'A tua subscrição cancelada com :merchant termina a :date.',
+        'outro' => 'Retoma-a antes disso para manteres tudo o que inclui sem interrupção.',
+        'cta' => 'Retomar a subscrição',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'A tua situação fiscal mudou',
         'intro' => 'A tua situação fiscal passou de :from para :to. Determinámos isto a partir dos nossos próprios registos — não foi pedido por ti.',

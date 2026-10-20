@@ -5,21 +5,31 @@ declare(strict_types=1);
 namespace Pushery\Billing\Webhooks\Effects;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Contracts\ReadsProviderComputedTax;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
+use Pushery\Billing\Enums\DeemedSupplyOfGoods;
 use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxRateCategory;
 use Pushery\Billing\Events\AddonPurchased;
+use Pushery\Billing\Events\DeemedSupplyReceiptWithheld;
+use Pushery\Billing\Exceptions\DeemedSupplyOfGoodsRefused;
+use Pushery\Billing\Exceptions\RegimeNotPermitted;
+use Pushery\Billing\Exceptions\UnknownTaxCountry;
 use Pushery\Billing\Marketplace\FanReceiptIssuer;
 use Pushery\Billing\Marketplace\FanReceiptTierResolver;
 use Pushery\Billing\Marketplace\ProductClassifier;
 use Pushery\Billing\Models\MerchantCharge;
+use Pushery\Billing\Tax\DeemedSupplyOfGoodsTaxDecision;
+use Pushery\Billing\Tax\OneStopShopDeclaration;
+use Pushery\Billing\ValueObjects\GoodsConsignment;
 use Pushery\Billing\ValueObjects\ProviderComputedTax;
 use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 use Pushery\Billing\Webhooks\RepeatableEffect;
@@ -66,6 +76,15 @@ use Pushery\Billing\Webhooks\RepeatableEffect;
  *   not one unknown but five guesses. A document about a supply whose treatment nobody established would
  *   be the same defect as one stating a rate nobody supplied.
  *
+ * ## A supply of goods the platform is treated as making itself
+ *
+ * Its row names the paragraph and keeps the consignment the sale was classified from, and its document is the one
+ * `FanReceiptIssuer::issueDeemedSupplyOfGoods()` writes, with the tax decided now that the provider has reported
+ * where the buyer is. Decided from the row rather than the catalog, because the classification was made before the
+ * money moved and is never made again. The document is withheld, and {@see DeemedSupplyReceiptWithheld} says why,
+ * where the payment contradicts that classification: a tax ID the buyer entered on the page, a destination the
+ * supply cannot be taxed in, or a tax the provider computed at another rate.
+ *
  * ## Once, however often the provider redelivers
  *
  * Through `issue()`, which goes to the repeat guard keyed on the charge reference. A second delivery finds
@@ -105,6 +124,12 @@ final readonly class IssueDocumentForRoutedHostedPurchase implements RepeatableE
         // Read off the row, which froze it when the session opened — not from today's configuration, which
         // on a bank debit can be days younger than the sale.
         if ($charge->postureOr(SellerOfRecordPosture::PlatformDeemedSupplier) !== SellerOfRecordPosture::PlatformDeemedSupplier) {
+            return;
+        }
+
+        if ($charge->deemed_supply instanceof DeemedSupplyOfGoods) {
+            $this->documentDeemedSupply($event, $charge, $charge->deemed_supply);
+
             return;
         }
 
@@ -149,6 +174,13 @@ final readonly class IssueDocumentForRoutedHostedPurchase implements RepeatableE
         // side of a second boundary, and the document would then state a sale date and a delivery date that
         // disagree about when the same instant was.
         $soldOn = CarbonImmutable::now();
+        // Where the document places the sale and whether the cross-border consumer return declares it, as on the direct
+        // lane: from the product's placement, the buyer's country, a tax id a register confirmed for the buyer and the
+        // installation's distance-sale threshold, counted with this sale's net.
+        [$place, $oneStopShop] = Container::getInstance()->make(OneStopShopDeclaration::class)->placed(
+            $classification->placeOfSupply->fixedAnswerOf(PlaceOfSupplyRule::class),
+            $event->buyerCountry, $owner, $providerTax->net ?? $event->amount, $soldOn,
+        );
 
         $this->receipts->issue(
             buyerOwner: $owner,
@@ -166,15 +198,80 @@ final readonly class IssueDocumentForRoutedHostedPurchase implements RepeatableE
             chargeReference: $event->paymentReference,
             characteristics: new SupplyTaxCharacteristics(
                 archetype: $archetype,
-                placeOfSupply: $classification->placeOfSupply->fixedAnswerOf(PlaceOfSupplyRule::class),
+                placeOfSupply: $place,
                 rateCategory: $classification->rateCategory->fixedAnswerOf(TaxRateCategory::class),
                 // BT-72, and absent where the treatment defers the supply: a multi-purpose voucher has been
                 // paid for and nothing has been supplied, so dating a delivery would date something that has
                 // not happened.
                 deliveredOn: $classification->placeOfSupply->isDeferred() ? null : $soldOn,
                 destinationCountry: $event->buyerCountry,
+                oneStopShop: $oneStopShop,
             ),
             provider: $event->provider,
+        );
+    }
+
+    /**
+     * The buyer's document of a supply of goods the platform is treated as making itself, or the reason it has none.
+     *
+     * The tax is decided now, from the consignment the row kept and the destination the buyer entered, at the rate
+     * band the classification settles for the archetype the row recorded. A tax the provider computed has to be at the
+     * decided rate and add up to the payment, or the document would state figures the buyer was not charged.
+     */
+    private function documentDeemedSupply(AddonPurchased $event, MerchantCharge $charge, DeemedSupplyOfGoods $supply): void
+    {
+        $owner = $this->directory->ownerForReference($event->customerReference);
+        $consignment = $charge->goodsConsignment();
+
+        if (! $owner instanceof Model || ! $consignment instanceof GoodsConsignment) {
+            return;
+        }
+
+        if ($event->buyerTaxId !== null) {
+            $this->withhold($owner, $charge, $supply, $event->buyerTaxId, 'The buyer entered a tax ID on the provider\'s page, so the sale may have been to a business, which no deemed supply is. The sale was classified as one to somebody who is not a business before the page asked.');
+
+            return;
+        }
+
+        $category = $this->classifier->classify($charge->tax_archetype ?? TaxArchetype::ConsumerGoods)
+            ->rateCategory->fixedAnswerOf(TaxRateCategory::class) ?? TaxRateCategory::Standard;
+
+        try {
+            $tax = Container::getInstance()->make(DeemedSupplyOfGoodsTaxDecision::class)->decide(
+                $supply, $consignment, $consignment->goodsLocatedIn, $event->buyerCountry, $event->amount, CarbonImmutable::now(), $category,
+            );
+        } catch (DeemedSupplyOfGoodsRefused|RegimeNotPermitted|UnknownTaxCountry $refused) {
+            $this->withhold($owner, $charge, $supply, null, $refused->getMessage());
+
+            return;
+        }
+
+        if (($event->taxMinor ?? 0) !== 0) {
+            $providerTax = $this->taxes->forSale($event->reference);
+
+            if (! $providerTax instanceof ProviderComputedTax || ! $providerTax->accountsFor($event->amount) || $providerTax->rateBps !== $tax->rateBps) {
+                $this->withhold($owner, $charge, $supply, null, "The provider computed a tax this sale cannot state: the platform's supply is taxed in [{$tax->taxedIn}] at {$tax->rateBps} basis points.");
+
+                return;
+            }
+        }
+
+        $this->receipts->issueDeemedSupplyOfGoods(
+            buyerOwner: $owner,
+            tier: $this->tiers->tierFor($event->amount, ! $tax->distanceSale(), false),
+            tax: $tax,
+            // The anchor the settlement side already uses, as on every other routed sale's document.
+            chargeReference: $event->paymentReference,
+            provider: $event->provider,
+            goods: $consignment->description,
+        );
+    }
+
+    /** Say why a deemed supply paid on the provider's page has no document. */
+    private function withhold(Model $owner, MerchantCharge $charge, DeemedSupplyOfGoods $supply, ?string $buyerTaxId, string $reason): void
+    {
+        Container::getInstance()->make(Dispatcher::class)->dispatch(
+            new DeemedSupplyReceiptWithheld($owner, $charge->provider, $charge->charge_reference, $supply, $buyerTaxId, $reason),
         );
     }
 

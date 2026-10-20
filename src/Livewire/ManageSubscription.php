@@ -65,7 +65,7 @@ final class ManageSubscription extends AccountScreen
     public ?string $previewAmount = null;
 
     /**
-     * A coupon code the visitor types to apply at checkout. Deliberately NOT locked — it is client input,
+     * A coupon code the visitor types to apply at checkout. Deliberately not locked — it is client input,
      * carried as a code (never trusted as an amount) and honored only by the driver that was configured.
      */
     public string $couponCode = '';

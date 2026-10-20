@@ -71,6 +71,23 @@ final readonly class RoutedInvoiceCommission
          * found from the other without asking the provider again. Null where the reader could not name it.
          */
         public ?string $paymentReference = null,
+        /**
+         * The buyer's tax rate on this invoice, in basis points, where the fee was taken on the net it separates.
+         *
+         * Zero where the fee was taken on the payment as a whole: a destination cycle whose fee is the percentage
+         * the provider applied to the invoice total, because its draft was not set on the net in time, and a cycle
+         * whose invoice charged no tax or named no single rate. Frozen onto the row, because a partial clawback and
+         * the small-business turnover both read the commission's base back through it.
+         */
+        public int $commissionTaxBps = 0,
+        /**
+         * The one whole tax rate the invoice charged, in basis points, where the fee was taken on the total and can
+         * still be brought down to the net after the payment.
+         *
+         * Null where nothing is left to correct, because the fee was already taken on the net or the lane takes it
+         * there itself, and where the invoice names no single whole rate or it could not be read.
+         */
+        public ?int $invoiceTaxBps = null,
     ) {}
 
     /** What is left for the merchant. Derived, because net is what remains by definition. */

@@ -7,7 +7,7 @@ namespace Pushery\Billing\ValueObjects;
 /**
  * The start of a mandate that only the customer can finish.
  *
- * Deliberately NOT a MandateReference. There is no mandate yet — there is a payment in progress and a
+ * Deliberately not a MandateReference. There is no mandate yet — there is a payment in progress and a
  * place to send somebody, and calling it a reference would let a caller store it as one. What arrives
  * later, over the webhook, is the mandate; this is the receipt for having asked.
  *

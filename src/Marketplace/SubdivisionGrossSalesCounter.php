@@ -58,7 +58,7 @@ final readonly class SubdivisionGrossSalesCounter
      *
      * @return array<string, Money> subdivision code => gross, with {@see self::UNKNOWN} for the unsettled
      *                              ones. Sorted by code so two runs produce the same report; `unknown` is
-     *                              LAST because it is not a place and sorting it among the codes would put
+     *                              last because it is not a place and sorting it among the codes would put
      *                              it in the middle of a list a reader scans
      *
      * @throws ReportingCounterDisabled when the installation is not counting this at all

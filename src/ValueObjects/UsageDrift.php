@@ -19,7 +19,7 @@ final readonly class UsageDrift
         public Model $owner,
         public string $meterKey,
         public string $period,
-        /** What WE believe we successfully reported. */
+        /** What we believe we successfully reported. */
         public int $reported,
         /** What the provider says it actually recorded. */
         public int $recorded,

@@ -86,12 +86,18 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
                 return null;
             }
 
+            // The rate the draft's fee was set on the net with, where the fee withheld is that fee. Anything else is
+            // the provider's percentage of the total, and its zero says the payment was the base.
+            $setOn = StripeCycleCommissionOnNet::taxBpsSetOn($invoice->toArray(), $fee);
+
             return new RoutedInvoiceCommission(
                 merchantAccountReference: $account,
                 gross: StripeAmount::toMoney($gross, strtoupper($currency)),
                 fee: StripeAmount::toMoney($fee, strtoupper($currency)),
                 feeBps: $this->feeBpsOf($invoice->toArray()),
                 paymentReference: $intentId,
+                commissionTaxBps: $setOn,
+                invoiceTaxBps: $setOn === 0 ? $this->invoiceTaxBpsOf($invoice->toArray()) : null,
             );
         } catch (RateLimitException $exception) {
             // A 429 is "ask again", never "not routed".
@@ -111,6 +117,10 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
      * is withheld by the provider, so there is no figure to read back. The platform takes the invoice's whole
      * payment and moves the merchant's share afterwards. The split is taken on what the buyer actually paid,
      * `amount_paid`, so a discounted cycle moves the share of the discounted amount rather than of the list price.
+     *
+     * The commission is taken on the net of that payment, as on every other lane that can: the configured rate is
+     * a net rate, and on 119.00 at 19% with a 10% rate the platform keeps 10.00, not 11.90. The tax is separated
+     * by the invoice's own rate, read by StripeInvoiceTaxRate, and that rate is frozen onto the row with the fee.
      *
      * Null for an invoice whose subscription is not on this lane, or whose terms cannot be read: a subscription
      * that names a merchant and no readable terms cannot be priced, and a guessed rate would be a plausible wrong
@@ -137,17 +147,40 @@ final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoice
         }
 
         $gross = StripeAmount::toMoney($paid, strtoupper($currency));
-        [$fee] = $terms->splitOf($gross);
+        $taxBps = StripeInvoiceTaxRate::pointsOf($this->stripe, $invoice);
 
         return new RoutedInvoiceCommission(
             merchantAccountReference: $account,
             gross: $gross,
-            fee: $fee,
+            fee: $terms->of($gross->baseFromMarkup($taxBps)[0]),
             feeBps: $terms->bps,
             chargeType: ChargeType::SeparateTransfer,
             terms: $terms,
             paymentReference: $intentId,
+            commissionTaxBps: $taxBps,
         );
+    }
+
+    /**
+     * The invoice's one whole tax rate, for a cycle whose fee was taken on the total and is brought to the net afterwards.
+     *
+     * Its own failure, apart from the reading of the money: the row is written either way, with the fee that was
+     * withheld, and a rate that cannot be read leaves that row as it is rather than the cycle unreadable. A rate limit
+     * is rethrown, as everywhere here.
+     *
+     * @param  array<array-key, mixed>  $invoice
+     */
+    private function invoiceTaxBpsOf(array $invoice): ?int
+    {
+        try {
+            $bps = StripeInvoiceTaxRate::pointsOf($this->stripe, $invoice);
+        } catch (RateLimitException $exception) {
+            throw $exception;
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $bps > 0 ? $bps : null;
     }
 
     /**

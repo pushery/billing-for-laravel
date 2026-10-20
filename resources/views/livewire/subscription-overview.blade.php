@@ -28,6 +28,17 @@
             </span>
         </div>
 
+        {{-- The plan the subscription is on, with its price where the catalog declares one. --}}
+        @if ($plan !== null)
+            <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                @if ($plan['price'] !== null)
+                    {{ __('billing::account.subscription.plan_priced', ['plan' => $plan['label'], 'price' => $plan['price'], 'interval' => __('billing::account.interval.'.$plan['interval'])]) }}
+                @else
+                    {{ __('billing::account.subscription.plan', ['plan' => $plan['label']]) }}
+                @endif
+            </p>
+        @endif
+
         {{-- When access ends (grace) or has ended, show the date — read from the local column, never a call. --}}
         @if ($endsAt !== null && $state->value === 'grace')
             <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
@@ -128,7 +139,7 @@
                 </div>
             @elseif ($state === \Pushery\Billing\Enums\SubscriptionState::Grace && $resumable)
                 <button type="button" wire:click="resume" wire:loading.attr="disabled"
-                    class="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50">
+                    class="rounded-lg bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 disabled:opacity-50">
                     {{ __('billing::account.subscription.resume') }}
                 </button>
             @elseif (in_array($state, [

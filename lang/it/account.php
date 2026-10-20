@@ -94,6 +94,8 @@ return [
     'subscription' => [
         'heading' => 'Abbonamento',
         'status' => 'Stato',
+        'plan' => 'Piano: :plan.',
+        'plan_priced' => 'Piano: :plan, :price / :interval.',
         'next_invoice' => 'Prossima fattura: :amount il :date.',
         'access_ends' => 'Il tuo accesso termina il :date.',
         'access_ended' => 'Il tuo accesso è terminato il :date.',
@@ -157,6 +159,7 @@ return [
         'unavailable' => 'La cronologia dell’utilizzo non è disponibile al momento. Riprova tra un istante.',
         'empty' => 'Nessun utilizzo registrato finora.',
         'periods_heading' => 'Periodi precedenti',
+        'period_from' => 'Periodo dal :date',
         'used' => ':used utilizzati',
         'not_metered' => 'Non misurato',
         'prepaid_used' => ':units prepagati',
@@ -236,6 +239,8 @@ return [
     'toast' => [
         'payment_failed' => 'Non è stato possibile elaborare il tuo pagamento. Aggiorna i tuoi dati di pagamento.',
         'subscription_activated' => 'Il tuo abbonamento è attivo: tutto ciò che include è sbloccato.',
+        'addon_credited' => 'Il tuo acquisto è completato. Aggiunto al credito del tuo account: :amount.',
+        'addon_units_granted' => 'Il tuo acquisto è completato. Aggiunto al tuo saldo prepagato: :units.',
         'dismiss' => 'Chiudi',
     ],
 

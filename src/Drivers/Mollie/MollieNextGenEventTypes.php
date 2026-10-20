@@ -64,10 +64,11 @@ final class MollieNextGenEventTypes
         // afternoon's guessing.
         'dispute' => 'no dispute resource or endpoint exists in the SDK; adoption needs a captured payload',
 
-        // Also not permanent, and blocked on something concrete: a payout event names a merchant, and this
-        // driver registers no marketplace surface at all — no rails, no marketplace webhook mapper. The
-        // event would describe a payout to a merchant Mollie was never asked to pay.
-        'payout' => 'the Mollie driver has no marketplace surface yet, so a payout has nowhere to land',
+        // Unlike the dispute above, no payload reopens this one. A payout event names a merchant, and the
+        // marketplace runs on the Stripe driver only, so this driver registers no marketplace surface at
+        // all: no rails, no marketplace webhook mapper. The event would describe a payout to a merchant
+        // Mollie was never asked to pay.
+        'payout' => 'the marketplace runs on the Stripe driver only, so a Mollie payout has nowhere to land',
 
         // Each of these names a part of a payment, and the payment carries the change already: the classic ping
         // of its webhookUrl arrives for it, and the mapper reads refunds, chargebacks and what was captured off

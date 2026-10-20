@@ -80,5 +80,11 @@ final readonly class AddonPurchased implements BillingDomainEvent, IdentifiesCus
          * Null on every purchase that named none, which is every existing one.
          */
         public ?string $callerReference = null,
+        /**
+         * A tax ID the buyer entered on the provider's page, or null where they entered none or the provider does not
+         * report one. Asked of nobody before the session opened, so a sale classified as one to somebody who is not a
+         * business learns here that the buyer said otherwise.
+         */
+        public ?string $buyerTaxId = null,
     ) {}
 }

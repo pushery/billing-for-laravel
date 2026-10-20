@@ -75,7 +75,7 @@ final class ReleaseAbandonedClaimCommand extends Command
         // Money moves, so production asks first. --force is for an operator who has already inspected the
         // provider and is scripting the cleanup of several.
         //
-        // Asked BEFORE eligibility, which costs one prompt on an order that then turns out not to be a
+        // Asked before eligibility, which costs one prompt on an order that then turns out not to be a
         // claim — and buys the thing that matters more: exactly one place decides, and it decides from the
         // row as it stands after the operator has answered. A version that checked here as well read the
         // caller's copy of the row, so its second look could never disagree with its first: a branch that

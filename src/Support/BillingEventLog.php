@@ -26,7 +26,7 @@ final readonly class BillingEventLog
 {
     /**
      * Event types that write only at `all` level — navigation, credential and high-volume read-side
-     * events. Everything NOT listed here is a money/entitlement/state change and always writes.
+     * events. Everything not listed here is a money/entitlement/state change and always writes.
      *
      * @var list<string>
      */

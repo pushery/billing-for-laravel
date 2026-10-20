@@ -23,8 +23,8 @@ use Pushery\Billing\ValueObjects\DriverCapabilities;
  * to say so. It is the reason the engine and the rails are injected rather than constructed here — both
  * are exercised on their own long before anything resolves this class.
  *
- * It deliberately does not implement {@see RoutesMoney}. Mollie Connect exists,
- * but this package has not built its rails, and claiming the interface would turn "this driver cannot
+ * It deliberately does not implement {@see RoutesMoney}. The marketplace runs on the Stripe driver only,
+ * so no rails are built onto Mollie Connect, and claiming the interface would turn "this driver cannot
  * route" — a clear refusal at the seam — into a fatal somewhere further in.
  */
 final readonly class MollieDriver implements BillingDriver

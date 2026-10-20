@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Pushery\Billing\ValueObjects\MerchantScope;
+use Pushery\Billing\Webhooks\WebhookPayloadSecrets;
 
 /**
  * Everything the package holds about one person, as plain data — the answer to a subject-access or
@@ -46,7 +47,7 @@ final readonly class BillingDataExport
         // Payments-only mode keeps the webhook deliveries and nothing else (PaymentsModeSchema), so what it holds
         // about a person is the deliveries recorded for them, payloads included.
         if (($this->manager ?? Container::getInstance()->make(BillingManager::class))->paymentsOnly()) {
-            return $this->records->export(PaymentsModeSchema::ownerAxis(), $owner);
+            return $this->withoutDeliverySecrets($this->records->export(PaymentsModeSchema::ownerAxis(), $owner));
         }
 
         // The same axis, the same table work the eraser does — read out instead of deleted. Child tables
@@ -82,7 +83,41 @@ final readonly class BillingDataExport
             ->map(fn (object $row): array => $this->isAbout($row, $owner) ? (array) $row : $this->withoutTheOtherParty((array) $row))
             ->all());
 
+        return $this->withoutDeliverySecrets($export);
+    }
+
+    /**
+     * The export with the fields a provider asks not to be kept removed from every delivery payload in it.
+     *
+     * The ledger strips them before it stores a delivery. A payload stored before it did keeps them until the retention
+     * clock prunes it, and the person asking for their data is handed the payload as it stands, so the export strips
+     * them as well: the payment details stay in the copy, and the secret that could confirm a payment does not.
+     *
+     * @param  array<string, list<array<array-key, mixed>>>  $export
+     * @return array<string, list<array<array-key, mixed>>>
+     */
+    private function withoutDeliverySecrets(array $export): array
+    {
+        if (isset($export['billing_webhook_events'])) {
+            $export['billing_webhook_events'] = array_map($this->withoutPayloadSecrets(...), $export['billing_webhook_events']);
+        }
+
         return $export;
+    }
+
+    /**
+     * One delivery row with its payload stripped.
+     *
+     * @param  array<array-key, mixed>  $row
+     * @return array<array-key, mixed>
+     */
+    private function withoutPayloadSecrets(array $row): array
+    {
+        if (array_key_exists('payload', $row)) {
+            $row['payload'] = WebhookPayloadSecrets::stripJson($row['payload']);
+        }
+
+        return $row;
     }
 
     /** Whether an audit row is about the person, rather than one in which they only acted. */

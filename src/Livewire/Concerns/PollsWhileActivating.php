@@ -9,7 +9,7 @@ namespace Pushery\Billing\Livewire\Concerns;
  * post-checkout "activating" wait, a past-due recovery — needs the screen to refresh itself until the state
  * settles. This concern makes that a short, self-limiting poll rather than a permanent one:
  *
- *  - it polls only WHILE the transition is active,
+ *  - it polls only while the transition is active,
  *  - only up to a hard cap of ticks (~30s at 5s), then stops so a stuck state never polls forever.
  *
  * The poll is the reliable refresh mechanism and runs whether or not realtime is enabled: realtime broadcasts

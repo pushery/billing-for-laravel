@@ -87,7 +87,7 @@ final readonly class EnInvoiceTaxCategory
      * Decide the category for one supply.
      *
      * @param  bool  $exempt  the supply is exempt for a reason the reason enum does not model — a
-     *                        small-business relief, for instance, which is exempt (E) and NOT zero-rated (Z)
+     *                        small-business relief, for instance, which is exempt (E) and not zero-rated (Z)
      * @param  ?float  $rate  the rate actually charged, which decides only between S and Z once nothing above applies;
      *                        null for an amount collected in the name and on behalf of another party
      * @param  ?TaxationBasis  $basis  the basis the document froze; a margin-taxed one decides the category on its own
@@ -204,6 +204,14 @@ final readonly class EnInvoiceTaxCategory
         // BR-E-10 accepts the reason text alone, and the text is where the ground actually gets named —
         // a code guessed from the published list would be a claim about which article relieves this
         // supplier, which is precisely the fact the platform is not in a position to assert for them.
+        if ($exemption === TaxExemptionReason::SupplyToADeemedSupplier) {
+            if ($rate > 0) {
+                throw ContradictoryExemption::taxedSupplyToADeemedSupplier($rate);
+            }
+
+            return new self('E', null, 'Exempt supply of goods to the electronic interface that facilitates it');
+        }
+
         if ($exemption === TaxExemptionReason::DomesticSmallBusiness) {
             return new self('E', null, 'Exempt under the domestic small-business scheme');
         }
@@ -212,7 +220,7 @@ final readonly class EnInvoiceTaxCategory
             return new self('E', null, 'Exempt under the small-business scheme of another member state');
         }
 
-        // An exempt supply is E, and E is NOT Z: a relief from VAT is not a rate of zero, and EN 16931's
+        // An exempt supply is E, and E is not Z: a relief from VAT is not a rate of zero, and EN 16931's
         // BR-E-* rules differ from BR-Z-*. BR-E-10 accepts the reason text alone, without a VATEX code.
         if ($exempt) {
             return new self('E', null, 'Tax exempt');

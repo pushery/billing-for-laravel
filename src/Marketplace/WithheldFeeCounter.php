@@ -23,7 +23,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * ## A withheld fee is not an event of its own
  *
- * It is a deduction FROM a particular consideration, and the reporting field says so: fees withheld or
+ * It is a deduction from a particular consideration, and the reporting field says so: fees withheld or
  * charged, out of what is paid or credited to the seller. Its quarter is therefore the quarter of the
  * consideration it reduces, and the consideration is dated by the settlement document.
  *

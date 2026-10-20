@@ -16,8 +16,8 @@ namespace Pushery\Billing\Enums;
  */
 enum SubscriptionState: string
 {
-    case None = 'none';                            // never subscribed, no customer record
-    case Churned = 'churned';                      // had a customer, no live subscription row
+    case None = 'none';                            // never subscribed, whether or not the provider knows a customer
+    case Churned = 'churned';                      // left, in a provider status no other case describes
     case Activating = 'activating';                // post-checkout/mutation, webhook not yet applied
     case GenericTrial = 'generic_trial';           // trial without a subscription
     case Trialing = 'trialing';                    // subscription in trial

@@ -16,7 +16,7 @@ use Pushery\Billing\Support\BillingSchema;
  * So the balance is signed and allowed to go negative, and the next settlement is applied against it before
  * anything is paid out.
  *
- * Deliberately NOT the buyer credit balance. That one is a claim on future invoices for somebody buying from
+ * Deliberately not the buyer credit balance. That one is a claim on future invoices for somebody buying from
  * the platform; this is a debt owed by somebody selling through it. Sharing a table would put a payable and
  * a receivable in the same column and make one person's prepayment offsettable against another's clawback.
  *

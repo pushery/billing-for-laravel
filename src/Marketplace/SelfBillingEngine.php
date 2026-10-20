@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use LogicException;
 use Pushery\Billing\Contracts\CreatorTaxStatusResolver;
 use Pushery\Billing\Contracts\MerchantPartyResolver;
 use Pushery\Billing\Contracts\SuppliesExchangeRateBasis;
+use Pushery\Billing\Contracts\SuppliesSellerVatRegistrations;
+use Pushery\Billing\Enums\DeemedSupplyOfGoods;
 use Pushery\Billing\Enums\DocumentSeries;
 use Pushery\Billing\Enums\ExchangeRateBasis;
 use Pushery\Billing\Enums\ExchangeRateLayer;
@@ -18,6 +21,7 @@ use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Enums\SettlementDocumentType;
 use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\TaxArchetype;
+use Pushery\Billing\Exceptions\DeemedSupplyRegistrationMissing;
 use Pushery\Billing\Exceptions\ProductNotClassified;
 use Pushery\Billing\Exceptions\SelfBillingDisabled;
 use Pushery\Billing\Invoicing\Party;
@@ -25,6 +29,7 @@ use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Tax\FreezeExchangeRateOnDocument;
+use Pushery\Billing\Tax\UnionMembership;
 use Pushery\Billing\ValueObjects\InboundTaxTreatment;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
@@ -174,8 +179,9 @@ final readonly class SelfBillingEngine
         int $supplyRateBps,
         CarbonImmutable $supplyDate,
         ?TaxArchetype $archetype = null,
+        ?DeemedSupplyOfGoods $deemedSupply = null,
     ): SettlementOutcome {
-        $plan = $this->plan($creator, $regime, $transactionNet, $commission, $supplyRateBps, $supplyDate);
+        $plan = $this->plan($creator, $regime, $transactionNet, $commission, $supplyRateBps, $supplyDate, $deemedSupply);
 
         if ($plan->isHold || ! $plan->series instanceof DocumentSeries) {
             return $plan;
@@ -227,6 +233,7 @@ final readonly class SelfBillingEngine
         PlatformFee $commission,
         int $supplyRateBps,
         CarbonImmutable $supplyDate,
+        ?DeemedSupplyOfGoods $deemedSupply = null,
     ): SettlementOutcome {
         // Backstop, not the routing decision: a platform that does not self-bill checks the switch and stays
         // in the fallback lane before reaching here. Reaching here with it off is a caller mistake.
@@ -235,7 +242,7 @@ final readonly class SelfBillingEngine
         }
 
         $status = $this->status->statusAt($creator, $supplyDate);
-        $treatment = $this->matrix->resolve($regime, $status, $transactionNet, $commission, $supplyRateBps);
+        $treatment = $this->matrix->resolve($regime, $status, $transactionNet, $commission, $supplyRateBps, $deemedSupply);
 
         if ($treatment->isHold()) {
             return SettlementOutcome::hold();
@@ -291,7 +298,14 @@ final readonly class SelfBillingEngine
     ): ?InvoiceRecord {
         $characteristics ??= SupplyTaxCharacteristics::unknown();
 
-        $outcome = $this->settle($creator, $regime, $transactionNet, $commission, $supplyRateBps, $supplyDate, $characteristics->archetype);
+        // The seller's supply of goods already in the Union to the platform that is treated as supplying them is
+        // documented under the registration where the goods are. Read before the number is drawn, so a seller
+        // without one burns no number in a series that has to be gapless.
+        $registration = $characteristics->deemedSupply === DeemedSupplyOfGoods::WithinTheUnion
+            ? $this->registrationWhereTheGoodsAre($creator, $characteristics->goodsLocatedIn)
+            : null;
+
+        $outcome = $this->settle($creator, $regime, $transactionNet, $commission, $supplyRateBps, $supplyDate, $characteristics->archetype, $characteristics->deemedSupply);
         $treatment = $outcome->treatment;
 
         if (! $treatment instanceof InboundTaxTreatment) {
@@ -337,6 +351,13 @@ final readonly class SelfBillingEngine
             'sold_alongside_archetype' => $characteristics->soldAlongside,
             'place_of_supply_rule' => $characteristics->placeOfSupply,
             'tax_rate_category' => $characteristics->rateCategory,
+            // Which supply of goods the platform is treated as making, and where the goods were when the transport
+            // began, the place of the seller's supply. The buyer's document of the same sale writes both from the same
+            // classification, so a correction of either finds the supply it corrects stated the same way on both. Only
+            // goods already in the Union have such a place: the registration above was looked up there, and an imported
+            // consignment's transport begins outside the Union, where the buyer's document states none either.
+            'deemed_supply' => $characteristics->deemedSupply,
+            'goods_located_in' => $registration === null ? null : strtoupper(trim((string) $characteristics->goodsLocatedIn)),
             // The rate the document states, and only where it states one. Readers take the rate from this
             // column: the DATEV export tells a 7% input from a 19% one by it, and a correction copies it
             // onto its own line. Left empty on a document that states tax, a reduced-rate settlement booked
@@ -379,7 +400,7 @@ final readonly class SelfBillingEngine
             // direction, and on an installation that hands the cent the other way it comes back one cent off
             // the sale it corrects — on every uneven split, silently.
             'commission_residual' => $commission->residual,
-            'seller' => $this->merchantParty->partyFor($creator)->toArray(),
+            'seller' => $this->sellerParty($creator, $registration),
             'buyer' => $this->platformParty(),
             'lines' => [[
                 'description' => 'Platform settlement',
@@ -539,6 +560,41 @@ final readonly class SelfBillingEngine
         if ($treatment->reverseChargeToRecipient && ! $original->tax_archetype instanceof TaxArchetype) {
             throw ProductNotClassified::beforeReverseChargedDocument('a restated settlement');
         }
+    }
+
+    /**
+     * The seller's registration in the member state the goods were in, which the document of its supply names.
+     *
+     * @throws DeemedSupplyRegistrationMissing where the member state is not one, or the seller has none there
+     */
+    private function registrationWhereTheGoodsAre(Model $creator, ?string $country): string
+    {
+        $country = $country === null ? null : strtoupper(trim($country));
+
+        if ($country === null || ! UnionMembership::isMember($country)) {
+            throw DeemedSupplyRegistrationMissing::goodsLocationUnknown($country);
+        }
+
+        return $this->registrations()->registrationIn($creator, $country)
+            ?? throw DeemedSupplyRegistrationMissing::inMemberState($country);
+    }
+
+    /**
+     * The seller as the document names it: the merchant's invoice party, under the registration the supply was made
+     * under where that is another number than the party's own.
+     *
+     * @return array<string, mixed>
+     */
+    private function sellerParty(Model $creator, ?string $registration): array
+    {
+        $party = $this->merchantParty->partyFor($creator)->toArray();
+
+        return $registration === null ? $party : ['vat_id' => $registration] + $party;
+    }
+
+    private function registrations(): SuppliesSellerVatRegistrations
+    {
+        return Container::getInstance()->make(SuppliesSellerVatRegistrations::class);
     }
 
     /** @return array<string, ?string> */

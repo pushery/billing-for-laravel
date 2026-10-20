@@ -19,6 +19,8 @@ use Pushery\Billing\Enums\SupplyRegime;
 use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Invoicing\Party;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\Tax\UnionMembership;
+use Pushery\Billing\ValueObjects\DeemedSupplyOfGoodsTax;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\ProviderComputedTax;
 use Pushery\Billing\ValueObjects\ServicePeriod;
@@ -94,7 +96,7 @@ final readonly class FanReceiptIssuer
      * @param  Money  $gross  what the buyer paid
      * @param  ?array<string, mixed>  $buyer  the buyer's details — permitted only for a full invoice
      * @param  ?ServicePeriod  $period  the stretch this document covers, where it covers one. A subscription
-     *                                  cycle is a PART-SUPPLY and its document says which part; a one-off
+     *                                  cycle is a part supply and its document says which part; a one-off
      *                                  purchase has no period and states none.
      * @param  ?SupplyTaxCharacteristics  $characteristics  what the supply was, in the terms its tax treatment turns on
      * @param  ?string  $provider  which provider the charge reference belongs to — the money, not the supply
@@ -132,6 +134,43 @@ final readonly class FanReceiptIssuer
         ?ServicePeriod $period = null,
         ?SupplyTaxCharacteristics $characteristics = null,
         ?string $provider = null,
+    ): InvoiceRecord {
+        return $this->write(
+            buyerOwner: $buyerOwner,
+            tier: $tier,
+            gross: $gross,
+            taxRateBps: $taxRateBps,
+            soldOn: $soldOn,
+            chargeReference: $chargeReference,
+            buyer: $buyer,
+            period: $period,
+            characteristics: $characteristics,
+            provider: $provider,
+            lineDescription: null,
+        );
+    }
+
+    /**
+     * The document issue() describes, with its line naming what was bought where the caller knows it.
+     *
+     * Private, so the public signature keeps its ten parameters: only a sale whose goods the platform supplies
+     * itself names them on the line, and it comes through issueDeemedSupplyOfGoods().
+     *
+     * @param  ?array<string, mixed>  $buyer  the buyer's details, permitted only for a full invoice
+     * @param  ?string  $lineDescription  what the line names; a purchase or a subscription period where it is null
+     */
+    private function write(
+        Model $buyerOwner,
+        FanReceiptTier $tier,
+        Money $gross,
+        int|ProviderComputedTax $taxRateBps,
+        CarbonImmutable $soldOn,
+        ?string $chargeReference,
+        ?array $buyer,
+        ?ServicePeriod $period,
+        ?SupplyTaxCharacteristics $characteristics,
+        ?string $provider,
+        ?string $lineDescription,
     ): InvoiceRecord {
         // A caller that knows none of them says so with an empty set rather than by omission. Every field
         // is nullable, so there is no partially-filled case to rule on: the columns stay null exactly where
@@ -183,7 +222,7 @@ final readonly class FanReceiptIssuer
             // not tidiness. Three checks on the model read this column and all three return early without
             // it, so none of them has ever fired on a document this package issued.
             //
-            // Two of the three become tautological once it is derived here (the posture comes FROM the
+            // Two of the three become tautological once it is derived here (the posture comes from the
             // regime, so it cannot contradict it), and that is the trade. The third does not: it compares
             // the posture against the party actually snapshotted as seller, and catches a document that
             // claims the platform is deemed supplier while naming somebody else. That one is worth two
@@ -202,7 +241,7 @@ final readonly class FanReceiptIssuer
             // the standard band whatever rate it actually carried.
             'tax_archetype' => $characteristics->archetype,
             // What a voluntary payment was paid ON. The two columns beside it are the derived answers; this
-            // is what they were derived FROM, and keeping it is what lets a reader check the derivation
+            // is what they were derived from, and keeping it is what lets a reader check the derivation
             // rather than take it. It is also the transaction line's reference to the thing it accompanied,
             // which a tip otherwise has no way of naming.
             'sold_alongside_archetype' => $characteristics->soldAlongside,
@@ -212,8 +251,24 @@ final readonly class FanReceiptIssuer
             // class is jurisdictional, and the place evidence belongs to the consuming application. What
             // the package guarantees is the other half — that an absent subdivision is counted as
             // `unknown` rather than attributed somewhere plausible.
-            'destination_country' => $characteristics->destinationCountry,
+            // A sale a special return declares names the member state whose return it is in, so a place a member folds
+            // into itself is written as that member: Monaco as France, as the rate and the union test already read it.
+            // Any other sale keeps the country the caller stated.
+            'destination_country' => ($characteristics->oneStopShop === true || $characteristics->importScheme === true) && $characteristics->destinationCountry !== null
+                ? UnionMembership::territoryOf($characteristics->destinationCountry)
+                : $characteristics->destinationCountry,
             'destination_subdivision' => $characteristics->destinationSubdivision,
+            // Whether the cross-border consumer return or the import scheme's return declares this sale. Each return
+            // reads its flag and nothing else, so both are written from the placement the caller decided, never
+            // inferred here from a country.
+            'oss' => $characteristics->oneStopShop === true,
+            'ioss' => $characteristics->importScheme === true,
+            // Which supply of goods the platform is treated as making, and where the goods set out from. The seller's
+            // document of the same sale writes both from the same classification, so the two cannot describe two
+            // different supplies, and the records the platform keeps as the supplier read the start of the transport
+            // from here.
+            'deemed_supply' => $characteristics->deemedSupply,
+            'goods_located_in' => $characteristics->goodsLocatedIn,
             'tax_rate_category' => $characteristics->rateCategory,
             // BT-72, the delivery date. Like the characteristics above, both renderers emit it and the column
             // is frozen against later change, so a term the issuer does not write here is missing from the
@@ -262,7 +317,7 @@ final readonly class FanReceiptIssuer
             // document without a period renders byte-for-byte what it always did — the EN 16931 period terms
             // appear only when a period was actually supplied over time.
             'lines' => [array_filter([
-                'description' => $period instanceof ServicePeriod ? 'Subscription period' : 'Purchase',
+                'description' => $lineDescription ?? ($period instanceof ServicePeriod ? 'Subscription period' : 'Purchase'),
                 'quantity' => 1,
                 'unit' => 'C62',
                 'unit_price_minor' => $net->minorUnits,
@@ -272,6 +327,60 @@ final readonly class FanReceiptIssuer
                 'period_end' => $period?->endsOn(),
             ], static fn (mixed $value): bool => $value !== null)],
         ]), $chargeReference, $provider);
+    }
+
+    /**
+     * The buyer's document in a sale of goods the platform is treated as supplying itself.
+     *
+     * The platform received the goods from the seller and supplies them to the buyer (Art. 14a VAT Directive), so it
+     * is the supplier named here, and the document states the full price the buyer paid with the tax of the member
+     * state the decision placed the supply in. It is dated to the moment the payment was accepted, at which the tax
+     * arises (Art. 66a), and states that moment as the date of supply, as the seller's document of its own supply
+     * does. Its number comes from the buyer receipt series, and a repeated charge reference returns the document
+     * already written, as {@see self::issue()} does for every buyer's receipt.
+     *
+     * ## Which document
+     *
+     * A deemed supply is declared under the Union scheme or the import scheme, and a receipt for it is then not
+     * required and follows the rules of the member state of identification (Art. 219a). The tier is decided by
+     * {@see FanReceiptTierResolver} as for any purchase, which gives the simplified receipt to a small domestic
+     * purchase only. The same line is held here for a caller that chose the tier itself: a distance sale crosses a
+     * border, so it gets a payment record or the full invoice the buyer asks for. The import scheme number appears
+     * on no document of the buyer: the platform is named with its own invoicing details from `billing.company`.
+     *
+     * @param  ?array<string, mixed>  $buyer  the buyer's details, permitted only for a full invoice
+     * @param  ?string  $goods  the goods as the consignment describes them, which the line names: the platform is
+     *                          their supplier, and its records describe what it supplied
+     */
+    public function issueDeemedSupplyOfGoods(
+        Model $buyerOwner,
+        FanReceiptTier $tier,
+        DeemedSupplyOfGoodsTax $tax,
+        ?string $chargeReference = null,
+        ?array $buyer = null,
+        ?string $provider = null,
+        ?string $goods = null,
+    ): InvoiceRecord {
+        if ($tier === FanReceiptTier::Simplified && $tax->distanceSale()) {
+            throw new InvalidArgumentException(
+                'A distance sale of goods gets no simplified receipt: that is the tier of a small domestic purchase, '
+                .'and a distance sale crosses a border. Issue a payment record, or the full invoice the buyer asks for.'
+            );
+        }
+
+        return $this->write(
+            buyerOwner: $buyerOwner,
+            tier: $tier,
+            gross: $tax->gross,
+            taxRateBps: $tax->rateBps,
+            soldOn: $tax->taxPoint,
+            chargeReference: $chargeReference,
+            buyer: $buyer,
+            period: null,
+            characteristics: $tax->characteristics(),
+            provider: $provider,
+            lineDescription: $goods,
+        );
     }
 
     /**

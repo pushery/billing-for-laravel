@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\ValueObjects;
 
 use InvalidArgumentException;
+use Pushery\Billing\Contracts\TaxReturnPeriod;
 use Pushery\Billing\Enums\TaxRateCategory;
 
 /**
@@ -32,7 +33,7 @@ final readonly class TaxReturnLine
         /** The tax on it. Negative on a correcting line. */
         public int $taxMinor,
         /** The period this corrects, or null when it declares this period's own sales. */
-        public ?ReportingPeriod $originPeriod = null,
+        public ?TaxReturnPeriod $originPeriod = null,
     ) {
         if ($country === '' || strlen($country) !== 2) {
             throw new InvalidArgumentException("A return line names a two-letter country; got '{$country}'.");
@@ -53,7 +54,7 @@ final readonly class TaxReturnLine
     /** Whether this line corrects an earlier period rather than declaring this one. */
     public function corrects(): bool
     {
-        return $this->originPeriod instanceof ReportingPeriod;
+        return $this->originPeriod instanceof TaxReturnPeriod;
     }
 
     /** The key a line aggregates on: one country, one category, one rate, one origin. */

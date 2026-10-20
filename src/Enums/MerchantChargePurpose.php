@@ -13,7 +13,7 @@ namespace Pushery\Billing\Enums;
  *
  * ## Why it is stored rather than derived
  *
- * It IS derivable, and that is the trap: each lane derives differently, over a different number of hops, and
+ * It is derivable, and that is the trap: each lane derives differently, over a different number of hops, and
  * one of them cannot be derived at all.
  *
  * - a one-off purchase resolves through its payment reference to an addon key;

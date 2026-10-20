@@ -15,6 +15,7 @@ use Pushery\Billing\Events\RoutedSubscriptionInvoicePaid;
 use Pushery\Billing\Exceptions\RoutedCycleUnreadable;
 use Pushery\Billing\Jobs\MoveMerchantShareOnConfirmation;
 use Pushery\Billing\Jobs\NameTransferOnConfirmation;
+use Pushery\Billing\Jobs\TakeCommissionOnNet;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
 use Pushery\Billing\Models\Subscription;
@@ -123,10 +124,10 @@ final readonly class RecordRoutedSubscriptionCharge
             // The lane this cycle took, as the subscription was sold under it, rather than today's configuration read
             // back when a refund needs to know.
             $commission->chargeType,
-            // Zero, stated rather than left null. The rate is applied to the invoice total with no tax rate
-            // separating a net from a gross, and null on this column means "written before this was
-            // recorded" -- a description of old rows, which this is not.
-            0,
+            // The buyer's tax rate where the fee was taken on the net it separates, and zero where it was taken on
+            // the payment as a whole, stated rather than left null: null on this column means "written before this
+            // was recorded" -- a description of old rows, which this is not.
+            $commission->commissionTaxBps,
             sellerPosture: ($this->sales ?? Container::getInstance()->make(MarketplaceSaleContext::class))->posture(),
             // A cycle, and this is the one lane where that is genuinely hard to read back: the reference on
             // this row is the invoice, and reaching the subscription from it takes two more hops through an
@@ -148,6 +149,13 @@ final readonly class RecordRoutedSubscriptionCharge
         // after the webhook's transaction commits. A redelivery settles nothing a second time and asks nothing.
         if ($charge->charge_type === ChargeType::Destination && $this->ledger->settle($charge)) {
             Bus::dispatch(new NameTransferOnConfirmation((int) $charge->id));
+        }
+
+        // A destination cycle whose fee was withheld on the invoice total, the buyer's tax included: the first cycle,
+        // paid as its checkout completed with no draft in between, or a renewal whose draft was charged before its fee
+        // was set. The commission is brought down to the net after the commit, by giving the difference back.
+        if ($charge->charge_type === ChargeType::Destination && $commission->commissionTaxBps === 0 && $commission->invoiceTaxBps !== null) {
+            Bus::dispatch(new TakeCommissionOnNet((int) $charge->id, $commission->invoiceTaxBps));
         }
 
         // A separate transfer is not settled here, because nothing has paid the merchant yet: the platform took the
