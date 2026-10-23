@@ -9,17 +9,24 @@ use InvalidArgumentException;
 use Mollie\Api\Exceptions\ApiException;
 use Mollie\Api\Exceptions\RequestException;
 use Mollie\Api\Http\Data\Date;
+use Mollie\Api\Http\Requests\CancelPaymentRequest;
 use Mollie\Api\Http\Requests\CreateMandateRequest;
 use Mollie\Api\Http\Requests\CreatePaymentRefundRequest;
 use Mollie\Api\Http\Requests\CreatePaymentRequest;
+use Mollie\Api\Http\Requests\GetPaginatedPaymentRefundsRequest;
+use Mollie\Api\Http\Requests\GetPaymentRequest;
 use Mollie\Api\MollieApiClient;
+use Mollie\Api\Resources\CursorCollection;
 use Mollie\Api\Resources\Mandate;
 use Mollie\Api\Resources\Payment;
 use Mollie\Api\Resources\Refund;
 use Mollie\Api\Types\MandateMethod;
+use Pushery\Billing\Contracts\CancelsPayments;
 use Pushery\Billing\Contracts\CollectsDirectDebits;
 use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
 use Pushery\Billing\Contracts\PaymentRails;
+use Pushery\Billing\Contracts\ReadsRefunds;
+use Pushery\Billing\Enums\RefundStatus;
 use Pushery\Billing\Exceptions\DirectDebitMandateRefused;
 use Pushery\Billing\Exceptions\MandateNeedsRedirect;
 use Pushery\Billing\Support\CheckoutUrls;
@@ -32,9 +39,12 @@ use Pushery\Billing\ValueObjects\Iban;
 use Pushery\Billing\ValueObjects\MandateHandshake;
 use Pushery\Billing\ValueObjects\MandateReference;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\PaymentCancellation;
 use Pushery\Billing\ValueObjects\RefundResult;
+use Pushery\Billing\ValueObjects\RefundState;
 use Pushery\Billing\ValueObjects\SepaCreditor;
 use Pushery\Billing\ValueObjects\TokenizedMethod;
+use UnexpectedValueException;
 
 /**
  * Mollie's implementation of the lower billing layer.
@@ -61,7 +71,7 @@ use Pushery\Billing\ValueObjects\TokenizedMethod;
  * `paid` is success; `failed`, `canceled` and `expired` are declines; everything else is `pending`, which
  * the engine reads as "not yet" rather than as "no".
  */
-final readonly class MolliePaymentRails implements CollectsDirectDebits, EstablishesMandateByRedirect, PaymentRails
+final readonly class MolliePaymentRails implements CancelsPayments, CollectsDirectDebits, EstablishesMandateByRedirect, PaymentRails, ReadsRefunds
 {
     /**
      * Mollie's `description` carries 255 characters at most, and less for some payment methods.
@@ -79,6 +89,15 @@ final readonly class MolliePaymentRails implements CollectsDirectDebits, Establi
 
     /** The mandate method whose recurring payments Mollie collects as SEPA direct debits. */
     private const string SEPA_MANDATE = 'directdebit';
+
+    /** The most entries Mollie puts on one page of a list. */
+    private const int REFUND_PAGE_SIZE = 250;
+
+    /**
+     * The pages one read of a payment's refunds follows, 5,000 refunds in all. A payment carries a handful, so a list
+     * that goes on past this is not ending, and the read stops with an exception rather than report part of it.
+     */
+    private const int REFUND_PAGE_LIMIT = 20;
 
     public function __construct(
         private MollieApiClient $client,
@@ -324,6 +343,129 @@ final readonly class MolliePaymentRails implements CollectsDirectDebits, Establi
             reference: $refund instanceof Refund ? MollieValue::id($refund->id) : '',
             amount: $amount,
         );
+    }
+
+    /**
+     * Cancel a payment the customer has not completed, in the client's mode: an account's rails in test mode cancel
+     * the test payment they made.
+     *
+     * Mollie cancels a payment while its method allows it, an `open` one in most cases. One it keeps answers 422, and
+     * that comes back as a cancellation that did not happen, with Mollie's own words. So does an id Mollie does not
+     * know. A refusal that says nothing about the payment (credentials, a rate limit, an outage) travels, as a refund's
+     * does.
+     */
+    public function cancel(string $paymentReference): PaymentCancellation
+    {
+        try {
+            $payment = MollieValue::narrow($this->client->send(new CancelPaymentRequest($paymentReference)), Payment::class);
+        } catch (RequestException $refusal) {
+            $status = $refusal->getStatusCode();
+
+            if ($status < 400 || $status >= 500 || in_array($status, [401, 403, 429], true)) {
+                throw $refusal;
+            }
+
+            return new PaymentCancellation(
+                paymentReference: $paymentReference,
+                canceled: false,
+                failureCode: (string) $status,
+                failureMessage: $refusal instanceof ApiException ? $refusal->getPlainMessage() : $refusal->getMessage(),
+            );
+        }
+
+        if (! $payment instanceof Payment) {
+            throw new UnexpectedValueException("Mollie answered the cancellation of payment {$paymentReference} with something other than a payment.");
+        }
+
+        return $payment->isCanceled()
+            ? new PaymentCancellation($paymentReference, canceled: true)
+            : new PaymentCancellation($paymentReference, canceled: false, failureCode: MollieValue::of($payment->status));
+    }
+
+    /**
+     * Every refund Mollie holds for the payment, read page by page.
+     *
+     * An answer that is not a list of refunds is refused rather than read as an empty one. A caller looks for its
+     * key here before it refunds again, and a list read as empty would send it to refund a second time.
+     *
+     * @return list<RefundState>
+     */
+    public function refundsOf(string $chargeReference): array
+    {
+        $states = [];
+        $page = MollieValue::narrow($this->client->send(new GetPaginatedPaymentRefundsRequest($chargeReference, limit: self::REFUND_PAGE_SIZE)), CursorCollection::class);
+
+        for ($read = 1; ; $read++) {
+            if (! $page instanceof CursorCollection) {
+                throw new UnexpectedValueException("Mollie answered the refunds of payment {$chargeReference} with something other than a list, so they are unknown rather than absent.");
+            }
+
+            foreach ($page as $refund) {
+                $states[] = $refund instanceof Refund
+                    ? $this->stateOf($refund)
+                    : throw new UnexpectedValueException("Mollie's list of the refunds of payment {$chargeReference} holds an entry of another kind.");
+            }
+
+            if (! $page->hasNext()) {
+                return $states;
+            }
+
+            if ($read >= self::REFUND_PAGE_LIMIT) {
+                throw new UnexpectedValueException('Mollie lists more than '.(self::REFUND_PAGE_SIZE * self::REFUND_PAGE_LIMIT)." refunds for payment {$chargeReference}, so the list was not read to its end.");
+            }
+
+            $page = MollieValue::narrow($page->next(), CursorCollection::class);
+        }
+    }
+
+    /**
+     * Mollie's own figure for what is left to refund, or null where it names none: before the payment is paid, and on
+     * a method Mollie takes no refunds for.
+     */
+    public function refundableOf(string $chargeReference): ?Money
+    {
+        $payment = MollieValue::narrow($this->client->send(new GetPaymentRequest($chargeReference)), Payment::class);
+
+        if (! $payment instanceof Payment) {
+            throw new UnexpectedValueException("Mollie answered payment {$chargeReference} with something other than a payment.");
+        }
+
+        return MollieAmount::fromNullableResource($payment->amountRemaining);
+    }
+
+    /**
+     * One refund in the words every provider shares, with the key {@see self::refund()} stored in its metadata.
+     *
+     * `queued`, `pending` and `processing` all read as pending, and so does a status Mollie adds later: a refund
+     * that may still pay out is not one to make a second time.
+     */
+    private function stateOf(Refund $refund): RefundState
+    {
+        return new RefundState(
+            reference: MollieValue::id($refund->id),
+            key: $this->keyIn($refund->metadata),
+            status: match (MollieValue::of($refund->status)) {
+                'refunded' => RefundStatus::Refunded,
+                'failed' => RefundStatus::Failed,
+                'canceled' => RefundStatus::Canceled,
+                default => RefundStatus::Pending,
+            },
+            amount: MollieAmount::fromResource($refund->amount),
+        );
+    }
+
+    /**
+     * The key {@see self::refund()} stored in a refund's metadata, or null where it stored none.
+     *
+     * The parameter stays `mixed`, because the two majors of the SDK disagree about the type: version 4 declares the
+     * metadata as an object, version 3 leaves it as the JSON decoder made it.
+     */
+    private function keyIn(mixed $metadata): ?string
+    {
+        $values = is_object($metadata) ? get_object_vars($metadata) : (is_array($metadata) ? $metadata : []);
+        $key = $values[ChargeOptions::RESERVED_METADATA_KEY] ?? null;
+
+        return is_string($key) && $key !== '' ? $key : null;
     }
 
     /**

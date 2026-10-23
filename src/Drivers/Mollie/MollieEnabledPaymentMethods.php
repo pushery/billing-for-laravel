@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Mollie;
 
-use Mollie\Api\Http\Data\Money as MollieMoney;
 use Mollie\Api\Http\Requests\GetEnabledMethodsRequest;
 use Mollie\Api\MollieApiClient;
 use Mollie\Api\Resources\Method;
@@ -20,7 +19,9 @@ use Pushery\Billing\ValueObjects\PaymentMethodIssuer;
  * Mollie applies all three filters: an amount returns the methods that take it in its currency (without one, Mollie
  * answers for the euro), a billing country the methods offered there, and a locale translates the names. In live
  * mode the list holds the methods that are fully enabled; in test mode Mollie adds the ones still pending, so a test
- * checkout can try them. The banks and brands come along for the methods that have them.
+ * checkout can try them. The banks and brands come along for the methods that have them. The wallets a checkout
+ * names go to Mollie as `includeWallets`, the way it learns that the checkout can show them; without any the
+ * request asks for none.
  */
 final readonly class MollieEnabledPaymentMethods implements EnabledPaymentMethods
 {
@@ -33,12 +34,13 @@ final readonly class MollieEnabledPaymentMethods implements EnabledPaymentMethod
         private ?string $profileId = null,
     ) {}
 
-    public function all(?Money $amount = null, ?string $country = null, ?string $locale = null): array
+    public function all(?Money $amount = null, ?string $country = null, ?string $locale = null, array $wallets = []): array
     {
         $methods = MollieValue::narrow($this->client->send(new GetEnabledMethodsRequest(
             locale: $locale,
             amount: $amount instanceof Money ? MollieAmount::toMollie($amount) : null,
             billingCountry: $country,
+            includeWallets: $wallets === [] ? null : $wallets,
             profileId: $this->profileId,
             includeIssuers: true,
         )), MethodCollection::class);
@@ -54,14 +56,23 @@ final readonly class MollieEnabledPaymentMethods implements EnabledPaymentMethod
                     $method->id,
                     $method->description,
                     $this->imageOf($method->image),
-                    $method->minimumAmount instanceof MollieMoney ? MollieAmount::fromResource($method->minimumAmount) : null,
-                    $method->maximumAmount instanceof MollieMoney ? MollieAmount::fromResource($method->maximumAmount) : null,
+                    $this->limitOf($method->minimumAmount),
+                    $this->limitOf($method->maximumAmount),
                     $this->issuersOf($method->issuers),
                 );
             }
         }
 
         return $enabled;
+    }
+
+    /**
+     * A limit of a method, or null where Mollie states none. Version 4 of the SDK hands a limit over as its money
+     * object, version 3 as the decoded JSON object, and both carry `value` and `currency`.
+     */
+    private function limitOf(mixed $amount): ?Money
+    {
+        return is_object($amount) ? MollieAmount::fromResource($amount) : null;
     }
 
     /** The address of a logo, the vector version where Mollie has one, or null where it sent none. */

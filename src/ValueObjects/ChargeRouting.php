@@ -33,7 +33,7 @@ final readonly class ChargeRouting
      *                            to the platform account. This parameter has now been wrong in both
      *                            directions: first described as cosmetic, then as the axis fee and
      *                            liability follow. Neither is right: both are stated on the connected
-     *                            ACCOUNT, in `controller.fees.payer` and `controller.losses.payments`, and
+     *                            account, in `controller.fees.payer` and `controller.losses.payments`, and
      *                            they follow its type rather than anything chosen per payment. See
      *                            ChargeType::Destination for the measurement.
      * @param  bool  $feeRefundedByCaller  on a refund: the caller gives the platform's fee back itself, in the

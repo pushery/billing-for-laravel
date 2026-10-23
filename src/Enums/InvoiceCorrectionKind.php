@@ -10,7 +10,7 @@ namespace Pushery\Billing\Enums;
  * chain turns ambiguous the moment they share a name.
  *
  * - Cancellation (Storno / kaufmännische Gutschrift) → EN 16931 type code 381. Reverses a booked turnover;
- *   its amounts are POSITIVE and the code, not a sign, inverts the meaning.
+ *   its amounts are positive and the code, not a sign, inverts the meaning.
  * - Amendment (Rechnungsberichtigung) → type code 384. Corrects a specific earlier invoice and therefore
  *   must reference it (BG-3). This is the role the invariant guards: an amendment with no origin reference
  *   is not a valid document and cannot be constructed.

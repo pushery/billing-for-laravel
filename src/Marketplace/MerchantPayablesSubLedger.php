@@ -71,6 +71,9 @@ final readonly class MerchantPayablesSubLedger
     /**
      * The balance per merchant, keyed by the morph pair, summed from movements {@see movementsIn()} produced.
      *
+     * An erased merchant is keyed `erased:` and the erasure key, so the documents of one erased merchant still add up
+     * to one balance.
+     *
      * @param  iterable<SubLedgerMovement>  $movements
      * @return array<string, Money>
      */
@@ -103,9 +106,11 @@ final readonly class MerchantPayablesSubLedger
         // the same rule the booking marker follows, so the two can never disagree about direction.
         $raised = $document->isCorrection() ? $amount->negated() : $amount;
 
+        [$merchantType, $merchantId] = $this->merchantOf($document);
+
         $movements = [new SubLedgerMovement(
-            $document->owner_type,
-            $document->owner_id,
+            $merchantType,
+            $merchantId,
             $number,
             $date,
             $raised,
@@ -115,8 +120,8 @@ final readonly class MerchantPayablesSubLedger
         // own leaves the payable standing, which is the honest reading: nothing has been paid.
         if ($document->fan_gross_minor !== null) {
             $movements[] = new SubLedgerMovement(
-                $document->owner_type,
-                $document->owner_id,
+                $merchantType,
+                $merchantId,
                 $number,
                 $date,
                 $raised->negated(),
@@ -124,5 +129,23 @@ final readonly class MerchantPayablesSubLedger
         }
 
         return $movements;
+    }
+
+    /**
+     * The merchant a document's movements are kept under.
+     *
+     * An erased merchant is named by nobody any more. Their documents stay together under the erasure key they
+     * share, the way the booking batch keeps an erased owner's credit movements together, and a document erased
+     * before that key was recorded stands on its own.
+     *
+     * @return array{string, int|string}
+     */
+    private function merchantOf(InvoiceRecord $document): array
+    {
+        if ($document->owner_type !== null && $document->owner_id !== null) {
+            return [$document->owner_type, $document->owner_id];
+        }
+
+        return ['erased', $document->erased_owner_key ?? 'document-'.$document->id];
     }
 }

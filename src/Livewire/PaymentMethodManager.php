@@ -36,13 +36,26 @@ final class PaymentMethodManager extends AccountScreen
     {
         return $this->view('billing::livewire.payment-method-manager', [
             // Listing methods is a provider read; degrade to a notice rather than 500 the whole screen.
-            'methods' => $this->orDegrade(fn (): array => Container::getInstance()->make(PaymentMethods::class)->all($this->owner()), []),
+            'methods' => $this->orDegrade($this->methods(...), []),
         ]);
+    }
+
+    /**
+     * The owner's stored methods for the list, one provider read, spent from the owner's budget first.
+     *
+     * @return list<PaymentMethod>
+     */
+    private function methods(): array
+    {
+        $this->spendProviderCall();
+
+        return Container::getInstance()->make(PaymentMethods::class)->all($this->owner());
     }
 
     public function addMethod(): void
     {
         $this->ensureEligible();
+        $this->spendProviderCall();
 
         // A full-page redirect to the provider's hosted card page — no card data touches this app, and no
         // front-end element is shipped. The card is captured on the provider's side and attached to the
@@ -57,6 +70,7 @@ final class PaymentMethodManager extends AccountScreen
 
     public function setDefault(string $methodId): void
     {
+        $this->spendProviderCall();
         $this->authorizeMethod($methodId);
 
         Container::getInstance()->make(PaymentMethods::class)->setDefault($this->owner(), $methodId);
@@ -64,6 +78,7 @@ final class PaymentMethodManager extends AccountScreen
 
     public function remove(string $methodId): void
     {
+        $this->spendProviderCall();
         $this->authorizeMethod($methodId);
 
         // Self-harm guard: removing the default (or only) card while a live subscription will still be

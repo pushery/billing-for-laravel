@@ -43,7 +43,7 @@ use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
  * engine consumes its treatment and turns it into a numbered, guarded plan. What it adds is the ORDER and
  * the preconditions the matrix cannot express on its own:
  *
- *  - the creator's standing is read at the SUPPLY date, so a later status change does not rewrite a past
+ *  - the creator's standing is read at the supply date, so a later status change does not rewrite a past
  *    settlement;
  *  - an unclarified creator is a hold — no document, nothing paid — carried straight through from the matrix;
  *  - a self-billed invoice requires the prior agreement (or it is not an invoice) and, if it states tax, the
@@ -219,7 +219,7 @@ final readonly class SelfBillingEngine
     }
 
     /**
-     * Everything settle() decides EXCEPT drawing a number: the treatment, the document series, and the guards.
+     * Everything settle() decides except drawing a number: the treatment, the document series, and the guards.
      *
      * The monthly collective run ({@see CollectiveSelfBillingEngine}) plans every transaction of a creator's
      * month this way and draws a single number for the whole document — so the plan must run the guards (each

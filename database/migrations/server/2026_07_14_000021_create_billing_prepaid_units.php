@@ -23,7 +23,7 @@ use Pushery\Billing\Support\BillingSchema;
  *    leaves exactly the units that should actually be billed.
  *
  * 3. `billing_usage_reservations.included` — the per-cycle allowance ceiling captured when the hold was
- *    taken. settle() needs it to work out how much of the settled usage fell BEYOND `included` and therefore
+ *    taken. settle() needs it to work out how much of the settled usage fell beyond `included` and therefore
  *    drew from the prepaid balance. Without it the settle would have to re-resolve tier config, and a tier
  *    change between reserve and settle would silently move the line.
  *
@@ -55,7 +55,7 @@ return new class extends Migration
             $table->unsignedBigInteger('included')->nullable()->after('amount');
         });
 
-        // 4. Per-EVENT prepaid coverage. The flusher nets at the rollup, and a rollup only covers the
+        // 4. Per-event prepaid coverage. The flusher nets at the rollup, and a rollup only covers the
         //    events coalesced into it — so the coverage has to be carried by the event, not derived from
         //    the period total, or a second flush in the same cycle would subtract the same units twice.
         Schema::table('billing_usage_events', function (Blueprint $table): void {

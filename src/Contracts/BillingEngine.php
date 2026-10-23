@@ -10,7 +10,7 @@ use DateTimeInterface;
  * The upper of the two billing layers: the recurring cycle, proration, invoices, coupons, trials,
  * dunning and tax. Two shapes of driver implement it:
  *
- *  - the Stripe driver DELEGATES to Stripe Billing and no-ops {@see tick()} (Stripe drives its own
+ *  - the Stripe driver delegates to Stripe Billing and no-ops {@see tick()} (Stripe drives its own
  *    cycle);
  *  - a local-engine driver owns the cycle as a package-local engine, and {@see tick()} advances
  *    every due subscription (invoked by the `billing:run` scheduler command).

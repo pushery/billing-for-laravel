@@ -12,7 +12,9 @@ return [
     | Whether the package mounts its account hub at all. An application with
     | account screens of its own turns it off: the hub's routes and Livewire
     | screens are then not registered, and a checkout returns to the URLs set
-    | under billing.checkout instead of the hub's return route.
+    | under billing.checkout instead of the hub's return route. The realtime
+    | bridge (billing.account-realtime) stays registered, so a layout of the
+    | application's own can mount it.
     |
     */
 

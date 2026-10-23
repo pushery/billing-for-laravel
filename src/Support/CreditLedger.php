@@ -33,7 +33,7 @@ use Pushery\Billing\ValueObjects\Money;
  * Do not add a payout or transfer method here. Two properties of this class are load-bearing and hold only
  * because the corresponding code does not exist:
  *
- *  1. There is no path that pays a balance back OUT — credit is spent against what this package bills, and
+ *  1. There is no path that pays a balance back out — credit is spent against what this package bills, and
  *     nothing else. The balance is a claim on future invoices, not a store of withdrawable value.
  *  2. Every method takes exactly one owner, so a balance cannot move between owners.
  *

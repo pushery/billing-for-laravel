@@ -12,7 +12,7 @@ use Pushery\Billing\Support\BillingSchema;
  *
  * ## Why the answer has to be kept
  *
- * A checkout that collects a tax ID has only its FORMAT checked while the buyer is on the page, and Stripe Tax
+ * A checkout that collects a tax ID has only its format checked while the buyer is on the page, and Stripe Tax
  * reverses the charge on that format alone. Whether the number is registered is asked afterwards and answered
  * once. A sale reverse-charged to a number that turns out unregistered can owe the tax after all, and the only
  * record of when that became known is this answer.

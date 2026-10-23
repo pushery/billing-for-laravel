@@ -62,7 +62,7 @@ use Throwable;
  *
  * ## What is recorded, and when
  *
- * On a charge that succeeded OR is still resolving — an intent awaiting 3-D Secure, a bank debit still
+ * On a charge that succeeded or is still resolving — an intent awaiting 3-D Secure, a bank debit still
  * processing. Both are payments that may yet settle on a merchant's behalf, and a row that appeared only
  * after settlement would leave the most interesting window unrecorded: the one where an operator asks what
  * is in flight. The row starts `pending` and is moved by the settlement path, never by this method.

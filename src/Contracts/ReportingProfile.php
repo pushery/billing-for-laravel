@@ -25,7 +25,7 @@ interface ReportingProfile
      * @param  bool  $isLegalEntity  a company rather than a person — which changes which fields exist at
      *                               all, not merely whether they are required
      * @param  bool  $reportable  whether this seller currently falls under the reporting duty. It changes
-     *                            the BASIS of the fields, never the list: a seller who is not reportable
+     *                            the basis of the fields, never the list: a seller who is not reportable
      *                            today can become one tomorrow, and collecting afterwards is the expensive
      *                            case.
      * @return list<SellerRecordField>

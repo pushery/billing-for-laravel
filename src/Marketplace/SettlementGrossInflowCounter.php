@@ -94,7 +94,7 @@ final readonly class SettlementGrossInflowCounter implements CountsEarnings
 
         // A correction subtracts, and nothing about the row says so on its face. A correcting settlement
         // states a positive magnitude -- "this much less" -- because a negative invoice is not a thing; its
-        // meaning lives in its ROLE, which is the document it credits. It also carries the same settlement
+        // meaning lives in its role, which is the document it credits. It also carries the same settlement
         // type as the original, so a sum over the type alone adds a clawback to the very figure it reduces.
         //
         // That is the over-reporting direction, and over-reporting here is not the safe error: filing more

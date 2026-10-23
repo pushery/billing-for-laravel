@@ -60,7 +60,7 @@ final readonly class AccessDecision
         return $this->granted && $this->via instanceof AccessVia && $this->via->isRevocable();
     }
 
-    /** Granted AND handable-over — the single question a delivery path asks before streaming bytes. */
+    /** Granted and handable-over — the single question a delivery path asks before streaming bytes. */
     public function isDeliverable(): bool
     {
         return $this->granted && $this->availability->isDeliverable();

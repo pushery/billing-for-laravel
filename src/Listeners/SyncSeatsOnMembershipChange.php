@@ -21,7 +21,7 @@ use Pushery\Billing\Support\Concerns\BacksOffBetweenAttempts;
  * consumer registers its own membership events (`billing.seats.membership_events`) and this listener runs
  * on each.
  *
- * It runs AFTER COMMIT and on the queue, for two reasons that are really one: the sync makes a provider call,
+ * It runs after the commit and on the queue, for two reasons that are really one: the sync makes a provider call,
  * which must not block the web request, and must not fire against a membership change that is still inside an
  * open transaction and could yet roll back — reporting seats a rollback then un-does. A transient gateway
  * failure propagates so the queue retries it; a permanent one is handled (and logged) at the seam.

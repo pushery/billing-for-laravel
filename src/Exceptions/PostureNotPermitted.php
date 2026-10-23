@@ -16,7 +16,7 @@ use RuntimeException;
  *    liability decision (who owes the VAT, who the buyer's contract is with), so it must be a deliberate
  *    opt-in, never a value the resolver falls into.
  *
- *  - `SellerOfRecord` was resolved for an ELECTRONIC supply without a genuine Art. 9a rebuttal. Naming the
+ *  - `SellerOfRecord` was resolved for an electronic supply without a genuine Art. 9a rebuttal. Naming the
  *    merchant (not the platform) as the seller of an electronic service contradicts the deemed-supplier
  *    presumption (Art. 9a VAT-IR (EU) 282/2011; CJEU C-695/20 Fenix); a platform that sets the terms,
  *    authorizes the billing or approves the supply cannot truthfully assert the rebuttal, so this is refused.

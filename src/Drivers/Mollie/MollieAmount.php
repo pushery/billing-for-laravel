@@ -74,4 +74,16 @@ final readonly class MollieAmount
     {
         return $amount === null ? Money::zero($currency) : self::fromResource($amount);
     }
+
+    /**
+     * An amount Mollie states only where it applies, read as null where it is absent.
+     *
+     * Unlike {@see self::fromOptionalResource()}, absence stays absence here, for a caller that has to tell "Mollie
+     * names no amount" from "the amount is zero". A present amount that cannot be read still refuses, and the
+     * parameter stays `mixed` for the same reason as there.
+     */
+    public static function fromNullableResource(mixed $amount): ?Money
+    {
+        return $amount === null ? null : self::fromResource($amount);
+    }
 }

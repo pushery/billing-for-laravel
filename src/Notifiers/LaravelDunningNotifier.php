@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Notifiers;
 
+use Carbon\CarbonImmutable;
 use DateTimeInterface;
+use DateTimeZone;
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Notification;
+use InvalidArgumentException;
 use Pushery\Billing\Consumer\WithdrawalConsentLedger;
 use Pushery\Billing\Contracts\DunningNotifier;
 use Pushery\Billing\Contracts\MandateNotifier;
+use Pushery\Billing\Contracts\OwnerTimezone;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
 use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\SubscriptionEndingNotifier;
@@ -40,6 +45,10 @@ use Pushery\Billing\ValueObjects\Money;
  * `billing:doctor` names such an owner type. The
  * once-per-failure / once-per-payment / once-per-rung / once-per-trial-end / once-per-cancellation
  * guarantees live in the callers (the webhook effects and the dunning-advance command); this simply delivers.
+ *
+ * The three notices that name a last day, of a trial, of the access after a cancellation and of a canceled
+ * subscription, get their moment in the zone the owner reads dates in ({@see OwnerTimezone}), so the day they name
+ * is the owner's day.
  */
 final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, PaymentActionNotifier, ReceiptNotifier, SubscriptionEndingNotifier, SubscriptionNotifier, SuspensionNotifier, TrialNotifier, UsageNotifier
 {
@@ -86,17 +95,17 @@ final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, 
 
     public function trialEnding(Model $owner, DateTimeInterface $endsAt): void
     {
-        Notification::send($owner, new TrialEndingNotification($endsAt));
+        Notification::send($owner, new TrialEndingNotification($this->inTheOwnersZone($owner, $endsAt)));
     }
 
     public function subscriptionCanceled(Model $owner, DateTimeInterface $accessEndsAt): void
     {
-        Notification::send($owner, new SubscriptionCanceledNotification($accessEndsAt));
+        Notification::send($owner, new SubscriptionCanceledNotification($this->inTheOwnersZone($owner, $accessEndsAt)));
     }
 
     public function subscriptionEnding(Model $owner, DateTimeInterface $endsAt, ?MerchantScope $merchant = null, ?string $merchantName = null): void
     {
-        Notification::send($owner, new SubscriptionEndingNotification($endsAt, $merchant, $merchantName));
+        Notification::send($owner, new SubscriptionEndingNotification($this->inTheOwnersZone($owner, $endsAt), $merchant, $merchantName));
     }
 
     public function subscriptionActivated(Model $owner, string $tierLabel): void
@@ -107,5 +116,33 @@ final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, 
     public function quotaWarning(Model $owner, string $meterKey, string $label, int $used, int $included): void
     {
         Notification::send($owner, new QuotaWarningNotification($meterKey, $label, $used, $included));
+    }
+
+    /**
+     * The moment in the zone the owner reads dates in. Without an answer it is passed on as it is.
+     *
+     * An answer that is no time zone identifier is reported and the moment passed on as it is: the notice then names
+     * the stored day rather than failing inside the run that sends it, which a webhook effect would retry for good.
+     */
+    private function inTheOwnersZone(Model $owner, DateTimeInterface $moment): DateTimeInterface
+    {
+        $container = Container::getInstance();
+        $zone = $container->make(OwnerTimezone::class)->for($owner);
+
+        if ($zone === null) {
+            return $moment;
+        }
+
+        if (! in_array($zone, DateTimeZone::listIdentifiers(), true)) {
+            $container->make(ExceptionHandler::class)->report(new InvalidArgumentException(sprintf(
+                'OwnerTimezone answered [%s] for an owner of type [%s], which is no time zone identifier. The notice names the day as stored.',
+                $zone,
+                $owner->getMorphClass(),
+            )));
+
+            return $moment;
+        }
+
+        return CarbonImmutable::instance($moment)->setTimezone($zone);
     }
 }

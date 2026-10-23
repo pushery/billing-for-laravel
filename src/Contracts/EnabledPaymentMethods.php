@@ -24,9 +24,14 @@ interface EnabledPaymentMethods
      * currency; with a billing country, the methods offered there; the locale sets the language of the names. Each
      * driver documents which of them its provider applies.
      *
+     * A wallet such as Apple Pay needs code on the checkout that asks the shopper's device whether it can pay with
+     * it, so a provider may list one only where the checkout says it supports it: `$wallets` names those, such as
+     * `applepay` and `googlepay`. A provider that lists wallets like any other method ignores it.
+     *
      * @param  ?string  $country  the customer's billing country, ISO 3166-1 alpha-2
      * @param  ?string  $locale  the language of the names, such as `de_DE`
+     * @param  list<string>  $wallets  the wallets the checkout supports, in the provider's spelling
      * @return list<EnabledPaymentMethod>
      */
-    public function all(?Money $amount = null, ?string $country = null, ?string $locale = null): array;
+    public function all(?Money $amount = null, ?string $country = null, ?string $locale = null, array $wallets = []): array;
 }

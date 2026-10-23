@@ -17,7 +17,7 @@ use Throwable;
  * A best-effort preview of a billable's next Stripe invoice — the one live provider read on the otherwise
  * column-authoritative subscription screen. Three properties matter and are all deliberate:
  *
- * 1. Null-tolerant. No customer / no live subscription → null with NO Stripe call. Any provider error →
+ * 1. Null-tolerant. No customer / no live subscription → null with no Stripe call. Any provider error →
  *    null too, so the screen leaves the line out rather than 500-ing on a connection/timeout/rate-limit
  *    (the catch is `Throwable`, not just Stripe's invalid-request).
  * 2. Cached per customer for a few minutes, so a screen render does not hit Stripe every time.

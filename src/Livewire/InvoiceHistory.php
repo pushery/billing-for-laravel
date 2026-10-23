@@ -40,9 +40,14 @@ final class InvoiceHistory extends AccountScreen
     public function render(): View
     {
         return $this->view('billing::livewire.invoice-history', [
-            // Listing invoices is a provider read; degrade to a notice rather than 500 the whole screen.
+            // Listing invoices is a provider read; degrade to a notice rather than 500 the whole screen. A spent
+            // budget is a 429 and passes the boundary, which degrades no HTTP answer.
             'page' => $this->orDegrade(
-                fn (): InvoicePage => Container::getInstance()->make(Invoices::class)->recent($this->owner(), $this->perPage),
+                function (): InvoicePage {
+                    $this->spendProviderCall();
+
+                    return Container::getInstance()->make(Invoices::class)->recent($this->owner(), $this->perPage);
+                },
                 new InvoicePage([]),
             ),
         ]);

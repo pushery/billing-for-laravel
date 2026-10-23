@@ -62,6 +62,9 @@ final class OwnerScopedTables
         // What an owner's model calls cost per day, counted for the AI spend brake. It is a running count against a
         // cap, not a financial record, and goes with the person. A provider's rows in the same table name nobody.
         'billing_ai_spend',
+        // An owner's spend cap and the period in which it last stopped them. A setting and a claim on an announcement,
+        // not a financial record, and it goes with the person.
+        'billing_spend_caps',
         // A coupon redemption records who used a coupon — personal data, not a financial record (any money it
         // discounted lives on the retained invoice). It goes with the person; the coupon definition itself is
         // owner-less and stays.
@@ -71,7 +74,7 @@ final class OwnerScopedTables
         // was never claimed: an unclaimed one names an owner who asked to buy something, which is the kind
         // of fact an erasure is for.
         'billing_subscription_intents',
-        // A local order is the operational billing unit a due cycle is assembled into; the RETAINED financial
+        // A local order is the operational billing unit a due cycle is assembled into; the retained financial
         // record is the invoice produced from it, not the order itself. So an order is purged with the owner,
         // the same way the subscription it billed is.
         'billing_orders',
@@ -117,7 +120,7 @@ final class OwnerScopedTables
 
         // A voucher somebody paid for. What is left on it is a liability the platform owes, and what expired
         // off it is income already taken — both are financial facts about money that moved, so the row
-        // outlives the person named on it, unlinked rather than deleted. The OWNER axis, because a voucher
+        // outlives the person named on it, unlinked rather than deleted. The owner axis, because a voucher
         // belongs to whoever bought it; putting it on the merchant axis would have meant a merchant erasure
         // unlinking a buyer's voucher and leaving the buyer's own erasure with nothing to find.
         'billing_vouchers',
@@ -327,8 +330,13 @@ final class OwnerScopedTables
             // not tell a scrubbed one from those, and would write the erased person's data back.
             scrubbedAt: [self::SCRUBBED => 'payload_removed_at'],
             // The booking batch replays a spend over the movements of the balance it came out of, so the kept
-            // movements of one erased owner stay together under a key that names nobody.
-            erasedKeys: ['billing_credit_ledger_entries' => 'erased_owner_key'],
+            // movements of one erased owner stay together under a key that names nobody. A merchant's
+            // settlement documents keep it too: the export books them to the creditor account that keeps the
+            // same key on the merchant axis.
+            erasedKeys: [
+                'billing_credit_ledger_entries' => 'erased_owner_key',
+                'billing_invoices' => 'erased_owner_key',
+            ],
         );
     }
 
@@ -344,6 +352,9 @@ final class OwnerScopedTables
             retained: self::MERCHANT_RETAINED,
             scrubbed: self::MERCHANT_SCRUBBED,
             cascaded: self::MERCHANT_CASCADED,
+            // An erased merchant's creditor account stays taken, and a later period still books the merchant's
+            // documents to it: the documents carry the same key on the owner axis.
+            erasedKeys: ['billing_merchant_creditor_accounts' => 'erased_merchant_key'],
         );
     }
 

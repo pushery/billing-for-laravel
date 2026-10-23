@@ -17,6 +17,7 @@ use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Discounts\CouponCodes;
 use Pushery\Billing\Discounts\CouponRedeemer;
+use Pushery\Billing\Discounts\TrialCodes;
 use Pushery\Billing\Enums\CollectionTiming;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Exceptions\CouponUnavailable;
@@ -163,22 +164,54 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
             ? $this->policy->endsAt($now, $tierKey)
             : null;
 
-        if ($trialEndsAt instanceof DateTimeImmutable && ! $this->policy->requiresPaymentMethod($tierKey)) {
-            $subscription = $this->writeSubscription(
-                $billable,
-                $ownerKey,
-                $tierKey,
-                CarbonImmutable::createFromInterface($trialEndsAt),
-                $now,
-                $declarationReference,
-            );
+        if (! $this->policy->requiresPaymentMethod($tierKey)) {
+            // One transaction for the code and the row, so a code redeemed for days of trial is never left without
+            // the subscription it gave them to. A code that gives the tier days counts them from now and is spent
+            // only when it lengthens the trial the policy gives; it is redeemed here, under the coupon's row lock
+            // (see TrialCodes). A subscription that needs a mandate takes the code when the mandate settles.
+            $couponModel = Coupon::model();
+            $started = new $couponModel()->getConnection()->transaction(function () use ($billable, $ownerKey, $tierKey, $couponCode, $trialEndsAt, $now, $declarationReference): ?SubscriptionStart {
+                $codes = new TrialCodes($this->coupons);
+                $days = $codes->daysFor($couponCode, $tierKey);
+                $endsAt = $trialEndsAt;
+                $granted = null;
 
-            // This shape has its subscription now, so the coupon is spent now. The redirect shape cannot do
-            // the same -- see `redeemFor()` for why spending one before the mandate lands would cost the
-            // customer their single use on a checkout they may abandon.
-            $this->redeemFor($billable, $couponCode, $subscription->id);
+                if ($days !== null && (! $endsAt instanceof DateTimeImmutable || $now->addDays($days) > $endsAt)) {
+                    $granted = $codes->redeemFor($billable, $couponCode, $tierKey);
+                    $codeEndsAt = $granted === null ? null : $now->addDays($granted['days']);
+                    $endsAt = $codeEndsAt instanceof CarbonImmutable && (! $endsAt instanceof DateTimeImmutable || $codeEndsAt > $endsAt) ? $codeEndsAt : $endsAt;
+                }
 
-            return new SubscriptionStart(SubscriptionState::Trialing);
+                if (! $endsAt instanceof DateTimeImmutable) {
+                    return null;
+                }
+
+                $subscription = $this->writeSubscription(
+                    $billable,
+                    $ownerKey,
+                    $tierKey,
+                    CarbonImmutable::createFromInterface($endsAt),
+                    $now,
+                    $declarationReference,
+                );
+
+                if ($granted !== null) {
+                    $granted['redemption']->forceFill(['subscription_id' => $subscription->id])->save();
+
+                    return new SubscriptionStart(SubscriptionState::Trialing);
+                }
+
+                // This shape has its subscription now, so the coupon is spent now. The redirect shape cannot do
+                // the same -- see `redeemFor()` for why spending one before the mandate lands would cost the
+                // customer their single use on a checkout they may abandon.
+                $this->redeemFor($billable, $couponCode, $subscription->id);
+
+                return new SubscriptionStart(SubscriptionState::Trialing);
+            });
+
+            if ($started instanceof SubscriptionStart) {
+                return $started;
+            }
         }
 
         // Resolved before the provider is touched, and the order is the whole reason it is its own statement.
@@ -384,7 +417,7 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         // configuration the package's own documentation says is optional.
         //
         // The throw stays reachable, from `successUrl()` itself, for the one install where it is honest:
-        // no configured URL AND no account hub to fall back to.
+        // no configured URL and no account hub to fall back to.
         try {
             return $this->urls->successUrl();
         } catch (RuntimeException) {

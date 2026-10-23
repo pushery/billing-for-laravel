@@ -79,6 +79,7 @@ use Pushery\Billing\Support\LocalSubscriptionPayments;
 use Pushery\Billing\Support\LocalSubscriptionStarter;
 use Pushery\Billing\Support\LocalUpcomingInvoice;
 use Pushery\Billing\Support\OrderItemPreprocessorChain;
+use Pushery\Billing\Support\RedirectPaymentCsp;
 use Pushery\Billing\Support\WebhookSecretGuard;
 use Pushery\Billing\Tax\SaleTaxDecision;
 use Pushery\Billing\Trials\TrialPolicy;
@@ -165,6 +166,7 @@ final class MollieServiceProvider extends ServiceProvider
         // A shop page that mounts the card fields or redirects to the checkout for an account adds these sources to
         // its own policy. They are the same for every account.
         $manager->extendAccountCsp('mollie', static fn (): PaymentCsp => new MolliePaymentCsp);
+        $manager->extendAccountRedirectCsp('mollie', static fn (): PaymentCsp => new RedirectPaymentCsp(MollieHostedPages::HOSTS));
 
         // The payment methods an account has turned on, read with its client and on its profile.
         $manager->extendAccountPaymentMethods('mollie', static fn (PaymentAccount $account): EnabledPaymentMethods => new MollieEnabledPaymentMethods(

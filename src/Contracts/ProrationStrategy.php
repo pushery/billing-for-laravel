@@ -11,10 +11,10 @@ use Pushery\Billing\ValueObjects\Plan;
 /**
  * What a plan swapped mid-cycle costs or gives back. Three implementations:
  *
- *  - DELEGATE (Stripe): defer to the provider's own proration.
- *  - ARREARS (the package's own engine, under Mollie): nothing is paid for the period in progress, so the swap
+ *  - Delegate (Stripe): defer to the provider's own proration.
+ *  - Arrears (the package's own engine, under Mollie): nothing is paid for the period in progress, so the swap
  *    changes the bill that closes it, which then charges each tier for the days it held.
- *  - CREDIT-BALANCE (a local driver that collects in advance): the package computes the unused portion of the
+ *  - Credit balance (a local driver that collects in advance): the package computes the unused portion of the
  *    paid period into a customer credit balance and offsets the next order.
  */
 interface ProrationStrategy

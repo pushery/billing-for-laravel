@@ -25,7 +25,7 @@ return new class extends Migration
         Schema::create('billing_vouchers', function (Blueprint $table): void {
             $table->id();
             $table->string('code')->unique();
-            // The OWNER axis, not the merchant one: a voucher belongs to whoever bought it. Nullable so an
+            // The owner axis, not the merchant one: a voucher belongs to whoever bought it. Nullable so an
             // erasure can unlink it rather than delete the record of money that was taken.
             BillingSchema::nullableMorphs($table, 'owner', 'billing_vouchers_owner_index');
             $table->string('currency', 3);

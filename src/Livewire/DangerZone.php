@@ -71,6 +71,7 @@ final class DangerZone extends AccountScreen
         // Re-confirm the acting user's identity (throttled) before the irreversible cancel. On a wrong
         // secret or a throttle lockout this throws and the cancel never runs.
         $this->confirmIdentity($credential);
+        $this->spendProviderCall();
 
         $actions = $this->subscriptionActions();
 

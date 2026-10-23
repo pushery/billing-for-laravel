@@ -18,7 +18,7 @@ use Pushery\Billing\Support\TrialCallouts;
  * application's language (`LocalizedDate::long()`), the database entry carries it as an ISO date, and both
  * read the day in the zone of the moment passed in, so the two never name different days.
  *
- * Queued AFTER COMMIT, like every notification the package sends: the run that sends it claims, mails and
+ * Queued after the commit, like every notification the package sends: the run that sends it claims, mails and
  * marks itself handled in one transaction, so a run that rolled back can never have mailed the customer.
  */
 final class TrialEndingNotification extends BillingNotification

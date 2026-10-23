@@ -9,8 +9,10 @@ use Pushery\Billing\Catalogs\MeterCatalog;
 use Pushery\Billing\Contracts\TierResolver;
 use Pushery\Billing\Enums\MeteringPolicy;
 use Pushery\Billing\Exceptions\QuotaExceeded;
+use Pushery\Billing\Exceptions\SpendCapExceeded;
 use Pushery\Billing\ValueObjects\MeteredComponent;
 use Pushery\Billing\ValueObjects\QuotaDecision;
+use Pushery\Billing\ValueObjects\SpendCapCheck;
 
 /**
  * The quota pre-check: given an owner, a meter and how much they want to consume, decide whether to
@@ -36,13 +38,71 @@ final readonly class UsageGate
         private TierResolver $tiers,
         private PeriodResolver $periods,
         private UsageMeter $counters,
+        private SpendCaps $caps,
     ) {}
 
-    /** The quota decision for consuming $quantity of $meterKey now. An unmetered or ceiling-less meter is always allowed. */
+    /**
+     * The quota decision for consuming $quantity of $meterKey now. An unmetered or ceiling-less meter is always allowed
+     * by its allowance. With spend caps on, the owner's cap can still refuse the request, and the decision carries what
+     * is left under the cap.
+     */
     public function allows(Model $owner, string $meterKey, int $quantity = 1): QuotaDecision
     {
-        $component = $this->meters->component($this->tiers->resolve($owner)->key, $meterKey);
+        return $this->decide($owner, $meterKey, $quantity)[0];
+    }
 
+    /**
+     * Allow or throw: the same decision as allows(), but a blocked one raises QuotaExceeded, or SpendCapExceeded where
+     * the owner's spend cap refused it.
+     */
+    public function authorize(Model $owner, string $meterKey, int $quantity = 1): QuotaDecision
+    {
+        [$decision, $refusal] = $this->decide($owner, $meterKey, $quantity);
+
+        if ($refusal instanceof SpendCapCheck) {
+            throw SpendCapExceeded::fromCheck($meterKey, $decision->policy, $decision->remaining ?? 0, $refusal);
+        }
+
+        if ($decision->blocked()) {
+            throw QuotaExceeded::onMeter($meterKey, $decision->policy, $quantity, $decision->remaining ?? 0);
+        }
+
+        return $decision;
+    }
+
+    /**
+     * The decision, and the spend cap check that refused it where the cap did.
+     *
+     * The allowance decides first, by the meter's policy, and a request it refuses stays refused whatever the cap says.
+     * A request it takes is then measured against the owner's spend cap, and the first stop of a period is announced,
+     * as SpendCaps describes.
+     *
+     * @return array{0: QuotaDecision, 1: ?SpendCapCheck}
+     */
+    private function decide(Model $owner, string $meterKey, int $quantity): array
+    {
+        $component = $this->meters->component($this->tiers->resolve($owner)->key, $meterKey);
+        $decision = $this->allowance($owner, $meterKey, $quantity, $component);
+
+        if (! $component instanceof MeteredComponent || ! $this->caps->enabled()) {
+            return [$decision, null];
+        }
+
+        $period = $this->periods->forOwner($owner);
+        $check = $this->caps->check($owner, $component, $quantity, $period);
+
+        if (! $decision->blocked() && ! $check->admits()) {
+            $this->caps->announce($owner, $check, $period);
+
+            return [new QuotaDecision($meterKey, $decision->policy, allowed: false, degraded: false, remaining: $decision->remaining, remainingSpend: $check->remaining()), $check];
+        }
+
+        return [new QuotaDecision($meterKey, $decision->policy, $decision->allowed, $decision->degraded, $decision->remaining, $check->remaining()), null];
+    }
+
+    /** The decision of the meter's allowance alone, by its policy. */
+    private function allowance(Model $owner, string $meterKey, int $quantity, ?MeteredComponent $component): QuotaDecision
+    {
         // No such meter on the tier, or a meter with no `included` ceiling: nothing to enforce.
         if (! $component instanceof MeteredComponent || $component->included === null) {
             $policy = $component instanceof MeteredComponent ? $component->policy : MeteringPolicy::FairUse;
@@ -68,17 +128,5 @@ final readonly class UsageGate
             MeteringPolicy::Degrade => new QuotaDecision($meterKey, $component->policy, allowed: true, degraded: true, remaining: $remaining),
             MeteringPolicy::FairUse => new QuotaDecision($meterKey, $component->policy, allowed: true, degraded: false, remaining: $remaining),
         };
-    }
-
-    /** Allow or throw: the same decision as allows(), but a blocked one raises QuotaExceeded. */
-    public function authorize(Model $owner, string $meterKey, int $quantity = 1): QuotaDecision
-    {
-        $decision = $this->allows($owner, $meterKey, $quantity);
-
-        if ($decision->blocked()) {
-            throw QuotaExceeded::onMeter($meterKey, $decision->policy, $quantity, $decision->remaining ?? 0);
-        }
-
-        return $decision;
     }
 }

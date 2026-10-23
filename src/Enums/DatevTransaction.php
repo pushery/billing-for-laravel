@@ -76,7 +76,7 @@ enum DatevTransaction: string
     case CreatorInputDeStandard = 'creator_input_de_standard';
 
     /**
-     * Creator payout to a German REDUCED-rated business — input VAT 7% (books, e-books, cultural supplies).
+     * Creator payout to a German reduced-rated business — input VAT 7% (books, e-books, cultural supplies).
      *
      * Deliberately unmapped in the shipped charts. The package has no account it can confirm for this, and
      * an unconfirmed account here is not a cosmetic error: the input VAT lands on the wrong line of the

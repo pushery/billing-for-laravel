@@ -13,7 +13,7 @@ namespace Pushery\Billing\Enums;
  *  - Reported  the provider has it and will bill it. Terminal.
  *  - Reversed  reported, then withdrawn before the invoice closed. Terminal.
  *  - Failed    the provider refused it past the retry budget, or the cycle it belongs to has closed.
- *              Terminal, and LOUD: this is revenue that will not be collected unless someone acts.
+ *              Terminal, and loud: this is revenue that will not be collected unless someone acts.
  */
 enum UsageEventState: string
 {

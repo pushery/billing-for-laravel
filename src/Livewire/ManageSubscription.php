@@ -8,7 +8,6 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
 use Pushery\Billing\Catalogs\ConfigAddonCatalog;
@@ -35,7 +34,6 @@ use Pushery\Billing\ValueObjects\Plan;
 use Pushery\Billing\ValueObjects\TierIdentity;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 
 /**
  * The account-hub plan-change screen — the in-app upgrade/downgrade that replaces delegating plan
@@ -225,6 +223,8 @@ final class ManageSubscription extends AccountScreen
         // `StartsSubscriptions`, not `Checkout`. Only the hosted-checkout driver binds `Checkout`, so asking
         // for it here would resolve an unbound interface under every other driver and end the button in a
         // `BindingResolutionException`. This contract is what every driver answers, each in its own shape.
+        $this->spendProviderCall();
+
         $start = Container::getInstance()->make(StartsSubscriptions::class)->start($this->owner(), $tierKey, $coupon, $declarationReference);
         $url = SafeExternalUrl::orNull($start->checkoutUrl);
 
@@ -281,6 +281,8 @@ final class ManageSubscription extends AccountScreen
         Container::getInstance()->make(PurchaseDeclarations::class)
             ->assertMayCheckout($this->owner(), $addonKey, $declarationReference);
 
+        $this->spendProviderCall();
+
         $intent = Container::getInstance()->make(OneTimeCharge::class)->purchase($this->owner(), $addonKey, $declarationReference);
         $url = SafeExternalUrl::orNull($intent->payload['checkout_url'] ?? null);
 
@@ -321,7 +323,9 @@ final class ManageSubscription extends AccountScreen
     public function preview(string $tierKey): void
     {
         $this->refuseATierNotOffered($tierKey);
-        $this->throttle('swap-preview', [60 => 10, 3600 => 60, 86400 => 240]);
+        // A preview asks the provider twice on the platform's account, and beside the shared budget it keeps an hour
+        // and a day of its own, {@see ProviderCallBudget::spend()} for why a minute does not bound a month.
+        $this->spendProviderCall('swap-preview', [60 => 10, 3600 => 60, 86400 => 240]);
 
         $plan = Container::getInstance()->make(PlanCatalog::class)->planFor($tierKey);
 
@@ -338,7 +342,7 @@ final class ManageSubscription extends AccountScreen
         $this->denyInAppCheckout();
         $this->ensureEligible();
         $this->refuseATierNotOffered($tierKey);
-        $this->throttle('swap', [60 => 5]);
+        $this->spendProviderCall('swap', [60 => 5]);
 
         $subscription = $this->subscription();
         $timing = $subscription instanceof Subscription
@@ -388,37 +392,6 @@ final class ManageSubscription extends AccountScreen
 
         $this->previewTierKey = null;
         $this->previewAmount = null;
-    }
-
-    /**
-     * Refuse an owner who has used this action more often in a window than a customer clicking through the plans
-     * ever would.
-     *
-     * One Livewire request may carry up to 50 calls on each of up to 200 component entries, the framework's
-     * `payload.max_calls` and `max_components`, and a preview asks the provider twice on the platform's account.
-     * Without a limit, a single request drives thousands of provider calls. The refusal ends the request rather than
-     * answering each further call with nothing, so the rest of the batch never runs.
-     *
-     * A minute alone does not bound a month. The provider allots an account its reads per month, and ten previews a
-     * minute held all month come to over 400,000 reads for one owner, so the preview also carries an hour and a day.
-     *
-     * @param  array<int, int>  $limits  how many calls each window allows, keyed by the window's length in seconds
-     */
-    private function throttle(string $action, array $limits): void
-    {
-        $owner = $this->owner();
-        $id = $owner->getKey();
-        $key = 'billing:'.$action.':'.$owner->getMorphClass().':'.(is_scalar($id) ? (string) $id : '');
-
-        foreach ($limits as $seconds => $allowed) {
-            if (RateLimiter::tooManyAttempts("{$key}:{$seconds}", $allowed)) {
-                throw new TooManyRequestsHttpException(RateLimiter::availableIn("{$key}:{$seconds}"));
-            }
-        }
-
-        foreach (array_keys($limits) as $seconds) {
-            RateLimiter::hit("{$key}:{$seconds}", $seconds);
-        }
     }
 
     /**

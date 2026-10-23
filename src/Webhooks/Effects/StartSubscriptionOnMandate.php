@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Pushery\Billing\Discounts\CouponCodes;
 use Pushery\Billing\Discounts\CouponRedeemer;
+use Pushery\Billing\Discounts\TrialCodes;
 use Pushery\Billing\Enums\CollectionTiming;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Events\MandateEstablished;
@@ -97,25 +98,6 @@ final readonly class StartSubscriptionOnMandate
     private function write(SubscriptionIntent $intent): void
     {
         $now = CarbonImmutable::now();
-        $trialEndsAt = $intent->trial_ends_at === null
-            ? null
-            : CarbonImmutable::createFromInterface($intent->trial_ends_at);
-
-        // A trial pushes the first cycle out to its end; without one the period starts now and the engine
-        // charges it on its own schedule. Charging here would take money on a webhook, which is the one
-        // place a retry is guaranteed and an amount is not.
-        //
-        // Collected in advance, that schedule is now: the next run charges the first period, which the customer
-        // has from this moment. Collected in arrears, it is the period's end. A trial is due at its end either way,
-        // because nothing is owed for the free days.
-        $timing = CollectionTiming::fromConfigured(($this->config ?? Container::getInstance()->make(Repository::class))->get(CollectionTiming::CONFIG_KEY));
-        // The same reader the engine advances by, not a second answer to one question. Hardcoded to a
-        // month here, an annual subscriber's very first period is thirty days long — so the sweep collects
-        // the annual price again a month after they signed up, before the engine's own reading gets a turn.
-        $periodEnd = $trialEndsAt ?? CarbonImmutable::createFromInterface(
-            $this->intervals->for($intent->tier_key)->advance($now)
-        );
-        $firstRun = $timing === CollectionTiming::InAdvance && ! $trialEndsAt instanceof CarbonImmutable ? $now : $periodEnd;
 
         // An intent never overwrites a live subscription, and the check has to be here rather than at the
         // redirect. `LocalSubscriptionStarter::alreadySubscribed()` runs when the customer presses
@@ -155,6 +137,40 @@ final readonly class StartSubscriptionOnMandate
 
             return;
         }
+        $trialEndsAt = $intent->trial_ends_at === null
+            ? null
+            : CarbonImmutable::createFromInterface($intent->trial_ends_at);
+
+        // A code the customer entered can give days of trial of its own, and this is where it is redeemed: under the
+        // coupon's row lock, so of two orders racing for its last redemption one gets the days and the other none,
+        // and in the transaction that writes the row, so an order that never settles holds no redemption. Only a
+        // code that lengthens the trial is spent. See TrialCodes.
+        $owner = $this->ownerOf($intent);
+        $codes = new TrialCodes($this->coupons);
+        $days = $codes->daysFor($intent->coupon_code, $intent->tier_key);
+        $granted = null;
+
+        if ($owner instanceof Model && $days !== null && (! $trialEndsAt instanceof CarbonImmutable || $now->addDays($days) > $trialEndsAt)) {
+            $granted = $codes->redeemFor($owner, $intent->coupon_code, $intent->tier_key);
+            $codeEndsAt = $granted === null ? null : $now->addDays($granted['days']);
+            $trialEndsAt = $codeEndsAt instanceof CarbonImmutable && (! $trialEndsAt instanceof CarbonImmutable || $codeEndsAt > $trialEndsAt) ? $codeEndsAt : $trialEndsAt;
+        }
+
+        // A trial pushes the first cycle out to its end; without one the period starts now and the engine
+        // charges it on its own schedule. Charging here would take money on a webhook, which is the one
+        // place a retry is guaranteed and an amount is not.
+        //
+        // Collected in advance, that schedule is now: the next run charges the first period, which the customer
+        // has from this moment. Collected in arrears, it is the period's end. A trial is due at its end either way,
+        // because nothing is owed for the free days.
+        $timing = CollectionTiming::fromConfigured(($this->config ?? Container::getInstance()->make(Repository::class))->get(CollectionTiming::CONFIG_KEY));
+        // The same reader the engine advances by, not a second answer to one question. Hardcoded to a
+        // month here, an annual subscriber's very first period is thirty days long — so the sweep collects
+        // the annual price again a month after they signed up, before the engine's own reading gets a turn.
+        $periodEnd = $trialEndsAt ?? CarbonImmutable::createFromInterface(
+            $this->intervals->for($intent->tier_key)->advance($now)
+        );
+        $firstRun = $timing === CollectionTiming::InAdvance && ! $trialEndsAt instanceof CarbonImmutable ? $now : $periodEnd;
 
         // updateOrCreate on the UNIQUE KEY, not create. An ended row still occupies that slot: the starter
         // deliberately lets a customer who once canceled subscribe again, because refusing would leave them
@@ -183,7 +199,7 @@ final readonly class StartSubscriptionOnMandate
                 'declaration_reference' => $intent->declaration_reference,
                 // Preserved, never nulled — the same shape `SyncPlanFromSubscription` uses for this exact
                 // column. `LocalSubscriptionStarter` decides "has this owner had a trial" from it, so a
-                // plain write destroys the evidence the guard reads: the second, trial-LESS subscribe
+                // plain write destroys the evidence the guard reads: the second, trial-less subscribe
                 // settles here, sets this to null, and the third one hands out a fresh free trial. One
                 // trial per two cycles, resettable forever at one verification payment a time — the defect
                 // the guard exists to close, one paid round trip deeper and invisible in the data.
@@ -216,6 +232,14 @@ final readonly class StartSubscriptionOnMandate
                 'tier_adjustment_accrued' => 0,
             ],
         );
+
+        // The code that gave the days is the coupon the intent carries, redeemed above; spending it a second time
+        // would only meet the per-owner index.
+        if ($granted !== null) {
+            $granted['redemption']->forceFill(['subscription_id' => $subscription->getKey()])->save();
+
+            return;
+        }
 
         $this->redeemCarriedCoupon($intent, $subscription);
     }

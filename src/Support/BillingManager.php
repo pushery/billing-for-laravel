@@ -37,6 +37,9 @@ final class BillingManager
     /** @var array<string, callable(PaymentAccount): PaymentCsp> */
     private array $accountCspFactories = [];
 
+    /** @var array<string, callable(PaymentAccount): PaymentCsp> */
+    private array $accountRedirectCspFactories = [];
+
     /** @var array<string, callable(PaymentAccount): EnabledPaymentMethods> */
     private array $accountPaymentMethodFactories = [];
 
@@ -76,6 +79,17 @@ final class BillingManager
     public function extendAccountCsp(string $name, callable $factory): void
     {
         $this->accountCspFactories[$name] = $factory;
+    }
+
+    /**
+     * Register the Content-Security-Policy source a page needs that redirects one payment account's customer to the
+     * provider's hosted pages: the origins of those pages, for `form-action`.
+     *
+     * @param  callable(PaymentAccount): PaymentCsp  $factory
+     */
+    public function extendAccountRedirectCsp(string $name, callable $factory): void
+    {
+        $this->accountRedirectCspFactories[$name] = $factory;
     }
 
     /**
@@ -224,6 +238,22 @@ final class BillingManager
     public function accountsCsp(PaymentAccount ...$accounts): PaymentCsp
     {
         return new MergedPaymentCsp(...array_map($this->accountCsp(...), array_values($accounts)));
+    }
+
+    /**
+     * The CSP sources a page needs that only sends the customers of payment accounts to their providers' hosted pages,
+     * such as a checkout that submits a form and follows the checkout link it gets back: `form-action` with the origins
+     * of those pages, each once, and no script, frame or connection of a provider. A provider whose driver serves no
+     * hosted page names none.
+     */
+    public function accountsRedirectCsp(PaymentAccount ...$accounts): PaymentCsp
+    {
+        return new MergedPaymentCsp(...array_map(
+            fn (PaymentAccount $account): PaymentCsp => isset($this->accountRedirectCspFactories[$account->provider])
+                ? ($this->accountRedirectCspFactories[$account->provider])($account)
+                : new RedirectPaymentCsp([]),
+            array_values($accounts),
+        ));
     }
 
     /**

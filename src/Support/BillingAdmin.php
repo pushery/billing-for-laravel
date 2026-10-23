@@ -441,7 +441,7 @@ final readonly class BillingAdmin
         $terms = $charge->frozenFee();
         $full = $charge->refunded_minor + $amount->minorUnits >= $charge->gross_minor;
 
-        // A row from before the terms were recorded can still be refunded IN FULL: with nothing left of the
+        // A row from before the terms were recorded can still be refunded in full: with nothing left of the
         // sale there is no remainder to price, so every rate returns the same figure -- everything the
         // merchant still holds. A partial one genuinely cannot be computed, and a rate borrowed from today
         // would produce a balanced number belonging to a different sale.

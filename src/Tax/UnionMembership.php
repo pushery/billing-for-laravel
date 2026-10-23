@@ -8,7 +8,7 @@ namespace Pushery\Billing\Tax;
  * Whether an ISO-3166 country is a member of the EU VAT area — the one fact that decides, for a reverse-charge
  * input, whether it books to the §13b Abs. 1 (EU) or §13b Abs. 2 (third-country) account.
  *
- * This is an IDENTITY list of the 27 member states, not a market list: it says nothing about where a platform
+ * This is an identity list of the 27 member states, not a market list: it says nothing about where a platform
  * chooses to sell (that is the configurable allowlist). It is the same membership the OSS rate table encodes,
  * lifted here so a caller that needs only "is this the union?" — the DATEV account choice for a foreign
  * creator's supply — does not reach into a rate calculator for it.

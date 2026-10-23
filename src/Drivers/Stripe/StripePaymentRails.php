@@ -6,10 +6,12 @@ namespace Pushery\Billing\Drivers\Stripe;
 
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\PaymentRails;
+use Pushery\Billing\Contracts\ReadsRefunds;
 use Pushery\Billing\Contracts\RefundsPlatformFee;
 use Pushery\Billing\Contracts\SupplyRegimeResolver;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\FeeRefundPolicy;
+use Pushery\Billing\Enums\RefundStatus;
 use Pushery\Billing\Exceptions\FeeRefundPolicyNotPermitted;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\ValueObjects\ChargeNarrative;
@@ -19,6 +21,7 @@ use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\MandateReference;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\RefundResult;
+use Pushery\Billing\ValueObjects\RefundState;
 use Pushery\Billing\ValueObjects\TokenizedMethod;
 use RuntimeException;
 use Stripe\ApplicationFee;
@@ -44,7 +47,7 @@ use Stripe\TransferReversal;
  * authenticate (3-D Secure) or be a bank debit still processing (SEPA). Those are carried out as
  * requires-action / pending on the ChargeResult, never collapsed onto "declined".
  */
-final readonly class StripePaymentRails implements PaymentRails, RefundsPlatformFee
+final readonly class StripePaymentRails implements PaymentRails, ReadsRefunds, RefundsPlatformFee
 {
     /**
      * A PaymentIntent's `description` carries 1000 characters — four times Mollie's field.
@@ -197,6 +200,12 @@ final readonly class StripePaymentRails implements PaymentRails, RefundsPlatform
     {
         $params = ['payment_intent' => $this->paymentIntentFor($chargeReference), 'amount' => StripeAmount::of($amount)];
 
+        // The key goes into the refund's metadata as well as into its idempotency key. Stripe forgets an idempotency
+        // key after a day; the metadata stays with the refund, and refundsOf() reads the key back from it.
+        if ($idempotencyKey !== null) {
+            $params['metadata'] = ['billing_reference' => $idempotencyKey];
+        }
+
         // The flag only means something on a destination charge, where the transfer is part of the payment
         // and the provider can unwind both together. On a separate transfer the money moved in its own call,
         // and refunding the payment does not touch it — the flag is accepted and does nothing.
@@ -318,6 +327,53 @@ final readonly class StripePaymentRails implements PaymentRails, RefundsPlatform
         );
 
         return new Money((int) $refund->amount, strtoupper((string) $refund->currency));
+    }
+
+    /**
+     * Every refund Stripe holds for the payment, read through all its pages.
+     *
+     * `succeeded` reads as refunded, `failed` and `canceled` as they are, and `pending` and `requires_action` as
+     * pending, as does a status Stripe adds later: a refund that may still pay out is not one to make a second time.
+     *
+     * @return list<RefundState>
+     */
+    public function refundsOf(string $chargeReference): array
+    {
+        $states = [];
+
+        foreach ($this->stripe->refunds->all(['payment_intent' => $this->paymentIntentFor($chargeReference), 'limit' => 100])->autoPagingIterator() as $refund) {
+            $key = $refund->metadata['billing_reference'] ?? null;
+
+            $states[] = new RefundState(
+                reference: $refund->id,
+                key: is_string($key) && $key !== '' ? $key : null,
+                status: match ($refund->status) {
+                    'succeeded' => RefundStatus::Refunded,
+                    'failed' => RefundStatus::Failed,
+                    'canceled' => RefundStatus::Canceled,
+                    default => RefundStatus::Pending,
+                },
+                amount: new Money((int) $refund->amount, strtoupper((string) $refund->currency)),
+            );
+        }
+
+        return $states;
+    }
+
+    /**
+     * What is left to refund of the payment: what Stripe captured of its charge, less what it refunded. Null while
+     * the payment has no paid charge.
+     */
+    public function refundableOf(string $chargeReference): ?Money
+    {
+        $intent = $this->stripe->paymentIntents->retrieve($this->paymentIntentFor($chargeReference), ['expand' => ['latest_charge']]);
+        $charge = $intent->latest_charge ?? null;
+
+        if (! $charge instanceof Charge || ! $charge->paid) {
+            return null;
+        }
+
+        return new Money(max(0, (int) $charge->amount_captured - (int) $charge->amount_refunded), strtoupper((string) $charge->currency));
     }
 
     /**

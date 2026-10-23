@@ -99,7 +99,7 @@ final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
         // from a type's point of view an outbound object that cannot reverse does not exist here. It exists
         // in a consumer, which is the whole subject. `bound()` returns a bool and answers the question the
         // message is actually about -- is a transfers driver installed at all.
-        // The "NOTHING IS BOUND" case is decided before anything is resolved, and that ordering is what
+        // The "nothing is bound" case is decided before anything is resolved, and that ordering is what
         // makes it expressible at all. Asked afterwards -- `$outbound === null`, or a ternary on the
         // binding -- the analyzer rejects it as unreachable, and it is right about the code it can see:
         // this package ships one implementation of the outbound contract and that class carries both

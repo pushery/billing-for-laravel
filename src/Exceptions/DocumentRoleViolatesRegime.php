@@ -9,7 +9,7 @@ use Pushery\Billing\Enums\SupplyRegime;
 use RuntimeException;
 
 /**
- * A document was about to be written whose ROLE does not belong to the sale's frozen supply regime.
+ * A document was about to be written whose role does not belong to the sale's frozen supply regime.
  *
  * The cardinal case is a commission invoice under the commission chain (regime K). There the platform's
  * margin is the difference between the two fictional supplies' tax bases, not a supply of its own

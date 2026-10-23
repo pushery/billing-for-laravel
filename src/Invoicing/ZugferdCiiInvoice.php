@@ -270,7 +270,7 @@ final readonly class ZugferdCiiInvoice implements EInvoice
         }
 
         // BG-14 the period the whole document covers. CII orders ram:BillingSpecifiedPeriod after the tax
-        // bands and before the monetary summation, which is the same relative position the LINE-level period
+        // bands and before the monetary summation, which is the same relative position the line-level period
         // takes inside its own settlement — the two are the same term at two levels, not two terms.
         if ($invoice->service_period_start !== null && $invoice->service_period_end !== null) {
             $period = $doc->createElement('ram:BillingSpecifiedPeriod');

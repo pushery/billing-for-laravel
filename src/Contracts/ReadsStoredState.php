@@ -16,7 +16,7 @@ namespace Pushery\Billing\Contracts;
  * exception: the runner excludes these outside the console, so the boot path keeps the promise the contract
  * makes, and the command keeps the whole checklist.
  *
- * The failure this prevents is worse than the cost it saves. A checkpoint that declares itself NON-blocking
+ * The failure this prevents is worse than the cost it saves. A checkpoint that declares itself non-blocking
  * could still take the entire application down, because an exception out of `evaluate()` does not care what
  * `isBlocking()` returned -- and on an install whose schema is not yet migrated the query throws. The first
  * effect of adopting this package was an application that would not boot, `route:list` included, with the

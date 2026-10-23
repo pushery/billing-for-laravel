@@ -19,8 +19,8 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  * built by hand, which is what lets a consumer with its own checkout supply one without adopting this table.
  *
  * @property int $id
- * @property string $owner_type
- * @property int|string $owner_id
+ * @property ?string $owner_type
+ * @property int|string|null $owner_id
  * @property string $reference
  * @property bool $consented_to_immediate_provision
  * @property bool $acknowledged_forfeiture

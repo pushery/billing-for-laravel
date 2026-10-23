@@ -11,7 +11,7 @@ use Pushery\Billing\Support\TableLookup;
 /**
  * What an erasure request needs in order to be honest.
  *
- * (1) A webhook delivery gets an OWNER. The raw payload the receiver stores carries the customer's personal
+ * (1) A webhook delivery gets an owner. The raw payload the receiver stores carries the customer's personal
  * data — email, name, billing address, card last four — and until now that table had no owner column at
  * all, so it was simultaneously the package's largest store of personal data and the one an erasure could
  * not even find. With an owner on it, an erasure can scrub exactly that customer's payloads.

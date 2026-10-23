@@ -98,7 +98,7 @@
         "pestphp/pest-plugin-phpstan": "5.2.1",
         "pestphp/pest-plugin-type-coverage": "^5.0",
         "phpstan/phpstan": "2.3.1",
-        "pushery/sqlens-for-laravel": "^0.30",
+        "pushery/sqlens-for-laravel": "^0.31",
         "rector/rector": "2.7.0",
         "setasign/fpdf": "^1.8.2",
         "smalot/pdfparser": "^2.0",

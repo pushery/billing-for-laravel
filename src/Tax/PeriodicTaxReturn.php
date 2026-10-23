@@ -157,7 +157,7 @@ final readonly class PeriodicTaxReturn
             country: strtoupper($country),
             category: $this->categoryOf($sale),
             rateBps: $this->rateOf($sale),
-            // A correction reduces: its document states positive magnitudes and its ROLE inverts them, so
+            // A correction reduces: its document states positive magnitudes and its role inverts them, so
             // the sign is applied here, once, where a return needs it.
             netMinor: $correcting ? -$net : $net,
             taxMinor: $correcting ? -$tax : $tax,

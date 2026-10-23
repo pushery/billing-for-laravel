@@ -16,6 +16,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * @property ?string $merchant_id
  * @property string $number
  * @property ?Carbon $merchant_erased_at
+ * @property ?string $erased_merchant_key
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at
  */
