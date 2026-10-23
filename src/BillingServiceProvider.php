@@ -207,6 +207,7 @@ use Pushery\Billing\Entitlements\ConfigLicense;
 use Pushery\Billing\Events\BillableAccountDeleting;
 use Pushery\Billing\Events\CreatorReattestationDue;
 use Pushery\Billing\Events\CreatorTaxStatusChanged;
+use Pushery\Billing\Events\FallbackPaymentMethodCharged;
 use Pushery\Billing\Events\SellerDataReminderDue;
 use Pushery\Billing\Http\Controllers\BillingController;
 use Pushery\Billing\Http\Middleware\AccountContentSecurityPolicy;
@@ -220,6 +221,7 @@ use Pushery\Billing\Invoicing\XRechnungInvoice;
 use Pushery\Billing\Listeners\NotifyMerchantOfAutomaticTaxStatusChange;
 use Pushery\Billing\Listeners\NotifyMerchantOfReattestationDue;
 use Pushery\Billing\Listeners\NotifyMerchantOfSellerDataReminder;
+use Pushery\Billing\Listeners\NotifyOwnerOfFallbackCharge;
 use Pushery\Billing\Listeners\QueueSettlementRestatements;
 use Pushery\Billing\Listeners\RecordSellerDataReminderDelivery;
 use Pushery\Billing\Listeners\StopBillingForDeletedAccount;
@@ -1162,6 +1164,13 @@ final class BillingServiceProvider extends ServiceProvider
             if (! $this->paymentsOnly()) {
                 $this->app->make(Dispatcher::class)->listen(BillableAccountDeleting::class, StopBillingForDeletedAccount::class);
             }
+
+            // Tell an owner when a cycle was paid with their fallback because the default could not pay it. Nothing
+            // is owed, but the default still comes first next time, and it just failed.
+            $this->app->make(Dispatcher::class)->listen(
+                FallbackPaymentMethodCharged::class,
+                NotifyOwnerOfFallbackCharge::class,
+            );
 
             // Tell a merchant when the platform changed their tax standing without being asked. The change
             // is not a preference and neither is the notice: it alters what they owe and what their own

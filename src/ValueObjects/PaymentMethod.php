@@ -22,6 +22,8 @@ final readonly class PaymentMethod
         public ?string $last4 = null,
         public ?int $expMonth = null,
         public ?int $expYear = null,
+        /** Whether this is the method a cycle is charged to once when the default could not pay. */
+        public bool $isFallback = false,
     ) {}
 
     /**

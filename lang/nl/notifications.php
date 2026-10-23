@@ -11,6 +11,13 @@ return [
         'cta' => 'Betaalgegevens bijwerken',
     ],
 
+    'fallback_method_charged' => [
+        'subject' => 'Je reservebetaalmethode is belast',
+        'intro' => 'Je standaardbetaalmethode kon niet worden belast, daarom hebben we je reservebetaalmethode belast.',
+        'outro' => 'Controleer je standaardbetaalmethode. Bij je volgende betaling wordt die weer als eerste geprobeerd.',
+        'cta' => 'Betaalmethoden controleren',
+    ],
+
     'payment_succeeded' => [
         'subject' => 'Je betalingsbewijs',
         'intro' => 'Bedankt — we hebben je betaling ontvangen.',

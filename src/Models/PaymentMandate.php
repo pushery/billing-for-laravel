@@ -7,8 +7,10 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
+use LogicException;
 use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\MandateReference;
+use Pushery\Billing\ValueObjects\PaymentMethod;
 
 /**
  * One stored mandate a local-engine driver may charge off-session.
@@ -23,6 +25,7 @@ use Pushery\Billing\ValueObjects\MandateReference;
  * @property string $method
  * @property string $status
  * @property bool $is_default
+ * @property bool $is_fallback the one mandate a cycle is charged to once when the default could not pay
  * @property ?string $customer_reference
  * @property ?string $card_brand
  * @property ?string $card_last4
@@ -47,7 +50,7 @@ class PaymentMandate extends Model
     /** @var list<string> */
     protected $fillable = [
         'owner_type', 'owner_id', 'provider', 'mandate_reference',
-        'method', 'status', 'is_default', 'customer_reference',
+        'method', 'status', 'is_default', 'is_fallback', 'customer_reference',
         'card_brand', 'card_last4', 'card_exp_month', 'card_exp_year',
     ];
 
@@ -59,10 +62,11 @@ class PaymentMandate extends Model
     protected $attributes = [
         'status' => self::CHARGEABLE,
         'is_default' => false,
+        'is_fallback' => false,
     ];
 
     /** @var array<string,string> */
-    protected $casts = ['is_default' => 'boolean', 'card_exp_month' => 'integer', 'card_exp_year' => 'integer'];
+    protected $casts = ['is_default' => 'boolean', 'is_fallback' => 'boolean', 'card_exp_month' => 'integer', 'card_exp_year' => 'integer'];
 
     /**
      * The chargeable default for an owner at one provider, or null when they currently have no way to pay.
@@ -79,6 +83,25 @@ class PaymentMandate extends Model
             ->where('provider', $provider)
             ->where('status', self::CHARGEABLE)
             ->orderByDesc('is_default')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /**
+     * The chargeable fallback an owner keeps at one provider, or null when they keep none.
+     *
+     * Never the default, even where a row says both: the default is what was just refused, and charging it again
+     * as its own fallback would be a second attempt on the same method minutes after the first.
+     */
+    public static function fallbackFor(string $ownerType, int|string $ownerId, string $provider): ?self
+    {
+        return static::model()::query()
+            ->where('owner_type', $ownerType)
+            ->where('owner_id', $ownerId)
+            ->where('provider', $provider)
+            ->where('status', self::CHARGEABLE)
+            ->where('is_fallback', true)
+            ->where('is_default', false)
             ->orderByDesc('id')
             ->first();
     }
@@ -112,8 +135,50 @@ class PaymentMandate extends Model
                 ->whereKeyNot($this->getKey())
                 ->update(['is_default' => false, 'updated_at' => Carbon::now()]);
 
-            $this->update(['is_default' => true]);
+            // A default is never its own fallback, so a fallback promoted to default stops being one.
+            $this->update(['is_default' => true, 'is_fallback' => false]);
         });
+    }
+
+    /**
+     * Make this the mandate a cycle is charged to once when the default could not pay, in place of any other.
+     *
+     * Scoped to the owner and the provider, as the default is, and refused for the default itself: the fallback
+     * exists for the moment the default has just failed.
+     *
+     * @throws LogicException when this mandate is the default
+     */
+    public function makeFallback(): void
+    {
+        if ($this->is_default) {
+            throw new LogicException('The default payment method cannot be its own fallback. Choose another method as the fallback, or make another the default first.');
+        }
+
+        $this->getConnection()->transaction(function (): void {
+            static::model()::query()
+                ->where('owner_type', $this->owner_type)
+                ->where('owner_id', $this->owner_id)
+                ->where('provider', $this->provider)
+                ->whereKeyNot($this->getKey())
+                ->update(['is_fallback' => false, 'updated_at' => Carbon::now()]);
+
+            $this->update(['is_fallback' => true]);
+        });
+    }
+
+    /** The method as the account hub renders it, read from the row. */
+    public function toPaymentMethod(): PaymentMethod
+    {
+        return new PaymentMethod(
+            id: (string) $this->mandate_reference,
+            type: (string) ($this->method ?? 'mandate'),
+            isDefault: (bool) $this->is_default,
+            brand: $this->card_brand,
+            last4: $this->card_last4,
+            expMonth: $this->card_exp_month,
+            expYear: $this->card_exp_year,
+            isFallback: (bool) $this->is_fallback,
+        );
     }
 
     /** @return MorphTo<Model,$this> */

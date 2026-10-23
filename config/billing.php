@@ -963,10 +963,19 @@ return [
     | offer to switch off "your payment failed". An empty/unusable value here falls
     | back to mail rather than sending nothing.
     |
+    | A notice the queue fails to send is tried again: `tries` times in all, with
+    | `backoff` seconds before each retry, the last wait for every retry after it.
+    | A mail server that turns a message away for a passing reason has not taken
+    | it, so another try does not deliver it twice, and each channel is a job of
+    | its own, so a retry repeats only the channel that failed. A value that is
+    | not a positive whole number, or a list of them, reads as the shipped one.
+    |
     */
 
     'notifications' => [
         'channels' => ['mail'],
+        'tries' => 3,
+        'backoff' => [60, 300],
     ],
 
     /*

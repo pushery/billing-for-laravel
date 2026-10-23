@@ -11,6 +11,13 @@ return [
         'cta' => 'Actualizar los datos de pago',
     ],
 
+    'fallback_method_charged' => [
+        'subject' => 'Hemos cobrado tu método de pago de reserva',
+        'intro' => 'No hemos podido cobrar tu método de pago predeterminado, así que hemos cobrado tu método de reserva.',
+        'outro' => 'Revisa tu método de pago predeterminado. En tu próximo pago se volverá a intentar primero.',
+        'cta' => 'Revisar los métodos de pago',
+    ],
+
     'payment_succeeded' => [
         'subject' => 'Tu recibo de pago',
         'intro' => 'Gracias: hemos recibido tu pago.',

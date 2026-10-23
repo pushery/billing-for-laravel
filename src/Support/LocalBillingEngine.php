@@ -23,9 +23,11 @@ use Pushery\Billing\Dunning\ConfigDunningLadder;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\CollectionTiming;
 use Pushery\Billing\Enums\CreditReason;
+use Pushery\Billing\Enums\FallbackAttempt;
 use Pushery\Billing\Enums\OrderItemType;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Enums\SubscriptionState;
+use Pushery\Billing\Events\FallbackPaymentMethodCharged;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Invoicing\OrderInvoiceIssuer;
@@ -383,7 +385,17 @@ final readonly class LocalBillingEngine implements BillingEngine
             return true;
         }
 
-        $mandate = PaymentMandate::defaultFor($subscription->owner_type, $subscription->owner_id, $this->provider);
+        $retry = Order::model()::query()
+            ->where('subscription_id', $subscription->getKey())
+            ->where('period_start', $subscription->current_period_start)
+            ->where('status', OrderStatus::Failed)
+            ->first();
+
+        // A cycle the default could not pay that waits for the owner's fallback announces the fallback's debit. The
+        // default was just refused, and a notice naming it would announce a debit nobody is going to draw.
+        $mandate = $retry instanceof Order && $retry->fallback_attempt === FallbackAttempt::Due
+            ? $this->fallbackHandedTo($subscription, $retry)
+            : PaymentMandate::defaultFor($subscription->owner_type, $subscription->owner_id, $this->provider);
 
         if (! $mandate instanceof PaymentMandate || ! $this->chargeableOffSession($mandate) || ! $this->notices->drawsDirectDebit($this->rails, $mandate)) {
             return true;
@@ -394,12 +406,6 @@ final readonly class LocalBillingEngine implements BillingEngine
         if (! $amount->isPositive()) {
             return true;
         }
-
-        $retry = Order::model()::query()
-            ->where('subscription_id', $subscription->getKey())
-            ->where('period_start', $subscription->current_period_start)
-            ->where('status', OrderStatus::Failed)
-            ->first();
 
         $notice = $retry instanceof Order
             ? $this->notices->forCharge($mandate, $retry)
@@ -620,7 +626,21 @@ final readonly class LocalBillingEngine implements BillingEngine
             return;
         }
 
-        $mandate = PaymentMandate::defaultFor($subscription->owner_type, $subscription->owner_id, $this->provider);
+        // The order says which mandate this run charges: the owner's fallback when the default could not pay the cycle
+        // and the fallback is next, the default otherwise.
+        $fallback = $order->fallback_attempt === FallbackAttempt::Due;
+        $mandate = $fallback
+            ? $this->fallbackHandedTo($subscription, $order)
+            : PaymentMandate::defaultFor($subscription->owner_type, $subscription->owner_id, $this->provider);
+
+        if ($fallback && (! $mandate instanceof PaymentMandate || ! $this->chargeableOffSession($mandate))) {
+            // The fallback went away between the refusal and this run, removed or revoked. Nothing is left to try
+            // before dunning, and the default is not charged a second time minutes after it failed.
+            $order->update(['fallback_attempt' => FallbackAttempt::Refused]);
+            $this->recordFailure($subscription, $order, $total, 'fallback_unavailable');
+
+            return;
+        }
 
         if (! $mandate instanceof PaymentMandate || ! $this->chargeableOffSession($mandate)) {
             // Two different people arrive here, and only one of them owes anything.
@@ -665,6 +685,12 @@ final readonly class LocalBillingEngine implements BillingEngine
                 return;
             }
 
+            // A default the provider cannot charge off-session is a default that cannot pay, and the fallback is the
+            // owner's answer to exactly that.
+            if ($this->handToTheFallback($subscription, $order, $mandate)) {
+                return;
+            }
+
             $this->recordFailure($subscription, $order, $total, 'no_usable_mandate');
 
             return;
@@ -686,10 +712,19 @@ final readonly class LocalBillingEngine implements BillingEngine
             return;
         }
 
+        if ($fallback) {
+            // Written before the call, so the refusal, the settlement and a released claim all read that the fallback
+            // was charged, whichever of them comes.
+            $order->update(['fallback_attempt' => FallbackAttempt::Made]);
+        }
+
         $result = $this->rails->offSessionCharge(
             $due,
             $mandate->toReference(),
-            (string) $order->id,
+            // A key of its own for the fallback. The default was charged under the order's id minutes ago, and a
+            // provider still inside its idempotency window answers a second request under that key with the payment
+            // it already refused.
+            $fallback ? $order->id.'-fallback' : (string) $order->id,
             null,
             $this->narrate($subscription, $order),
         );
@@ -730,6 +765,14 @@ final readonly class LocalBillingEngine implements BillingEngine
         // Before recordFailure, so the balance is whole again by the time the ladder is scheduled: the
         // retry reassembles this cycle from scratch and must find the credit where the customer left it.
         $this->returnCredit($owner, $order, $spend);
+
+        // A refused default hands the cycle to the owner's fallback once, before any dunning. A refused fallback ends
+        // that: the ladder takes the cycle, and its retries go to the default again.
+        if ($fallback) {
+            $order->update(['fallback_attempt' => FallbackAttempt::Refused]);
+        } elseif ($this->handToTheFallback($subscription, $order, $mandate)) {
+            return;
+        }
 
         $this->recordFailure($subscription, $order, $due, $result->failureReason ?? 'charge_refused');
     }
@@ -937,6 +980,15 @@ final readonly class LocalBillingEngine implements BillingEngine
 
         $this->returnSpentCredit($subscription, $order);
 
+        // The turn a synchronous refusal takes: a bounced default hands the cycle to the fallback once, and a bounced
+        // fallback leaves it to dunning. The order does not record which mandate it charged, and the default is the
+        // one a charge that is not the fallback's went to.
+        if ($order->fallback_attempt === FallbackAttempt::Made) {
+            $order->update(['fallback_attempt' => FallbackAttempt::Refused]);
+        } elseif ($this->handToTheFallback($subscription, $order, PaymentMandate::defaultFor($subscription->owner_type, $subscription->owner_id, $this->provider))) {
+            return;
+        }
+
         $this->recordFailure($subscription, $order, Money::of($order->total_minor, $order->currency), $reason);
     }
 
@@ -1000,9 +1052,16 @@ final readonly class LocalBillingEngine implements BillingEngine
             // A late fee goes back to open rather than to failed: failed is where a cycle waits for its retry, and
             // a fee is retried by being open when the next cycle is paid. So is the rest of a period charged for a
             // change inside it.
+            //
+            // An abandoned charge of the fallback is due again as the fallback, so the next tick charges the same mandate
+            // under the same key and a payment the dead attempt may have created collapses onto it.
             $locked->update($locked->isLateFee() || $locked->isProration()
                 ? ['status' => OrderStatus::Open]
-                : ['status' => OrderStatus::Failed, 'processed_at' => Carbon::now()]);
+                : [
+                    'status' => OrderStatus::Failed,
+                    'processed_at' => Carbon::now(),
+                    ...($locked->fallback_attempt === FallbackAttempt::Made ? ['fallback_attempt' => FallbackAttempt::Due] : []),
+                ]);
 
             return true;
         });
@@ -1652,6 +1711,10 @@ final readonly class LocalBillingEngine implements BillingEngine
 
             Event::dispatch(new PaymentSucceeded((string) $subscription->owner_id, $amount, $reference ?? (string) $order->id));
 
+            if ($order->fallback_attempt === FallbackAttempt::Made) {
+                $this->reportTheFallback($subscription, $order, $amount);
+            }
+
             // After the cycle, never inside it: the cycle is collected and recorded whatever becomes of a fee.
             $this->collectChargesOfTheirOwn($subscription);
         });
@@ -1811,6 +1874,93 @@ final readonly class LocalBillingEngine implements BillingEngine
             ->first();
 
         return $charge instanceof Order ? $charge : null;
+    }
+
+    /**
+     * Hand a cycle the default could not pay to the owner's fallback, once and before any dunning: true when it did.
+     *
+     * Nothing is dunned and the status does not move, because nothing is owed yet that the fallback may still pay. The
+     * order waits as a failed one with its fallback due, which is how the next run finds it, and that run is due at
+     * once. Announcing a direct debit and charging are its work, so a fallback drawn by direct debit is announced
+     * before it is drawn, like any other.
+     *
+     * Not when the cycle had its turn already, when the owner keeps no fallback that can be charged off-session, or when
+     * the fallback is the mandate that just failed, which is what is left when it stood in for a revoked default.
+     */
+    private function handToTheFallback(Subscription $subscription, Order $order, ?PaymentMandate $refused): bool
+    {
+        if ($order->fallback_attempt instanceof FallbackAttempt) {
+            return false;
+        }
+
+        $fallback = PaymentMandate::fallbackFor($subscription->owner_type, $subscription->owner_id, $this->provider);
+
+        if (! $fallback instanceof PaymentMandate || ! $this->chargeableOffSession($fallback)
+            || ($refused instanceof PaymentMandate && $fallback->is($refused))) {
+            return false;
+        }
+
+        DB::transaction(function () use ($subscription, $order, $fallback): void {
+            $order->update([
+                'status' => OrderStatus::Failed,
+                'processed_at' => Carbon::now(),
+                'fallback_attempt' => FallbackAttempt::Due,
+                'fallback_mandate_reference' => $fallback->mandate_reference,
+            ]);
+
+            $subscription->update(['scheduled_processing_at' => Carbon::now()]);
+        });
+
+        Log::info('billing: the default could not pay a cycle, so its fallback is charged next', [
+            'subscription' => $subscription->getKey(),
+            'order' => $order->id,
+        ]);
+
+        return true;
+    }
+
+    /**
+     * The mandate a cycle was handed to as its fallback, while it is still the owner's and chargeable. Named by the
+     * order, so a fallback the owner changes in between does not change which mandate this cycle charges.
+     */
+    private function fallbackHandedTo(Subscription $subscription, Order $order): ?PaymentMandate
+    {
+        $mandate = $this->mandateNamedBy($subscription, $order);
+
+        return $mandate instanceof PaymentMandate && $mandate->status === PaymentMandate::CHARGEABLE ? $mandate : null;
+    }
+
+    /** The mandate the order names as its fallback, whatever its status now. */
+    private function mandateNamedBy(Subscription $subscription, Order $order): ?PaymentMandate
+    {
+        if ($order->fallback_mandate_reference === null) {
+            return null;
+        }
+
+        $mandate = PaymentMandate::model()::query()
+            ->where('owner_type', $subscription->owner_type)
+            ->where('owner_id', $subscription->owner_id)
+            ->where('provider', $this->provider)
+            ->where('mandate_reference', $order->fallback_mandate_reference)
+            ->first();
+
+        return $mandate instanceof PaymentMandate ? $mandate : null;
+    }
+
+    /**
+     * Tell the owner that the fallback paid a cycle, with the method that was charged. After the cycle is committed, as
+     * the receipt's event is, so a run that rolls back tells nobody.
+     */
+    private function reportTheFallback(Subscription $subscription, Order $order, Money $amount): void
+    {
+        $owner = $this->ownerOf($subscription);
+        $mandate = $this->mandateNamedBy($subscription, $order);
+
+        if (! $owner instanceof Model || ! $mandate instanceof PaymentMandate) {
+            return;
+        }
+
+        Event::dispatch(new FallbackPaymentMethodCharged($owner, $amount, $mandate->toPaymentMethod(), (string) $order->id));
     }
 
     /**
