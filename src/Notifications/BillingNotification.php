@@ -17,7 +17,7 @@ use Pushery\Billing\Contracts\BillingActionUrls;
 use Pushery\Billing\Enums\BillingAction;
 
 /**
- * The base every billing notice extends. It carries the three things that are the same for all of them,
+ * The base every billing notice extends. It carries the four things that are the same for all of them,
  * so no individual notice can get them wrong:
  *
  * 1. **Queued after the commit.** A webhook effect claims, sends and marks itself handled in one transaction;
@@ -34,6 +34,10 @@ use Pushery\Billing\Enums\BillingAction;
  *    be opting out of being told their money did not move. That decision is made once, here, and is final
  *    — an individual notice cannot opt itself out of it.
  *
+ * 4. **Tried again after a passing failure** — {@see $tries} / {@see backoff()}. Three tries, a minute and
+ *    then five minutes apart, unless `config('billing.notifications')` says otherwise, so a mail server's
+ *    timeout or temporary refusal does not lose the notice.
+ *
  * The customer's language is Laravel's own job: a notifiable implementing `HasLocalePreference` gets its
  * mail rendered in its stored locale, and every string here resolves through the publishable, overridable
  * `billing::notifications` namespace.
@@ -41,6 +45,51 @@ use Pushery\Billing\Enums\BillingAction;
 abstract class BillingNotification extends Notification implements ShouldQueueAfterCommit
 {
     use Queueable;
+
+    /** How many times the queue tries a notice when the config names no positive whole number. */
+    public const int TRIES = 3;
+
+    /** The seconds before each retry when the config names no list of positive whole numbers. */
+    public const array BACKOFF = [60, 300];
+
+    /**
+     * How many times the queue tries this notice before it gives up, `billing.notifications.tries`.
+     *
+     * A mail server that turns a message away for a passing reason, a timeout or a temporary refusal, has not
+     * taken it, so another try does not deliver it twice. The queue sends each channel as a job of its own, so a
+     * retry repeats only the channel that failed. A property rather than a method, because the job that sends the
+     * notice copies it when the notice is queued and asks no method for it.
+     */
+    public int $tries {
+        get {
+            $tries = $this->setting('billing.notifications.tries');
+
+            return is_int($tries) && $tries >= 1 ? $tries : self::TRIES;
+        }
+    }
+
+    /**
+     * The seconds the queue waits before each retry of this notice, `billing.notifications.backoff`: the first
+     * entry before the second try, the next before the third, and the last one before every try after it. A list
+     * with anything but positive whole numbers in it reads as the shipped one.
+     *
+     * @return list<int>
+     */
+    public function backoff(): array
+    {
+        $configured = $this->setting('billing.notifications.backoff');
+        $seconds = [];
+
+        foreach (is_array($configured) ? $configured : [] as $wait) {
+            if (! is_int($wait) || $wait < 1) {
+                return self::BACKOFF;
+            }
+
+            $seconds[] = $wait;
+        }
+
+        return $seconds === [] ? self::BACKOFF : $seconds;
+    }
 
     /**
      * The channels this notice goes out on — `['mail']` unless the app configures otherwise. An
@@ -51,7 +100,7 @@ abstract class BillingNotification extends Notification implements ShouldQueueAf
      */
     public function via(object $notifiable): array
     {
-        $channels = Container::getInstance()->make(Repository::class)->get('billing.notifications.channels');
+        $channels = $this->setting('billing.notifications.channels');
 
         if (! is_array($channels)) {
             return ['mail'];
@@ -119,5 +168,11 @@ abstract class BillingNotification extends Notification implements ShouldQueueAf
     final public function isSuppressible(): bool
     {
         return false;
+    }
+
+    /** A value of the application's config, read when it is asked for rather than when the notice was built. */
+    private function setting(string $key): mixed
+    {
+        return Container::getInstance()->make(Repository::class)->get($key);
     }
 }

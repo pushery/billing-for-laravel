@@ -4,6 +4,24 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.49.0] - 2026-10-23
+
+### ✨ Added
+
+- **A cycle the default payment method cannot pay is charged once to a fallback the owner keeps, before dunning begins.** An owner keeps a second method as the fallback, a card beside a SEPA mandate or two cards, and chooses it on the account hub's payment-methods screen or through the new `Contracts\KeepsAFallbackMethod` (`fallback()`, `setFallback()`, `clearFallback()`), which the Mollie driver binds. When the default is refused, its direct debit bounces, or it cannot be charged off-session, the next run charges the fallback under an idempotency key of its own. Nobody is dunned in between, a fallback drawn by SEPA direct debit is announced like any other debit before it is drawn, and a fallback that cannot pay either leaves the cycle to the ladder, whose retries charge the default again. A paid fallback dispatches `FallbackPaymentMethodCharged`, and the owner receives `FallbackPaymentMethodChargedNotification`, because the default still comes first for the next cycle. `PaymentMethod` carries `isFallback`.
+
+  **Upgrade:** two new migrations, `2026_10_22_000186_mark_the_fallback_on_billing_payment_mandates_table` and `2026_10_22_000187_record_the_fallback_attempt_on_billing_orders_table`, add `is_fallback` to `billing_payment_mandates` and `fallback_attempt` and `fallback_mandate_reference` to `billing_orders`, and `php artisan migrate` runs them. Nothing changes until an owner chooses a fallback.
+
+- **A billing notice is tried again after a passing failure, three times in all by default.** The notices went out with the worker's own setting, often a single try, so a mail server's timeout or temporary refusal lost the notice, the reminder before a canceled subscription ends included. `billing.notifications.tries` (3) and `billing.notifications.backoff` (60, then 300 seconds) now set how often and how far apart the queue tries each notice. A mail server that turned a message away has not taken it, so a retry does not deliver it twice, and the queue sends each channel as a job of its own, so a retry repeats only the channel that failed.
+
+  **Upgrade:** nothing to do. Set `billing.notifications.tries` to `1` to keep a single try.
+
+### 🔒 Security
+
+- **The provider-call budget holds when a payer's requests arrive together.** `ProviderCallBudget::spend()` read the count of each window first and charged it afterwards, so requests that arrived at the same moment all read the last free call and all spent it: with 29 of 30 calls spent, ten parallel requests put 39 calls into the window, and the number of workers was the only bound. It now charges each window first and judges the count the charge returns, and a refusal gives back every window it charged, so a refused call still spends nothing.
+
+  **Upgrade:** nothing to do.
+
 ## [0.48.0] - 2026-10-23
 
 ### ⚠️ Breaking
@@ -8181,7 +8199,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.48.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.49.0...HEAD
+[0.49.0]: https://github.com/pushery/billing-for-laravel/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/pushery/billing-for-laravel/compare/v0.47.0...v0.48.0
 [0.47.0]: https://github.com/pushery/billing-for-laravel/compare/v0.46.0...v0.47.0
 [0.46.0]: https://github.com/pushery/billing-for-laravel/compare/v0.45.0...v0.46.0

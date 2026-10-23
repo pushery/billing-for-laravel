@@ -11,6 +11,13 @@ return [
         'cta' => 'Aggiorna i dati di pagamento',
     ],
 
+    'fallback_method_charged' => [
+        'subject' => 'Abbiamo addebitato il tuo metodo di pagamento di riserva',
+        'intro' => 'Non è stato possibile addebitare il tuo metodo di pagamento predefinito, quindi abbiamo addebitato quello di riserva.',
+        'outro' => 'Controlla il tuo metodo di pagamento predefinito. Al prossimo pagamento verrà provato di nuovo per primo.',
+        'cta' => 'Controlla i metodi di pagamento',
+    ],
+
     'payment_succeeded' => [
         'subject' => 'La tua ricevuta di pagamento',
         'intro' => 'Grazie: abbiamo ricevuto il tuo pagamento.',

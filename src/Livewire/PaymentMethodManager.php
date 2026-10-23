@@ -7,6 +7,7 @@ namespace Pushery\Billing\Livewire;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Contracts\KeepsAFallbackMethod;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Livewire\Concerns\DegradesGracefully;
 use Pushery\Billing\Support\SafeExternalUrl;
@@ -37,6 +38,8 @@ final class PaymentMethodManager extends AccountScreen
         return $this->view('billing::livewire.payment-method-manager', [
             // Listing methods is a provider read; degrade to a notice rather than 500 the whole screen.
             'methods' => $this->orDegrade($this->methods(...), []),
+            // Offered only where the driver charges a fallback; under any other the choice would promise nothing.
+            'keepsFallback' => $this->fallbacks() instanceof KeepsAFallbackMethod,
         ]);
     }
 
@@ -74,6 +77,29 @@ final class PaymentMethodManager extends AccountScreen
         $this->authorizeMethod($methodId);
 
         Container::getInstance()->make(PaymentMethods::class)->setDefault($this->owner(), $methodId);
+    }
+
+    /**
+     * Make a method the one a cycle is charged to once when the default could not pay it. The default is never offered
+     * as its own fallback, and a request that names it anyway changes nothing.
+     */
+    public function setFallback(string $methodId): void
+    {
+        $this->spendProviderCall();
+        $method = $this->authorizeMethod($methodId);
+        $fallbacks = $this->fallbacks();
+
+        if ($fallbacks instanceof KeepsAFallbackMethod && ! $method->isDefault) {
+            $fallbacks->setFallback($this->owner(), $methodId);
+        }
+    }
+
+    /** Keep no fallback: a cycle the default cannot pay goes to dunning, as it did before. */
+    public function clearFallback(): void
+    {
+        $this->spendProviderCall();
+
+        $this->fallbacks()?->clearFallback($this->owner());
     }
 
     public function remove(string $methodId): void
@@ -121,17 +147,24 @@ final class PaymentMethodManager extends AccountScreen
     /**
      * Reject a mutation for a method the signed-in owner does not actually hold. The id arrives from the
      * browser, so it is checked against the owner's own stored methods — an id belonging to another
-     * account is a 404, never a mutation.
+     * account is a 404, never a mutation. Answers the owner's method by that id.
      */
-    private function authorizeMethod(string $methodId): void
+    private function authorizeMethod(string $methodId): PaymentMethod
     {
-        $owned = array_map(
-            static fn (PaymentMethod $method): string => $method->id,
-            Container::getInstance()->make(PaymentMethods::class)->all($this->owner()),
-        );
-
-        if (! (in_array($methodId, $owned, true))) {
-            throw new NotFoundHttpException;
+        foreach (Container::getInstance()->make(PaymentMethods::class)->all($this->owner()) as $method) {
+            if ($method->id === $methodId) {
+                return $method;
+            }
         }
+
+        throw new NotFoundHttpException;
+    }
+
+    /** The driver's fallback, where it keeps one: only a driver whose cycles the package bills itself binds it. */
+    private function fallbacks(): ?KeepsAFallbackMethod
+    {
+        $container = Container::getInstance();
+
+        return $container->bound(KeepsAFallbackMethod::class) ? $container->make(KeepsAFallbackMethod::class) : null;
     }
 }

@@ -25,6 +25,7 @@ use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
 use Pushery\Billing\Contracts\HostedPortal;
 use Pushery\Billing\Contracts\Invoices;
 use Pushery\Billing\Contracts\IssuesReaderPairingCodes;
+use Pushery\Billing\Contracts\KeepsAFallbackMethod;
 use Pushery\Billing\Contracts\LateFees;
 use Pushery\Billing\Contracts\MeterInspector;
 use Pushery\Billing\Contracts\OneTimeCharge;
@@ -197,6 +198,8 @@ final class MollieServiceProvider extends ServiceProvider
             new InAdvanceProrationStrategy(self::restOfPeriod($app), $app->make(PlanCatalog::class), $app->make(BillingEventLog::class)),
         ));
         $this->app->bind(PaymentMethods::class, MolliePaymentMethods::class);
+        // A fallback is charged by the engine below, so only this driver can keep the promise and only here is it bound.
+        $this->app->bind(KeepsAFallbackMethod::class, MolliePaymentMethods::class);
         $this->app->bind(PaymentCsp::class, MolliePaymentCsp::class);
         // Payment in person, on Mollie's own terminals. Rebound because the Stripe provider binds its reader path
         // unconditionally, and on this driver that one would ask Stripe about a reader it never saw. Mollie pairs by

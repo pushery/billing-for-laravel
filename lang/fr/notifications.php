@@ -11,6 +11,13 @@ return [
         'cta' => 'Mettre à jour les informations de paiement',
     ],
 
+    'fallback_method_charged' => [
+        'subject' => 'Ton moyen de paiement de secours a été débité',
+        'intro' => 'Ton moyen de paiement par défaut n’a pas pu être débité, nous avons donc débité ton moyen de secours.',
+        'outro' => 'Vérifie ton moyen de paiement par défaut. Il sera de nouveau essayé en premier lors de ton prochain paiement.',
+        'cta' => 'Vérifier les moyens de paiement',
+    ],
+
     'payment_succeeded' => [
         'subject' => 'Ton reçu de paiement',
         'intro' => 'Merci — nous avons bien reçu ton paiement.',

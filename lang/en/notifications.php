@@ -11,6 +11,13 @@ return [
         'cta' => 'Update your payment details',
     ],
 
+    'fallback_method_charged' => [
+        'subject' => 'Your fallback payment method was charged',
+        'intro' => 'Your default payment method could not be charged, so we charged your fallback method instead.',
+        'outro' => 'Please check your default payment method. It is tried first again on your next payment.',
+        'cta' => 'Check your payment methods',
+    ],
+
     'payment_succeeded' => [
         'subject' => 'Your payment receipt',
         'intro' => 'Thank you — your payment was received.',

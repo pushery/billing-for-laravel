@@ -9,8 +9,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
+use LogicException;
 use Mollie\Api\Exceptions\RequestException;
 use Mollie\Api\MollieApiClient;
+use Pushery\Billing\Contracts\KeepsAFallbackMethod;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Exceptions\MandateNeedsRedirect;
@@ -44,7 +46,7 @@ use RuntimeException;
  * Stripe as well. Deleting only the row left the authorization active at Mollie, where it could still be
  * charged from the dashboard.
  */
-final readonly class MolliePaymentMethods implements PaymentMethods
+final readonly class MolliePaymentMethods implements KeepsAFallbackMethod, PaymentMethods
 {
     /**
      * Mollie has no hosted page for adding a payment method, and that is not a gap to fill later.
@@ -98,6 +100,7 @@ final readonly class MolliePaymentMethods implements PaymentMethods
                 last4: $mandate->card_last4,
                 expMonth: $mandate->card_exp_month,
                 expYear: $mandate->card_exp_year,
+                isFallback: (bool) $mandate->is_fallback,
             );
         }
 
@@ -126,6 +129,39 @@ final readonly class MolliePaymentMethods implements PaymentMethods
     public function setDefault(Model $billable, string $methodId): void
     {
         $this->ownedBy($billable, $methodId)->makeDefault();
+    }
+
+    public function fallback(Model $billable): ?PaymentMethod
+    {
+        $fallback = $this->chargeable($billable)->where('is_fallback', true)->where('is_default', false)->orderByDesc('id')->first();
+
+        return $fallback instanceof PaymentMandate ? $fallback->toPaymentMethod() : null;
+    }
+
+    /**
+     * Make one of the billable's mandates the fallback. The default is refused with the same exception as a method
+     * that is not theirs would be answered with, so a screen shows one kind of refusal for a choice it should not
+     * have offered.
+     */
+    public function setFallback(Model $billable, string $methodId): void
+    {
+        $mandate = $this->ownedBy($billable, $methodId);
+
+        try {
+            $mandate->makeFallback();
+        } catch (LogicException $refused) {
+            throw new InvalidArgumentException($refused->getMessage(), 0, $refused);
+        }
+    }
+
+    public function clearFallback(Model $billable): void
+    {
+        PaymentMandate::model()::query()
+            ->where('owner_type', $billable->getMorphClass())
+            ->where('owner_id', $billable->getKey())
+            ->where('provider', 'mollie')
+            ->where('is_fallback', true)
+            ->update(['is_fallback' => false]);
     }
 
     public function remove(Model $billable, string $methodId): void

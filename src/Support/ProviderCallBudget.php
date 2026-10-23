@@ -65,15 +65,37 @@ final readonly class ProviderCallBudget
             $windows["billing:{$action}:{$payer}:{$seconds}"] = [$allowed, $seconds];
         }
 
-        // Every window is asked before any is charged, so a refusal spends nothing, not even in the windows it passed.
-        foreach ($windows as $key => [$allowed]) {
-            if ($this->limiter->tooManyAttempts($key, $allowed)) {
+        // Each window is charged first and judged by the count its charge returns. Asked first and charged after, two
+        // requests that arrive together both read the last free call and both spend it; the count the cache returns
+        // to a charge is that request's own. A refusal gives back every window it charged, the refusing one included,
+        // so it spends nothing, not even in the windows it passed.
+        $charged = [];
+
+        foreach ($windows as $key => [$allowed, $seconds]) {
+            $charged[] = $key;
+
+            if ($this->limiter->hit($key, $seconds) > $allowed) {
+                $this->giveBack($charged);
+
                 throw new TooManyRequestsHttpException($this->limiter->availableIn($key));
             }
         }
+    }
 
-        foreach ($windows as $key => [, $seconds]) {
-            $this->limiter->hit($key, $seconds);
+    /**
+     * Give back the call a refused spend charged in each of these windows.
+     *
+     * The limiter stores a count that falls back to one again, with the decay it is handed, so the decay is the time
+     * left in the window rather than its length. Handed the length, the count would outlive the window, and the next
+     * window would start counting where the refused one stopped. In a window of one call, a payer who asks again
+     * within each window would then be refused for good.
+     *
+     * @param  list<string>  $keys
+     */
+    private function giveBack(array $keys): void
+    {
+        foreach ($keys as $key) {
+            $this->limiter->decrement($key, max(1, $this->limiter->availableIn($key)));
         }
     }
 

@@ -11,6 +11,13 @@ return [
         'cta' => 'Atualizar os dados de pagamento',
     ],
 
+    'fallback_method_charged' => [
+        'subject' => 'Cobrámos o teu método de pagamento alternativo',
+        'intro' => 'Não foi possível cobrar o teu método de pagamento predefinido, por isso cobrámos o teu método alternativo.',
+        'outro' => 'Verifica o teu método de pagamento predefinido. No teu próximo pagamento, voltará a ser tentado primeiro.',
+        'cta' => 'Verificar os métodos de pagamento',
+    ],
+
     'payment_succeeded' => [
         'subject' => 'O teu comprovativo de pagamento',
         'intro' => 'Obrigado — recebemos o teu pagamento.',

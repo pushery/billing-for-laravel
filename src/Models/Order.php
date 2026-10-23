@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
+use Pushery\Billing\Enums\FallbackAttempt;
 use Pushery\Billing\Enums\OrderItemType;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Models\Concerns\Replaceable;
@@ -36,6 +37,8 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?Carbon $period_end
  * @property ?Carbon $processed_at
  * @property ?string $payment_reference
+ * @property ?FallbackAttempt $fallback_attempt where the cycle stands with the owner's fallback mandate, null when it never needed it
+ * @property ?string $fallback_mandate_reference the fallback mandate the cycle was handed to
  * @property ?string $reference the order's own key, unique where set: a late fee's dunning reference
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at when this row last moved — how a charge that has been in flight too long is spotted
@@ -61,6 +64,7 @@ class Order extends Model
     protected $fillable = [
         'owner_type', 'owner_id', 'provider', 'subscription_id', 'total_minor', 'currency',
         'status', 'period_start', 'period_end', 'processed_at', 'payment_reference', 'reference',
+        'fallback_attempt', 'fallback_mandate_reference',
     ];
 
     /**
@@ -81,6 +85,7 @@ class Order extends Model
         'subscription_id' => 'integer',
         'total_minor' => 'integer',
         'status' => OrderStatus::class,
+        'fallback_attempt' => FallbackAttempt::class,
         'period_start' => UtcDateTime::class,
         'period_end' => UtcDateTime::class,
         'processed_at' => UtcDateTime::class,

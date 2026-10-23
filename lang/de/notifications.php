@@ -11,6 +11,13 @@ return [
         'cta' => 'Zahlungsdaten aktualisieren',
     ],
 
+    'fallback_method_charged' => [
+        'subject' => 'Deine Ersatz-Zahlungsmethode wurde belastet',
+        'intro' => 'Deine Standard-Zahlungsmethode konnte nicht belastet werden, deshalb haben wir stattdessen deine Ersatz-Zahlungsmethode belastet.',
+        'outro' => 'Bitte prüfe deine Standard-Zahlungsmethode. Bei deiner nächsten Zahlung wird sie wieder zuerst versucht.',
+        'cta' => 'Zahlungsmethoden prüfen',
+    ],
+
     'payment_succeeded' => [
         'subject' => 'Deine Zahlungsbestätigung',
         'intro' => 'Danke – wir haben deine Zahlung erhalten.',

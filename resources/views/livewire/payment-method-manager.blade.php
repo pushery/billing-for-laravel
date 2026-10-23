@@ -44,6 +44,11 @@
                             {{ __('billing::account.payment_methods.default') }}
                         </span>
                     @endif
+                    @if ($method->isFallback)
+                        <span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/40 dark:text-blue-200">
+                            {{ __('billing::account.payment_methods.fallback') }}
+                        </span>
+                    @endif
                 </div>
                 <div class="flex items-center gap-3">
                     @unless ($method->isDefault)
@@ -52,6 +57,20 @@
                             {{ __('billing::account.payment_methods.make_default') }}
                         </button>
                     @endunless
+                    {{-- The fallback is offered only where the driver charges one, and never on the default. --}}
+                    @if ($keepsFallback && ! $method->isDefault)
+                        @if ($method->isFallback)
+                            <button type="button" wire:click="clearFallback"
+                                class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
+                                {{ __('billing::account.payment_methods.clear_fallback') }}
+                            </button>
+                        @else
+                            <button type="button" wire:click="setFallback('{{ $method->id }}')"
+                                class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
+                                {{ __('billing::account.payment_methods.make_fallback') }}
+                            </button>
+                        @endif
+                    @endif
                     <button type="button" wire:click="remove('{{ $method->id }}')"
                         class="text-sm font-medium text-red-600 hover:underline dark:text-red-400">
                         {{ __('billing::account.payment_methods.remove') }}
