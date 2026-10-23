@@ -112,6 +112,8 @@ final readonly class BillingEraser
             $purged = [];
             $retained = [];
             $axes = [];
+            // One key for the person on every axis, so the rows one axis keeps still find the rows another keeps.
+            $key = SubjectScopedRecords::erasureKey();
 
             // Every axis the package scopes records to: the buyer who holds a subscription, and the merchant on
             // the other side of a routed sale. A person can be both, and a merchant's rows carry no owner
@@ -128,7 +130,7 @@ final readonly class BillingEraser
                     ...$this->records->scrub($axis, $owner),
                 ];
 
-                $axisRetained = $this->records->unlink($axis, $owner, $now);
+                $axisRetained = $this->records->unlink($axis, $owner, $now, $key);
 
                 $axes[$axis->name] = ['purged' => $axisPurged, 'retained' => $axisRetained];
                 $purged = $this->sum($purged, $axisPurged);

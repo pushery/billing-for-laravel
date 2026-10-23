@@ -701,7 +701,7 @@ final readonly class LocalBillingEngine implements BillingEngine
         }
 
         // Not settled is not refused, and reading only `successful` said it was. `ChargeResult` states the
-        // distinction in its own comment — "`requiresAction` and `pending` are NOT failures" — and offers
+        // distinction in its own comment — "`requiresAction` and `pending` are not failures" — and offers
         // `failed()` for exactly this branch. It was never asked.
         //
         // What that cost is the ordinary European path, not an edge case. A SEPA direct debit is Mollie's

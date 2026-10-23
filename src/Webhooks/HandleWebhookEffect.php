@@ -26,13 +26,13 @@ use Throwable;
  *
  * The order inside is the whole point — claim, run, mark handled, all in one transaction:
  *
- *   - If the effect throws, the transaction rolls back and takes the CLAIM with it. The work is
+ *   - If the effect throws, the transaction rolls back and takes the claim with it. The work is
  *     re-claimable, so the queue's retry (and `billing:webhooks:replay`) will do it again. A dedup marker
  *     recorded before running the effect is how a payment-failure notice gets lost forever: the marker
  *     survives, the mail does not, and nothing will ever send it.
  *   - The failure is then recorded outside that rolled-back transaction, so an operator can see the work
  *     the package knows it still owes.
- *   - The package's notifications are queued AFTER COMMIT, so a mail is only ever really sent if the run
+ *   - The package's notifications are queued after the commit, so a mail is only ever really sent if the run
  *     it belongs to committed. That is what closes the other half: no duplicate mail from a run that
  *     rolled back.
  *   - For the same reason an effect never calls a provider itself. Inside this transaction its own

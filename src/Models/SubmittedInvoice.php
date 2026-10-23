@@ -17,8 +17,8 @@ use Pushery\Billing\Models\Concerns\Replaceable;
  * may therefore be paid. The findings hold the per-field result so a creator sees what is missing.
  *
  * @property int $id
- * @property string $owner_type
- * @property int $owner_id
+ * @property ?string $owner_type
+ * @property ?int $owner_id
  * @property string $issuer_invoice_number
  * @property int $net_minor
  * @property int $tax_minor

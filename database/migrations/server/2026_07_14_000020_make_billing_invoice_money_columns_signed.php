@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * A provider can finalize a NEGATIVE-total invoice — a steep mid-cycle downgrade whose proration credit
+ * A provider can finalize a negative-total invoice — a steep mid-cycle downgrade whose proration credit
  * exceeds the new charge yields an invoice with a negative total. The money columns were declared
  * unsignedBigInteger, which diverges by engine: MySQL 8.4 in strict mode (Laravel Cloud's default) rejects
  * the negative with SQLSTATE 22003, so the effect throws and the credit invoice is never persisted — the

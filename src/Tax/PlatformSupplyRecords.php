@@ -139,6 +139,12 @@ final readonly class PlatformSupplyRecords
     /** The account the merchant holds at the payment provider, as the provider names it, or nothing. */
     private function accountOf(MerchantCharge $charge): string
     {
+        // An erased merchant leaves the pair null, and a query for null would ask for an account that names
+        // no merchant rather than for this merchant's.
+        if ($charge->merchant_type === null || $charge->merchant_id === null) {
+            return '';
+        }
+
         $account = MerchantAccount::model()::query()
             ->where('merchant_type', $charge->merchant_type)
             ->where('merchant_id', $charge->merchant_id)

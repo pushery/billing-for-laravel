@@ -12,6 +12,8 @@ use Pushery\Billing\ValueObjects\ReaderPairingCode;
  * The terminal is paired with the profile the code was issued for, and it appears among that profile's terminals
  * once the code has been entered. A driver whose provider pairs the other way round binds `PairsReadersByTheirCode`
  * instead, and binds nothing here.
+ *
+ * Mollie issues pairing codes in live mode only, and refuses the call with a test key.
  */
 interface IssuesReaderPairingCodes
 {

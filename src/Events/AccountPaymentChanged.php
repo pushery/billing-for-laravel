@@ -25,6 +25,9 @@ final readonly class AccountPaymentChanged implements BillingDomainEvent
      * @param  ?string  $billingReference  the idempotency key the charge carried, such as the order's id
      * @param  array<string, string|int>  $metadata  the metadata the charge's options carried
      * @param  ?string  $refundReference  the provider's id of the refund that failed, with RefundFailed
+     * @param  bool  $testmode  whether the payment ran in the provider's test mode, as the provider reports it: every
+     *                          payment of a test account, and on a live account a payment made in test mode through
+     *                          its OAuth access, such as a probe before the shop goes live
      */
     public function __construct(
         public string $provider,
@@ -37,5 +40,6 @@ final readonly class AccountPaymentChanged implements BillingDomainEvent
         public ?string $billingReference = null,
         public array $metadata = [],
         public ?string $refundReference = null,
+        public bool $testmode = false,
     ) {}
 }

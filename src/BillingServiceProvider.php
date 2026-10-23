@@ -143,6 +143,7 @@ use Pushery\Billing\Contracts\MerchantResolver;
 use Pushery\Billing\Contracts\MerchantScopedCustomerDirectory;
 use Pushery\Billing\Contracts\MeterInspector;
 use Pushery\Billing\Contracts\MovesMerchantShare;
+use Pushery\Billing\Contracts\OwnerTimezone;
 use Pushery\Billing\Contracts\PaymentAccounts;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
 use Pushery\Billing\Contracts\PdfRenderer;
@@ -271,6 +272,7 @@ use Pushery\Billing\Marketplace\UnmovedMerchantShares;
 use Pushery\Billing\Models\InPersonSaleRecord;
 use Pushery\Billing\Notifiers\HubBillingActionUrls;
 use Pushery\Billing\Notifiers\LaravelDunningNotifier;
+use Pushery\Billing\Notifiers\NoOwnerTimezone;
 use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
 use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
@@ -711,6 +713,9 @@ final class BillingServiceProvider extends ServiceProvider
         // Where the button of a notice to an owner points: the account hub's screen, unless the application
         // binds an answer that sends some owners to screens of its own.
         $this->app->bind(BillingActionUrls::class, HubBillingActionUrls::class);
+        // The zone an owner reads the day of a notice in. None until the application binds an answer: a notice then
+        // names the day of the moment as stored, which this package keeps in UTC.
+        $this->app->bind(OwnerTimezone::class, NoOwnerTimezone::class);
         // Which owners buy as a business. Nobody, until the application says: an offer only businesses may buy is
         // then shown to no one rather than to everyone.
         $this->app->bind(IdentifiesBusinessBuyers::class, NoBusinessBuyers::class);
@@ -1116,7 +1121,13 @@ final class BillingServiceProvider extends ServiceProvider
             //
             // An application with screens of its own switches either off (`account.enabled`, `billing.admin.enabled`),
             // and the switched-off one registers neither its routes nor its components.
+            //
+            // The realtime bridge is not one of the hub's screens. It is headless, renders no route and reads nothing
+            // the hub sets up, and an application with account screens of its own mounts it in its own layout to have
+            // those screens refresh live and show the toasts. So it stays registered with the hub switched off.
             if (class_exists(Livewire::class) && ! $this->app->make(BillingManager::class)->paymentsOnly()) {
+                Livewire::component('billing.account-realtime', AccountRealtime::class);
+
                 if ($this->switchedOn('account.enabled')) {
                     $this->registerAccountHub();
                 }
@@ -1433,7 +1444,6 @@ final class BillingServiceProvider extends ServiceProvider
     private function registerAccountHub(): void
     {
         Livewire::component('billing.account-overview', AccountOverview::class);
-        Livewire::component('billing.account-realtime', AccountRealtime::class);
         Livewire::component('billing.subscription-overview', SubscriptionOverview::class);
         Livewire::component('billing.manage-subscription', ManageSubscription::class);
         Livewire::component('billing.invoice-history', InvoiceHistory::class);

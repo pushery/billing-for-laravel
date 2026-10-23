@@ -61,7 +61,10 @@ final readonly class StripeEnabledPaymentMethods implements EnabledPaymentMethod
 
     public function __construct(private StripeClient $stripe) {}
 
-    public function all(?Money $amount = null, ?string $country = null, ?string $locale = null): array
+    /**
+     * The configuration shows a wallet like any other method, so the wallets a checkout supports change nothing here.
+     */
+    public function all(?Money $amount = null, ?string $country = null, ?string $locale = null, array $wallets = []): array
     {
         $enabled = [];
 

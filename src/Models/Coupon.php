@@ -60,6 +60,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * @property ?Carbon $expires_at
  * @property ?string $provider_coupon_id
  * @property bool $active
+ * @property array<string, int>|null $trial_days
  */
 class Coupon extends Model
 {
@@ -70,7 +71,7 @@ class Coupon extends Model
     /** @var list<string> */
     protected $fillable = [
         'code', 'merchant_uid', 'type', 'value', 'currency', 'duration', 'duration_in_cycles',
-        'max_redemptions', 'redeemed_count', 'expires_at', 'provider_coupon_id', 'active',
+        'max_redemptions', 'redeemed_count', 'expires_at', 'provider_coupon_id', 'active', 'trial_days',
     ];
 
     /**
@@ -100,7 +101,19 @@ class Coupon extends Model
         // stored instant in the app timezone, shifting it by the offset on every round-trip (see InvoiceRecord).
         'expires_at' => UtcDateTime::class,
         'active' => 'boolean',
+        'trial_days' => 'array',
     ];
+
+    /**
+     * The days of trial this coupon gives a subscription to the plan, or null when it gives none: the plan's own
+     * entry, else the `*` entry for every plan the coupon does not name. A count below one gives nothing.
+     */
+    public function trialDaysFor(string $planKey): ?int
+    {
+        $days = $this->trial_days[$planKey] ?? $this->trial_days['*'] ?? null;
+
+        return is_int($days) && $days >= 1 ? $days : null;
+    }
 
     /** @return HasMany<CouponRedemption, $this> */
     public function redemptions(): HasMany

@@ -56,13 +56,22 @@ final class PaymentRecovery extends AccountScreen
             // without this branch the recovery screen answered "all good" to the same owner.
             'needsConfirmation' => $incomplete,
             // Reading the method on file is a provider read; degrade to a notice rather than 500 the screen.
-            'default' => $this->orDegrade(fn (): ?PaymentMethod => Container::getInstance()->make(PaymentMethods::class)->default($this->owner())),
+            'default' => $this->orDegrade($this->defaultMethod(...)),
         ]);
+    }
+
+    /** The method on file, one provider read, spent from the owner's budget first. */
+    private function defaultMethod(): ?PaymentMethod
+    {
+        $this->spendProviderCall();
+
+        return Container::getInstance()->make(PaymentMethods::class)->default($this->owner());
     }
 
     public function updatePaymentMethod(): void
     {
         $this->ensureEligible();
+        $this->spendProviderCall();
 
         // A past-due owner is sent to the provider's hosted card page to replace the method that failed.
         // When the page completes, the new card becomes the default for the account and for every

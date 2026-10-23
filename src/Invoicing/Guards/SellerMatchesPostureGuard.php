@@ -12,7 +12,7 @@ use Pushery\Billing\Invoicing\Party;
  * The seller a document names must agree with the posture it carries: the deemed supplier is the platform,
  * anyone else is the merchant.
  *
- * This is the who half of "a document must match its sale"; `DocumentRoleGuard` is the ROLE half. Checked at
+ * This is the who half of "a document must match its sale"; `DocumentRoleGuard` is the role half. Checked at
  * creation and independent of the regime — a document may carry a posture and a seller without a regime —
  * and skipped entirely where no seller was snapshotted, so a single-seller row is untouched.
  *

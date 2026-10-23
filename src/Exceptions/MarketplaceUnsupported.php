@@ -47,7 +47,7 @@ final class MarketplaceUnsupported extends RuntimeException
      * makes it.
      *
      * Refused rather than completed, which is what this package tells driver authors to do in the same
-     * situation: "a driver that cannot serve a routing must THROW, never no-op." A loud failure costs one
+     * situation: "a driver that cannot serve a routing must throw, never no-op." A loud failure costs one
      * checkout; the silent one costs every routed sale until somebody reconciles an account.
      *
      * This refusal is permanent and correct, not a placeholder. The rails alone genuinely cannot serve the

@@ -19,9 +19,11 @@ use Pushery\Billing\Contracts\UsageNotifier;
 use Pushery\Billing\Enums\MeteringPolicy;
 use Pushery\Billing\Enums\UsageEventState;
 use Pushery\Billing\Exceptions\QuotaExceeded;
+use Pushery\Billing\Exceptions\SpendCapExceeded;
 use Pushery\Billing\Models\UsageEvent;
 use Pushery\Billing\ValueObjects\BillingPeriod;
 use Pushery\Billing\ValueObjects\MeteredComponent;
+use Pushery\Billing\ValueObjects\SpendCapCheck;
 use Pushery\Billing\ValueObjects\UsageHold;
 use Throwable;
 
@@ -54,6 +56,7 @@ final readonly class UsageRecorder
         private UsageMeter $counters,
         private Repository $config,
         private UsageNotifier $notifier,
+        private SpendCaps $caps,
     ) {}
 
     /**
@@ -98,6 +101,7 @@ final readonly class UsageRecorder
 
         if ($recorded) {
             $this->warnIfRunningOut($owner, $component, $period);
+            $this->announceIfCapPassed($owner, $component, $period);
         }
 
         return $recorded;
@@ -262,18 +266,35 @@ final readonly class UsageRecorder
         $period = $this->periods->forOwner($owner, $moment);
         $component = $this->meters->component($this->tiers->resolve($owner)->key, $meterKey);
 
-        $hold = $this->counters->reserve(
+        // With spend caps on, the hold is taken under the lock on the owner's cap row, and only where the cap admits
+        // what the request would cost (see SpendCaps).
+        $hold = $this->caps->admit(
             $owner,
-            $meterKey,
-            $period->key,
+            $component,
+            $period,
             $quantity,
-            $component?->included,
-            // Only a blocking policy refuses past the allowance: a degrade or fair-use meter is billed past
-            // it, not refused, so there is nothing to defend and the reservation is granted unconditionally.
-            $component instanceof MeteredComponent && $component->policy->isBlocking(),
-            Carbon::now()->addSeconds($this->holdSeconds()),
-            $component instanceof MeteredComponent ? $component->grace : 0,
+            fn (): ?UsageHold => $this->counters->reserve(
+                $owner,
+                $meterKey,
+                $period->key,
+                $quantity,
+                $component?->included,
+                // Only a blocking policy refuses past the allowance: a degrade or fair-use meter is billed past
+                // it, not refused, so there is nothing to defend and the reservation is granted unconditionally.
+                $component instanceof MeteredComponent && $component->policy->isBlocking(),
+                Carbon::now()->addSeconds($this->holdSeconds()),
+                $component instanceof MeteredComponent ? $component->grace : 0,
+            ),
         );
+
+        if ($hold instanceof SpendCapCheck) {
+            throw SpendCapExceeded::fromCheck(
+                $meterKey,
+                $component instanceof MeteredComponent ? $component->policy : MeteringPolicy::FairUse,
+                $this->counters->remaining($owner, $meterKey, $period->key, $component?->included),
+                $hold,
+            );
+        }
 
         if (! $hold instanceof UsageHold) {
             // The same sum the reservation just refused — the same method, so the message cannot quote a
@@ -314,8 +335,24 @@ final readonly class UsageRecorder
         // The oversell-safe path consumes allowance exactly like record() does, so it warns exactly like it:
         // an owner metering through meter() must not be the one who never hears they are running out.
         $this->warnIfRunningOut($owner, $component, $period);
+        $this->announceIfCapPassed($owner, $component, $period);
 
         return $used;
+    }
+
+    /**
+     * Announce a spend cap the usage just written took the owner past, once per period.
+     *
+     * After the write's transaction, for the reason the quota warning gives: the usage is on the books and the caller
+     * was told so, and an announcement that fails must not turn that write into a failure the caller retries.
+     */
+    private function announceIfCapPassed(Model $owner, ?MeteredComponent $component, BillingPeriod $period): void
+    {
+        try {
+            $this->caps->announceIfPassed($owner, $component, $period);
+        } catch (Throwable $e) {
+            Log::warning('The spend cap announcement could not be made.', ['exception' => $e::class]);
+        }
     }
 
     /** How long a hold stands before the sweeper hands it back. */

@@ -176,7 +176,7 @@ final readonly class StripeCheckout implements Checkout
             $payload['automatic_tax'] = ['enabled' => true];
 
             // Asking for a tax ID is a choice, and `billing.checkout.tax_id_collection` makes it one. Stripe checks
-            // only the FORMAT of an ID during the session and verifies it afterwards, yet reverse-charges on the
+            // only the format of an ID during the session and verifies it afterwards, yet reverse-charges on the
             // format alone, so a consumer who types a well-formed invalid ID buys without VAT the platform still
             // owes. A platform that sells to consumers may leave the field out and charge every buyer their
             // country's tax. On by default, so an existing installation keeps the field.

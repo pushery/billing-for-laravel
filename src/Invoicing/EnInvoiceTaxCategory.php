@@ -200,7 +200,7 @@ final readonly class EnInvoiceTaxCategory
             return new self('O', null, 'Not subject to VAT');
         }
 
-        // A small-business relief is E, like any other exemption, and carries NO VATEX code on purpose.
+        // A small-business relief is E, like any other exemption, and carries no VATEX code on purpose.
         // BR-E-10 accepts the reason text alone, and the text is where the ground actually gets named —
         // a code guessed from the published list would be a claim about which article relieves this
         // supplier, which is precisely the fact the platform is not in a position to assert for them.

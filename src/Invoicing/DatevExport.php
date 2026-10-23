@@ -239,12 +239,17 @@ final readonly class DatevExport
      * The batch reaches a tax advisor, and a creator's identity there is the account it settles with, not a
      * person. A name in a booking text would also be a fan's name on the buyer side of the same file, which
      * is the leak the disclosure guard exists to prevent.
+     *
+     * An erased creator is identified by nothing any more, and the tag says so rather than ending in a bare
+     * prefix that reads like an identifier somebody lost.
      */
     private function creatorTag(InvoiceRecord $invoice): string
     {
-        return $invoice->settlement_document_type instanceof SettlementDocumentType
-            ? 'CR-'.$invoice->owner_id
-            : '';
+        if (! $invoice->settlement_document_type instanceof SettlementDocumentType) {
+            return '';
+        }
+
+        return $invoice->owner_id === null ? 'CR-geloescht' : 'CR-'.$invoice->owner_id;
     }
 
     /** The document a correction corrects, so the text says what the amount undoes. */
@@ -634,7 +639,7 @@ final readonly class DatevExport
         $date = $invoice->issued_at ?? $invoice->created_at ?? Carbon::now();
 
         // Direction lives only in the Soll/Haben marker — never the amount (field 1 is the unsigned
-        // magnitude, "Umsatz OHNE Soll/Haben-Kz"; a leading minus is rejected on import). A normal invoice
+        // magnitude, "Umsatz ohne Soll/Haben-Kz"; a leading minus is rejected on import). A normal invoice
         // debits receivables ("S"); a credit note reverses to "H". So does a genuinely negative invoice — a
         // downgrade proration credit finalizes as a regular negative-total invoice (no credit-note link),
         // which is economically a revenue reduction and must book "H" too, or turnover is overstated. The
@@ -643,7 +648,7 @@ final readonly class DatevExport
         $isCredit = $invoice->isCorrection() !== ($invoice->total_minor < 0);
         $marker = $isCredit ? 'H' : 'S';
 
-        // Konto (field 7) and Gegenkonto (field 8) are resolved from the document's ROLE, not read as fixed
+        // Konto (field 7) and Gegenkonto (field 8) are resolved from the document's role, not read as fixed
         // config: a fan invoice debits receivables against fan revenue, a self-billed settlement debits the
         // creator's input account against the creator-liabilities account. The BU-Schlüssel (field 9) stays
         // empty either way — every account these resolve to is an Automatikkonto that derives its VAT from the
@@ -821,8 +826,8 @@ final readonly class DatevExport
     /**
      * The settlement's part of the commission-chain booking of one settled transaction.
      *
-     *   (1) fan sale    money-transit  an  fan revenue     — booked from the BUYER'S RECEIPT, not from here
-     *   (2) creator input  input account  an  creditor      — the payout GROSS; the input expense is its net
+     *   (1) fan sale    money-transit  an  fan revenue     — booked from the buyer's receipt, not from here
+     *   (2) creator input  input account  an  creditor      — the payout gross; the input expense is its net
      *   (3) payout       creditor       an  money-transit   — the payout leaves the account
      *
      * The sale to the buyer is the receipt's to book. It is the document that states that sale — its rate,
@@ -873,7 +878,12 @@ final readonly class DatevExport
      */
     private function liabilityAccountFor(InvoiceRecord $invoice): string
     {
-        return $this->liabilities->forMerchant($invoice->owner_type, $invoice->owner_id);
+        return $this->liabilities->forMerchant(
+            $invoice->owner_type,
+            $invoice->owner_id,
+            $invoice->erased_owner_key,
+            $invoice->number ?? (string) $invoice->id,
+        );
     }
 
     /**

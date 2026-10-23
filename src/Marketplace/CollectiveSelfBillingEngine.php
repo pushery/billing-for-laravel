@@ -30,7 +30,7 @@ use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
  *
  * The single date is the point. A per-transaction document would scatter a creator's supplies across the
  * month; dating the collective on the month-end (Ultimo) puts the platform's expense, its input tax and the
- * matching output turnover in the same period, which is what § 15 UStG's "supply received AND invoice held"
+ * matching output turnover in the same period, which is what § 15 UStG's "supply received and invoice held"
  * needs, and makes the document total equal to the month's payout run — reconciliation by construction
  * rather than a search. The 6-month issuance limit is met structurally as a consequence.
  *

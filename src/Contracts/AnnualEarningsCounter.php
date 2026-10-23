@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
- * How much a party earned in one calendar year — the raw, jurisdiction-NEUTRAL basis a threshold monitor
+ * How much a party earned in one calendar year — the raw, jurisdiction-neutral basis a threshold monitor
  * evaluates against a limit.
  *
  * It knows nothing of any tax regime: no limit, no status, no country. It answers one factual question —

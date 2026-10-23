@@ -8,6 +8,7 @@ use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\DatevAccountResolver;
 use Pushery\Billing\Enums\DatevTransaction;
 use Pushery\Billing\Exceptions\DatevTransactionUnresolvable;
+use Pushery\Billing\Exceptions\MerchantCreditorAccountUnknown;
 use Pushery\Billing\Models\MerchantCreditorAccount;
 
 /**
@@ -50,14 +51,33 @@ final readonly class MerchantLiabilityAccounts
      *
      * In the individual arrangement the number is allocated on first use and kept — a number that moved would
      * leave earlier bookings pointing at an account that now means somebody else.
+     *
+     * An erased merchant is named by nobody any more. The collective account needs no name. An individual account
+     * is found through the erasure key the merchant's documents and their creditor account share, so the document
+     * books to the account the merchant had. A document whose merchant was erased before that key was recorded
+     * cannot be placed, and the export is refused for it rather than booked to another account.
+     *
+     * @param  string  $document  the document being booked, named in the refusal
      */
-    public function forMerchant(string $merchantType, int|string $merchantId): string
+    public function forMerchant(?string $merchantType, int|string|null $merchantId, ?string $erasedKey = null, string $document = ''): string
     {
         if (! $this->individual()) {
             return $this->accounts->resolve(DatevTransaction::CreatorLiabilities)->number;
         }
 
-        return $this->allocate($merchantType, (string) $merchantId);
+        if ($merchantType !== null && $merchantId !== null) {
+            return $this->allocate($merchantType, (string) $merchantId);
+        }
+
+        $account = $erasedKey === null
+            ? null
+            : MerchantCreditorAccount::model()::query()->where('erased_merchant_key', $erasedKey)->first();
+
+        if (! $account instanceof MerchantCreditorAccount) {
+            throw MerchantCreditorAccountUnknown::forErasedMerchant($document);
+        }
+
+        return $account->number;
     }
 
     /**

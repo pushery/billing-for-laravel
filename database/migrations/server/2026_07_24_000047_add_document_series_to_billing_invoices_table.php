@@ -7,7 +7,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 /**
- * Which numbering ROLE this document is — buyer receipt, self-billed invoice, settlement note, or commission
+ * Which numbering role this document is — buyer receipt, self-billed invoice, settlement note, or commission
  * invoice (plus their correction series) — frozen onto the row.
  *
  * The role is what the belief "a document must match its sale" checks against: the commission chain never

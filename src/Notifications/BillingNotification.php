@@ -20,7 +20,7 @@ use Pushery\Billing\Enums\BillingAction;
  * The base every billing notice extends. It carries the three things that are the same for all of them,
  * so no individual notice can get them wrong:
  *
- * 1. **Queued AFTER COMMIT.** A webhook effect claims, sends and marks itself handled in one transaction;
+ * 1. **Queued after the commit.** A webhook effect claims, sends and marks itself handled in one transaction;
  *    deferring the mail to the commit is what guarantees a run that rolled back cannot have mailed the
  *    customer, and a run that failed before committing is retried rather than silently losing the notice.
  *

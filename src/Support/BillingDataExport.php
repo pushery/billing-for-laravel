@@ -73,7 +73,7 @@ final readonly class BillingDataExport
         $export['billing_coupons'] = $this->couponsIssuedBy($owner);
 
         // The audit ledger keys on subject/actor, not owner — but a subject-access request covers the
-        // owner's billing history all the same, so include the rows where they are the subject OR the actor.
+        // owner's billing history all the same, so include the rows where they are the subject or the actor.
         $export['billing_events'] = array_values(DB::table('billing_events')
             ->where(fn (Builder $q): Builder => $q
                 ->where('subject_type', $owner->getMorphClass())->where('subject_id', $owner->getKey()))

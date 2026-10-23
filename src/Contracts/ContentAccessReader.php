@@ -22,7 +22,7 @@ use Pushery\Billing\ValueObjects\OwnedWork;
  *
  * ## Composition is a union, and the union is what makes it correct
  *
- * Access is granted when either a persisted grant says so OR the live subscription view does. The two answer
+ * Access is granted when either a persisted grant says so or the live subscription view does. The two answer
  * different questions and neither subsumes the other: ownership is permanent and narrow, a subscription is
  * broad and temporary. Requiring both would take a bought work away the day somebody cancels; requiring only
  * the subscription would do the same. The union is the only reading that survives a cancellation.

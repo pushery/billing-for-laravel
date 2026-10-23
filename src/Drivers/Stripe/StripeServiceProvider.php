@@ -80,6 +80,7 @@ use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\Events\TaxIdVerificationReported;
 use Pushery\Billing\Events\TrialEnding;
 use Pushery\Billing\Support\BillingManager;
+use Pushery\Billing\Support\RedirectPaymentCsp;
 use Pushery\Billing\Support\WebhookSecretGuard;
 use Pushery\Billing\ValueObjects\PaymentAccount;
 use Pushery\Billing\Webhooks\AccountWebhooks;
@@ -326,6 +327,8 @@ final class StripeServiceProvider extends ServiceProvider
         // A shop page that mounts Stripe.js for an account adds these sources to its own policy. They are the same for
         // every account.
         $this->app->make(BillingManager::class)->extendAccountCsp('stripe', static fn (): PaymentCsp => new StripePaymentCsp);
+        // An account with a custom domain serves its checkout there, and only its own checkout accepts that host.
+        $this->app->make(BillingManager::class)->extendAccountRedirectCsp('stripe', static fn (PaymentAccount $account): PaymentCsp => new RedirectPaymentCsp([...StripeHostedPages::HOSTS, ...$account->redirectHosts]));
 
         // The payment methods an account has turned on, from its default payment method configuration.
         $this->app->make(BillingManager::class)->extendAccountPaymentMethods(

@@ -58,6 +58,11 @@ final class UsageMeter
      * @param  bool  $enforce  whether to refuse past the allowance (a blocking policy) or always grant
      *                         (degrade/fair-use meters are billed past it, not refused)
      * @param  int  $grace  the units an enforcing hold may go past the ceiling, less the overdraft already owed
+     * @param  bool  $prepaidCounts  whether the units the owner bought and the open grants count toward the room.
+     *                               With false only the free allowance does: a tier whose bought units rest, as
+     *                               record() with an unlimited allowance treats them, enforces its limit against
+     *                               `included` alone. The grace, an overdraft on the bought units, does not apply
+     *                               either, and the hold draws on neither the balance nor the grants when it settles.
      */
     public function reserve(
         Model $owner,
@@ -68,13 +73,20 @@ final class UsageMeter
         bool $enforce,
         ?CarbonInterface $expiresAt = null,
         int $grace = 0,
+        bool $prepaidCounts = true,
     ): ?UsageHold {
-        return DB::transaction(function () use ($owner, $meterKey, $period, $amount, $included, $enforce, $expiresAt, $grace): ?UsageHold {
+        return DB::transaction(function () use ($owner, $meterKey, $period, $amount, $included, $enforce, $expiresAt, $grace, $prepaidCounts): ?UsageHold {
             $counter = $this->lockedCounter($owner, $meterKey, $period);
             $prepaid = $this->lockedPrepaid($owner->getMorphClass(), $owner->getKey(), $meterKey);
             $grants = $this->lockedGrants($owner->getMorphClass(), $owner->getKey(), $meterKey);
 
-            if ($enforce && $included !== null) {
+            if ($enforce && $included !== null && ! $prepaidCounts) {
+                // Only the free allowance is room here, less what requests in flight already hold. The bought
+                // units rest, so a balance on the owner's row neither widens the limit nor carries a grace.
+                if ($amount > self::availableFrom($included, $counter->used, $counter->reserved, 0)) {
+                    return null;
+                }
+            } elseif ($enforce && $included !== null) {
                 // What the owner can still take: the cycle's unspent free allowance, plus the units they
                 // bought, minus everything already promised to requests in flight.
                 //
@@ -110,8 +122,11 @@ final class UsageMeter
                 'amount' => $amount,
                 // Frozen with the hold: settle() needs the allowance line this hold was taken against, so a
                 // tier change between reserving and settling cannot silently move it. The grace likewise.
-                'included' => $included,
-                'grace' => $enforce && $grace > 0 ? $grace : null,
+                //
+                // A hold whose bought units do not count freezes an unlimited allowance, the one record() takes for
+                // the same tier, so settling it draws on neither the balance nor the grants.
+                'included' => $prepaidCounts ? $included : PHP_INT_MAX,
+                'grace' => $prepaidCounts && $enforce && $grace > 0 ? $grace : null,
                 'state' => ReservationState::Pending,
                 'expires_at' => $expiresAt ?? Carbon::now()->addMinutes(15),
             ]);
@@ -279,6 +294,42 @@ final class UsageMeter
     }
 
     /**
+     * Units of a meter in a period billed past every allowance once the holds in flight settle in full, with $more
+     * units on top: past `included`, and past what the grants and the prepaid balance pay for.
+     *
+     * What a spend cap measures. A hold settles past the free allowance and then draws on the grants and the balance
+     * before anything is billed, so the units held for requests in flight are counted here as the money they may
+     * still cost. Units billed already stay billed: a balance bought later pays for later usage, never for usage
+     * billed before it, which is why the larger of the two counts wins.
+     */
+    public function billableUnits(Model $owner, string $meterKey, string $period, ?int $included, int $more = 0): int
+    {
+        $counter = UsageCounter::model()::query()
+            ->where('owner_type', $owner->getMorphClass())
+            ->where('owner_id', $owner->getKey())
+            ->where('meter_key', $meterKey)
+            ->where('period', $period)
+            ->first();
+
+        $used = $counter instanceof UsageCounter ? $counter->used : 0;
+        $held = $counter instanceof UsageCounter ? $counter->reserved : 0;
+        $paid = $counter instanceof UsageCounter ? $counter->prepaid_used : 0;
+
+        $row = PrepaidUnits::model()::query()
+            ->where('owner_type', $owner->getMorphClass())
+            ->where('owner_id', $owner->getKey())
+            ->where('meter_key', $meterKey)
+            ->first();
+
+        $left = ($row instanceof PrepaidUnits ? max(0, $row->balance) : 0)
+            + $this->grantsLeft($this->grantsOf($owner->getMorphClass(), $owner->getKey(), $meterKey, lock: false));
+
+        $free = max(0, $included ?? 0);
+
+        return max(0, max(0, $used - $free) - $paid, max(0, $used + $held + $more - $free) - $paid - $left);
+    }
+
+    /**
      * Settle one hold, once: take the whole hold off the ceiling, add whatever it really used, draw the part
      * that fell past the free allowance from prepaid, and stamp the row. Every way a hold can end —
      * committed, released, expired — comes through here, so the "this one is already settled" check exists
@@ -313,7 +364,7 @@ final class UsageMeter
 
             $counter->update([
                 'used' => $counter->used + $settled,
-                // The FULL hold comes off, never only the part that was used — anything else leaks the
+                // The full hold comes off, never only the part that was used — anything else leaks the
                 // remainder of every partial settlement back into the ceiling.
                 'reserved' => max(0, $counter->reserved - $reservation->amount),
                 'prepaid_used' => $counter->prepaid_used + $drawn,

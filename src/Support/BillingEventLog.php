@@ -14,7 +14,7 @@ use Pushery\Billing\Models\BillingEvent;
  * knowing the storage shape.
  *
  * Two levels, `billing.audit.level`:
- *   - `money` (default) writes the FLOOR — every money movement and entitlement/state change, the events an
+ *   - `money` (default) writes the floor — every money movement and entitlement/state change, the events an
  *     auditor or a "why is this customer on free?" question needs. Always on, never noisy.
  *   - `all` also writes the high-volume, navigational and read-side events (a customer opening checkout, a
  *     card added) — opt-in, because on a busy app they are a firehose.

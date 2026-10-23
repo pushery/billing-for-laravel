@@ -27,7 +27,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * keys and reached the same answer, independently.
  *
  * That held right up until one of them stopped. The one-off lane hard-wired `resolveFor(true)` where the
- * subscription lane passed the configured value, so an operator selling NON-electronic goods through a
+ * subscription lane passed the configured value, so an operator selling non-electronic goods through a
  * marketplace where the merchant is the seller of record could open a subscription and could not complete a
  * one-off purchase — and the refusal they got named an electronic supply, which their own configuration
  * denies. Nothing was red: both lanes were internally consistent, and no test compared them.

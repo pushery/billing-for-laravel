@@ -85,7 +85,7 @@ final readonly class SubjectScopedRecords
             // Only rows that still hold something: counting rows already scrubbed would report work that did
             // not happen, and this count is what an erasure receipt is written from. The alternatives are
             // nested — at the top level an `orWhere` would sit beside the two morph conditions and turn
-            // "this person's rows that hold data" into "this person's rows, OR anyone's row that holds
+            // "this person's rows that hold data" into "this person's rows, or anyone's row that holds
             // data", scrubbing strangers.
             $scrubbed[$table] = $this->scoped($axis, $table, $subject)
                 ->where(static function (Builder $q) use ($columns): void {
@@ -105,14 +105,18 @@ final readonly class SubjectScopedRecords
      * The stamp is what the retention clock later reads: a record with no erasure date belongs to somebody
      * who is still here, and pruning it would delete a live customer's invoice.
      *
+     * The key is drawn here unless the caller passes one. An erasure that walks several axes passes the same key to
+     * each, so a person's rows on one axis find their rows on another: a merchant's settlement document finds the
+     * merchant's creditor account.
+     *
      * @return array<string, int> table => rows unlinked
      */
-    public function unlink(ErasureAxis $axis, Model $subject, Carbon $at): array
+    public function unlink(ErasureAxis $axis, Model $subject, Carbon $at, ?string $key = null): array
     {
         $unlinked = [];
         // One key for this person, the same in every table that keeps one, and drawn at random so that it leads
         // back to nobody.
-        $key = bin2hex(random_bytes(16));
+        $key ??= self::erasureKey();
 
         foreach ($axis->retained as $table) {
             $keyColumn = $axis->erasedKeys[$table] ?? null;
@@ -126,6 +130,12 @@ final readonly class SubjectScopedRecords
         }
 
         return $unlinked;
+    }
+
+    /** A key for one erased person: 32 hex characters, drawn at random so that it leads back to nobody. */
+    public static function erasureKey(): string
+    {
+        return bin2hex(random_bytes(16));
     }
 
     /**

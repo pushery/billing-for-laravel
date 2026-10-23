@@ -102,7 +102,7 @@ final readonly class FanReceiptIssuer
      * @param  ?string  $provider  which provider the charge reference belongs to — the money, not the supply
      * @param  int|ProviderComputedTax  $taxRateBps  a rate in basis points, or the whole position a provider
      *                                               computed. A union rather than an eleventh parameter: the
-     *                                               position already CARRIES its rate, so the two are one
+     *                                               position already carries its rate, so the two are one
      *                                               argument's worth of meaning — what this document's tax
      *                                               position is. Given a position, the base and the tax are
      *                                               written as they arrived rather than derived, because on a
@@ -497,7 +497,7 @@ final readonly class FanReceiptIssuer
      *   transaction is aborted"), so the recovery read is itself refused unless a rollback comes first.
      * - **MySQL** does not need that rollback and would not reliably permit it: measured on 8.4, the
      *   rollback `DB::transaction()` performs comes back "SAVEPOINT trans2 does not exist", and that
-     *   PDOException then REPLACES the violation being absorbed. It only appears when the call is nested
+     *   PDOException then replaces the violation being absorbed. It only appears when the call is nested
      *   inside another transaction — the shape a careful consumer produces, and the shape every test has.
      *
      * A mechanism whose failure mode is "works alone, breaks inside your transaction" is worse than the

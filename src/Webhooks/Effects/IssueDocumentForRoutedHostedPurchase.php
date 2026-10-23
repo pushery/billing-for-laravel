@@ -66,7 +66,7 @@ use Pushery\Billing\Webhooks\RepeatableEffect;
  *   path keeps. Where the merchant is the seller of record the platform is not a party to the supply, and a
  *   document in its own name would name the wrong seller.
  * - **A tax the provider computed that it cannot state** — a positive figure means the rate came from the
- *   buyer's address, and the event carries amounts and never a rate. That is now ASKED of the provider
+ *   buyer's address, and the event carries amounts and never a rate. That is now asked of the provider
  *   rather than guessed at, through {@see ReadsProviderComputedTax}; what survives as a refusal is the case
  *   the provider cannot answer — several rates on one sale, a rate that is not a percentage, one finer than
  *   the document carries, or a read that failed. Zero is a different answer again: it says tax was computed

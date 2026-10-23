@@ -126,7 +126,7 @@ final readonly class IssueLocalCreditNote implements DedupesOnReference
         $correctionKey = sprintf('%s:credited:%d', $event->paymentReference, $cumulative)
             .($credit->reinstated > 0 ? sprintf(':after:%d', $credit->reinstated) : '');
 
-        // NO `exists()` pre-check, and its absence is the point. One stood here and became unreachable the
+        // No `exists()` pre-check, and its absence is the point. One stood here and became unreachable the
         // moment a note started stating the delta: a redelivery repeats a cumulative figure that has
         // already been credited, so `$credited` is zero and the guard above returns before this line. For
         // the pre-check to fire, a note keyed on a cumulative figure would have to exist while the notes

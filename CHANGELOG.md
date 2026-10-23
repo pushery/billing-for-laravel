@@ -4,6 +4,64 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.48.0] - 2026-10-23
+
+### ⚠️ Breaking
+
+- **`EnabledPaymentMethods::all()` takes a fourth parameter, `array $wallets = []`.** A class of your own that implements the contract adds it to its signature, or PHP refuses to load the class. Code that calls `all()` is unaffected.
+
+### ✨ Added
+
+- **The refunds of a payment can be read back, each with the key it was made under, and so can what is left to refund.** The Mollie and Stripe rails, the rails of a payment account included, implement `Contracts\ReadsRefunds`. `refundsOf($chargeReference)` lists every refund the provider holds for the payment as a `RefundState`: the provider's reference, the idempotency key the refund was made under, its status as `pending`, `refunded`, `failed` or `canceled`, and its amount. `refundableOf($chargeReference)` answers what can still be refunded, or null for a payment that was never paid. A provider remembers an idempotency key for an hour at Mollie and a day at Stripe, so a refund whose answer was lost and that is retried after that is paid out twice; looking for the key in `refundsOf()` first finds the refund that already went out, and `RefundState::standing()` says whether it can still reach the customer. For this, `refund()` now stores the key in the metadata of a Stripe refund as `billing_reference`, as it already did at Mollie.
+
+  **Upgrade:** nothing to do. A connected Mollie account needs the `refunds.read` permission to list refunds and `payments.read` for what is left to refund, so add both to the scopes you ask for.
+
+- **One budget of provider calls per payer, shared by the account screens and an application's own.** `ProviderCallBudget::spend()` takes a call from a payer's budget, `billing.provider_budget` with 30 calls in 10 seconds by default (`BILLING_PROVIDER_BUDGET_CALLS`, `BILLING_PROVIDER_BUDGET_SECONDS`), and answers a request past it with a 429 before the provider is asked. Every account screen spends from it before it asks the provider: the invoice list and the next-invoice preview at each render, cancel, resume and the immediate cancel, the payment methods and recovery, checkout and add-ons, and the plan change and its preview, which keep their own windows on top. A screen an application builds on the same seams spends from the same budget, so one payer has one count, and a crafted request that batches many Livewire calls reaches the provider at most as often as the budget allows.
+
+  **Upgrade:** nothing to do. An application with screens of its own on `Invoices`, `UpcomingInvoice`, `SubscriptionActions` or `PaymentMethods` calls `ProviderCallBudget::spend($owner)` before each provider call, and one that limits these requests itself sets `billing.provider_budget.calls` to `null`.
+
+- **A coupon can give a subscription days of trial, by plan.** `billing_coupons.trial_days` names the days per plan, with `*` for every plan it does not name. The days count only where the code is redeemed under the coupon's row lock: at the start for a subscription whose trial needs no payment method, when the mandate settles for one that needs it. Of two orders racing for the last redemption one gets the trial, and an order that never settles holds no redemption. A code is spent only when it lengthens the trial the policy gives, and it is honored for a customer who had a trial before. `TrialCodes::assertGives()` checks a code before the start and throws `TrialCodeRefused` with one message for every code that gives nothing.
+
+  **Upgrade:** a new migration, `2026_10_19_000184_record_the_trial_days_on_billing_coupons_table`, adds the column, null on every coupon issued before, and `php artisan migrate` runs it.
+
+- **A spend cap per owner on usage past the included allowance.** Off unless `billing.usage.spend_cap.enabled` is set. Once on, `UsageRecorder::meter()` measures each request against the owner's cap under a lock on the owner's cap row, so two requests on two meters cannot both pass it, and refuses one that does not fit with `SpendCapExceeded`, a `QuotaExceeded`, on a meter of any policy. The cap is the owner's own, set with `SpendCaps::set()`, or `billing.usage.spend_cap.default`, `0` unless configured, which allows no usage past the allowance. Spent is what the period's usage past every allowance costs at the meters' unit prices, held units included. `UsageGate` and the quota middleware refuse the same requests as a read, and `QuotaDecision::$remainingSpend` is what is left. `UsageSpendCapReached` fires once per period when the cap first stops a request or recorded usage passes it, and `UsageSpendCapRaised` when it is raised.
+
+  **Upgrade:** a new migration, `2026_10_19_000185_create_billing_spend_caps_table`, and `php artisan migrate` runs it. Nothing changes until spend caps are turned on.
+
+- **The notices that name the last day of a subscription or a trial can name it in the owner's time zone.** The package stores every moment in UTC, so a subscription ending at 22:00 UTC was announced a day early to an owner in Tokyo. Bind the new `OwnerTimezone` to answer with an owner's zone, and the trial-ending reminder, the cancellation notice and the reminder before a canceled subscription ends name the day in it, in the mail and in the database entry. Without a binding nothing changes.
+
+- **The payment methods of an account can include the wallets a checkout supports.** `BillingManager::accountPaymentMethods($account)->all(wallets: ['applepay', 'googlepay'])` names them, and Mollie, which lists Apple Pay and Google Pay only where the checkout says it can show them, receives them as `includeWallets`. Without wallets the request asks for none, as before. Stripe lists a wallet like any other method and ignores the parameter.
+
+- **A reservation can enforce a limit against the free allowance alone.** `UsageMeter::reserve()` takes `prepaidCounts: false`: an enforced reservation then counts the free allowance less what is already held, without purchased units, grants or grace, and settling the hold draws on neither. Until now an enforced reservation always counted purchased units and open grants as room, so a tier that leaves purchased units dormant could not hold its limit.
+
+  **Upgrade:** nothing to do. The parameter defaults to `true`, the behavior so far.
+
+- **A checkout that only redirects to the hosted page gets the one CSP source it needs.** `BillingManager::accountsRedirectCsp(...$accounts)` hands over `form-action` with the origins of the providers' hosted pages, and a Stripe account's own `redirectHosts`, each once, and nothing that lets a provider run script, open a frame or connect from the page. A provider whose driver serves no hosted page names none.
+
+- **A live Mollie account connected through OAuth has its test payments reported, and a payment the customer has not completed can be canceled.** A payment made in the test mode of a live account, through its access token, such as a probe before a shop goes live, used to be unknown to the account's webhook, because Mollie does not show a test payment to a request in live mode. The webhook now asks for a payment it does not find in live mode once more in test mode, for a live account with an access token only, and `AccountPaymentChanged` carries the new field `testmode`: whether the payment ran in the provider's test mode, as Mollie reports it in the payment's `mode` and Stripe in `livemode`. A payment of the account's own mode is read once, as before. The Mollie rails, the rails of a payment account included, implement the new `Contracts\CancelsPayments`: `cancel($paymentReference)` cancels the payment in the client's mode, so Mollie reports it as canceled now rather than at its expiry, and answers with a `PaymentCancellation`. A payment Mollie keeps comes back with `canceled` false, Mollie's HTTP status or the payment's status as `failureCode`, and Mollie's words; an error that says nothing about the payment is thrown.
+
+  **Upgrade:** nothing to do. A listener that treats a test payment differently reads `testmode`; every payment of a test account carries it, so mark a probe of your own in the charge's metadata to tell it from a test order. A connected Mollie account needs the `payments.write` permission to cancel.
+
+- **The onboarding status of a connected Mollie account can be read.** `MollieConnect::onboarding($account)` reads it with the account's own access token and answers with a `MollieOnboarding`: Mollie's `status` (`needs-data`, `in-review` or `completed`), whether Mollie lets the merchant take real payments (`canReceivePayments`), and whether it pays the money out (`canReceiveSettlements`). Without the `onboarding.read` permission it answers with `permitted` false rather than throwing; every other refusal is thrown.
+
+  **Upgrade:** add `onboarding.read` to the scopes a merchant grants, then read it before a shop goes live.
+
+### 🐛 Fixed
+
+- **The DATEV export and the reconciliation of the collective account run over a period with the settlement document of an erased merchant.** Both stopped with a `TypeError` once an erasure had set the document's owner to null. With one collective account the document books as before. With an account per merchant an erasure now writes one key for the person into the documents and into their creditor account, so a later export books the document to the account the merchant had, and the payables sub-ledger keeps the merchant's movements together under that key. A merchant erased before this release left no key on either side, and the export refuses such a document with `MerchantCreditorAccountUnknown` instead of booking it to another account. The booking text names an erased creator as `CR-geloescht`.
+
+  **Upgrade:** two new migrations, `2026_10_19_000182_keep_the_erasure_key_on_billing_invoices_table` and `2026_10_19_000183_keep_the_erasure_key_on_billing_merchant_creditor_accounts_table`, add `erased_owner_key` to `billing_invoices` and `erased_merchant_key` to `billing_merchant_creditor_accounts`. `php artisan migrate` applies them.
+
+- **A refund on the sale of an erased merchant finishes instead of failing after the money moved.** An erasure keeps the routed charge and sets its merchant pair to null, and the announcement that runs once a transfer reversal has committed looked up the stored class of that null, so the refund was reported as failed although it had gone through. The announcement is skipped for an erased merchant, as it already was for a merchant whose class or row is gone, and the reversal stands. The platform supply record of such a sale no longer looks up a provider account for an empty merchant either.
+
+- **The realtime bridge stays registered with the account hub switched off.** An application with account screens of its own mounts `<livewire:billing.account-realtime />` in its own layout, so its screens refresh live and show the toasts the webhook effects raise. With `account.enabled` off the component was not registered, and every page with that layout failed with `ComponentNotFoundException`. The bridge is headless and reads nothing the hub sets up, so it is now registered whenever Livewire is installed and the package does not run payments only.
+
+- **The payment methods of a Mollie account carry their limits with version 3 of Mollie's SDK.** `BillingManager::accountPaymentMethods()` read a method's minimum and maximum amount only in the form version 4 of `mollie/mollie-api-php` hands them over, so with version 3, which the package supports from 3.13, every method came without its limits. Both forms are read now.
+
+### 📚 Documentation
+
+- **Mollie issues terminal pairing codes in live mode only.** With a test key, `IssuesReaderPairingCodes::requestPairingCode()` is refused with Mollie's `ApiException` (400, "only available in live mode"). A test profile with point of sale enabled already has a virtual terminal, so nothing needs pairing there.
+
 ## [0.47.0] - 2026-10-20
 
 ### ✨ Added
@@ -8123,7 +8181,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.47.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.48.0...HEAD
+[0.48.0]: https://github.com/pushery/billing-for-laravel/compare/v0.47.0...v0.48.0
 [0.47.0]: https://github.com/pushery/billing-for-laravel/compare/v0.46.0...v0.47.0
 [0.46.0]: https://github.com/pushery/billing-for-laravel/compare/v0.45.0...v0.46.0
 [0.45.0]: https://github.com/pushery/billing-for-laravel/compare/v0.44.0...v0.45.0

@@ -6,6 +6,7 @@ namespace Pushery\Billing\Drivers\Mollie;
 
 use Illuminate\Http\Request;
 use Mollie\Api\Exceptions\RequestException;
+use Mollie\Api\Http\Auth\AccessTokenAuthenticator;
 use Mollie\Api\Http\Requests\GetPaymentRequest;
 use Mollie\Api\MollieApiClient;
 use Mollie\Api\Resources\Payment;
@@ -25,6 +26,10 @@ use Pushery\Billing\ValueObjects\Money;
  * its refunds reaches processing, refunded or failed, and when a chargeback arrives. The ping carries nothing else, so
  * the payment is read back with the account's own client, which also proves it is the account's: a payment of another
  * account does not resolve with this credential.
+ *
+ * A live account reached through an OAuth access token can also make payments in test mode, through the same access,
+ * and Mollie does not show a test payment to a request in live mode. So for such an account a payment that is unknown
+ * in live mode is asked for once more in test mode, and the change reports which mode the payment ran in.
  */
 final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, WebhookEventMapper
 {
@@ -113,6 +118,7 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Webho
             $billingReference,
             $metadata,
             $failedRefund,
+            testmode: MollieValue::of($payment->mode) === 'test',
         );
     }
 
@@ -179,13 +185,38 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Webho
     }
 
     /**
-     * The payment, or null where Mollie answers that it does not exist for this account. Every other refusal travels,
-     * so the receiver answers 500 and Mollie delivers the ping again.
+     * The payment, or null where Mollie answers that it does not exist for this account, in live mode and, where the
+     * account can hold them, in test mode.
      */
     private function fetch(string $id): ?Payment
     {
+        return $this->fetchIn($id, testmode: false) ?? ($this->holdsTestPaymentsToo() ? $this->fetchIn($id, testmode: true) : null);
+    }
+
+    /**
+     * Whether the account can hold test payments its own mode does not show: a live account reached through an OAuth
+     * access token. An API key carries its mode in itself, so the SDK sends no test flag with it, and a test account
+     * already reads in test mode.
+     */
+    private function holdsTestPaymentsToo(): bool
+    {
+        return $this->client->getTestmode() !== true && $this->client->getAuthenticator() instanceof AccessTokenAuthenticator;
+    }
+
+    /**
+     * The payment in one mode, or null where Mollie answers that it does not exist there. Every other refusal travels,
+     * so the receiver answers 500 and Mollie delivers the ping again.
+     */
+    private function fetchIn(string $id, bool $testmode): ?Payment
+    {
+        $request = new GetPaymentRequest($id);
+
+        if ($testmode) {
+            $request->test();
+        }
+
         try {
-            return MollieValue::narrow($this->client->send(new GetPaymentRequest($id)), Payment::class);
+            return MollieValue::narrow($this->client->send($request), Payment::class);
         } catch (RequestException $refusal) {
             if (! in_array($refusal->getStatusCode(), [404, 410], true)) {
                 throw $refusal;

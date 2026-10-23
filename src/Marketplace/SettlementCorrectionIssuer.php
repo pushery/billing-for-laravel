@@ -47,7 +47,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * ## Positive amounts
  *
- * The correcting document states magnitudes, and its ROLE inverts the meaning. A negative invoice is not a
+ * The correcting document states magnitudes, and its role inverts the meaning. A negative invoice is not a
  * thing; a document that says "this much less" is. The cascade already reports reductions as positive, so
  * they land here unchanged rather than being negated on the way in and back out.
  */
@@ -214,7 +214,7 @@ final readonly class SettlementCorrectionIssuer
     }
 
     /**
-     * Issue the BUYER-side correcting document for a refund.
+     * Issue the buyer-side correcting document for a refund.
      *
      * Its figures are the outbound ones — what the buyer is given back and the tax the platform no longer
      * owes on it — never the merchant-side ones. The two are different amounts about different supplies, and

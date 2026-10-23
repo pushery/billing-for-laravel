@@ -58,7 +58,7 @@ final readonly class ChargedBuyerFee
      * The fee this sale carries, or null when no fee applies to it.
      *
      * @param  Money  $saleGross  the price of the mediated item — never the total the buyer will pay, which
-     *                            is this fee ON TOP of that
+     *                            is this fee on top of that
      * @param  int  $taxBps  the rate for this supply at its place
      * @param  ?SupplyRegime  $regime  the regime the lane booked this sale under, where it decided one itself; the
      *                                 configured resolver answers otherwise

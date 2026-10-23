@@ -72,7 +72,7 @@ final readonly class SubdivisionGrossSalesCounter
      * How many sales stand behind those figures, per subdivision.
      *
      * Beside the amounts rather than derived from them, and for the reason every counter in this package
-     * keeps its own: a threshold can be stated as an amount OR as a number of transactions, and several
+     * keeps its own: a threshold can be stated as an amount or as a number of transactions, and several
      * jurisdictions state it as both.
      *
      * @return array<string, int>

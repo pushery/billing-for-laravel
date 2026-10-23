@@ -19,7 +19,7 @@ use Pushery\Billing\ValueObjects\SubscriptionGrant;
  * never a live provider read, so an access check per page never fans out to a payment provider.
  *
  * The merchant scope defaults to null — the platform, the single-seller case — so a single-merchant consumer
- * calls exactly as before. A marketplace passes a merchant to ask "is this fan subscribed to THIS creator".
+ * calls exactly as before. A marketplace passes a merchant to ask "is this fan subscribed to this creator", rather than to any.
  */
 interface SubscriptionStateReader
 {

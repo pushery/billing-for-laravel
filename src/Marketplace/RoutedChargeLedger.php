@@ -763,9 +763,13 @@ final readonly class RoutedChargeLedger
     {
         $stored = $charge->merchant_type;
 
-        // The morph pair on this table is not nullable — erasure marks `merchant_erased_at` and leaves the
-        // pair standing, because the financial record outlives the person. So the only way this fails is a
-        // class that has gone away, never an absent one.
+        // An erasure keeps the charge, because the financial record outlives the person, and unlinks it:
+        // the pair becomes null and `merchant_erased_at` says when. There is no class to ask about then,
+        // and nobody to announce anything to.
+        if ($stored === null) {
+            return false;
+        }
+
         return class_exists(Relation::getMorphedModel($stored) ?? $stored);
     }
 

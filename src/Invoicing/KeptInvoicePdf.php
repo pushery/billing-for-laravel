@@ -34,7 +34,7 @@ final readonly class KeptInvoicePdf
      *  - **A path recorded but no disk configured.** The application wrote where it keeps files and never told
      *    the package which disk that is. Logged as a warning: the value is being ignored, and an operator who
      *    set one and not the other should learn it from something other than a support case.
-     *  - **A path recorded, a disk configured, and the file GONE.** Logged as an ERROR, because the row
+     *  - **A path recorded, a disk configured, and the file gone.** Logged as an error, because the row
      *    promises an archived document and the archive did not keep it. That is an incident.
      *
      * The caller renders where it can in every one of them, deliberately. Refusing would lock an owner out of

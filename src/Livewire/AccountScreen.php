@@ -21,6 +21,7 @@ use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\OwnerSubscriptionState;
+use Pushery\Billing\Support\ProviderCallBudget;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
@@ -62,6 +63,17 @@ abstract class AccountScreen extends Component
         }
 
         return $actor;
+    }
+
+    /**
+     * Take one call from the owner's provider budget before the screen asks the provider, or refuse the request
+     * with a 429. The budget is the one an application's own screens spend from as well, {@see ProviderCallBudget}.
+     *
+     * @param  array<int, int>  $within  how many calls of this action each further window allows, keyed by the window's length in seconds
+     */
+    protected function spendProviderCall(string $action = 'call', array $within = []): void
+    {
+        Container::getInstance()->make(ProviderCallBudget::class)->spend($this->owner(), $action, $within);
     }
 
     /**

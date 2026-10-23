@@ -65,7 +65,7 @@ final readonly class LocalDunningGuard implements DunningGuard, MerchantScopedDu
         // and produced the opposite harm: one creator's arrears blocked all of them.
         //
         // The scope is what makes the question answerable at all. "Is this owner blocked" has no answer in a
-        // marketplace; "is this owner blocked AT THIS MERCHANT" does, and it needs no aggregate.
+        // marketplace; "is this owner blocked at this merchant" does, and it needs no aggregate.
         $states = Subscription::model()::query()
             ->forOwner($owner)
             ->ofDefaultType()

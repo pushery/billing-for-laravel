@@ -43,7 +43,7 @@ final readonly class InvoiceSnapshot
         // The renderer needs this to emit VAT category AE with an exemption reason, not a zero-rated Z.
         public bool $reverseCharge = false,
         /**
-         * How much of the customer's PROVIDER-held balance this invoice consumed, in minor units.
+         * How much of the customer's provider-held balance this invoice consumed, in minor units.
          *
          * Zero on a driver that holds no such balance, and zero on an invoice that consumed none — the two
          * are the same answer here on purpose: what a reader does with it is spend it down, and there is

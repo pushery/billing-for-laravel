@@ -46,7 +46,7 @@ use Illuminate\Support\Facades\DB;
  *   holding it; it is one creator's document naming another's charge. Without this a stranger's sale would
  *   read as settled by a document that never mentioned them.
  * - **A correcting document is skipped.** A correction copies `settled_charge_reference` from the original it
- *   reverses, so it names the same charge. The consideration is dated by the ORIGINAL settlement; placing a
+ *   reverses, so it names the same charge. The consideration is dated by the original settlement; placing a
  *   fee by the correction would date it to the reversal instead.
  * - **A charge that already has a link keeps it.** That link was written by a run that actually settled it.
  *   Ascending order plus this condition means the oldest matching document wins, which is the original.

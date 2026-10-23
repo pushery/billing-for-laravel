@@ -11,8 +11,8 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 /**
  * One recorded one-time add-on purchase, unique per checkout `reference`.
  *
- * @property string $owner_type
- * @property int $owner_id
+ * @property ?string $owner_type
+ * @property ?int $owner_id
  * @property string $reference
  * @property string $addon_key
  * @property int $amount_minor

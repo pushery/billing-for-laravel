@@ -9,12 +9,15 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
+use Mollie\Api\Exceptions\RequestException;
 use Mollie\Api\Http\Data\Owner;
 use Mollie\Api\Http\Data\OwnerAddress;
 use Mollie\Api\Http\Requests\CreateClientLinkRequest;
+use Mollie\Api\Http\Requests\GetOnboardingStatusRequest;
 use Mollie\Api\Http\Requests\GetPaginatedProfilesRequest;
 use Mollie\Api\Resources\ClientLink;
 use Mollie\Api\Resources\CursorCollection;
+use Mollie\Api\Resources\Onboarding;
 use Mollie\Api\Resources\Profile;
 use Pushery\Billing\Drivers\Mollie\MollieClientFactory;
 use Pushery\Billing\Drivers\Mollie\MollieValue;
@@ -40,6 +43,8 @@ use stdClass;
  *    created on.
  * 4. Before the access token runs out, after an hour, {@see self::refresh()} buys a new one.
  * 5. {@see self::revoke()} ends the connection from the platform's side.
+ *
+ * At any point, {@see self::onboarding()} says where the account stands in Mollie's onboarding.
  */
 final readonly class MollieConnect
 {
@@ -160,6 +165,34 @@ final readonly class MollieConnect
         }
 
         return $profiles;
+    }
+
+    /**
+     * Where a connected account stands in Mollie's onboarding, read with its own access token: whether Mollie lets
+     * the merchant take real payments yet, and whether it pays the money out.
+     *
+     * Reading it needs the `onboarding.read` permission. Without it Mollie answers 403, and that comes back as an
+     * answer of its own, {@see MollieOnboarding::$permitted} false, not as an exception. Every other refusal travels.
+     * An answer that is no onboarding status reads as one that allows neither, so a shop never goes live on a guess.
+     */
+    public function onboarding(PaymentAccount $account): MollieOnboarding
+    {
+        try {
+            $onboarding = MollieValue::narrow($this->clients->forAccount($account)->send(new GetOnboardingStatusRequest), Onboarding::class);
+        } catch (RequestException $refusal) {
+            if ($refusal->getStatusCode() !== 403) {
+                throw $refusal;
+            }
+
+            return new MollieOnboarding(permitted: false);
+        }
+
+        return new MollieOnboarding(
+            permitted: true,
+            status: MollieValue::of($onboarding?->status),
+            canReceivePayments: $onboarding?->canReceivePayments === true,
+            canReceiveSettlements: $onboarding?->canReceiveSettlements === true,
+        );
     }
 
     /**

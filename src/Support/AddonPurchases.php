@@ -27,7 +27,7 @@ final class AddonPurchases
      * @param  ?string  $declarationReference  the key the buyer's pre-purchase declarations were recorded
      *                                         against, minted before the redirect and echoed back by the
      *                                         provider. Kept on the row because the receipt knows the
-     *                                         PAYMENT id and the declarations are not keyed on it -- without
+     *                                         payment id and the declarations are not keyed on it -- without
      *                                         it that lookup answers null, and null there reads as "the
      *                                         buyer declared nothing"
      * @param  ?bool  $moneyCredit  whether this purchase puts money on the buyer's credit balance, kept so the
@@ -178,6 +178,11 @@ final class AddonPurchases
     /** Resolve the purchase's owner back to a model instance via the morph map (as UsageFlusher does). */
     private function ownerOf(AddonPurchase $purchase): ?Model
     {
+        // An erasure keeps the purchase and takes its owner away, and nobody is left to resolve.
+        if ($purchase->owner_type === null || $purchase->owner_id === null) {
+            return null;
+        }
+
         $class = Relation::getMorphedModel($purchase->owner_type) ?? $purchase->owner_type;
 
         if (! is_subclass_of($class, Model::class)) {

@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\Money;
  * billing-critical notice is non-suppressible. Sent once per failing invoice, not once per provider
  * retry of it (see SendDunningNotice).
  *
- * Queued AFTER COMMIT: the effect run that sends it claims, sends and marks itself in one transaction,
+ * Queued after the commit: the effect run that sends it claims, sends and marks itself in one transaction,
  * so deferring the mail to after that commits means a run which rolled back can never have mailed the
  * customer — and a run that failed before committing is retried, so the notice is never silently lost.
  */

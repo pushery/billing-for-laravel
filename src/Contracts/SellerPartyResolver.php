@@ -11,7 +11,7 @@ use Pushery\Billing\Models\InvoiceRecord;
 /**
  * Who is named as the seller on a document — a different question from the seller-of-record posture.
  *
- * The posture ({@see SellerOfRecordPosture}) answers which ROLE the platform plays;
+ * The posture ({@see SellerOfRecordPosture}) answers which role the platform plays;
  * this answers which concrete party — name, address, tax ids — that role resolves to. They are one decision
  * seen twice, so the resolved party must agree with the frozen posture: when the platform is the deemed
  * supplier the seller is the platform itself, and when it merely arranges or the merchant sells in their own

@@ -31,6 +31,7 @@ use Pushery\Billing\Support\TrialCallouts;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\Plan;
+use Pushery\Billing\ValueObjects\UpcomingInvoicePreview;
 
 /**
  * The account-hub subscription screen. It shows the owner's canonical subscription state (collapsed by
@@ -112,7 +113,7 @@ final class SubscriptionOverview extends AccountScreen
             // counts the continuation line of a multi-line ternary as executable and never records it
             // as hit, so this file measured 97.5% with `: null` as its only gap. Measured both ways on
             // the same tests: folded 97.5%, one line 100.0%, with identical behavior.
-            'preview' => $state->hasUpcomingInvoice() ? $this->orDegrade(fn () => Container::getInstance()->make(UpcomingInvoice::class)->preview($this->owner())) : null,
+            'preview' => $state->hasUpcomingInvoice() ? $this->orDegrade($this->upcomingInvoice(...)) : null,
             // The owner's credit balance, so the credit they earned is finally visible and its effect
             // explained. Null when they have none, so the card only shows when there is something to show.
             'credit' => $this->creditBalance(),
@@ -128,6 +129,17 @@ final class SubscriptionOverview extends AccountScreen
             // portal (e.g. a local-engine provider) would otherwise show a link that only 404s.
             'supportsHostedPortal' => $this->supportsHostedPortal(),
         ]);
+    }
+
+    /**
+     * The next-invoice preview, the one live provider read of this screen, spent from the owner's budget first. A
+     * spent budget is a 429 and passes the error boundary around it, which degrades no HTTP answer.
+     */
+    private function upcomingInvoice(): ?UpcomingInvoicePreview
+    {
+        $this->spendProviderCall();
+
+        return Container::getInstance()->make(UpcomingInvoice::class)->preview($this->owner());
     }
 
     /**
@@ -203,6 +215,10 @@ final class SubscriptionOverview extends AccountScreen
 
         $survey = $this->cancellationSurvey();
 
+        // Before the survey is recorded, so a refused cancellation leaves no answer behind for a cancellation that
+        // never happened.
+        $this->spendProviderCall();
+
         // Record the churn reason locally only when one was actually given, then cancel. The survey is also
         // handed to the driver, where a provider with a native cancellation-feedback field receives it.
         if ($survey instanceof CancellationSurvey) {
@@ -211,7 +227,7 @@ final class SubscriptionOverview extends AccountScreen
 
         Container::getInstance()->make(SubscriptionActions::class)->cancel($this->owner(), $survey);
 
-        // Deliberately NO identity re-confirm here: canceling is reversible (resume() exists), so it is
+        // Deliberately no identity re-confirm here: canceling is reversible (resume() exists), so it is
         // covered by auth + owner-scoping — a re-confirm is reserved for the irreversible (account deletion,
         // DangerZone). That boundary is a settled design decision, not an oversight. The survey likewise
         // never gates the cancellation: leaving must stay one action.
@@ -257,6 +273,8 @@ final class SubscriptionOverview extends AccountScreen
         if ($this->subscription()?->endInsideItsPeriod() instanceof Carbon) {
             return;
         }
+
+        $this->spendProviderCall();
 
         Container::getInstance()->make(SubscriptionActions::class)->resume($this->owner());
 

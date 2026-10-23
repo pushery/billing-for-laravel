@@ -29,7 +29,7 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  *
  * Creating the row is provision. Where a consumer-rights profile is active and the work is one whose right
  * of withdrawal ends on delivery, the buyer's declarations must already be on record — so a missing consent
- * means NO ROW, never "access now, paperwork later". That ordering is the whole protection: once somebody
+ * means no row, never "access now, paperwork later". That ordering is the whole protection: once somebody
  * can read the work, the thing the record exists to preserve has already been given away.
  *
  * ## Every entry point writes through one method

@@ -15,12 +15,12 @@ use Pushery\Billing\Support\UsageReconciler;
  * Answers "is any usage going to be mis-billed right now?" — the point-in-time check a scheduler runs and
  * a human runs after a provider incident. It looks in three places, because usage goes wrong in three ways:
  *
- *  - DRIFT: our ledger and the provider's meter disagree about how much a customer used. Reporting can
+ *  - Drift: our ledger and the provider's meter disagree about how much a customer used. Reporting can
  *    succeed on our side and still never arrive, and the two sources drift quietly until the invoice. This
  *    reads the provider's own aggregate back and compares it against what we netted and sent.
- *  - A STALLED BACKLOG: usage the flusher has been holding, unreported, for longer than the provider's
+ *  - A stalled backlog: usage the flusher has been holding, unreported, for longer than the provider's
  *    acceptance window allows — an outage that stopped being temporary and became lost revenue.
- *  - FAILED rollups: usage the flusher gave up on after exhausting its retries. `--redrive` resets them to
+ *  - Failed rollups: usage the flusher gave up on after exhausting its retries. `--redrive` resets them to
  *    pending so the next flush retries them — run it after fixing the cause (a missing meter that
  *    `billing:meters:check` found, a restored provider).
  *

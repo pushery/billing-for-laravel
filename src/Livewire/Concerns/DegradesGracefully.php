@@ -23,7 +23,7 @@ use Throwable;
  *   Gate {@see AuthorizationException} is rethrown, so a security decision reaches the customer as the
  *   status it is — never quietly redrawn as a "temporarily unavailable" card.
  * - It never logs the exception's message, stack, or any provider detail (a Stripe error carries the
- *   customer's email and the request that failed). Only the exception's CLASS NAME is logged — enough to
+ *   customer's email and the request that failed). Only the exception's class name is logged — enough to
  *   see what kind of failure degraded a panel, without spilling PII into the log.
  *
  * The `$degraded` flag is reset before every render (a Livewire `boot` hook), so a `$refresh` that now

@@ -21,7 +21,7 @@ use Pushery\Billing\Webhooks\RepeatableEffect;
  * before running the effect is how a payment-failure notice gets lost forever: the marker survives, the
  * mail does not, and no retry will ever send it.
  *
- * A handled run is never re-claimed. A failed or still-PENDING one is: pending means a worker died
+ * A handled run is never re-claimed. A failed or still-pending one is: pending means a worker died
  * mid-run without committing, which is indistinguishable from never having run.
  */
 final class WebhookEffectLedger

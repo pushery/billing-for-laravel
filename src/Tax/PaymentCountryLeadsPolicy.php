@@ -17,7 +17,7 @@ use Pushery\Billing\ValueObjects\CountrySignals;
  * 1. Where the money comes from is the strongest single signal, because it is the hardest for a buyer to
  *    choose casually — a card is issued somewhere and stays issued there.
  * 2. A buyer who says otherwise and whose connection agrees with them outranks it. Two sources against one
- *    is the ordinary shape of a genuine traveller or an expatriate, and refusing them would turn a correct
+ *    is the ordinary shape of a genuine traveler or an expatriate, and refusing them would turn a correct
  *    self-declaration into a failed sale.
  * 3. Anything else is asked, never guessed. A contradiction the sources cannot settle is settled by the one
  *    party who actually knows, and picking a side quietly would attribute a sale to a country on the

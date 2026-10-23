@@ -82,7 +82,7 @@ final readonly class PricingCatalog
     }
 
     /**
-     * The cards a CURRENT-tier owner can upgrade to — the purchasable tiers ranked above their tier, in
+     * The cards a current-tier owner can upgrade to — the purchasable tiers ranked above their tier, in
      * upgrade order. This is what an upgrade grid the application builds renders, as opposed to {@see cards()}
      * (the full set a /pricing page shows); both render from the same {@see PricingCard} model, so they cannot
      * drift.

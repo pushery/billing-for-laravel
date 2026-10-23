@@ -12,11 +12,11 @@ namespace Pushery\Billing\Enums;
  *
  * The distinction is load-bearing for VAT:
  *
- *  - `PlatformDeemedSupplier` — for ELECTRONIC services over a portal the platform is, by law, the supplier
+ *  - `PlatformDeemedSupplier` — for electronic services over a portal the platform is, by law, the supplier
  *    to the buyer (Art. 9a VAT Implementing Regulation (EU) 282/2011; §3 Abs. 11a UStG; CJEU C-695/20
  *    Fenix). The presumption is irrebuttable once the platform sets the terms, authorizes the billing or
  *    approves the supply — so a normal content platform cannot avoid it. The buyer receipt names the
- *    PLATFORM; the merchant stays anonymous to the buyer.
+ *    platform; the merchant stays anonymous to the buyer.
  *
  *  - `SellerOfRecord` — the merchant is the seller in their own name (the buyer receipt names the merchant,
  *    with a real name and address). Only permitted for an electronic supply when the Art. 9a rebuttal

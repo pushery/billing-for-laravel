@@ -27,8 +27,8 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * A payment that was routed to a merchant, and what has since been taken back off it.
  *
  * @property int $id
- * @property string $merchant_type
- * @property int $merchant_id
+ * @property ?string $merchant_type null once the merchant is erased: the row outlives them, unlinked, and `merchant_erased_at` says when
+ * @property ?int $merchant_id null once the merchant is erased
  * @property string $provider
  * @property string $charge_reference
  * @property ?string $payment_reference the payment behind a subscription cycle, whose row is recorded under its

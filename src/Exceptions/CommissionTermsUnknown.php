@@ -18,7 +18,7 @@ use RuntimeException;
  * amount a different sale owed. That is exactly the mistake the frozen columns exist to prevent, arrived at
  * one layer up.
  *
- * A FULL reversal of the same row is fine and is not refused. With nothing left of the sale there is no
+ * A full reversal of the same row is fine and is not refused. With nothing left of the sale there is no
  * remainder to price: everything the merchant still holds comes back, and every rate gives that same answer.
  * So the refusal is as narrow as the missing fact actually is.
  *

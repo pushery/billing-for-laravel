@@ -99,7 +99,7 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
             return null;
         }
 
-        return $this->change($id, $status, $amount, Money::zero($amount->currency), Money::zero($amount->currency), $intent['metadata'] ?? null);
+        return $this->change($id, $status, $amount, Money::zero($amount->currency), Money::zero($amount->currency), $intent['metadata'] ?? null, testmode: ($intent['livemode'] ?? null) === false);
     }
 
     /**
@@ -120,7 +120,7 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
 
         $amount = StripeAmount::toMoney($total, $currency);
 
-        return $this->change($id, AccountPaymentStatus::Expired, $amount, Money::zero($amount->currency), Money::zero($amount->currency), $session['metadata'] ?? null);
+        return $this->change($id, AccountPaymentStatus::Expired, $amount, Money::zero($amount->currency), Money::zero($amount->currency), $session['metadata'] ?? null, testmode: ($session['livemode'] ?? null) === false);
     }
 
     /**
@@ -153,10 +153,12 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
             $chargedBack ?? Money::zero($amount->currency),
             $intent['metadata'] ?? null,
             $refund,
+            ($intent['livemode'] ?? null) === false,
         );
     }
 
-    private function change(string $paymentReference, AccountPaymentStatus $status, Money $amount, Money $refunded, Money $chargedBack, mixed $metadata, ?string $refund = null): AccountPaymentChanged
+    /** The change, with the payment's own mode: Stripe marks every object of a test-mode request `livemode: false`. */
+    private function change(string $paymentReference, AccountPaymentStatus $status, Money $amount, Money $refunded, Money $chargedBack, mixed $metadata, ?string $refund = null, bool $testmode = false): AccountPaymentChanged
     {
         $values = is_array($metadata) ? $metadata : [];
         $kept = [];
@@ -180,6 +182,7 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
             is_string($reference) && $reference !== '' ? $reference : null,
             $kept,
             $refund,
+            $testmode,
         );
     }
 

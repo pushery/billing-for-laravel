@@ -18,7 +18,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * Blocks a request that would take the owner past a blocking metered allowance, with a 429 by default —
  * `->middleware('billing.quota:emails')` (or `billing.quota:emails,5` to check five units). A degrade or
  * fair-use meter is never blocked here (those are not enforcement decisions the transport can make); only
- * a hard-stop / refuse meter past its allowance is refused. A guest passes through — there is no owner to
+ * a hard-stop / refuse meter past its allowance is refused. With spend caps on, a request on any meter is
+ * refused as well once what it would cost does not fit under the owner's cap. A guest passes through — there is no owner to
  * meter.
  *
  * The block is a plain abort so the app renders it however it renders any other error; the richer

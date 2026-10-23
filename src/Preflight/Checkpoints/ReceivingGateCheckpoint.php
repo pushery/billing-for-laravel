@@ -18,7 +18,7 @@ use Pushery\Billing\ValueObjects\CheckpointOutcome;
  *
  * The package binds `CanReceiveMoney` to {@see AlwaysReceivable}, whose `check()` is a literal `return
  * true`. That is the right default for a single-seller install — there are no merchants to gate — and it
- * is fail-OPEN the moment a marketplace is switched on: money then routes to accounts whose
+ * is fail-open the moment a marketplace is switched on: money then routes to accounts whose
  * `charges_enabled`, `payouts_enabled` and `details_submitted` nobody has looked at, and which may be
  * deauthorized or locally suspended.
  *

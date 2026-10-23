@@ -63,7 +63,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | The dated Stripe API version every call and webhook runs against. The
-    | package PINS this itself and is tested against it — it is not inherited from
+    | package pins this itself and is tested against it — it is not inherited from
     | whatever version the installed SDK happens to ship, because Stripe versions
     | the shape of a webhook payload, and a routine `composer update` of the SDK
     | would otherwise move it silently under a mapper that reads raw fields.
@@ -547,13 +547,13 @@ return [
     |
     | 'pro' => [
     |     'label' => 'Pro',
-    |     'provider_price' => env('BILLING_PRICE_PRO'),   // the BASE fee item
+    |     'provider_price' => env('BILLING_PRICE_PRO'),   // the base fee item
     |     'price_display' => ['amount' => 1900, 'currency' => 'EUR'],
     |     'metered' => [
     |         'emails' => [
     |             'label' => 'Emails sent',
     |             'unit' => 'email',
-    |             'provider_price' => env('BILLING_PRICE_EMAILS'), // a METERED price
+    |             'provider_price' => env('BILLING_PRICE_EMAILS'), // a metered price
     |             'provider_meter' => 'emails_sent',               // the meter's event name
     |             'package_size' => 1000,                          // billed per 1 000
     |             'unit_price' => ['amount' => 50, 'currency' => 'EUR'],
@@ -675,10 +675,19 @@ return [
     | Set it comfortably longer than your slowest metered request, and shorter
     | than you would tolerate an owner being short of allowance they did not use.
     |
+    | `spend_cap` limits what usage past the included allowance may cost an owner
+    | per billing period. Off by default. Once on, an owner who never set a cap of
+    | their own (SpendCaps::set()) gets `default`, in minor units of
+    | `billing.currency`, so 0 allows no usage past the allowance at all.
+    |
     */
 
     'usage' => [
         'hold_seconds' => is_numeric($usageHoldSeconds = env('BILLING_USAGE_HOLD_SECONDS')) && (int) $usageHoldSeconds >= 1 ? (int) $usageHoldSeconds : 900,
+        'spend_cap' => [
+            'enabled' => in_array(is_string($usageSpendCap = env('BILLING_USAGE_SPEND_CAP')) ? strtolower(trim($usageSpendCap)) : $usageSpendCap, [true, '1', 'true', 'yes', 'on'], true),
+            'default' => is_numeric($usageSpendCapDefault = env('BILLING_USAGE_SPEND_CAP_DEFAULT')) && (int) $usageSpendCapDefault >= 0 ? (int) $usageSpendCapDefault : 0,
+        ],
     ],
 
     /*
@@ -751,7 +760,7 @@ return [
         // obligation, in breach of storage limitation (Art. 5(1)(e)).
         'erased_financial_days' => is_numeric($erasedFinancialDays = env('BILLING_RETENTION_ERASED_FINANCIAL_DAYS')) && (int) $erasedFinancialDays >= 1 ? (int) $erasedFinancialDays : 2920,
 
-        // The book/BATCH window for the audit ledger: ten years (§257 HGB / §147 AO) — longer than the
+        // The book/batch window for the audit ledger: ten years (§257 HGB / §147 AO) — longer than the
         // invoice window above on purpose. The two numbers (3650 vs 2920) are different windows for different
         // record classes, not a value that got out of sync; do not "unify" them. The produced tax returns
         // and seller-reporting records keep this window too, counted from the END of the year a record was
@@ -930,7 +939,7 @@ return [
     | Dunning block status
     |--------------------------------------------------------------------------
     |
-    | The HTTP status the `billing.dunning` middleware returns to a NON-browser
+    | The HTTP status the `billing.dunning` middleware returns to a non-browser
     | request (API / JSON) from an owner whose payment has failed. A browser
     | request is redirected to the payment-recovery screen instead; this status
     | is what an API client sees. 402 Payment Required is the natural default.
@@ -1074,6 +1083,28 @@ return [
     */
 
     'redirect_hosts' => [],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Provider budget
+    |--------------------------------------------------------------------------
+    |
+    | How many calls to the payment provider one payer may make: `calls` in every
+    | `seconds`. Each render or action of an account screen that asks the provider
+    | takes one, a screen of the application's own takes one through
+    | ProviderCallBudget::spend(), and both count against the same budget. A
+    | request past it is answered 429 before the provider is asked. A `calls` of
+    | null switches the budget off for an application that limits these requests
+    | itself; any other value that is not a positive whole number reads as the
+    | shipped one. BILLING_PROVIDER_BUDGET_CALLS and BILLING_PROVIDER_BUDGET_SECONDS
+    | set both from the environment.
+    |
+    */
+
+    'provider_budget' => [
+        'calls' => is_numeric($providerBudgetCalls = env('BILLING_PROVIDER_BUDGET_CALLS')) && (int) $providerBudgetCalls >= 1 ? (int) $providerBudgetCalls : 30,
+        'seconds' => is_numeric($providerBudgetSeconds = env('BILLING_PROVIDER_BUDGET_SECONDS')) && (int) $providerBudgetSeconds >= 1 ? (int) $providerBudgetSeconds : 10,
+    ],
 
     /*
     |--------------------------------------------------------------------------
@@ -1760,7 +1791,7 @@ return [
     //
     //   1. prior-year turnover of not more than 800,000 EUR
     //   2. exempt from bookkeeping obligations under § 148 AO
-    //   3. income from a freelance profession under § 18 Abs. 1 Nr. 1 EStG -- NO turnover ceiling,
+    //   3. income from a freelance profession under § 18 Abs. 1 Nr. 1 EStG -- no turnover ceiling,
     //      as long as no books are kept. Keeping them voluntarily forfeits this route
     //   4. a public-law entity without a bookkeeping obligation
     //
@@ -1772,7 +1803,7 @@ return [
     //       a corporation is a merchant by form (§ 6 HGB) and therefore keeps books, so alternative 2 is
     //       closed to it. Alternative 1 is not. A corporation under 800,000 EUR can be granted receipt
     //       taxation, and that is regularly believed to be impossible
-    //   over the ceiling AND obliged to keep books ................. accrual, with no route open
+    //   over the ceiling and obliged to keep books ................. accrual, with no route open
     //
     // The 800,000 figure was raised from 600,000 with effect from 2024-01-01. An older source names the
     // old one, and the difference decides exactly the cases in between. Read the current § 20 UStG rather
@@ -1964,7 +1995,7 @@ return [
     | Marketplace (multi-merchant)
     |--------------------------------------------------------------------------
     |
-    | The optional multi-merchant marketplace surface (Stripe Connect). OFF by
+    | The optional multi-merchant marketplace surface (Stripe Connect). Off by
     | default: with `enabled` false the whole marketplace path is unreachable and
     | the single-merchant behavior is byte-identical.
     |
@@ -2125,7 +2156,7 @@ return [
     //
     // Two questions that sound alike and are not. The licensing side (`config/license.php`, reached through
     // the License contract) answers "what may this owner DO right now", and its answer changes the moment
-    // their tier does. This answers "what did this person BUY, and is it still theirs" — a fact that
+    // their tier does. This answers "what did this person buy, and is it still theirs" — a fact that
     // outlives the plan, the creator's account, and the work's own publication.
     //
     // Off by default, and off is fail-closed rather than merely unused. With the switch off the read seam
@@ -2703,7 +2734,7 @@ return [
             //                    matching the per-transaction commercial rounding decided for the ledger.
             //   creator_first  — the residual cent goes to the net (the creator). This is the only order
             //                    that hits an exact target payout, at the cost of the platform's cent; a
-            //                    consumer using it must show the RESULTING payout, never treat the input as
+            //                    consumer using it must show the resulting payout, never treat the input as
             //                    a promise.
             'rounding' => env('BILLING_MARKETPLACE_FEE_ROUNDING', 'platform_first'),
 
@@ -2827,7 +2858,7 @@ return [
             // DE and US accounts, and readable on any account as `controller.fees.payer` and
             // `controller.losses.payments`:
             //
-            //   express  — the PLATFORM pays the provider's processing fee, and the PLATFORM absorbs a
+            //   express  — the platform pays the provider's processing fee, and the platform absorbs a
             //              chargeback. Neither is visible in a charge; both are properties of the account.
             //   standard — the merchant pays the fee, and a loss is not debited from the platform balance.
             //

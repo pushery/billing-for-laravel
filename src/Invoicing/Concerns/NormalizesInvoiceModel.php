@@ -62,7 +62,7 @@ trait NormalizesInvoiceModel
     /**
      * The EN 16931 document type code (BT-3), shared by both writers so the two syntaxes never disagree.
      *
-     * Four codes, selected by the document's ROLE rather than by a boolean. A cancellation is 381 and an
+     * Four codes, selected by the document's role rather than by a boolean. A cancellation is 381 and an
      * amendment is 384 — two different documents a tax authority reads apart by this code alone, which is
      * exactly why one boolean could never carry both. A self-billed invoice is 389, a document treated
      * differently from the ordinary 380. Correction wins first: correcting a self-billed invoice produces a

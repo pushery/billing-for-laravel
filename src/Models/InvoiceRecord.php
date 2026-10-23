@@ -54,8 +54,9 @@ use Pushery\Billing\ValueObjects\Money;
  * never touch the model or a provider object.
  *
  * @property int $id
- * @property string $owner_type
- * @property int $owner_id
+ * @property ?string $owner_type
+ * @property ?int $owner_id
+ * @property ?string $erased_owner_key
  * @property ?string $provider
  * @property ?string $provider_id
  * @property ?int $order_id
@@ -417,7 +418,7 @@ class InvoiceRecord extends Model
             }
         });
 
-        // The document's ROLE against the sale's regime. Keyed on the regime rather than the posture: a
+        // The document's role against the sale's regime. Keyed on the regime rather than the posture: a
         // self-billed invoice names the creator as seller, which reads as "not the platform", so the posture
         // is not a clean key for a creator-facing document's role.
         self::creating(static function (self $invoice): void {
