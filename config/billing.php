@@ -80,6 +80,10 @@ return [
         // Stripe.js, PayPal, Klarna), for a charge confirmed on-session. Null rules such methods out, so
         // only a payment that stays on the page confirms there.
         'return_url' => env('BILLING_STRIPE_RETURN_URL'),
+        // The customer-portal configuration every portal session opens with, a `bpc_...` id from the
+        // Stripe dashboard. Null opens the account's default configuration, and what that allows,
+        // canceling a subscription included, is decided in the dashboard alone.
+        'portal_configuration' => env('BILLING_STRIPE_PORTAL_CONFIGURATION'),
     ],
 
     /*
@@ -306,6 +310,11 @@ return [
         // before it verifies the ID, so a platform that sells to consumers can leave the field out and charge every
         // buyer the tax of their country. Only read while the provider computes tax.
         'tax_id_collection' => ! in_array(is_string($checkoutTaxIdCollection = env('BILLING_CHECKOUT_TAX_ID_COLLECTION')) ? strtolower(trim($checkoutTaxIdCollection)) : $checkoutTaxIdCollection, [false, '', '0', 'false', 'no', 'off'], true),
+        // What the submit button of a hosted subscription checkout says, as Stripe's `submit_type`. `auto` leaves it
+        // to Stripe, which writes "Subscribe" on a subscription; `pay` writes "Buy". A seller to consumers in Germany
+        // sets `pay`, because the order button has to name the obligation to pay. An add-on purchase reads nothing
+        // here: it is in payment mode, where Stripe's own choice is "Buy" already.
+        'submit_type' => is_string($checkoutSubmitType = env('BILLING_CHECKOUT_SUBMIT_TYPE')) && trim($checkoutSubmitType) !== '' ? strtolower(trim($checkoutSubmitType)) : 'auto',
     ],
 
     /*

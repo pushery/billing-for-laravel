@@ -45,6 +45,7 @@ return [
         'intro' => 'Ton abonnement résilié se termine le :date.',
         'intro_merchant' => 'Ton abonnement résilié auprès de :merchant se termine le :date.',
         'outro' => 'Réactive-le avant pour garder tout ce qu’il inclut sans interruption.',
+        'tier_after' => 'Sinon, ton compte passe ensuite à l\'offre :tier.',
         'cta' => 'Réactiver mon abonnement',
     ],
 

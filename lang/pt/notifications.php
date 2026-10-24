@@ -45,6 +45,7 @@ return [
         'intro' => 'A tua subscrição cancelada termina a :date.',
         'intro_merchant' => 'A tua subscrição cancelada com :merchant termina a :date.',
         'outro' => 'Retoma-a antes disso para manteres tudo o que inclui sem interrupção.',
+        'tier_after' => 'Caso contrário, a tua conta passa depois para o plano :tier.',
         'cta' => 'Retomar a subscrição',
     ],
 

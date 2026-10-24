@@ -45,6 +45,7 @@ return [
         'intro' => 'Il tuo abbonamento annullato termina il :date.',
         'intro_merchant' => 'Il tuo abbonamento annullato con :merchant termina il :date.',
         'outro' => 'Riattivalo prima di allora per mantenere tutto ciò che include senza interruzioni.',
+        'tier_after' => 'Altrimenti il tuo account passa poi al piano :tier.',
         'cta' => 'Riattiva l’abbonamento',
     ],
 

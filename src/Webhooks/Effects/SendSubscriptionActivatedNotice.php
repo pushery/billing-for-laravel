@@ -68,13 +68,25 @@ final readonly class SendSubscriptionActivatedNotice implements DedupesOnReferen
         ], AuditSource::Webhook);
     }
 
-    /** Once per subscription — never once per state change, or a recovery from past_due would re-welcome. */
+    /**
+     * Once per subscription for the activation — never once per state change, or a recovery from past_due would
+     * re-welcome — and a key of its own for every other state.
+     *
+     * The delivery machinery claims the key before the effect runs and keeps the claim when the effect returns
+     * without doing anything. A state that is no activation therefore must not claim the activation's key: a
+     * subscription that reports `incomplete` or `trialing` before it is `active` would spend it on an event this
+     * effect ignores, and the activation after it would find the key taken and welcome nobody.
+     */
     public function dedupReference(BillingDomainEvent $event): string
     {
         if (! $event instanceof SubscriptionStateChanged) {
             throw new RuntimeException('SendSubscriptionActivatedNotice only handles SubscriptionStateChanged events.');
         }
 
-        return ($event->subscriptionReference ?? $event->customerReference).':activated';
+        $subscription = $event->subscriptionReference ?? $event->customerReference;
+
+        return $event->state === SubscriptionState::Active
+            ? $subscription.':activated'
+            : $subscription.':state-'.$event->state->value;
     }
 }

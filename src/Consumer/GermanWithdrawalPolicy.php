@@ -20,7 +20,9 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  * the seller of record here, that difference is the platform's risk, not the creator's.
  *
  * A subscription is different: the right does not extinguish on delivery, so provision is not gated on the
- * consent, and a withdrawal inside the window is settled by paying for the part already used.
+ * consent, and a withdrawal inside the window is settled by paying for the part already used — where the
+ * buyer asked for the service to begin inside the window. Without that request the part used is owed by
+ * nobody, and the whole payment goes back.
  *
  * The statutes live here and in the notice data, never in the neutral core. A consumer elsewhere binds
  * their own reading and never sees the word "Widerruf".
@@ -75,11 +77,28 @@ final readonly class GermanWithdrawalPolicy implements ConsumerWithdrawalPolicy,
         return GermanWithdrawalPeriod::endsAfter($providedAt);
     }
 
-    public function valueForUse(WithdrawalType $type, Money $periodGross, int $elapsedDays, int $periodDays): Money
+    /**
+     * The elapsed part of the period, owed only where the buyer asked for the service to begin early.
+     *
+     * § 357a Abs. 2 BGB makes value for a service provided inside the withdrawal period owed on three
+     * conditions. The buyer expressly asked for it to begin before the period ran out, which is
+     * `consentedToImmediateProvision` on the declarations; acknowledging the forfeiture is a statement about
+     * something else and does not stand in for it. The request reached the seller on a durable medium, which
+     * the law asks only of a contract concluded away from business premises, never of one concluded online.
+     * And the buyer was told about the right and about this charge, which is the operator's notice: the
+     * declarations carry the version that was shown, and judging its content is not this class's to do.
+     */
+    public function valueForUse(WithdrawalType $type, ?WithdrawalConsent $consent, Money $periodGross, int $elapsedDays, int $periodDays): Money
     {
         // A pro-rata charge only exists where the right survives provision — a subscription or a service in
         // progress. For anything whose right extinguished on delivery there is nothing part-used to bill.
         if ($type !== WithdrawalType::ProRataOnCancellation && $type !== WithdrawalType::ServicePerformed) {
+            return new Money(0, $periodGross->currency);
+        }
+
+        // No request on file, no charge for the days used: the buyer who never asked for the service to begin
+        // inside the period owes nothing for it, and the whole payment is theirs.
+        if (! ($consent->consentedToImmediateProvision ?? false)) {
             return new Money(0, $periodGross->currency);
         }
 

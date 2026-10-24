@@ -28,6 +28,7 @@ use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\SubscriptionPeriodPayment;
+use Pushery\Billing\ValueObjects\WithdrawalConsent;
 use Pushery\Billing\ValueObjects\WithdrawalSettlement;
 
 /**
@@ -42,6 +43,11 @@ use Pushery\Billing\ValueObjects\WithdrawalSettlement;
  *
  * Refunding everything makes the platform pay for days it provided. Refunding nothing keeps money for days
  * it did not, and that is the direction where the buyer is in the right.
+ *
+ * The buyer's declarations go with the question, because a jurisdiction may make the answer depend on them.
+ * Under the German reading the days provided are owed only where the buyer asked for the service to begin
+ * inside the withdrawal period, so a withdrawal reads that request wherever it can be found: off the
+ * subscription, off the purchase behind the payment, or from the caller.
  *
  * ## Why the refund is a subtraction and not its own calculation
  *
@@ -104,6 +110,13 @@ final readonly class ConsumerWithdrawal
         private ?WithdrawalTypeResolver $types = null,
         private ?ReadsSubscriptionPayments $payments = null,
         private ?SubscriptionActions $actions = null,
+        /**
+         * Where the buyer's declarations are read back, the request that a service begin early among them.
+         *
+         * Defaulted for the reason the ledger above is: the ledger is stateless, and a consumer constructing
+         * this class by hand supplies nothing new.
+         */
+        private WithdrawalConsentLedger $consents = new WithdrawalConsentLedger,
     ) {}
 
     /**
@@ -115,14 +128,17 @@ final readonly class ConsumerWithdrawal
      *
      * @param  int  $elapsedDays  days of the period already provided when the withdrawal was declared
      * @param  int  $periodDays  the whole period the payment covered
+     * @param  ?WithdrawalConsent  $consent  what the buyer declared for this purchase; null when nothing is on
+     *                                       file, which under the German reading leaves no day of a service owed
      */
     public function settlementFor(
         WithdrawalType $type,
         Money $periodGross,
         int $elapsedDays,
         int $periodDays,
+        ?WithdrawalConsent $consent = null,
     ): WithdrawalSettlement {
-        $retained = $this->gate->valueForUse($type, $periodGross, $elapsedDays, $periodDays);
+        $retained = $this->gate->valueForUse($type, $consent, $periodGross, $elapsedDays, $periodDays);
 
         return new WithdrawalSettlement($periodGross, $retained, $periodGross->minus($retained));
     }
@@ -133,6 +149,10 @@ final readonly class ConsumerWithdrawal
      * The refund is recorded as {@see RefundKind::StatutoryWithdrawal} rather than as goodwill, because the
      * two are different events in the books and only a category can be counted. The reason stays free text
      * for whatever this particular case needs saying about it.
+     *
+     * The buyer's declarations are read off the add-on purchase behind the payment when the caller hands
+     * over none. A subscription's payment has no such purchase, so a caller settling one again after a
+     * refused refund passes them: {@see WithdrawalConsentLedger::forSubscription()}.
      */
     public function withdraw(
         Model $owner,
@@ -143,6 +163,7 @@ final readonly class ConsumerWithdrawal
         int $periodDays,
         ?string $reason = null,
         ?Model $actor = null,
+        ?WithdrawalConsent $consent = null,
     ): WithdrawalSettlement {
         // A retried withdrawal is the ordinary case: a provider timeout, an operator clicking twice. Where an earlier
         // declaration's refund already moved, it is not made again, whatever today's pro-rata says, and the rest of
@@ -159,7 +180,9 @@ final readonly class ConsumerWithdrawal
 
         $this->assertWindowIsOpen($chargeReference);
 
-        $settlement = $this->settlementFor($type, $periodGross, $elapsedDays, $periodDays);
+        $consent ??= $this->consents->forPayment($owner, $chargeReference);
+
+        $settlement = $this->settlementFor($type, $periodGross, $elapsedDays, $periodDays, $consent);
 
         // Nothing to return is not an error and not a refund. A buyer who withdraws on the last day of a
         // period they used in full owes nothing back, and issuing a zero refund would put a money movement
@@ -222,6 +245,12 @@ final readonly class ConsumerWithdrawal
      * {@see WithdrawalWindowClosed} once it has passed, before the provider is asked anything and before anything
      * moves.
      *
+     * ## What the buyer asked for
+     *
+     * The declarations are read off the key the subscription carries from its checkout. Where they hold the
+     * request that the service begin inside the window, the part of the period already used is kept;
+     * without it, the whole payment of the period goes back.
+     *
      * ## Ended first, settled second
      *
      * The subscription ends before the refund. Should something fail between the two, the buyer holds no contract
@@ -262,6 +291,8 @@ final readonly class ConsumerWithdrawal
             return null;
         }
 
+        // The declarations the subscription carries home from its checkout, the request that it begin early among
+        // them. Without one on file the days used are owed by nobody, and the whole payment goes back.
         return $this->withdraw(
             $owner,
             $payment->chargeReference,
@@ -271,6 +302,7 @@ final readonly class ConsumerWithdrawal
             $payment->periodDays(),
             $reason,
             $actor,
+            $this->consents->forSubscription($subscription),
         );
     }
 

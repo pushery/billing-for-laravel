@@ -145,6 +145,16 @@ final readonly class StripeCheckout implements Checkout
             'cancel_url' => $this->urls->cancelUrl(),
         ];
 
+        // The wording of the submit button. Stripe writes "Subscribe" on a subscription unless the session names
+        // another `submit_type`, and that word does not say the buyer is about to pay, which the order button of a
+        // consumer contract in Germany has to. `auto` is Stripe's own choice and goes out as no field at all, so an
+        // installation that names no other value sends the payload it sent before the key existed.
+        $submitType = $this->config->get('billing.checkout.submit_type');
+
+        if (is_string($submitType) && $submitType !== '' && $submitType !== 'auto') {
+            $payload['submit_type'] = $submitType;
+        }
+
         // A subscription trial (mode 'subscription') attaches trial_period_days for this tier. A generic
         // trial (mode 'generic', taken before subscribing) does not — and neither does a subscription tier
         // for an owner already mid generic trial, or a mixed config would trial the same owner twice.

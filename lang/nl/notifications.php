@@ -45,6 +45,7 @@ return [
         'intro' => 'Je opgezegde abonnement eindigt op :date.',
         'intro_merchant' => 'Je opgezegde abonnement bij :merchant eindigt op :date.',
         'outro' => 'Hervat het vóór die datum om alles wat erbij hoort zonder onderbreking te houden.',
+        'tier_after' => 'Anders gaat je account daarna over naar het :tier-abonnement.',
         'cta' => 'Abonnement hervatten',
     ],
 

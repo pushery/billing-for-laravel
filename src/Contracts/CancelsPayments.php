@@ -11,8 +11,12 @@ use Pushery\Billing\ValueObjects\PaymentCancellation;
  *
  * A provider reports a payment on the webhook when its status changes, not when it is created. A payment nobody
  * completes is reported only when it expires, and how long that takes depends on its method. Canceling it ends it now
- * and has it reported as canceled: a checkout the customer abandoned, or a probe payment a platform makes to see an
- * account's webhook arrive before a shop goes live.
+ * and has it reported as canceled, where the provider lets it: a checkout the customer abandoned, for one.
+ *
+ * Mollie keeps an open payment whose customer has not chosen a method yet, which its reference shows as
+ * `isCancelable: false`. A probe payment a platform makes to see an account's webhook arrive before a shop goes live
+ * is usually one, since it is created without a method so that every method of the account is offered: canceling it
+ * comes back as a cancellation that did not happen, and the payment is reported when it expires.
  *
  * The Mollie rails implement it, the rails of a payment account included, and cancel in the account's mode. It is a
  * contract of its own rather than part of PaymentRails, so a PaymentRails of your own does not have to implement it:

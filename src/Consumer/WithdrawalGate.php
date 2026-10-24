@@ -66,14 +66,16 @@ final readonly class WithdrawalGate
      * no withdrawal right in this installation, so there is nothing to part-bill and the whole payment is
      * the caller's to deal with. Answering the policy's figure anyway would apply one jurisdiction's
      * pro-rata rule to an installation that never opted into any.
+     *
+     * The consent is handed to the policy, which decides what it changes.
      */
-    public function valueForUse(WithdrawalType $type, Money $periodGross, int $elapsedDays, int $periodDays): Money
+    public function valueForUse(WithdrawalType $type, ?WithdrawalConsent $consent, Money $periodGross, int $elapsedDays, int $periodDays): Money
     {
         if (! $this->isEnforced()) {
             return new Money(0, $periodGross->currency);
         }
 
-        return $this->policy->valueForUse($type, $periodGross, $elapsedDays, $periodDays);
+        return $this->policy->valueForUse($type, $consent, $periodGross, $elapsedDays, $periodDays);
     }
 
     /**

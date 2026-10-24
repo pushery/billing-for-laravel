@@ -4,6 +4,38 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.50.0] - 2026-10-24
+
+### ⚠️ Breaking
+
+- **`ConsumerWithdrawalPolicy::valueForUse()` takes the buyer's declarations as its second parameter, `?WithdrawalConsent $consent`, and `WithdrawalGate::valueForUse()` takes them in the same place.** A policy of your own adds the parameter and decides what a missing declaration means for the charge.
+
+### ✨ Added
+
+- **`billing.checkout.submit_type` sets what the submit button of a hosted subscription checkout says.** Stripe writes "Subscribe" there unless the session names another `submit_type`. Set `BILLING_CHECKOUT_SUBMIT_TYPE=pay` and the button says "Buy", which is what a seller to consumers in Germany needs: § 312j Abs. 3 BGB asks for an order button that names the obligation to pay. Unset, or `auto`, the session carries no `submit_type`, as before.
+
+- **`billing.stripe.portal_configuration` names the Stripe customer-portal configuration a session opens with.** Set `BILLING_STRIPE_PORTAL_CONFIGURATION` to a `bpc_…` id from the Stripe dashboard, and every portal session `HostedPortal::url()` opens uses that configuration, so an application that confirms a cancellation in its own screens can leave the cancel feature out of the portal. Unset or blank, Stripe opens the account's default configuration, as before.
+
+- **The reminder before a canceled subscription ends names the tier the account moves to.** It said when the subscription ends and asked the reader to resume it; a new line in all seven catalogs adds that otherwise the account moves to the tier `billing.zero_tier` names, by its label. A subscription held with a merchant, and an installation without a zero tier, get the mail as before.
+
+### 🐛 Fixed
+
+- **A withdrawn subscription keeps nothing for the days used unless the buyer asked for it to begin inside the withdrawal period.** Under the `de` profile a withdrawal kept the elapsed part of the period on every subscription, while § 357a Abs. 2 BGB makes that part owed only on the buyer's request. `ConsumerWithdrawal::withdrawSubscription()` reads the request from the declarations the subscription carries, `withdraw()` from the add-on purchase behind the payment or from its new `consent` argument, and `settlementFor()` takes it as an argument. Without a request on file the whole payment of the period goes back.
+
+  **Upgrade:** take the request at checkout, as the 0.50.0 section of the upgrade guide describes. A subscription started without it is refunded in full when it is withdrawn.
+
+- **A subscription that reports `incomplete` or `trialing` before it is `active` gets its activation mail.** The activation notice used one deduplication key for every state change of a subscription, and an event it ignored claimed that key first, so the activation after it found the key taken and neither the mail nor the success toast went out. Only the activation claims that key now; a recovery from `past_due` still sends no second mail.
+
+### 🔒 Security
+
+- **The five tries of the identity check before an immediate cancel hold when attempts arrive together.** The check read the count of wrong attempts first and counted a wrong one afterwards, so attempts sent at the same moment were all checked against the credential while one try was left. Each attempt is now counted before the credential is checked and judged by the count it gets back. A throttled attempt gives its count back, a wrong credential keeps it, and a correct one clears the counter, as before.
+
+  **Upgrade:** nothing to do.
+
+### 📚 Documentation
+
+- **`CancelsPayments` and the Mollie rails say which payment Mollie keeps.** An open payment whose customer has not chosen a method yet is not cancelable at Mollie, so canceling the probe payment a platform makes to see an account's webhook arrive comes back as a cancellation that did not happen, and the payment is reported when it expires. The contract had named that probe as a case the cancellation ends at once.
+
 ## [0.49.0] - 2026-10-23
 
 ### ✨ Added
@@ -8199,7 +8231,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.49.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.50.0...HEAD
+[0.50.0]: https://github.com/pushery/billing-for-laravel/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/pushery/billing-for-laravel/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/pushery/billing-for-laravel/compare/v0.47.0...v0.48.0
 [0.47.0]: https://github.com/pushery/billing-for-laravel/compare/v0.46.0...v0.47.0

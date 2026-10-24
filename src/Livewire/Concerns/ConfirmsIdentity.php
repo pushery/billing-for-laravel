@@ -18,10 +18,12 @@ use Pushery\Billing\Livewire\AccountScreen;
  * account (OAuth / magic-link) its account email, which a held session knows, so an application without
  * passwords binds a factor of its own.
  *
- * The attempt is per-user rate-limited (5 tries / 5 minutes) and the limiter is checked before the
- * credential is verified, so a brute-force is locked out rather than probed one attempt at a time. Only
- * a wrong credential consumes an attempt; a correct one clears the counter. The submitted credential is
- * never persisted or logged — it lives only for the duration of the check.
+ * The attempt is per-user rate-limited (5 tries / 5 minutes) and counted before the credential is verified,
+ * so a brute-force is locked out rather than probed one attempt at a time. It is judged by the count its own
+ * charge returns: asked first and counted after, attempts that arrive together all read the last free try and
+ * are all checked. A throttled attempt gives its count back, a wrong credential keeps it, and a correct one
+ * clears the counter. The submitted credential is never persisted or logged — it lives only for the duration
+ * of the check.
  *
  * The using component must expose `actor()` (every {@see AccountScreen} does):
  * the identity re-confirmed is the signed-in user who clicked, not the billing owner (which may be a team).
@@ -44,15 +46,15 @@ trait ConfirmsIdentity
         $id = $actor->getKey();
         $key = 'billing:reconfirm:'.$actor->getMorphClass().':'.(is_scalar($id) ? (string) $id : '');
 
-        if (RateLimiter::tooManyAttempts($key, 5)) {
+        if (RateLimiter::hit($key, 300) > 5) {
+            RateLimiter::decrement($key, max(1, RateLimiter::availableIn($key)));
+
             throw ValidationException::withMessages([
                 'credential' => Lang::get('billing::account.reconfirm.throttled', ['seconds' => RateLimiter::availableIn($key)]),
             ]);
         }
 
         if (! $this->reconfirmation()->confirms($actor, $credential)) {
-            RateLimiter::hit($key, 300);
-
             throw ValidationException::withMessages([
                 'credential' => Lang::get('billing::account.reconfirm.wrong'),
             ]);

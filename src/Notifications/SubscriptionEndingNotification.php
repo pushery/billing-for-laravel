@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Pushery\Billing\Notifications;
 
 use DateTimeInterface;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Config\Repository;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
+use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Enums\BillingAction;
 use Pushery\Billing\Support\LocalizedDate;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -19,6 +22,9 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * A subscription held with a merchant is named after the merchant where the name is known, and its mail has no
  * button: the account hub's subscription screen shows the platform's own subscription, and a button there would
  * resume a different one.
+ *
+ * The platform's own subscription ends in the zero tier, where every owner without one stands, and the mail says
+ * so where the installation names one: the reader learns what the end means, not only when it comes.
  */
 final class SubscriptionEndingNotification extends BillingNotification
 {
@@ -47,6 +53,13 @@ final class SubscriptionEndingNotification extends BillingNotification
             ->line($intro)
             ->line(Lang::get('billing::notifications.subscription_ending.outro'));
 
+        // A subscription held with a merchant ends in no tier of the platform's, so its mail names none.
+        $tier = $this->heldWithAMerchant() ? null : $this->tierAfterTheEnd();
+
+        if ($tier !== null) {
+            $mail->line(Lang::get('billing::notifications.subscription_ending.tier_after', ['tier' => $tier]));
+        }
+
         return $this->withAction($mail, Lang::get('billing::notifications.subscription_ending.cta'), $action);
     }
 
@@ -63,5 +76,22 @@ final class SubscriptionEndingNotification extends BillingNotification
     private function heldWithAMerchant(): bool
     {
         return $this->merchant instanceof MerchantScope && ! $this->merchant->isPlatform();
+    }
+
+    /**
+     * The label of the zero tier, or null where the installation names none or no tier carries that key.
+     *
+     * Read as the mail is written, like a tier's label everywhere else, so a label renamed since the cancellation
+     * is the one the reader knows now.
+     */
+    private function tierAfterTheEnd(): ?string
+    {
+        $zero = Container::getInstance()->make(Repository::class)->get('billing.zero_tier');
+
+        if (! is_string($zero) || $zero === '') {
+            return null;
+        }
+
+        return Container::getInstance()->make(TierCatalog::class)->find($zero)?->label;
     }
 }
