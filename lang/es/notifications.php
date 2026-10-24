@@ -45,6 +45,7 @@ return [
         'intro' => 'Tu suscripción cancelada termina el :date.',
         'intro_merchant' => 'Tu suscripción cancelada con :merchant termina el :date.',
         'outro' => 'Reactívala antes para conservar todo lo que incluye sin interrupción.',
+        'tier_after' => 'Si no, tu cuenta pasa después al plan :tier.',
         'cta' => 'Reactivar la suscripción',
     ],
 

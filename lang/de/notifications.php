@@ -45,6 +45,7 @@ return [
         'intro' => 'Dein gekündigtes Abo endet am :date.',
         'intro_merchant' => 'Dein gekündigtes Abo bei :merchant endet am :date.',
         'outro' => 'Setz es vorher fort, dann behältst du alles, was dazugehört, ohne Unterbrechung.',
+        'tier_after' => 'Sonst wechselt dein Konto danach in den :tier-Tarif.',
         'cta' => 'Abo fortsetzen',
     ],
 

@@ -349,7 +349,8 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
      * Cancel a payment the customer has not completed, in the client's mode: an account's rails in test mode cancel
      * the test payment they made.
      *
-     * Mollie cancels a payment while its method allows it, an `open` one in most cases. One it keeps answers 422, and
+     * Mollie cancels a payment while its method allows it, an `open` one in most cases, and keeps one whose customer
+     * has not chosen a method yet, `isCancelable: false` in its reference. One it keeps answers 422, and
      * that comes back as a cancellation that did not happen, with Mollie's own words. So does an id Mollie does not
      * know. A refusal that says nothing about the payment (credentials, a rate limit, an outage) travels, as a refund's
      * does.

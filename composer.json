@@ -33,7 +33,7 @@
     "support": {
         "issues": "https://github.com/pushery/billing-for-laravel/issues",
         "source": "https://github.com/pushery/billing-for-laravel",
-        "docs": "https://docs.pushery.com/billing-for-laravel",
+        "docs": "https://docs.pushery.com/billing-for-laravel/",
         "security": "https://github.com/pushery/billing-for-laravel/security/policy"
     },
     "require": {

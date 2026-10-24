@@ -45,6 +45,7 @@ return [
         'intro' => 'Your canceled subscription ends on :date.',
         'intro_merchant' => 'Your canceled subscription to :merchant ends on :date.',
         'outro' => 'Resume it before then to keep everything it includes without a break.',
+        'tier_after' => 'Otherwise your account moves to the :tier plan.',
         'cta' => 'Resume your subscription',
     ],
 

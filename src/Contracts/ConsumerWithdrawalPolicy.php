@@ -36,6 +36,10 @@ interface ConsumerWithdrawalPolicy
      * Zero for a work whose right extinguished on delivery — there is nothing left to pro-rate. For a
      * subscription, the part of the period already elapsed, computed as a proportion of the whole rather
      * than a second rounding, so the refund and the retained value sum back to what was paid.
+     *
+     * The consent is what the buyer declared for this purchase, null when nothing is on file. A jurisdiction
+     * may make the charge depend on it: under German law the days used are owed only where the buyer asked
+     * for the service to begin before the withdrawal period ran out.
      */
-    public function valueForUse(WithdrawalType $type, Money $periodGross, int $elapsedDays, int $periodDays): Money;
+    public function valueForUse(WithdrawalType $type, ?WithdrawalConsent $consent, Money $periodGross, int $elapsedDays, int $periodDays): Money;
 }
