@@ -52,6 +52,20 @@ return [
         'nothing_running' => 'Este titular não tem nenhuma subscrição ativa para cancelar.',
     ],
 
+    'declarations' => [
+        'heading' => 'Declarações à tua espera',
+        'intro' => 'Cancelamentos e livres resoluções pelo botão de cancelamento e pela função de livre resolução que não foram executados, o mais antigo primeiro. Cada um conta a partir do momento em que chegou. Resolve-o quando tiveres tratado dele.',
+        'empty' => 'Nenhuma declaração espera por uma pessoa.',
+        'cancellation' => 'Cancelamento',
+        'withdrawal' => 'Livre resolução',
+        'failure' => 'A execução falhou: :failure.',
+        'ends_on' => 'O contrato termina a (opcional)',
+        'resolve' => 'Resolver',
+        'resolved' => 'Declaração resolvida.',
+        'gone' => 'Essa declaração já não espera por uma pessoa.',
+        'invalid_day' => 'Introduz o dia como data.',
+    ],
+
     'audit' => [
         'heading' => 'Atividade recente',
         'type' => 'Evento',

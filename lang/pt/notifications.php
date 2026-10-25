@@ -49,6 +49,28 @@ return [
         'cta' => 'Retomar a subscrição',
     ],
 
+    'contract_confirmation' => [
+        'subject' => 'Confirmação do teu contrato',
+        'intro' => 'Confirmamos a tua subscrição do plano :tier, que começou a :date.',
+        'intro_untitled' => 'Confirmamos a tua subscrição, que começou a :date.',
+        'intro_purchase' => 'Confirmamos a tua compra de :addon a :date.',
+        'declarations' => 'As tuas declarações antes da compra:',
+        'cta' => 'Ver o plano',
+        'cta_purchase' => 'Ver os recibos',
+    ],
+
+    'declaration_awaiting_review' => [
+        'subject_cancellation' => 'Um cancelamento espera por ti',
+        'subject_withdrawal' => 'Uma livre resolução espera por ti',
+        'intro_cancellation' => 'Chegou um cancelamento pelo botão de cancelamento e não foi executado. Conta a partir do momento em que chegou.',
+        'intro_withdrawal' => 'Chegou uma livre resolução pela função de livre resolução e não foi executada. Conta a partir do momento em que foi enviada.',
+        'reason_failure' => 'A execução falhou: :failure.',
+        'reason_signed_out' => 'A declaração foi feita sem iniciar sessão, por isso nomeia o contrato com as palavras de quem a fez.',
+        'reason_unmatched' => 'O contrato que a declaração nomeia não é um que a pessoa tenha agora.',
+        'reason_judgment' => 'O tipo ou a data pedida exige a tua decisão sobre quando o contrato termina.',
+        'cta' => 'Abrir as declarações',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'A tua situação fiscal mudou',
         'intro' => 'A tua situação fiscal passou de :from para :to. Determinámos isto a partir dos nossos próprios registos — não foi pedido por ti.',

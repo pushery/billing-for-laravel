@@ -17,6 +17,7 @@ return [
         'past_due' => 'O teu último pagamento falhou. Atualiza o teu método de pagamento para manteres a tua subscrição ativa.',
         'incomplete' => 'O teu pagamento precisa de confirmação antes de a tua subscrição começar.',
         'grace' => 'A tua subscrição foi cancelada e termina em breve. Retoma-a para manteres o teu acesso.',
+        'grace_anew' => 'A tua subscrição foi cancelada e termina em breve. Subscreve de novo para manteres o teu acesso.',
         'paused' => 'A tua faturação está em pausa, por isso as funcionalidades pagas estão suspensas. Podes retomá-la quando quiseres.',
         'trial_ending' => 'O teu período de teste termina em breve. Escolhe um plano para manteres o teu acesso.',
         'with_merchant' => ':merchant: :message',

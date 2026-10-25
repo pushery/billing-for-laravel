@@ -184,6 +184,9 @@
         </form>
     </section>
 
+    {{-- Declarations that wait for a person ------------------------------------------------------------ --}}
+    <livewire:billing.declarations-awaiting-review />
+
     {{-- Audit viewer ------------------------------------------------------------------------------------ --}}
     <section aria-labelledby="audit-heading" class="space-y-4">
         <h2 id="audit-heading" class="text-base font-semibold">{{ __('billing::admin.audit.heading') }}</h2>

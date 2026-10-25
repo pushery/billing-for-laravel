@@ -106,6 +106,21 @@ final class MarketplaceUnsupported extends RuntimeException
         );
     }
 
+    /**
+     * A sale was to be paid from an internal balance on an installation that keeps none.
+     *
+     * Thrown before any gate and before anything is debited. The package keeps no balance of its own, so the host
+     * binds the one it keeps, and an installation that binds none has no balance to pay from.
+     */
+    public static function noInternalBalance(): self
+    {
+        return new self(
+            'A sale paid from an internal balance needs one, and this installation binds none. Bind an '.
+            'implementation of Pushery\\Billing\\Contracts\\InternalBalance over the ledger that holds the balance, '.
+            'or charge the sale through RoutedPayment::charge().'
+        );
+    }
+
     public static function billingDisabled(): self
     {
         return new self(

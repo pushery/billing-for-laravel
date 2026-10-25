@@ -49,6 +49,28 @@ return [
         'cta' => 'Riattiva l’abbonamento',
     ],
 
+    'contract_confirmation' => [
+        'subject' => 'Conferma del tuo contratto',
+        'intro' => 'Con questo messaggio confermiamo il tuo abbonamento al piano :tier, iniziato il :date.',
+        'intro_untitled' => 'Con questo messaggio confermiamo il tuo abbonamento, iniziato il :date.',
+        'intro_purchase' => 'Con questo messaggio confermiamo il tuo acquisto di :addon del :date.',
+        'declarations' => 'Le tue dichiarazioni prima dell\'acquisto:',
+        'cta' => 'Vedi il piano',
+        'cta_purchase' => 'Vedi le ricevute',
+    ],
+
+    'declaration_awaiting_review' => [
+        'subject_cancellation' => 'Una disdetta ti aspetta',
+        'subject_withdrawal' => 'Un recesso ti aspetta',
+        'intro_cancellation' => 'È arrivata una disdetta tramite il pulsante di disdetta e non è stata eseguita. Vale dal momento in cui è arrivata.',
+        'intro_withdrawal' => 'È arrivato un recesso tramite la funzione di recesso e non è stato eseguito. Vale dal momento in cui è stato inviato.',
+        'reason_failure' => 'L\'esecuzione non è riuscita: :failure.',
+        'reason_signed_out' => 'La dichiarazione è stata fatta senza accesso, quindi nomina il contratto con le parole della persona che l\'ha fatta.',
+        'reason_unmatched' => 'Il contratto che la dichiarazione nomina non è uno che la persona ha ora.',
+        'reason_judgment' => 'Il suo tipo o la data richiesta richiede la tua decisione su quando termina il contratto.',
+        'cta' => 'Apri le dichiarazioni',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'La tua posizione fiscale è cambiata',
         'intro' => 'La tua posizione fiscale è passata da :from a :to. Lo abbiamo stabilito dai nostri registri: non lo hai richiesto tu.',

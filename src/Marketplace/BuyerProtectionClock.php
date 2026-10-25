@@ -11,6 +11,7 @@ use DateTimeInterface;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\Contracts\InternalBalance;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Enums\BuyerProtectionState;
@@ -102,6 +103,8 @@ final readonly class BuyerProtectionClock
          * Null where nothing is asked, which is how a hand-built clock behaves.
          */
         private ?MerchantPayoutGate $payouts = null,
+        /** The host's balance, where a sale can be paid from one; the share of such a sale is released there. */
+        private ?InternalBalance $balance = null,
     ) {}
 
     /**
@@ -476,12 +479,18 @@ final readonly class BuyerProtectionClock
             return true;
         }
 
+        $charge = MerchantCharge::model()::query()->where('charge_reference', $hold->charge_reference)->first();
+
+        // A sale paid from an internal balance owes its share to the merchant's balance, so it never takes the
+        // provider's way below, whatever the driver can do.
+        $fromBalance = $charge instanceof MerchantCharge && $charge->provider === InternalBalance::PROVIDER;
+
         // No way to move a share at all — a driver that does not support it, an installation that never
         // bound one. Nothing is owed to the provider here, so the release is complete rather than stuck:
         // leaving it pending would park a hold forever over a transfer this arrangement was never going to
         // make. `assertOperable()` is what refuses an arrangement that claims protection it cannot deliver;
         // this method's job is only to move money where there is a way to.
-        if (! $this->transfers instanceof MovesMerchantShare || ! $this->accounts instanceof MerchantAccountDirectory) {
+        if (! $fromBalance && (! $this->transfers instanceof MovesMerchantShare || ! $this->accounts instanceof MerchantAccountDirectory)) {
             return true;
         }
 
@@ -495,15 +504,19 @@ final readonly class BuyerProtectionClock
             return false;
         }
 
-        $destination = $this->accounts->accountFor($merchant);
+        [$transfers, $destination] = $fromBalance ? $this->toTheBalanceOf($merchant) : $this->toTheProviderAccountOf($merchant);
+
+        // A sale paid from a balance this installation does not bind. The share is owed to the merchant all the same,
+        // so the release waits for the binding instead of counting as done.
+        if (! $transfers instanceof MovesMerchantShare) {
+            return false;
+        }
 
         // A merchant with no account at the provider. There is nobody to transfer to, and the hold must not
         // hang on it — the money is the platform's problem to resolve, not a state machine's.
         if (! $destination instanceof MerchantAccountReference) {
             return true;
         }
-
-        $charge = MerchantCharge::model()::query()->where('charge_reference', $hold->charge_reference)->first();
 
         // Moved already, by the retry of a failed transfer or by the release of a withheld share. Both move the
         // sale, under its own key, and a hold released after them must not instruct a second transfer: the key
@@ -529,7 +542,7 @@ final readonly class BuyerProtectionClock
         // provider still has it, rather than made a second time under a key the provider may have dropped.
         if ($charge instanceof MerchantCharge && $this->ledger instanceof RoutedChargeLedger) {
             try {
-                $earlier = $this->ledger->earlierTransfer($charge, $this->transfers, $destination);
+                $earlier = $this->ledger->earlierTransfer($charge, $transfers, $destination);
             } catch (Throwable $failure) {
                 $this->ledger->recordTransferFailure($charge, $merchant, $failure);
 
@@ -551,7 +564,7 @@ final readonly class BuyerProtectionClock
         }
 
         try {
-            $moved = $this->transfers->transferShare(
+            $moved = $transfers->transferShare(
                 $destination,
                 Money::of($hold->seller_net_minor, $hold->currency),
                 $hold->charge_reference,
@@ -573,6 +586,28 @@ final readonly class BuyerProtectionClock
         }
 
         return true;
+    }
+
+    /**
+     * The merchant's balance as the way and the place a share moves to, or neither where no balance is bound.
+     *
+     * @return array{?MovesMerchantShare, ?MerchantAccountReference}
+     */
+    private function toTheBalanceOf(Model $merchant): array
+    {
+        return $this->balance instanceof InternalBalance
+            ? [new InternalBalanceShares($this->balance), InternalBalanceShares::destinationFor($merchant)]
+            : [null, null];
+    }
+
+    /**
+     * The driver's transfers and the merchant's account at the provider, the way every other sale's share moves.
+     *
+     * @return array{?MovesMerchantShare, ?MerchantAccountReference}
+     */
+    private function toTheProviderAccountOf(Model $merchant): array
+    {
+        return [$this->transfers, $this->accounts?->accountFor($merchant)];
     }
 
     /** Announce an outcome, where anything is listening. */

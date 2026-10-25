@@ -17,6 +17,7 @@ return [
         'past_due' => 'Tu último pago ha fallado. Actualiza tu método de pago para mantener tu suscripción activa.',
         'incomplete' => 'Tu pago necesita confirmación antes de que empiece tu suscripción.',
         'grace' => 'Tu suscripción está cancelada y termina pronto. Reanúdala para mantener tu acceso.',
+        'grace_anew' => 'Tu suscripción está cancelada y termina pronto. Suscríbete de nuevo para mantener tu acceso.',
         'paused' => 'Tu facturación está en pausa, así que tus funciones de pago están suspendidas. Puedes reanudarla cuando quieras.',
         'trial_ending' => 'Tu prueba termina pronto. Elige un plan para mantener tu acceso.',
         'with_merchant' => ':merchant: :message',

@@ -52,6 +52,20 @@ return [
         'nothing_running' => 'Questo titolare non ha alcun abbonamento attivo da annullare.',
     ],
 
+    'declarations' => [
+        'heading' => 'Dichiarazioni che ti aspettano',
+        'intro' => 'Disdette e recessi tramite il pulsante di disdetta e la funzione di recesso che non sono stati eseguiti, il più vecchio per primo. Ognuno vale dal momento in cui è arrivato. Risolvilo quando te ne sei occupato.',
+        'empty' => 'Nessuna dichiarazione aspetta una persona.',
+        'cancellation' => 'Disdetta',
+        'withdrawal' => 'Recesso',
+        'failure' => 'L\'esecuzione non è riuscita: :failure.',
+        'ends_on' => 'Il contratto termina il (facoltativo)',
+        'resolve' => 'Risolvi',
+        'resolved' => 'Dichiarazione risolta.',
+        'gone' => 'Questa dichiarazione non aspetta più una persona.',
+        'invalid_day' => 'Inserisci il giorno come data.',
+    ],
+
     'audit' => [
         'heading' => 'Attività recente',
         'type' => 'Evento',

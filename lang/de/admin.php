@@ -52,6 +52,20 @@ return [
         'nothing_running' => 'Dieser Owner hat kein laufendes Abo, das sich kündigen ließe.',
     ],
 
+    'declarations' => [
+        'heading' => 'Erklärungen, die auf dich warten',
+        'intro' => 'Kündigungen und Widerrufe über den Kündigungsbutton und die Widerrufsfunktion, die nicht ausgeführt wurden, die älteste zuerst. Jede zählt ab dem Moment ihres Eingangs. Erledige eine, sobald du dich darum gekümmert hast.',
+        'empty' => 'Keine Erklärung wartet auf einen Menschen.',
+        'cancellation' => 'Kündigung',
+        'withdrawal' => 'Widerruf',
+        'failure' => 'Die Ausführung ist gescheitert: :failure.',
+        'ends_on' => 'Vertrag endet am (optional)',
+        'resolve' => 'Erledigt',
+        'resolved' => 'Erklärung erledigt.',
+        'gone' => 'Diese Erklärung wartet nicht mehr auf einen Menschen.',
+        'invalid_day' => 'Gib den Tag als Datum ein.',
+    ],
+
     'audit' => [
         'heading' => 'Letzte Aktivität',
         'type' => 'Ereignis',

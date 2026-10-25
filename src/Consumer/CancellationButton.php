@@ -113,6 +113,8 @@ final readonly class CancellationButton
         Notification::route('mail', $declaration->confirmation_email)
             ->notify(new CancellationReceivedNotification($declaration->id)->locale($declaration->locale));
 
+        DeclarationReview::announce($declaration);
+
         return $declaration;
     }
 

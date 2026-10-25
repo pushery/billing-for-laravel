@@ -52,6 +52,20 @@ return [
         'nothing_running' => 'Deze eigenaar heeft geen lopend abonnement om op te zeggen.',
     ],
 
+    'declarations' => [
+        'heading' => 'Verklaringen die op je wachten',
+        'intro' => 'Opzeggingen en herroepingen via de opzegknop en de herroepingsfunctie die niet zijn uitgevoerd, de oudste eerst. Elke geldt vanaf het moment dat ze binnenkwam. Handel er een af zodra je ervoor hebt gezorgd.',
+        'empty' => 'Er wacht geen verklaring op een persoon.',
+        'cancellation' => 'Opzegging',
+        'withdrawal' => 'Herroeping',
+        'failure' => 'Het uitvoeren is mislukt: :failure.',
+        'ends_on' => 'Contract eindigt op (optioneel)',
+        'resolve' => 'Afhandelen',
+        'resolved' => 'Verklaring afgehandeld.',
+        'gone' => 'Die verklaring wacht niet meer op een persoon.',
+        'invalid_day' => 'Voer de dag in als datum.',
+    ],
+
     'audit' => [
         'heading' => 'Recente activiteit',
         'type' => 'Gebeurtenis',

@@ -49,6 +49,28 @@ return [
         'cta' => 'Resume your subscription',
     ],
 
+    'contract_confirmation' => [
+        'subject' => 'Confirmation of your contract',
+        'intro' => 'This confirms your subscription to the :tier plan, which began on :date.',
+        'intro_untitled' => 'This confirms your subscription, which began on :date.',
+        'intro_purchase' => 'This confirms your purchase of :addon on :date.',
+        'declarations' => 'Your declarations before the purchase:',
+        'cta' => 'View your plan',
+        'cta_purchase' => 'View your receipts',
+    ],
+
+    'declaration_awaiting_review' => [
+        'subject_cancellation' => 'A cancellation waits for you',
+        'subject_withdrawal' => 'A withdrawal waits for you',
+        'intro_cancellation' => 'A cancellation came in through the cancellation button and was not carried out. It counts from the moment it arrived.',
+        'intro_withdrawal' => 'A withdrawal came in through the withdrawal function and was not carried out. It counts from the moment it was sent.',
+        'reason_failure' => 'Carrying it out failed: :failure.',
+        'reason_signed_out' => 'The declaration was made without signing in, so it names the contract in the words of the person who made it.',
+        'reason_unmatched' => 'The contract the declaration names is not one the person holds now.',
+        'reason_judgment' => 'Its kind or the date it asks for needs your decision on when the contract ends.',
+        'cta' => 'Open the declarations',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'Your tax standing has changed',
         'intro' => 'Your tax standing changed from :from to :to. We made this change from our own records — you did not ask for it.',

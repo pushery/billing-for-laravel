@@ -52,6 +52,20 @@ return [
         'nothing_running' => 'Este titular no tiene ninguna suscripción activa que cancelar.',
     ],
 
+    'declarations' => [
+        'heading' => 'Declaraciones que te esperan',
+        'intro' => 'Cancelaciones y desistimientos por el botón de cancelación y la función de desistimiento que no se ejecutaron, la más antigua primero. Cada una cuenta desde el momento en que llegó. Resuélvela cuando te hayas ocupado de ella.',
+        'empty' => 'Ninguna declaración espera a una persona.',
+        'cancellation' => 'Cancelación',
+        'withdrawal' => 'Desistimiento',
+        'failure' => 'Su ejecución ha fallado: :failure.',
+        'ends_on' => 'El contrato termina el (opcional)',
+        'resolve' => 'Resolver',
+        'resolved' => 'Declaración resuelta.',
+        'gone' => 'Esa declaración ya no espera a una persona.',
+        'invalid_day' => 'Introduce el día como fecha.',
+    ],
+
     'audit' => [
         'heading' => 'Actividad reciente',
         'type' => 'Evento',

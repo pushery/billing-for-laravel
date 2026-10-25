@@ -53,6 +53,14 @@ final readonly class DriverCapabilities
         // A capability is a promise the package keeps, so this is true where a mapper genuinely produces
         // the event, never where the provider merely could.
         public bool $supportsProviderTrialNotice = false,
+        // Appended last for the same reason, and the one flag that defaults to true: it answers whether the driver
+        // changes a running subscription itself, a plan swap and a resume after a cancellation, the way the
+        // account hub has always assumed. A driver built before this flag existed keeps that answer.
+        //
+        // False where every such change needs a new subscription the customer approves on the provider's page,
+        // as on Shopify. The hub then opens the checkout for a plan change, schedules nothing for the end of a
+        // period, and offers a new subscription instead of a resume.
+        public bool $supportsInPlaceSubscriptionChanges = true,
     ) {}
 
     public function offersMethod(string $method): bool

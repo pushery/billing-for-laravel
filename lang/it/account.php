@@ -17,6 +17,7 @@ return [
         'past_due' => 'Il tuo ultimo pagamento non è andato a buon fine. Aggiorna il tuo metodo di pagamento per mantenere attivo l’abbonamento.',
         'incomplete' => 'Il tuo pagamento deve essere confermato prima che l’abbonamento inizi.',
         'grace' => 'Il tuo abbonamento è stato annullato e termina a breve. Riprendilo per mantenere l’accesso.',
+        'grace_anew' => 'Il tuo abbonamento è stato annullato e termina a breve. Abbonati di nuovo per mantenere l’accesso.',
         'paused' => 'La tua fatturazione è in pausa, quindi le funzioni a pagamento sono sospese. Puoi riprenderla quando vuoi.',
         'trial_ending' => 'La tua prova termina a breve. Scegli un piano per mantenere l’accesso.',
         'with_merchant' => ':merchant: :message',

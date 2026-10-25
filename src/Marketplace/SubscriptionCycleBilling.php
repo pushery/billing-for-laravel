@@ -41,6 +41,12 @@ use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
  * The issuer's is the one that holds, for every caller including those that never come through here. This
  * one is the earlier and cheaper answer: it returns before a tier is resolved at all, so a repeat cannot be
  * turned into a failure by a threshold that has moved since the cycle was first billed.
+ *
+ * ## A buyer with two subscriptions
+ *
+ * One buyer holds one document per key in a series, so two subscriptions over the same stretch need the period
+ * to name the one it is billed for, with `ServicePeriod::withSubject()`. The subject follows the dates in the
+ * key, so a period without one keeps the key it always had, and the documents written under it still match.
  */
 final readonly class SubscriptionCycleBilling
 {

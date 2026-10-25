@@ -53,6 +53,8 @@ The service provider is registered through package discovery. The Stripe driver 
 
 For Mollie, set `BILLING_DRIVER=mollie` and `BILLING_MOLLIE_API_KEY`, and install its SDK — `composer require mollie/mollie-api-php`. It is a suggestion rather than a requirement on purpose: an install that never selects that driver would otherwise carry an HTTP client it never calls.
 
+For an app the Shopify App Store sells, set `BILLING_DRIVER=shopify` and `BILLING_SHOPIFY_CLIENT_SECRET`: Shopify then bills your merchants itself, and the package opens their subscriptions there and follows them through Shopify's webhooks. The [Shopify guide](https://docs.pushery.com/billing-for-laravel/guides/shopify) covers the shop domain and the access tokens it needs.
+
 > **Billable model isn't `App\Models\User`?** Set `BILLING_CUSTOMER_MODEL` **before** you run `billing:install`, or it adds the billing columns to `users`. See the [installation guide](https://docs.pushery.com/billing-for-laravel/single-seller/installation) for the full detail.
 
 ## Documentation

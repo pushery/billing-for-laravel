@@ -190,13 +190,16 @@ final class ManageSubscription extends AccountScreen
      * owner who does not is taken to the hosted checkout to become a subscriber. The mirror guard is the
      * point: without the hasLiveSubscription() branch, an owner with a subscription could open a second
      * one at the provider (a live money bug — two subscriptions, double-billed).
+     *
+     * Under a driver that changes no subscription in place the checkout is the swap: the provider replaces the
+     * running subscription with the new one once the customer approves it, so nothing is billed twice.
      */
     public function subscribe(string $tierKey, ?string $declarationReference = null): void
     {
         $this->denyInAppCheckout();
         $this->ensureEligible();
 
-        if ($this->hasLiveSubscription()) {
+        if ($this->hasLiveSubscription() && $this->changesSubscriptionsInPlace()) {
             $this->swap($tierKey);
 
             return;
@@ -235,7 +238,7 @@ final class ManageSubscription extends AccountScreen
 
             // A full-page redirect to the provider's hosted checkout — validated to be an absolute http(s)
             // URL first, so a tampered payload can never bounce the customer to a script/open-redirect target.
-            $this->redirect($url);
+            $this->toHostedPage($url);
         }
     }
 
@@ -289,7 +292,7 @@ final class ManageSubscription extends AccountScreen
         if ($url !== null) {
             $this->audit('addon.checkout.started', ['addon' => $addonKey]);
 
-            $this->redirect($url);
+            $this->toHostedPage($url);
         }
     }
 
@@ -342,6 +345,18 @@ final class ManageSubscription extends AccountScreen
         $this->denyInAppCheckout();
         $this->ensureEligible();
         $this->refuseATierNotOffered($tierKey);
+
+        // A driver that changes no subscription in place changes a plan through a new subscription the customer
+        // approves, which is what subscribe() opens. Now or not at all: nothing is scheduled for the end of the
+        // period, where no swap could perform it. A move to the tier the owner holds opens nothing.
+        if (! $this->changesSubscriptionsInPlace()) {
+            if ($tierKey !== $this->currentTierKey()) {
+                $this->subscribe($tierKey);
+            }
+
+            return;
+        }
+
         $this->spendProviderCall('swap', [60 => 5]);
 
         $subscription = $this->subscription();
@@ -485,5 +500,19 @@ final class ManageSubscription extends AccountScreen
         if (Container::getInstance()->make(LinkOut::class)->active()) {
             throw new HttpException(403);
         }
+    }
+
+    /**
+     * Send the customer to a page of the provider: a hosted checkout, or the page where they approve a charge.
+     *
+     * The redirect serves a screen that runs on its own. The event serves one that runs in a frame, as an app does
+     * inside the Shopify admin: the provider's page does not load in a frame, and a redirect moves only the frame,
+     * so the script beside this screen opens the page in the top window. Outside a frame the script does nothing.
+     */
+    private function toHostedPage(string $url): void
+    {
+        $this->dispatch('billing-hosted-page', url: $url);
+
+        $this->redirect($url);
     }
 }

@@ -190,6 +190,34 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Shopify
+    |--------------------------------------------------------------------------
+    |
+    | Only read when `default` is `shopify`, the driver for an app the Shopify
+    | App Store sells: Shopify bills the merchants of such an app itself. The
+    | shop of an owner is the permanent `*.myshopify.com` domain in the column
+    | `customer.column` names, and the access token for it comes from your
+    | binding of `ShopifyAccessTokens`.
+    |
+    */
+
+    'shopify' => [
+        // The client secret of your Shopify app. Shopify signs every webhook with it, and the driver refuses
+        // to boot in production without it, because every subscription change would be refused. While a
+        // secret is rotated, write both comma-separated: BILLING_SHOPIFY_CLIENT_SECRET=old_secret,new_secret.
+        'client_secret' => env('BILLING_SHOPIFY_CLIENT_SECRET'),
+
+        // The Admin API version every request names. Shopify supports a version for at least twelve months
+        // after its release, so move it forward within that time.
+        'api_version' => env('BILLING_SHOPIFY_API_VERSION', '2026-10'),
+
+        // Whether subscriptions and purchases are opened as test charges, which a development store approves
+        // without paying. Off unless set: a live store charged in test mode pays nothing.
+        'test' => in_array(is_string($shopifyTest = env('BILLING_SHOPIFY_TEST')) ? strtolower(trim($shopifyTest)) : $shopifyTest, [true, '1', 'true', 'yes', 'on'], true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Webhook path and middleware
     |--------------------------------------------------------------------------
     |
@@ -315,6 +343,14 @@ return [
         // sets `pay`, because the order button has to name the obligation to pay. An add-on purchase reads nothing
         // here: it is in payment mode, where Stripe's own choice is "Buy" already.
         'submit_type' => is_string($checkoutSubmitType = env('BILLING_CHECKOUT_SUBMIT_TYPE')) && trim($checkoutSubmitType) !== '' ? strtolower(trim($checkoutSubmitType)) : 'auto',
+        // The text a hosted checkout shows beside its order button, per tier key and per add-on key: a translation key,
+        // read in the locale of the request that opens the checkout, or the text itself. A seller to consumers in Germany
+        // names the essential features, the price per billing period, the term and the cancellation conditions there
+        // (§ 312j Abs. 2 BGB). Stripe shows up to 1200 characters. A tier or an add-on without an entry gets no text.
+        'submit_message' => [
+            'tiers' => [],
+            'addons' => [],
+        ],
     ],
 
     /*
@@ -2111,9 +2147,30 @@ return [
         // The zone of the business that receives the declaration; a value that names no zone states the moment in UTC.
         'declaration_timezone' => env('BILLING_DECLARATION_TIMEZONE', 'Europe/Berlin'),
 
-        // A route of your own that shows the receipt of a declaration, given its token as the `declaration` parameter.
-        // When it is set, the confirmation mail links to it; the package draws no receipt page of its own.
+        // A route of your own that shows the receipt of a declaration, given its token as the route's one parameter.
+        // Name that parameter `{token}`: the link opens the receipt for whoever holds it and does not expire, and the
+        // recorders that mask a secret in a path, a page-view tracker or an error tracker, look for that name. When it
+        // is set, the confirmation mail links to it; the package draws no receipt page of its own.
         'declaration_receipt_route' => env('BILLING_DECLARATION_RECEIPT_ROUTE'),
+
+        // An address of yours that hears of every declaration through the cancellation button or the withdrawal
+        // function that waits for a person: one made without signing in, an extraordinary cancellation, one for a date
+        // of its own, one naming a contract the person does not hold, and one the provider could not carry out. The
+        // mail repeats the declaration line by line, says why it waits, and answers to the person who made it. Unset,
+        // nobody is told.
+        'declaration_review_address' => env('BILLING_DECLARATION_REVIEW_ADDRESS'),
+
+        // A route of yours whose page mounts `<livewire:billing.declarations-awaiting-review />`, for the button of the
+        // mail above. Unset, the button goes to the admin console where it is mounted, and the mail has none otherwise.
+        'declaration_review_route' => env('BILLING_DECLARATION_REVIEW_ROUTE'),
+
+        // A view of your own with your part of the contract confirmation German law asks for on a distance contract:
+        // your identity and address, the price and the terms of the plan, your withdrawal notice with the model
+        // withdrawal form. With a consumer profile and this view, the package sends the confirmation as a
+        // subscription with the platform begins, before the service does. It writes the tier, the day and the
+        // buyer's declarations, and renders your view below them with `$owner` and a `ContractConfirmation` as
+        // `$contract`. The mail is Markdown. Unset, no confirmation goes out.
+        'contract_confirmation_view' => env('BILLING_CONTRACT_CONFIRMATION_VIEW'),
     ],
 
     // What model calls cost, and the daily caps on it (see the AI costs page of the documentation).
@@ -2334,6 +2391,23 @@ return [
             'decide_after_days' => is_numeric($decideAfterDays = env('BILLING_BUYER_PROTECTION_DECIDE_AFTER_DAYS')) && (int) $decideAfterDays >= 1 ? (int) $decideAfterDays : 60,
             'provider_limit_days' => is_numeric($providerLimitDays = env('BILLING_BUYER_PROTECTION_PROVIDER_LIMIT_DAYS')) ? (int) $providerLimitDays : 90,
             'margin_days' => is_numeric($marginDays = env('BILLING_BUYER_PROTECTION_MARGIN_DAYS')) && (int) $marginDays >= 1 ? (int) $marginDays : 20,
+        ],
+
+        /*
+        | A merchant's subscription paid from the balance a host keeps for its
+        | users (`InternalBalance`), renewed by `billing:run` through
+        | `BalanceSubscriptions`.
+        |
+        | "shortfall" is what happens when the balance does not cover a renewal.
+        | "retry" puts the subscription into arrears as a refused card does: the
+        | cure window starts, the buyer is reminded, the period is asked for once
+        | a day, and the subscription ends when the window has run out. "end"
+        | ends it with the last period it paid for.
+        */
+        'internal_balance' => [
+            'subscriptions' => [
+                'shortfall' => 'retry',
+            ],
         ],
 
         /*

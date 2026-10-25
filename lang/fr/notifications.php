@@ -49,6 +49,28 @@ return [
         'cta' => 'Réactiver mon abonnement',
     ],
 
+    'contract_confirmation' => [
+        'subject' => 'Confirmation de ton contrat',
+        'intro' => 'Nous confirmons ton abonnement à l\'offre :tier, qui a commencé le :date.',
+        'intro_untitled' => 'Nous confirmons ton abonnement, qui a commencé le :date.',
+        'intro_purchase' => 'Nous confirmons ton achat de :addon le :date.',
+        'declarations' => 'Tes déclarations avant l\'achat :',
+        'cta' => 'Voir l\'offre',
+        'cta_purchase' => 'Voir les reçus',
+    ],
+
+    'declaration_awaiting_review' => [
+        'subject_cancellation' => 'Une résiliation t\'attend',
+        'subject_withdrawal' => 'Une rétractation t\'attend',
+        'intro_cancellation' => 'Une résiliation est arrivée par le bouton de résiliation et n\'a pas été exécutée. Elle compte à partir du moment où elle est arrivée.',
+        'intro_withdrawal' => 'Une rétractation est arrivée par la fonction de rétractation et n\'a pas été exécutée. Elle compte à partir du moment où elle a été envoyée.',
+        'reason_failure' => 'Son exécution a échoué : :failure.',
+        'reason_signed_out' => 'La déclaration a été faite sans connexion, elle nomme donc le contrat avec les mots de la personne qui l\'a faite.',
+        'reason_unmatched' => 'Le contrat que nomme la déclaration n\'est pas un contrat que la personne détient actuellement.',
+        'reason_judgment' => 'Sa nature ou la date demandée exige ta décision sur la fin du contrat.',
+        'cta' => 'Ouvrir les déclarations',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'Ton statut fiscal a changé',
         'intro' => 'Ton statut fiscal est passé de :from à :to. Nous l\'avons établi à partir de nos propres registres — tu ne l\'as pas demandé.',

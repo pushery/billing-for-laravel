@@ -143,14 +143,17 @@ final class DeclarationStatement
     /**
      * The address of the receipt page for a declaration, or null where the application names none.
      *
-     * `billing.consumer_rights.declaration_receipt_route` names a route of the application that takes the
-     * declaration's token as its `declaration` parameter. The package draws no receipt page of its own.
+     * `billing.consumer_rights.declaration_receipt_route` names a route of the application with one parameter
+     * for the declaration's token. The token is passed by position, so it fills that parameter whatever the
+     * route calls it: `{token}` is the name recorders that mask a secret in a path look for, and a route that
+     * calls it `{declaration}` keeps working. The link opens the receipt for whoever holds it and does not
+     * expire. The package draws no receipt page of its own.
      */
     public static function receiptUrl(string $token): ?string
     {
         $route = Container::getInstance()->make(Repository::class)->get('billing.consumer_rights.declaration_receipt_route');
 
-        return is_string($route) && $route !== '' && Route::has($route) ? URL::route($route, ['declaration' => $token]) : null;
+        return is_string($route) && $route !== '' && Route::has($route) ? URL::route($route, [$token]) : null;
     }
 
     /** @return array{label: string, value: string} */

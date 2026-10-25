@@ -17,6 +17,7 @@ return [
         'past_due' => 'Your last payment failed. Update your payment method to keep your subscription active.',
         'incomplete' => 'Your payment needs confirmation before your subscription starts.',
         'grace' => 'Your subscription is canceled and ends soon. Resume it to keep your access.',
+        'grace_anew' => 'Your subscription is canceled and ends soon. Subscribe again to keep your access.',
         'paused' => 'Your billing is paused, so your paid features are on hold. Resume it whenever you like.',
         'trial_ending' => 'Your trial ends soon. Pick a plan to keep your access.',
         'with_merchant' => ':merchant: :message',

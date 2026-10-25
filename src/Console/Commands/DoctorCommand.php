@@ -229,6 +229,8 @@ final class DoctorCommand extends Command
 
         $this->reportXRechnungSellerGaps($config, $einvoice);
 
+        $this->reportConsumerContractsNobodyConfirms($config, $withdrawals);
+
         // Folded into $failing rather than carried alongside it: verdict() exists precisely because a
         // check held separately has to be remembered at every exit, and forgetting one is invisible —
         // the command still prints the warning, it just stops counting it.
@@ -520,6 +522,40 @@ final class DoctorCommand extends Command
             'The account hub is mounted at account.prefix while the notices send their readers to screens of your own '
             .'(a BillingActionUrls of yours is bound). If those screens replace the hub, set BILLING_ACCOUNT_ENABLED=false, '
             .'and its routes and screens are not registered; BILLING_ADMIN_ENABLED=false does the same for the admin console.',
+        );
+    }
+
+    /**
+     * A consumer-rights profile is active and no view holds the operator's part of the contract confirmation.
+     *
+     * The package then sends no confirmation, as before it could, and the confirmation German law asks for on a
+     * distance contract is left to the application. A warning rather than a failure, because an application that
+     * confirms its contracts itself leaves the view unset on purpose.
+     */
+    private function reportConsumerContractsNobodyConfirms(Repository $config, WithdrawalGate $withdrawals): void
+    {
+        $view = $config->get('billing.consumer_rights.contract_confirmation_view');
+
+        if (is_string($view) && trim($view) !== '') {
+            return;
+        }
+
+        // A profile that names no reading is reported as the failure it is by the check on works above.
+        try {
+            $enforced = $withdrawals->isEnforced();
+        } catch (InvalidBillingConfig) {
+            return;
+        }
+
+        if (! $enforced) {
+            return;
+        }
+
+        $this->components->warn(
+            'A consumer-rights profile is active and billing.consumer_rights.contract_confirmation_view names no view, '
+            .'so the package confirms no subscription contract. Set BILLING_CONTRACT_CONFIRMATION_VIEW to a view with '
+            .'your identity and address, the price and the terms, and your withdrawal notice with the model form, or '
+            .'confirm each contract yourself before the service begins.',
         );
     }
 

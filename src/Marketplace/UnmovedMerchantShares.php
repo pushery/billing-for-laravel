@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\Contracts\InternalBalance;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Enums\SettlementState;
@@ -37,7 +38,8 @@ use Throwable;
  *
  * The merchant's account as the directory knows it now, which is how `BuyerProtectionClock` resolves it for a
  * release. The row does not keep the account the sale was routed to, and a merchant who moved their account
- * since the sale is paid where they are paid today.
+ * since the sale is paid where they are paid today. A sale paid from an internal balance is the exception: its
+ * share moves to the merchant's balance, whatever account the directory names.
  */
 final readonly class UnmovedMerchantShares
 {
@@ -59,6 +61,8 @@ final readonly class UnmovedMerchantShares
         private ?MerchantPayoutGate $payouts = null,
         /** Null where no release waits on a share here, which is how a hand-built instance behaves. */
         private ?BuyerProtectionClock $protection = null,
+        /** The host's balance, where a sale can be paid from one; its shares move there and nowhere else. */
+        private ?InternalBalance $balance = null,
     ) {}
 
     public function count(): int
@@ -104,9 +108,12 @@ final readonly class UnmovedMerchantShares
             return 'skipped';
         }
 
-        $destination = $this->accounts?->accountFor($merchant);
+        // A sale paid from a balance moves its share to the merchant's balance, never to an account at the provider.
+        [$transfers, $destination] = $charge->provider === InternalBalance::PROVIDER
+            ? $this->toTheBalanceOf($merchant)
+            : [$this->transfers, $this->accounts?->accountFor($merchant)];
 
-        if (! $this->transfers instanceof MovesMerchantShare || ! $destination instanceof MerchantAccountReference) {
+        if (! $transfers instanceof MovesMerchantShare || ! $destination instanceof MerchantAccountReference) {
             return 'skipped';
         }
 
@@ -127,7 +134,7 @@ final readonly class UnmovedMerchantShares
         // An earlier attempt may have reached the provider and lost its answer. Its transfer is taken where the
         // provider still has it, rather than made a second time under a key the provider may have dropped.
         try {
-            $earlier = $this->ledger->earlierTransfer($charge, $this->transfers, $destination);
+            $earlier = $this->ledger->earlierTransfer($charge, $transfers, $destination);
         } catch (Throwable $failure) {
             $this->ledger->recordTransferFailure($charge, $merchant, $failure);
 
@@ -147,7 +154,7 @@ final readonly class UnmovedMerchantShares
         $this->ledger->recordTransferRequested($charge);
 
         try {
-            $moved = $this->transfers->transferShare($destination, $charge->net(), $charge->charge_reference, $charge->transferIdempotencyKey());
+            $moved = $transfers->transferShare($destination, $charge->net(), $charge->charge_reference, $charge->transferIdempotencyKey());
         } catch (Throwable $failure) {
             $this->ledger->recordTransferFailure($charge, $merchant, $failure);
 
@@ -177,6 +184,18 @@ final readonly class UnmovedMerchantShares
         if ($merchant instanceof Model && $charge->transfer_failed_at === null) {
             $this->ledger->recordTransferFailure($charge, $merchant, new RuntimeException($why));
         }
+    }
+
+    /**
+     * The merchant's balance as the way and the place a share moves to, or neither where no balance is bound.
+     *
+     * @return array{?MovesMerchantShare, ?MerchantAccountReference}
+     */
+    private function toTheBalanceOf(Model $merchant): array
+    {
+        return $this->balance instanceof InternalBalance
+            ? [new InternalBalanceShares($this->balance), InternalBalanceShares::destinationFor($merchant)]
+            : [null, null];
     }
 
     /**

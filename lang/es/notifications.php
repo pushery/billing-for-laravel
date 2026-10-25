@@ -49,6 +49,28 @@ return [
         'cta' => 'Reactivar la suscripción',
     ],
 
+    'contract_confirmation' => [
+        'subject' => 'Confirmación de tu contrato',
+        'intro' => 'Con este mensaje confirmamos tu suscripción al plan :tier, que comenzó el :date.',
+        'intro_untitled' => 'Con este mensaje confirmamos tu suscripción, que comenzó el :date.',
+        'intro_purchase' => 'Con este mensaje confirmamos tu compra de :addon el :date.',
+        'declarations' => 'Tus declaraciones antes de la compra:',
+        'cta' => 'Ver el plan',
+        'cta_purchase' => 'Ver los recibos',
+    ],
+
+    'declaration_awaiting_review' => [
+        'subject_cancellation' => 'Una cancelación te espera',
+        'subject_withdrawal' => 'Un desistimiento te espera',
+        'intro_cancellation' => 'Ha llegado una cancelación por el botón de cancelación y no se ha ejecutado. Cuenta desde el momento en que llegó.',
+        'intro_withdrawal' => 'Ha llegado un desistimiento por la función de desistimiento y no se ha ejecutado. Cuenta desde el momento en que se envió.',
+        'reason_failure' => 'Su ejecución ha fallado: :failure.',
+        'reason_signed_out' => 'La declaración se hizo sin iniciar sesión, así que nombra el contrato con las palabras de quien la hizo.',
+        'reason_unmatched' => 'El contrato que nombra la declaración no es uno que la persona tenga ahora.',
+        'reason_judgment' => 'Su tipo o la fecha que pide requieren que decidas cuándo termina el contrato.',
+        'cta' => 'Abrir las declaraciones',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'Tu situación fiscal ha cambiado',
         'intro' => 'Tu situación fiscal ha pasado de :from a :to. Lo determinamos a partir de nuestros propios registros: no lo pediste.',

@@ -48,6 +48,9 @@ final readonly class BillingBanner
         'past_due' => ['danger', 'recover', 'billing.account.recovery'],
         'incomplete' => ['warning', 'confirm', 'billing.account.recovery'],
         'grace' => ['warning', 'resume', 'billing.account.subscription'],
+        // The same period under a driver that starts a canceled subscription again only as a new one: the call is to
+        // the plans, since there is nothing to resume.
+        'grace_anew' => ['warning', 'upgrade', 'billing.account.plan'],
         // Without this the pause is invisible: the owner's paid features quietly stop working and
         // nothing on the account tells them why, or that one click restores them.
         'paused' => ['warning', 'resume', 'billing.account.subscription'],
@@ -67,6 +70,7 @@ final readonly class BillingBanner
         private Repository $config,
         private OwnerSubscriptionState $states,
         private MerchantDisplayName $merchantNames,
+        private BillingManager $billing,
     ) {}
 
     public function for(Model $owner): ?BannerNotice
@@ -123,7 +127,7 @@ final readonly class BillingBanner
         return match (true) {
             $state === SubscriptionState::PastDue => 'past_due',
             $state === SubscriptionState::Incomplete => 'incomplete',
-            $state === SubscriptionState::Grace => 'grace',
+            $state === SubscriptionState::Grace => $this->billing->capabilities()->supportsInPlaceSubscriptionChanges ? 'grace' : 'grace_anew',
             $state === SubscriptionState::Paused => 'paused',
             $state->isTrialing() && $this->trialEndingSoon($subscription, $owner) => 'trial_ending',
             default => null,

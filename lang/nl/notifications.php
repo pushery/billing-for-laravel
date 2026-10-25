@@ -49,6 +49,28 @@ return [
         'cta' => 'Abonnement hervatten',
     ],
 
+    'contract_confirmation' => [
+        'subject' => 'Bevestiging van je contract',
+        'intro' => 'Hierbij bevestigen we je :tier-abonnement, dat op :date is begonnen.',
+        'intro_untitled' => 'Hierbij bevestigen we je abonnement, dat op :date is begonnen.',
+        'intro_purchase' => 'Hierbij bevestigen we je aankoop van :addon op :date.',
+        'declarations' => 'Je verklaringen voor de aankoop:',
+        'cta' => 'Abonnement bekijken',
+        'cta_purchase' => 'Bonnen bekijken',
+    ],
+
+    'declaration_awaiting_review' => [
+        'subject_cancellation' => 'Er wacht een opzegging op je',
+        'subject_withdrawal' => 'Er wacht een herroeping op je',
+        'intro_cancellation' => 'Via de opzegknop is een opzegging binnengekomen die niet is uitgevoerd. Die geldt vanaf het moment dat ze binnenkwam.',
+        'intro_withdrawal' => 'Via de herroepingsfunctie is een herroeping binnengekomen die niet is uitgevoerd. Die geldt vanaf het moment dat ze werd verstuurd.',
+        'reason_failure' => 'Het uitvoeren is mislukt: :failure.',
+        'reason_signed_out' => 'De verklaring is afgelegd zonder in te loggen, dus noemt ze het contract in de woorden van degene die haar aflegde.',
+        'reason_unmatched' => 'Het contract dat de verklaring noemt, heeft de persoon nu niet.',
+        'reason_judgment' => 'Het soort opzegging of de gevraagde datum vraagt jouw beslissing over wanneer het contract eindigt.',
+        'cta' => 'Verklaringen openen',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'Je fiscale status is gewijzigd',
         'intro' => 'Je fiscale status is gewijzigd van :from naar :to. Wij hebben dit uit onze eigen administratie afgeleid — je hebt er niet om gevraagd.',

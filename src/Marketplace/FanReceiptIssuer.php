@@ -612,8 +612,9 @@ final readonly class FanReceiptIssuer
      * It looks like it should need a guard against matching the cycle's own document — the bounds are equal
      * there, so a containment test finds it. It does not need one, and a clause requiring the cover to be
      * strictly wider was built and removed: neutralizing it failed no test, because it could not change an
-     * answer. `ServicePeriod::key()` is derived from the two dates, so "same bounds" and "same key" are one
-     * statement, and the key lookup has already returned that document before this runs.
+     * answer. `ServicePeriod::key()` is derived from the two dates and the subject, so "same bounds, same
+     * subject" and "same key" are one statement, and the key lookup has already returned that document before
+     * this runs.
      *
      * A guard that cannot change an outcome reads in the test output exactly like a guard that works, which
      * is the reason it is gone rather than kept for comfort.
@@ -636,7 +637,14 @@ final readonly class FanReceiptIssuer
             // the January document behind, which is the least suspicious possible number of escapees.
             ->whereDate('service_period_start', '<=', $period->from)
             ->whereDate('service_period_end', '>=', $period->to)
-            ->first();
+            ->orderBy('id')
+            ->get()
+            // A term covers the cycles of the subscription it was billed for, and no other. A buyer can hold two
+            // subscriptions over the same stretch, and a year paid for one says nothing about the months of the
+            // other, so the subject is read off the stored key and has to be the cycle's own.
+            ->first(
+                static fn (InvoiceRecord $document): bool => ServicePeriod::subjectOfKey($document->settlement_period) === $period->subject,
+            );
     }
 
     /**

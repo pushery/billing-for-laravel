@@ -17,6 +17,7 @@ return [
         'past_due' => 'Je laatste betaling is mislukt. Werk je betaalmethode bij om je abonnement actief te houden.',
         'incomplete' => 'Je betaling moet worden bevestigd voordat je abonnement start.',
         'grace' => 'Je abonnement is opgezegd en eindigt binnenkort. Hervat het om je toegang te behouden.',
+        'grace_anew' => 'Je abonnement is opgezegd en eindigt binnenkort. Neem opnieuw een abonnement om je toegang te behouden.',
         'paused' => 'Je facturering staat op pauze, dus je betaalde functies liggen stil. Je kunt hem hervatten wanneer je wilt.',
         'trial_ending' => 'Je proefperiode eindigt binnenkort. Kies een plan om je toegang te behouden.',
         'with_merchant' => ':merchant: :message',

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace;
 
 use Carbon\CarbonImmutable;
+use Closure;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Debug\ExceptionHandler;
@@ -12,15 +13,18 @@ use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\BillingDriver;
 use Pushery\Billing\Contracts\CanReceiveMoney;
+use Pushery\Billing\Contracts\InternalBalance;
 use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Contracts\RoutesMoney;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Enums\DeemedSupplyOfGoods;
+use Pushery\Billing\Enums\MerchantChargePurpose;
 use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxRateCategory;
 use Pushery\Billing\Exceptions\DeemedSupplyOfGoodsRefused;
+use Pushery\Billing\Exceptions\InsufficientInternalBalance;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\ReceiveEligibilityDenied;
 use Pushery\Billing\Models\MerchantCharge;
@@ -178,6 +182,8 @@ final readonly class RoutedPayment
          * behavior it always had, the share moving now.
          */
         private ?MerchantPayoutGate $payouts = null,
+        /** The host's balance a sale can be paid from, where it keeps one. Without it {@see self::chargeFromBalance()} refuses. */
+        private ?InternalBalance $balance = null,
     ) {}
 
     /**
@@ -245,6 +251,114 @@ final readonly class RoutedPayment
         ?string $destinationSubdivision = null,
         ?GoodsConsignment $consignment = null,
         ?SupplyPlacement $placement = null,
+    ): ChargeResult {
+        // A separate transfer's charge is an ordinary platform charge -- the platform is the merchant of record and
+        // takes the whole payment; the merchant's share moves in a second call. So the routing is deliberately not
+        // passed there. Handing it to the rails would ask them to serve a lane they cannot serve alone, and they
+        // correctly refuse: the transfer can only be made once the payment has actually succeeded, which is after
+        // `charge()` has already returned.
+        $pay = fn (ChargeRouting $decided): ChargeResult => $this->driver->rails()->charge(
+            $gross,
+            $token,
+            $idempotencyKey,
+            $decided->type === ChargeType::SeparateTransfer ? null : $decided,
+        );
+
+        return $this->sell(
+            $merchant, $buyerOwner, $gross, $fee, $taxBps, $buyerIsDomestic, $routing, $archetype, $soldAlongside,
+            $destinationCountry, $destinationSubdivision, $consignment, $placement, $pay,
+        );
+    }
+
+    /**
+     * Take a routed sale from the buyer's internal balance, and write down what was sold, as one operation.
+     *
+     * The sale is the one {@see self::charge()} makes, with every gate, the commission, the record, the share and the
+     * buyer's document. Only the payment differs: the buyer's balance is debited where the card would be charged,
+     * and the merchant's share is credited to their balance where a provider transfer would move it, through
+     * {@see InternalBalanceShares}. The charge is recorded under {@see InternalBalance::PROVIDER} as a separate
+     * transfer, so the share waits behind withheld payouts and the buyer protection exactly as a transfer would.
+     *
+     * The debit and the record are one database transaction, so a balance kept in the same database is never
+     * debited for a sale that was not recorded. A balance that does not cover the gross refuses with
+     * {@see InsufficientInternalBalance}, and then nothing is recorded.
+     *
+     * The idempotency key is required here: it is what keeps a repeated sale from being debited twice, and the
+     * host's balance keys its debit by it.
+     *
+     * @param  Money  $gross  what the buyer pays
+     * @param  PlatformFee  $fee  the platform's cut, taken on the transaction's net, as on {@see self::charge()}
+     * @param  int  $taxBps  the tax on the buyer's side, in basis points
+     * @param  bool  $buyerIsDomestic  whether the small-value rules of the seller's own country apply
+     * @param  string  $idempotencyKey  the key of this sale, stable across a retry of it
+     * @param  ?TaxArchetype  $archetype  what is being sold, required as on {@see self::charge()}
+     * @param  ?TaxArchetype  $soldAlongside  for a voluntary payment, what it was paid on
+     * @param  ?GoodsConsignment  $consignment  for goods, where they ship from and what the consignment is worth
+     * @param  ?SupplyPlacement  $placement  where a caller that decided the sale's tax placed it
+     * @param  ?MerchantChargePurpose  $purpose  what the sale pays for, where the caller knows it: a subscription's
+     *                                           cycle says so on its row, a one-off sale leaves it null
+     *
+     * @throws MarketplaceUnsupported where this installation binds no {@see InternalBalance}
+     * @throws InsufficientInternalBalance where the buyer's balance does not cover the gross
+     */
+    public function chargeFromBalance(
+        Model $merchant,
+        Model $buyerOwner,
+        Money $gross,
+        PlatformFee $fee,
+        int $taxBps,
+        bool $buyerIsDomestic,
+        string $idempotencyKey,
+        ?TaxArchetype $archetype,
+        ?TaxArchetype $soldAlongside = null,
+        ?string $destinationCountry = null,
+        ?string $destinationSubdivision = null,
+        ?GoodsConsignment $consignment = null,
+        ?SupplyPlacement $placement = null,
+        ?MerchantChargePurpose $purpose = null,
+    ): ChargeResult {
+        $balance = $this->balance ?? throw MarketplaceUnsupported::noInternalBalance();
+
+        $pay = static fn (): ChargeResult => new ChargeResult(
+            successful: true,
+            reference: $balance->debit($buyerOwner, $gross, $idempotencyKey),
+            amount: $gross,
+        );
+
+        return $this->sell(
+            $merchant, $buyerOwner, $gross, $fee, $taxBps, $buyerIsDomestic,
+            new ChargeRouting(InternalBalanceShares::destinationFor($merchant), new Money(0, $gross->currency), ChargeType::SeparateTransfer),
+            $archetype, $soldAlongside, $destinationCountry, $destinationSubdivision, $consignment, $placement, $pay, $balance,
+            $purpose,
+        );
+    }
+
+    /**
+     * The sale both ways of paying share, from the first gate to the buyer's document.
+     *
+     * Paid through `$pay`, which charges the provider or debits the internal balance, and which is handed the routing
+     * as it was decided here. With a balance the payment and the record are one transaction, and the share moves to
+     * the merchant's balance.
+     *
+     * @param  Closure(ChargeRouting): ChargeResult  $pay
+     */
+    private function sell(
+        Model $merchant,
+        Model $buyerOwner,
+        Money $gross,
+        PlatformFee $fee,
+        int $taxBps,
+        bool $buyerIsDomestic,
+        ChargeRouting $routing,
+        ?TaxArchetype $archetype,
+        ?TaxArchetype $soldAlongside,
+        ?string $destinationCountry,
+        ?string $destinationSubdivision,
+        ?GoodsConsignment $consignment,
+        ?SupplyPlacement $placement,
+        Closure $pay,
+        ?InternalBalance $balance = null,
+        ?MerchantChargePurpose $purpose = null,
     ): ChargeResult {
         // The archetype is required and nullable, which looks like a contradiction and is the point. Required
         // so it cannot be forgotten — a default would make "unclassified" the quiet normal case within a
@@ -361,9 +475,9 @@ final readonly class RoutedPayment
         // only then refused to pay the merchant.
         // Held in a local from here on, so the answer is carried to the transfer below rather than asked of
         // the property a second time, after calls that could in principle have changed what it holds.
-        $transfers = null;
+        $transfers = $balance instanceof InternalBalance ? new InternalBalanceShares($balance) : null;
 
-        if ($routesSeparately) {
+        if ($routesSeparately && ! $transfers instanceof MovesMerchantShare) {
             if (! $this->transfers instanceof MovesMerchantShare) {
                 throw MarketplaceUnsupported::cannotMoveMerchantShare($this->driver->name());
             }
@@ -387,29 +501,30 @@ final readonly class RoutedPayment
 
         // Every gate above vouched for $merchant, and the money goes to the routing's destination. Where this
         // installation knows the merchant's account, the two have to be the same account, or a stale or
-        // swapped routing pays somebody no gate has seen while the row names the merchant that passed.
-        $this->assertDestinationIsTheMerchant($merchant, $routing);
-
-        // The provider first. A row written before the charge would describe a payment that may never
-        // happen, and the reversal caps would then be willing to give back money nobody ever took.
-        //
-        // A separate transfer's charge is an ordinary platform charge -- the platform is the merchant of
-        // record and takes the whole payment; the merchant's share moves in a second call below. So the
-        // routing is deliberately not passed there. Handing it to the rails would ask them to serve a lane
-        // they cannot serve alone, and they correctly refuse: the transfer can only be made once the payment
-        // has actually succeeded, which is after `charge()` has already returned.
-        $result = $this->driver->rails()->charge(
-            $gross,
-            $token,
-            $idempotencyKey,
-            $routesSeparately ? null : $routing,
-        );
-
-        if ($result->failed()) {
-            return $result;
+        // swapped routing pays somebody no gate has seen while the row names the merchant that passed. A sale
+        // paid from a balance has no such account: its destination is built from the merchant right here.
+        if (! $balance instanceof InternalBalance) {
+            $this->assertDestinationIsTheMerchant($merchant, $routing);
         }
 
-        $charge = $this->record($merchant, $result, $gross, $fee, $platformFee, $taxBps, $routing->type, $posture, $archetype, $deemed, $consignment, $destinationCountry);
+        // The payment first. A row written before the charge would describe a payment that may never
+        // happen, and the reversal caps would then be willing to give back money nobody ever took. Paid from a
+        // balance, the debit and the row are one transaction instead, so neither can stand without the other.
+        $provider = $balance instanceof InternalBalance ? InternalBalance::PROVIDER : $this->driver->name();
+
+        $collect = function () use ($pay, $routing, $merchant, $gross, $fee, $platformFee, $taxBps, $posture, $archetype, $deemed, $consignment, $destinationCountry, $provider, $purpose): array {
+            $result = $pay($routing);
+
+            return [$result, $result->failed() ? null : $this->record($merchant, $result, $gross, $fee, $platformFee, $taxBps, $routing->type, $posture, $archetype, $deemed, $consignment, $destinationCountry, $provider, $purpose)];
+        };
+
+        [$result, $charge] = $balance instanceof InternalBalance
+            ? MerchantCharge::model()::query()->getConnection()->transaction($collect)
+            : $collect();
+
+        if (! $charge instanceof MerchantCharge) {
+            return $result;
+        }
 
         // A settled payment is settled now, from what the provider just said — not later, from a webhook
         // re-deriving it. The result already carries the transfer reference on a destination charge,
@@ -441,6 +556,13 @@ final readonly class RoutedPayment
                 Money::of($charge->gross_minor, $charge->currency),
                 CarbonImmutable::now(),
                 $merchant,
+            );
+
+            // The share waits, the sale does not. The buyer's document is owed for the sale itself, so it is issued
+            // here exactly as on the lane below, and a refund of the hold later corrects a document that exists.
+            $this->issueBuyerDocument(
+                $buyerOwner, $posture, $gross, $taxBps, $buyerIsDomestic, $charge, $archetype, $classification,
+                $soldAlongside, $destinationCountry, $destinationSubdivision, $placement, $deemed, $consignment?->description,
             );
 
             return $result;
@@ -610,7 +732,7 @@ final readonly class RoutedPayment
                 tier: $this->tiers->tierFor($gross, ! $deemed->distanceSale(), false),
                 tax: $deemed,
                 chargeReference: $charge->charge_reference,
-                provider: $this->driver->name(),
+                provider: $charge->provider,
                 goods: $goods,
             );
 
@@ -671,15 +793,15 @@ final readonly class RoutedPayment
                 // without it the sale was never declared. See `placed()` for where it comes from.
                 oneStopShop: $oneStopShop,
             ),
-            // Whose charge reference the line above is. It is the same driver that produced it — taken from
-            // the driver rather than named here, so the reference and the provider recorded beside it can
-            // never come from two different places.
+            // Whose charge reference the line above is, read from the row that recorded both, so the reference and
+            // the provider beside it can never come from two different places: the driver for a sale it charged,
+            // the internal balance for a sale paid from one.
             //
             // Both of these arrived on separate branches, appended to the same parameter position, and this
             // call once passed them positionally. Which value bound to which parameter was going to be
             // decided by whoever resolved that conflict, and two nulls in the wrong slots are caught by
             // nothing. Named arguments take the decision away from the merge.
-            provider: $this->driver->name(),
+            provider: $charge->provider,
         );
     }
 
@@ -812,7 +934,7 @@ final readonly class RoutedPayment
      * the same charge converges on the row it already wrote rather than starting a second one with all its
      * reversal totals back at zero.
      */
-    private function record(Model $merchant, ChargeResult $result, Money $gross, PlatformFee $fee, Money $platformFee, int $taxBps, ChargeType $chargeType, SellerOfRecordPosture $posture, ?TaxArchetype $archetype, ?DeemedSupplyOfGoodsTax $deemed, ?GoodsConsignment $consignment, ?string $destinationCountry): MerchantCharge
+    private function record(Model $merchant, ChargeResult $result, Money $gross, PlatformFee $fee, Money $platformFee, int $taxBps, ChargeType $chargeType, SellerOfRecordPosture $posture, ?TaxArchetype $archetype, ?DeemedSupplyOfGoodsTax $deemed, ?GoodsConsignment $consignment, ?string $destinationCountry, string $provider, ?MerchantChargePurpose $purpose = null): MerchantCharge
     {
         // What the merchant receives is still the whole payment less the commission -- the buyer's tax
         // travels with the merchant's share, because on this lane it is the merchant who owes it. Computed
@@ -821,7 +943,7 @@ final readonly class RoutedPayment
 
         return $this->ledger->record(
             merchant: $merchant,
-            provider: $this->driver->name(),
+            provider: $provider,
             chargeReference: $result->reference,
             gross: $gross,
             fee: $platformFee,
@@ -843,6 +965,9 @@ final readonly class RoutedPayment
             // And who sold, for the small-business turnover: a creator who supplies the buyer counts the whole
             // price less their tax, one who supplies the platform counts the payout.
             sellerPosture: $posture,
+            // And what the sale paid for, where the caller said: a subscription's cycle is told apart from a one-off
+            // sale on its row, as the cycles the provider collects are.
+            purpose: $purpose,
             // And what was sold. Under intermediation this row is the only record of the sale, so it is what a
             // count of a seller's sales of goods reads.
             taxArchetype: $archetype,
