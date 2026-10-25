@@ -74,6 +74,9 @@ final class OwnerScopedTables
         // was never claimed: an unclaimed one names an owner who asked to buy something, which is the kind
         // of fact an erasure is for.
         'billing_subscription_intents',
+        // A purchase the app opened at Shopify, waiting for the merchant to approve it. It holds no money and no document,
+        // since Shopify charges the merchant and the add-on purchase records what was bought, so it goes with the person.
+        'billing_shopify_purchases',
         // A local order is the operational billing unit a due cycle is assembled into; the retained financial
         // record is the invoice produced from it, not the order itself. So an order is purged with the owner,
         // the same way the subscription it billed is.

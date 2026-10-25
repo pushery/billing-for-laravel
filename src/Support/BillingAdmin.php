@@ -8,10 +8,12 @@ use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Bus;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\CreatorTaxStatusResolver;
+use Pushery\Billing\Contracts\InternalBalance;
 use Pushery\Billing\Contracts\RefundsPlatformFee;
 use Pushery\Billing\Contracts\RoutesMoney;
 use Pushery\Billing\Contracts\SubscriptionActions;
@@ -22,6 +24,8 @@ use Pushery\Billing\Enums\RefundAttemptStatus;
 use Pushery\Billing\Enums\RefundKind;
 use Pushery\Billing\Enums\TaxBaseChangeReason;
 use Pushery\Billing\Exceptions\CommissionTermsUnknown;
+use Pushery\Billing\Exceptions\InsufficientInternalBalance;
+use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Jobs\RefundPlatformFee;
 use Pushery\Billing\Marketplace\ClawbackCalculator;
 use Pushery\Billing\Marketplace\RoutedChargeLedger;
@@ -36,6 +40,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PlatformFee;
 use Pushery\Billing\ValueObjects\RefundResult;
+use Throwable;
 
 /**
  * The support/admin console core: the three out-of-band operations a support agent performs on an
@@ -76,6 +81,8 @@ final readonly class BillingAdmin
          */
         private ?RoutedRefundCorrector $corrector = null,
         private ?CreatorTaxStatusResolver $statuses = null,
+        /** The host's balance, which a sale paid from it is refunded to. Without it such a refund is refused. */
+        private ?InternalBalance $balance = null,
     ) {}
 
     /**
@@ -145,6 +152,7 @@ final readonly class BillingAdmin
         // row twice is two readings that can differ: a concurrent reversal between them would price this
         // refund against one state and cap it against another.
         $charge = $this->routedChargeFor($chargeReference);
+        $balance = $this->balanceFor($charge);
         $attempt = $charge instanceof MerchantCharge ? $this->attemptFor($charge, $amount, $idempotencyKey) : null;
 
         // A refund the caller's key has already made. The provider answered once under that key and the money
@@ -173,9 +181,17 @@ final readonly class BillingAdmin
         //
         // Null for every single-seller charge, because nothing routed it and the ledger holds no row. The
         // shipped payload is then byte-for-byte what it always was.
-        $rails = $this->manager->driver()->rails();
-        $routing = $this->routingFor($charge, $rails instanceof RefundsPlatformFee);
-        $result = $rails->refund($chargeReference, $amount, $key, $routing);
+        //
+        // A sale paid from the host's balance went through no provider, so its refund goes back to that balance, and
+        // the merchant's share comes back from theirs.
+        if ($balance instanceof InternalBalance && $charge instanceof MerchantCharge) {
+            $routing = null;
+            $result = $this->refundToBalance($balance, $owner, $charge, $attempt, $amount, $key);
+        } else {
+            $rails = $this->manager->driver()->rails();
+            $routing = $this->routingFor($charge, $rails instanceof RefundsPlatformFee);
+            $result = $rails->refund($chargeReference, $amount, $key, $routing);
+        }
 
         // The attempt gets an outcome either way, and the failure branch is the one worth having: an attempt
         // row with no ending is a reversal nobody can later say was tried. `failRefund` moves no totals, so
@@ -194,7 +210,8 @@ final readonly class BillingAdmin
                 $result->reversedTransferReference === null
                     ? new Money(0, $amount->currency)
                     : $result->transferReversed,
-                reversalRequested: $result->reversedTransferReference !== null,
+                // The balance is always asked for the share, so what it did not give back came back short.
+                reversalRequested: $balance instanceof InternalBalance || $result->reversedTransferReference !== null,
             );
 
             // The fee the ledger just booked as given back, given back at the provider. The refund was made without
@@ -204,7 +221,7 @@ final readonly class BillingAdmin
                 Bus::dispatch(new RefundPlatformFee((int) $attempt->id, $moved['fee']));
             }
         } elseif ($attempt instanceof RefundAttempt) {
-            $this->routed->failRefund($attempt, 'The provider refused an admin-initiated refund'.($result->failureMessage !== null ? ': '.$result->failureMessage : '.'));
+            $this->routed->failRefund($attempt, ($balance instanceof InternalBalance ? 'The internal balance' : 'The provider').' refused an admin-initiated refund'.($result->failureMessage !== null ? ': '.$result->failureMessage : '.'));
         }
 
         if ($result->successful) {
@@ -300,7 +317,8 @@ final readonly class BillingAdmin
         // It is also the question the sibling paths ask. `ConsumerWithdrawal` looks the charge up exactly
         // this way, and having the two disagree is how the package ended up correcting the chain on three
         // paths out of four.
-        $charge = $this->routed->find($this->manager->driver()->name(), $chargeReference);
+        $charge = $this->routed->find($this->manager->driver()->name(), $chargeReference)
+            ?? $this->routed->find(InternalBalance::PROVIDER, $chargeReference);
 
         if (! $charge instanceof MerchantCharge) {
             return;
@@ -422,9 +440,66 @@ final readonly class BillingAdmin
     {
         $driver = $this->manager->driver();
 
-        return $driver instanceof RoutesMoney
+        $routed = $driver instanceof RoutesMoney
             ? $this->routed->find($driver->name(), $chargeReference)
             : null;
+
+        return $routed ?? $this->routed->find(InternalBalance::PROVIDER, $chargeReference);
+    }
+
+    /**
+     * The host's balance a refund of this charge goes back to, or null for a charge a provider took.
+     *
+     * @throws MarketplaceUnsupported where the charge was paid from a balance and this installation binds none
+     */
+    private function balanceFor(?MerchantCharge $charge): ?InternalBalance
+    {
+        if (! $charge instanceof MerchantCharge || $charge->provider !== InternalBalance::PROVIDER) {
+            return null;
+        }
+
+        return $this->balance ?? throw MarketplaceUnsupported::noInternalBalance();
+    }
+
+    /**
+     * Refund a sale paid from the host's balance: the buyer is credited, and the merchant's share comes back from theirs.
+     *
+     * The share is the one the attempt priced, under the commission terms frozen on the sale. A merchant whose balance
+     * no longer covers it gives back nothing here, and the refund still stands: what the buyer is owed does not depend
+     * on what the merchant still holds, and the difference is announced as a reversal that came back short.
+     *
+     * A credit the balance refuses is the refund failing, reported and answered with a failed result, as a provider's
+     * refusal is. The attempt is then failed by the caller, and a retry opens another under the same key.
+     */
+    private function refundToBalance(InternalBalance $balance, Model $owner, MerchantCharge $charge, RefundAttempt $attempt, Money $amount, string $key): RefundResult
+    {
+        try {
+            $credited = $balance->credit($owner, $amount, $key);
+        } catch (Throwable $failure) {
+            Container::getInstance()->make(ExceptionHandler::class)->report($failure);
+
+            return new RefundResult(successful: false, reference: $key, amount: $amount, failureMessage: $failure->getMessage());
+        }
+
+        $share = new Money($attempt->transfer_reversal_minor, $amount->currency);
+        $merchant = $charge->merchant;
+        $reversed = null;
+
+        if ($share->isPositive() && $merchant instanceof Model) {
+            try {
+                $reversed = $balance->debit($merchant, $share, $key.':share');
+            } catch (InsufficientInternalBalance) {
+                // Nothing came back, and the refund is booked with the share as short.
+            }
+        }
+
+        return new RefundResult(
+            successful: true,
+            reference: $credited,
+            amount: $amount,
+            reversedTransferReference: $reversed,
+            transferReversed: $reversed === null ? null : $share,
+        );
     }
 
     /**

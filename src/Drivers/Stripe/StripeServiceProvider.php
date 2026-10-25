@@ -118,9 +118,11 @@ use Pushery\Billing\Webhooks\Effects\ReverseSaleIntoClosedMarket;
 use Pushery\Billing\Webhooks\Effects\RevokeAccessOnChargeback;
 use Pushery\Billing\Webhooks\Effects\RevokeAccessOnRefund;
 use Pushery\Billing\Webhooks\Effects\RevokeMandate;
+use Pushery\Billing\Webhooks\Effects\SendContractConfirmation;
 use Pushery\Billing\Webhooks\Effects\SendDunningNotice;
 use Pushery\Billing\Webhooks\Effects\SendPaymentActionRequiredNotice;
 use Pushery\Billing\Webhooks\Effects\SendPaymentReceipt;
+use Pushery\Billing\Webhooks\Effects\SendPurchaseConfirmation;
 use Pushery\Billing\Webhooks\Effects\SendSubscriptionActivatedNotice;
 use Pushery\Billing\Webhooks\Effects\SendSubscriptionCanceledNotice;
 use Pushery\Billing\Webhooks\Effects\SendTrialEndingNotice;
@@ -360,6 +362,9 @@ final class StripeServiceProvider extends ServiceProvider
         // …and its counterpart: the subscription is live. Deduped once per subscription, so recovering from
         // past_due back to active does not welcome the customer a second time.
         $registry->on(SubscriptionStateChanged::class, SendSubscriptionActivatedNotice::class);
+        // The contract confirmation German law asks for before the service begins, where the operator named the view
+        // with their part of it. Its own job and its own key, so the welcome above never waits on the operator's view.
+        $registry->on(SubscriptionStateChanged::class, SendContractConfirmation::class);
         $registry->on(AddonPurchased::class, CreditAddonPurchase::class);
         // After the credit, and the order is a statement rather than a preference: a document is about a
         // sale that happened, and the effect that records what the buyer got should not be waiting behind
@@ -376,6 +381,8 @@ final class StripeServiceProvider extends ServiceProvider
         // different lifetimes, and folded together a failure in either half would roll back the other —
         // leaving a buyer charged, credited, and without the row saying they own what they paid for.
         $registry->on(AddonPurchased::class, GrantPurchasedContent::class);
+        // The contract confirmation of the purchase, where the operator named the view with their part of it.
+        $registry->on(AddonPurchased::class, SendPurchaseConfirmation::class);
         // The invoice of a purchase a local engine sold, raised from the order it wrote when the checkout opened.
         // Neutral like the credit note further down: it acts only where such an order exists, which a Stripe
         // purchase never has, so on this driver it passes every event through untouched.

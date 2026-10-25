@@ -15,6 +15,7 @@ use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\DiscountResolver;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\MerchantCatalog;
+use Pushery\Billing\Contracts\OrderButtonText;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
 use Pushery\Billing\Discounts\CouponCodes;
@@ -79,6 +80,12 @@ final readonly class StripeCheckout implements Checkout
     private function sellers(): SellerSaleGate
     {
         return Container::getInstance()->make(SellerSaleGate::class);
+    }
+
+    /** The text beside the order button, resolved rather than injected for the reason the seller gates are. */
+    private function orderButtonText(): OrderButtonText
+    {
+        return Container::getInstance()->make(OrderButtonText::class);
     }
 
     public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null): ClientIntent
@@ -153,6 +160,15 @@ final readonly class StripeCheckout implements Checkout
 
         if (is_string($submitType) && $submitType !== '' && $submitType !== 'auto') {
             $payload['submit_type'] = $submitType;
+        }
+
+        // The text beside that button, where the installation words one for this tier. § 312j Abs. 2 BGB asks for the
+        // essential features, the price per billing period, the term and the cancellation conditions immediately before
+        // the order, and on a hosted checkout that moment is on Stripe's page. No text, no field.
+        $message = $this->orderButtonText()->forSubscription($billable, $tierKey);
+
+        if ($message !== null) {
+            $payload['custom_text'] = StripeSubmitMessage::customText($message, "tier '{$tierKey}'");
         }
 
         // A subscription trial (mode 'subscription') attaches trial_period_days for this tier. A generic

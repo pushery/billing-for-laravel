@@ -31,6 +31,13 @@ use Illuminate\Support\Carbon;
 final class UtcDateTime implements CastsAttributes
 {
     /**
+     * Every read goes through get(), on the instance a moment was assigned on as well. Eloquent would otherwise hand
+     * back the assigned object itself until the row is loaded again: a `CarbonImmutable`, or a moment in another zone,
+     * where every other read of the column gives a UTC `Carbon`.
+     */
+    public bool $withoutObjectCaching = true;
+
+    /**
      * @param  array<string, mixed>  $attributes
      */
     public function get(Model $model, string $key, mixed $value, array $attributes): ?Carbon

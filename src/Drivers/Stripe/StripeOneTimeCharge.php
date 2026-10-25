@@ -15,6 +15,7 @@ use Pushery\Billing\Contracts\CanReceiveMoney;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\OneTimeCharge;
+use Pushery\Billing\Contracts\OrderButtonText;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
 use Pushery\Billing\Contracts\SuppliesGoodsConsignments;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
@@ -267,6 +268,14 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
             // share of the item is what must not move.
             'payment_intent_data' => $intent,
         ]);
+
+        // The text beside the order button, where the installation words one for this add-on, as on a subscription
+        // (StripeCheckout). Resolved rather than injected, so the constructor's parameter list stays what it is.
+        $message = Container::getInstance()->make(OrderButtonText::class)->forAddon($billable, $addonKey);
+
+        if ($message !== null) {
+            $payload['custom_text'] = StripeSubmitMessage::customText($message, "add-on '{$addonKey}'");
+        }
 
         // The same question the subscription lane answers, answered the same way — because it is one
         // installation-wide setting and must not give two opposite answers. Under a provider mode the

@@ -92,6 +92,8 @@ final readonly class WithdrawalFunction
             $this->carryOut($declaration, $owner, $choice, $actor);
         }
 
+        DeclarationReview::announce($declaration);
+
         return $declaration;
     }
 

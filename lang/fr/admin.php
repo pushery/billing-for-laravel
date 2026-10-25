@@ -52,6 +52,20 @@ return [
         'nothing_running' => 'Ce titulaire n\'a aucun abonnement en cours à résilier.',
     ],
 
+    'declarations' => [
+        'heading' => 'Déclarations qui t\'attendent',
+        'intro' => 'Résiliations et rétractations par le bouton de résiliation et la fonction de rétractation qui n\'ont pas été exécutées, la plus ancienne d\'abord. Chacune compte à partir du moment où elle est arrivée. Règle-la une fois que tu t\'en es occupé.',
+        'empty' => 'Aucune déclaration n\'attend une personne.',
+        'cancellation' => 'Résiliation',
+        'withdrawal' => 'Rétractation',
+        'failure' => 'Son exécution a échoué : :failure.',
+        'ends_on' => 'Le contrat prend fin le (facultatif)',
+        'resolve' => 'Régler',
+        'resolved' => 'Déclaration réglée.',
+        'gone' => 'Cette déclaration n\'attend plus une personne.',
+        'invalid_day' => 'Saisis le jour sous forme de date.',
+    ],
+
     'audit' => [
         'heading' => 'Activité récente',
         'type' => 'Événement',

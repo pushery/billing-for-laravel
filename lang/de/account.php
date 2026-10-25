@@ -17,6 +17,7 @@ return [
         'past_due' => 'Deine letzte Zahlung ist fehlgeschlagen. Aktualisiere deine Zahlungsmethode, damit dein Abo aktiv bleibt.',
         'incomplete' => 'Deine Zahlung muss noch bestätigt werden, bevor dein Abo startet.',
         'grace' => 'Dein Abo ist gekündigt und endet bald. Setze es fort, um deinen Zugang zu behalten.',
+        'grace_anew' => 'Dein Abo ist gekündigt und endet bald. Schließe ein neues ab, um deinen Zugang zu behalten.',
         'paused' => 'Deine Abrechnung ist pausiert, deine bezahlten Funktionen ruhen so lange. Du kannst jederzeit fortsetzen.',
         'trial_ending' => 'Deine Testphase endet bald. Wähle einen Tarif, um deinen Zugang zu behalten.',
         'with_merchant' => ':merchant: :message',

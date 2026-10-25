@@ -123,8 +123,11 @@ final class SubscriptionOverview extends AccountScreen
             // When access ends (grace) or ended, from the local subscription column — never a provider call.
             'endsAt' => $this->subscription()?->ends_at,
             // Whether the grace period can be taken back. A cancellation to a date inside the period cannot: the
-            // rest of the period may have been refunded, so the screen shows the date and no resume button.
-            'resumable' => ! $this->subscription()?->endInsideItsPeriod() instanceof Carbon,
+            // rest of the period may have been refunded, so the screen shows the date and no resume button. Nor
+            // can a driver that changes no subscription in place, which starts one again only as a new one.
+            'resumable' => ! $this->subscription()?->endInsideItsPeriod() instanceof Carbon && $this->changesSubscriptionsInPlace(),
+            // Where a canceled subscription starts again only as a new one, the grace period offers the plans.
+            'subscribesAnew' => ! $this->changesSubscriptionsInPlace(),
             // Only offer the hosted-portal link when the active driver actually has one — a driver without a
             // portal (e.g. a local-engine provider) would otherwise show a link that only 404s.
             'supportsHostedPortal' => $this->supportsHostedPortal(),
@@ -271,6 +274,12 @@ final class SubscriptionOverview extends AccountScreen
         // The button is not offered for a cancellation to a date inside the period, which is final. A request
         // that asks anyway changes nothing and records nothing, rather than failing with the driver's refusal.
         if ($this->subscription()?->endInsideItsPeriod() instanceof Carbon) {
+            return;
+        }
+
+        // Nor under a driver that starts a canceled subscription again only as a new one, which the screen offers
+        // instead of this button.
+        if (! $this->changesSubscriptionsInPlace()) {
             return;
         }
 

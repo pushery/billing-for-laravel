@@ -20,6 +20,7 @@ use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
+use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\OwnerSubscriptionState;
 use Pushery\Billing\Support\ProviderCallBudget;
 use Symfony\Component\HttpKernel\Exception\HttpException;
@@ -124,6 +125,15 @@ abstract class AccountScreen extends Component
     protected function hasLiveSubscription(): bool
     {
         return $this->subscription()?->provider_id !== null;
+    }
+
+    /**
+     * Whether the driver changes a running subscription itself: a plan swap, a resume after a cancellation. Where it
+     * does not, as on Shopify, each of those is a new subscription the customer approves on the provider's page.
+     */
+    protected function changesSubscriptionsInPlace(): bool
+    {
+        return Container::getInstance()->make(BillingManager::class)->capabilities()->supportsInPlaceSubscriptionChanges;
     }
 
     /**

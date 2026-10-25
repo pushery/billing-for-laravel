@@ -52,6 +52,20 @@ return [
         'nothing_running' => 'This owner has no running subscription to cancel.',
     ],
 
+    'declarations' => [
+        'heading' => 'Declarations waiting for you',
+        'intro' => 'Cancellations and withdrawals through the cancellation button and the withdrawal function that were not carried out, the oldest first. Each counts from the moment it arrived. Resolve one once you have dealt with it.',
+        'empty' => 'No declaration waits for a person.',
+        'cancellation' => 'Cancellation',
+        'withdrawal' => 'Withdrawal',
+        'failure' => 'Carrying it out failed: :failure.',
+        'ends_on' => 'Contract ends on (optional)',
+        'resolve' => 'Resolve',
+        'resolved' => 'Declaration resolved.',
+        'gone' => 'That declaration no longer waits for a person.',
+        'invalid_day' => 'Enter the day as a date.',
+    ],
+
     'audit' => [
         'heading' => 'Recent activity',
         'type' => 'Event',

@@ -135,4 +135,6 @@
         </section>
     @endif
     @endif
+
+    @include('billing::components.hosted-page-frame')
 </div>

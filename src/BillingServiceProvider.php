@@ -95,8 +95,10 @@ use Pushery\Billing\ContentOwnership\NoUpdatePolicyPreferences;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\AddonContentMap;
 use Pushery\Billing\Contracts\AnnualEarningsCounter;
+use Pushery\Billing\Contracts\AppliesScheduledSwaps;
 use Pushery\Billing\Contracts\ArrearsClock;
 use Pushery\Billing\Contracts\ArrearsRoster;
+use Pushery\Billing\Contracts\BalanceSubscriptionTerms;
 use Pushery\Billing\Contracts\BillingActionUrls;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\BundleContents;
@@ -123,10 +125,12 @@ use Pushery\Billing\Contracts\DiscountResolver;
 use Pushery\Billing\Contracts\DunningGuard;
 use Pushery\Billing\Contracts\DunningNotifier;
 use Pushery\Billing\Contracts\EInvoice;
+use Pushery\Billing\Contracts\EndsNowOnTheOwnersRequest;
 use Pushery\Billing\Contracts\ExchangeRateSource;
 use Pushery\Billing\Contracts\FeatureBullets;
 use Pushery\Billing\Contracts\GoLiveChecklist;
 use Pushery\Billing\Contracts\IdentifiesBusinessBuyers;
+use Pushery\Billing\Contracts\InternalBalance;
 use Pushery\Billing\Contracts\Invoices;
 use Pushery\Billing\Contracts\IpCountryResolver;
 use Pushery\Billing\Contracts\LateFees;
@@ -143,7 +147,9 @@ use Pushery\Billing\Contracts\MerchantResolver;
 use Pushery\Billing\Contracts\MerchantScopedCustomerDirectory;
 use Pushery\Billing\Contracts\MeterInspector;
 use Pushery\Billing\Contracts\MovesMerchantShare;
+use Pushery\Billing\Contracts\OrderButtonText;
 use Pushery\Billing\Contracts\OwnerTimezone;
+use Pushery\Billing\Contracts\PausesSubscriptions;
 use Pushery\Billing\Contracts\PaymentAccounts;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
 use Pushery\Billing\Contracts\PdfRenderer;
@@ -195,6 +201,7 @@ use Pushery\Billing\Drivers\NullMeterInspector;
 use Pushery\Billing\Drivers\NullSeatBilling;
 use Pushery\Billing\Drivers\NullSubscriptionActions;
 use Pushery\Billing\Drivers\NullUpcomingInvoice;
+use Pushery\Billing\Drivers\Shopify\ShopifyServiceProvider;
 use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
 use Pushery\Billing\Dunning\LadderSuspension;
 use Pushery\Billing\Dunning\LocalArrearsClock;
@@ -230,6 +237,7 @@ use Pushery\Billing\Livewire\AccountOverview;
 use Pushery\Billing\Livewire\AccountRealtime;
 use Pushery\Billing\Livewire\BillingAdminConsole;
 use Pushery\Billing\Livewire\DangerZone;
+use Pushery\Billing\Livewire\DeclarationsAwaitingReview;
 use Pushery\Billing\Livewire\InvoiceHistory;
 use Pushery\Billing\Livewire\ManageSubscription;
 use Pushery\Billing\Livewire\PaymentMethodManager;
@@ -237,6 +245,7 @@ use Pushery\Billing\Livewire\PaymentRecovery;
 use Pushery\Billing\Livewire\SubscriptionOverview;
 use Pushery\Billing\Livewire\UsageHistory;
 use Pushery\Billing\Livewire\UsageOverview;
+use Pushery\Billing\Marketplace\BalanceSubscriptions;
 use Pushery\Billing\Marketplace\BuyerProtectionClock;
 use Pushery\Billing\Marketplace\ChargeRoutingConsistencyGuard;
 use Pushery\Billing\Marketplace\ConfigPlatformFeeResolver;
@@ -284,8 +293,12 @@ use Pushery\Billing\Resolvers\ColumnTierResolver;
 use Pushery\Billing\Resolvers\ConfigBillingEntityResolver;
 use Pushery\Billing\Resolvers\PlanCycleAmountResolver;
 use Pushery\Billing\Resolvers\SubscriptionTierResolver;
+use Pushery\Billing\Support\BalanceRoutedLocalSubscriptionActions;
+use Pushery\Billing\Support\BalanceRoutedPausingSubscriptionActions;
+use Pushery\Billing\Support\BalanceRoutedSubscriptionActions;
 use Pushery\Billing\Support\BillingConfigValidator;
 use Pushery\Billing\Support\BillingManager;
+use Pushery\Billing\Support\ConfigOrderButtonText;
 use Pushery\Billing\Support\CustodyGuard;
 use Pushery\Billing\Support\GoLivePreflightGuard;
 use Pushery\Billing\Support\LanguageFallbackLoader;
@@ -380,6 +393,10 @@ final class BillingServiceProvider extends ServiceProvider
         // The seller's own coupon rows first, the platform's config map second -- LayeredDiscountResolver says why.
         $this->app->bind(DiscountResolver::class, LayeredDiscountResolver::class);
 
+        // The text beside the order button of a hosted checkout, read from billing.checkout.submit_message. With no
+        // entry there a checkout carries no text, so an installation that sets nothing opens the session it did before.
+        $this->app->bind(OrderButtonText::class, ConfigOrderButtonText::class);
+
         // Resolves a DATEV business transaction to its account from the configured chart. The default reads
         // the single-seller revenue account, so the export is byte-identical until a chart is selected.
         $this->app->bind(DatevAccountResolver::class, ConfigDatevAccountResolver::class);
@@ -473,7 +490,44 @@ final class BillingServiceProvider extends ServiceProvider
             // parameter is nullable for an instance built by hand, which moves the share as it always did;
             // left to autowiring it would be null here too, and nobody's payouts would ever be withheld.
             payouts: $app->make(MerchantPayoutGate::class),
+            // The host's balance, resolved only if something bound it: the package keeps none, and without one a
+            // sale paid from a balance is refused before any gate.
+            balance: $app->bound(InternalBalance::class) ? $app->make(InternalBalance::class) : null,
         ));
+
+        // Subscriptions paid from the host's balance, renewed by `billing:run`. Bound explicitly, like the clock below:
+        // the terms are passed where the host bound them and null otherwise, which stops every renewal, and the
+        // dispatcher is passed always, so a renewal is announced on every installation.
+        $this->app->bind(BalanceSubscriptions::class, fn (Application $app): BalanceSubscriptions => new BalanceSubscriptions(
+            $app->make(RoutedPayment::class),
+            $app->make(MerchantCatalog::class),
+            $app->make(Repository::class),
+            $app->bound(BalanceSubscriptionTerms::class) ? $app->make(BalanceSubscriptionTerms::class) : null,
+            $app->make(Dispatcher::class),
+        ));
+
+        // A subscription paid from a balance has no provider subscription for the driver to end or resume, so where a
+        // balance is bound the driver's actions are wrapped: such a subscription goes to `BalanceSubscriptions`, every
+        // other one to the driver unchanged. The wrapper declares the same optional abilities the driver's actions do,
+        // so no screen loses a pause or an immediate end it offered before.
+        $this->app->extend(SubscriptionActions::class, static function (SubscriptionActions $actions, Application $app): SubscriptionActions {
+            if (! $app->bound(InternalBalance::class)) {
+                return $actions;
+            }
+
+            $balances = static fn (): BalanceSubscriptions => $app->make(BalanceSubscriptions::class);
+            $eligibility = $app->make(CanTransactMoney::class);
+
+            if ($actions instanceof AppliesScheduledSwaps && $actions instanceof PausesSubscriptions && $actions instanceof EndsNowOnTheOwnersRequest) {
+                return new BalanceRoutedLocalSubscriptionActions($actions, $balances, $eligibility);
+            }
+
+            if ($actions instanceof AppliesScheduledSwaps && $actions instanceof PausesSubscriptions) {
+                return new BalanceRoutedPausingSubscriptionActions($actions, $balances, $eligibility);
+            }
+
+            return new BalanceRoutedSubscriptionActions($actions, $balances, $eligibility);
+        });
 
         // The clock, with the two seams a release needs, the dispatcher, the ledger and the payout gate. Bound
         // explicitly for the container rule documented below: a nullable parameter with a default gets the default
@@ -487,6 +541,8 @@ final class BillingServiceProvider extends ServiceProvider
             $app->make(RoutedChargeLedger::class),
             // Asked before a released share moves, for the reason given on the payment above.
             payouts: $app->make(MerchantPayoutGate::class),
+            // Where the share of a sale paid from a balance is released to.
+            balance: $app->bound(InternalBalance::class) ? $app->make(InternalBalance::class) : null,
         ));
 
         // The shares that failed to move, bound explicitly for the clock's reason above: nothing binds the payout
@@ -500,6 +556,8 @@ final class BillingServiceProvider extends ServiceProvider
             payouts: $app->make(MerchantPayoutGate::class),
             // Told when a retried share was what a release had been waiting on, so the hold over it finishes.
             protection: $app->make(BuyerProtectionClock::class),
+            // Where the share of a sale paid from a balance moves to.
+            balance: $app->bound(InternalBalance::class) ? $app->make(InternalBalance::class) : null,
         ));
 
         // Bound explicitly, and the reason is a container subtlety that cost a debugging round: the engine's
@@ -982,6 +1040,10 @@ final class BillingServiceProvider extends ServiceProvider
         // be told it does not exist. Its rebinds are conditional on it being the active driver.
         $this->app->register(MollieServiceProvider::class);
 
+        // Shopify's billing, for an app the Shopify App Store sells. Registered the same way, and rebinds only while
+        // it is the active driver.
+        $this->app->register(ShopifyServiceProvider::class);
+
         // No-op façade for a billing-disabled clone. The driver above binds the invoice / subscription
         // contracts to its Stripe impls unconditionally, so with the master switch off we rebind them to safe
         // no-ops: reads answer empty/null, mutations do nothing, and nothing reaches for Stripe keys the clone
@@ -1129,6 +1191,11 @@ final class BillingServiceProvider extends ServiceProvider
             // those screens refresh live and show the toasts. So it stays registered with the hub switched off.
             if (class_exists(Livewire::class) && ! $this->app->make(BillingManager::class)->paymentsOnly()) {
                 Livewire::component('billing.account-realtime', AccountRealtime::class);
+
+                // The declarations that wait for a person, a screen of its own so that an application without the admin
+                // console mounts it in a back office of its own. It authorizes against `billing.admin.ability` like the
+                // console, so registering it opens nothing.
+                Livewire::component('billing.declarations-awaiting-review', DeclarationsAwaitingReview::class);
 
                 if ($this->switchedOn('account.enabled')) {
                     $this->registerAccountHub();

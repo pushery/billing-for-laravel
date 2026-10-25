@@ -17,6 +17,7 @@ return [
         'past_due' => 'Ton dernier paiement a échoué. Mets à jour ton moyen de paiement pour garder ton abonnement actif.',
         'incomplete' => 'Ton paiement doit être confirmé avant que ton abonnement démarre.',
         'grace' => 'Ton abonnement est annulé et se termine bientôt. Reprends-le pour conserver ton accès.',
+        'grace_anew' => 'Ton abonnement est annulé et se termine bientôt. Abonne-toi à nouveau pour conserver ton accès.',
         'paused' => 'Ta facturation est en pause, tes fonctionnalités payantes sont donc suspendues. Tu peux la reprendre quand tu veux.',
         'trial_ending' => 'Ton essai se termine bientôt. Choisis un forfait pour conserver ton accès.',
         'with_merchant' => ':merchant : :message',

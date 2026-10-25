@@ -49,6 +49,28 @@ return [
         'cta' => 'Abo fortsetzen',
     ],
 
+    'contract_confirmation' => [
+        'subject' => 'Bestätigung deines Vertrags',
+        'intro' => 'Hiermit bestätigen wir dein Abo des :tier-Tarifs, das am :date begonnen hat.',
+        'intro_untitled' => 'Hiermit bestätigen wir dein Abo, das am :date begonnen hat.',
+        'intro_purchase' => 'Hiermit bestätigen wir deinen Kauf von :addon am :date.',
+        'declarations' => 'Deine Erklärungen vor dem Kauf:',
+        'cta' => 'Tarif ansehen',
+        'cta_purchase' => 'Belege ansehen',
+    ],
+
+    'declaration_awaiting_review' => [
+        'subject_cancellation' => 'Eine Kündigung wartet auf dich',
+        'subject_withdrawal' => 'Ein Widerruf wartet auf dich',
+        'intro_cancellation' => 'Über den Kündigungsbutton ist eine Kündigung eingegangen, die nicht ausgeführt wurde. Wirksam wird sie mit dem Moment ihres Eingangs.',
+        'intro_withdrawal' => 'Über die Widerrufsfunktion ist ein Widerruf eingegangen, der nicht ausgeführt wurde. Er zählt ab dem Moment, in dem er abgeschickt wurde.',
+        'reason_failure' => 'Die Ausführung ist gescheitert: :failure.',
+        'reason_signed_out' => 'Die Erklärung wurde ohne Anmeldung abgegeben und nennt den Vertrag deshalb in den Worten der Person, die sie abgegeben hat.',
+        'reason_unmatched' => 'Den Vertrag, den die Erklärung nennt, hat die Person derzeit nicht.',
+        'reason_judgment' => 'Die Art der Kündigung oder das gewünschte Datum verlangt deine Entscheidung, wann der Vertrag endet.',
+        'cta' => 'Erklärungen öffnen',
+    ],
+
     'tax_status_changed' => [
         'subject' => 'Dein Steuerstatus hat sich geändert',
         'intro' => 'Dein Steuerstatus hat sich von :from auf :to geändert. Wir haben das aus unseren eigenen Aufzeichnungen abgeleitet — du hast es nicht beantragt.',
