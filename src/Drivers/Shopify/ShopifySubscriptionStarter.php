@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers\Shopify;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\StartsSubscriptions;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\SubscriptionStart;
@@ -22,9 +23,9 @@ final readonly class ShopifySubscriptionStarter implements StartsSubscriptions
     /** The checkout the driver binds, {@see ShopifyCheckout}, asked through its contract as the screens ask it. */
     public function __construct(private Checkout $checkout) {}
 
-    public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): SubscriptionStart
+    public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?BillingInterval $interval = null): SubscriptionStart
     {
-        $intent = $this->checkout->subscribe($billable, $tierKey, $couponCode, $declarationReference);
+        $intent = $this->checkout->subscribe($billable, $tierKey, $couponCode, $declarationReference, interval: $interval);
         $id = $intent->payload['subscription_id'] ?? null;
 
         return new SubscriptionStart(

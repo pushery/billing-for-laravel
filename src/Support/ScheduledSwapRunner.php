@@ -120,9 +120,9 @@ final readonly class ScheduledSwapRunner
         $merchant = MerchantScope::fromUid($subscription->merchant_uid);
 
         if ($this->actions instanceof AppliesScheduledSwaps) {
-            $this->actions->applyScheduledSwap($owner, $targetTier, prorate: $prorate, merchant: $merchant, type: $type);
+            $this->actions->applyScheduledSwap($owner, $targetTier, prorate: $prorate, merchant: $merchant, type: $type, interval: $subscription->scheduled_billing_interval);
         } else {
-            $this->actions->swap($owner, $targetTier, prorate: $prorate, merchant: $merchant, type: $type);
+            $this->actions->swap($owner, $targetTier, prorate: $prorate, merchant: $merchant, type: $type, interval: $subscription->scheduled_billing_interval);
         }
 
         $subscription->cancelScheduledSwap();

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Catalogs;
 
 use Illuminate\Contracts\Config\Repository;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Support\KeyedConfig;
 
 /**
@@ -26,6 +27,12 @@ final readonly class ProviderPriceResolver
     public function forTier(string $tierKey, ?string $provider = null): ?string
     {
         return $this->resolve(KeyedConfig::setting($this->config, 'billing.tiers', $tierKey, 'provider_price'), $provider);
+    }
+
+    /** The price of a tier at an interval other than its own, from the tier's `intervals` entry for it. */
+    public function forTierAt(string $tierKey, BillingInterval $interval, ?string $provider = null): ?string
+    {
+        return $this->resolve(KeyedConfig::setting($this->config, 'billing.tiers', $tierKey, "intervals.{$interval->value}.provider_price"), $provider);
     }
 
     public function forAddon(string $addonKey, ?string $provider = null): ?string

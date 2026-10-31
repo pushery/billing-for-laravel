@@ -6,25 +6,7 @@
     the same address beside the redirect. Inside a frame this listener opens that address in the top window; outside
     one it does nothing, and the redirect does the work.
 
-    Inline for the reason the toast region gives: this package ships no JavaScript build.
+    A file of the application's own origin, `AccountScript::HostedPage`, for the reason the toast region gives: a host
+    policy with `script-src 'self'` and no `'unsafe-inline'` runs it, where it dropped an inline script.
 --}}
-<script>
-    (function () {
-        // Once per page load, as in the toast region: `wire:navigate` runs the scripts of a swapped body again.
-        if (window.__billingHostedPage) {
-            return;
-        }
-
-        window.__billingHostedPage = true;
-
-        window.addEventListener('billing-hosted-page', function (event) {
-            var url = event && event.detail ? event.detail.url : null;
-
-            if (window.top === window.self || typeof url !== 'string' || !/^https?:\/\//.test(url)) {
-                return;
-            }
-
-            window.open(url, '_top');
-        });
-    })();
-</script>
+<script src="{{ \Pushery\Billing\Enums\AccountScript::HostedPage->url() }}" defer></script>

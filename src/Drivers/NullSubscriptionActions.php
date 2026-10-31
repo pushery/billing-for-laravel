@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\SubscriptionActions;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
@@ -26,5 +27,5 @@ final class NullSubscriptionActions implements SubscriptionActions
 
     public function cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void {}
 
-    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void {}
+    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null, ?BillingInterval $interval = null): void {}
 }

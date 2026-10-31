@@ -38,6 +38,7 @@ return [
         'swap_to' => 'Cambia',
         'scheduled_swap' => 'Passa a :plan il :date.',
         'scheduled_swap_cancel' => 'Annulla la modifica programmata',
+        'billing_period' => 'Periodo di fatturazione',
         'subscribe' => 'Abbonati',
         'trial_days' => 'Include una prova gratuita di :days giorni.',
         'preview' => 'Anteprima costo',
@@ -184,6 +185,14 @@ return [
         'incomplete' => 'Il tuo pagamento deve essere confermato prima che l’abbonamento inizi.',
         'incomplete_hint' => 'La tua banca ti ha chiesto di confermare questo pagamento. Confermalo per attivare l’abbonamento.',
         'confirm' => 'Conferma il pagamento',
+        'pay_now' => 'Paga ora',
+        'outcome' => [
+            'paid' => 'Pagamento ricevuto. Il tuo abbonamento torna attivo non appena il fornitore lo conferma.',
+            'pending' => 'Il tuo pagamento è in corso. Il tuo abbonamento torna attivo appena viene accreditato.',
+            'declined' => 'La tua banca ha rifiutato il pagamento. Aggiorna il metodo di pagamento e riprova.',
+            'needs_confirmation' => 'La tua banca ti chiede di confermare questo pagamento. Riprova tra un momento.',
+            'nothing_owed' => 'Al momento non c’è nulla da pagare.',
+        ],
     ],
 
     'reconfirm' => [

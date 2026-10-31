@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Support;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\Webhooks\WebhookPayloadSecrets;
 
@@ -47,7 +50,7 @@ final readonly class BillingDataExport
         // Payments-only mode keeps the webhook deliveries and nothing else (PaymentsModeSchema), so what it holds
         // about a person is the deliveries recorded for them, payloads included.
         if (($this->manager ?? Container::getInstance()->make(BillingManager::class))->paymentsOnly()) {
-            return $this->withoutDeliverySecrets($this->records->export(PaymentsModeSchema::ownerAxis(), $owner));
+            return $this->withMoments($this->withoutDeliverySecrets($this->records->export(PaymentsModeSchema::ownerAxis(), $owner)));
         }
 
         // The same axis, the same table work the eraser does — read out instead of deleted. Child tables
@@ -72,6 +75,10 @@ final readonly class BillingDataExport
         // columns, so no axis reaches them, and they are theirs all the same.
         $export['billing_coupons'] = $this->couponsIssuedBy($owner);
 
+        // The access the person bought for somebody else. It is keyed to the recipient, so no axis reaches the person
+        // who paid, and the purchase is theirs all the same.
+        $export['billing_access_grants'] = [...$export['billing_access_grants'] ?? [], ...$this->giftsBoughtBy($owner)];
+
         // The audit ledger keys on subject/actor, not owner — but a subject-access request covers the
         // owner's billing history all the same, so include the rows where they are the subject or the actor.
         $export['billing_events'] = array_values(DB::table('billing_events')
@@ -83,7 +90,76 @@ final readonly class BillingDataExport
             ->map(fn (object $row): array => $this->isAbout($row, $owner) ? (array) $row : $this->withoutTheOtherParty((array) $row))
             ->all());
 
-        return $this->withoutDeliverySecrets($export);
+        return $this->withMoments($this->withoutDeliverySecrets($export));
+    }
+
+    /**
+     * The export with every moment in ISO 8601 with its offset, and a date as a date.
+     *
+     * A row leaves the database as the database writes it, `2026-10-26 21:00:00`, without a `T` and without a zone,
+     * and the person reading their copy cannot place it. Which columns hold a moment comes from the schema rather
+     * than from their names: `period_start` and `decide_by` are moments as much as `created_at` is. Each is read in
+     * the zone it was written in, as the package's models read it: UTC for a column a model casts with
+     * UtcDateTime, the application's time zone for every other.
+     *
+     * @param  array<string, list<array<array-key, mixed>>>  $export
+     * @return array<string, list<array<array-key, mixed>>>
+     */
+    private function withMoments(array $export): array
+    {
+        $utc = $this->utcColumns();
+
+        foreach ($export as $table => $rows) {
+            $zones = [];
+
+            foreach (Schema::getColumns(TableLookup::qualified($table)) as $column) {
+                $name = is_array($column) ? ($column['name'] ?? null) : null;
+                $type = is_array($column) ? ($column['type_name'] ?? null) : null;
+
+                if (is_string($name) && in_array($type, ['timestamp', 'timestamptz', 'datetime'], true)) {
+                    $zones[$name] = in_array($name, $utc[$table] ?? [], true) ? 'UTC' : null;
+                }
+            }
+
+            $export[$table] = array_map(static function (array $row) use ($zones): array {
+                foreach ($zones as $column => $zone) {
+                    $value = $row[$column] ?? null;
+
+                    if (is_string($value)) {
+                        $row[$column] = CarbonImmutable::parse($value, $zone)->toIso8601String();
+                    }
+                }
+
+                return $row;
+            }, $rows);
+        }
+
+        return $export;
+    }
+
+    /**
+     * The columns each of the package's models casts with UtcDateTime, by table.
+     *
+     * @return array<string, list<string>>
+     */
+    private function utcColumns(): array
+    {
+        $columns = [];
+
+        foreach (glob(__DIR__.'/../Models/*.php') ?: [] as $file) {
+            $class = 'Pushery\\Billing\\Models\\'.basename($file, '.php');
+            $model = new $class;
+
+            if ($model instanceof Model) {
+                foreach ($model->getCasts() as $column => $cast) {
+                    if ($cast === UtcDateTime::class) {
+                        $columns[$model->getTable()][] = $column;
+                    }
+                }
+            }
+        }
+
+        return $columns;
     }
 
     /**
@@ -143,6 +219,35 @@ final readonly class BillingDataExport
     private function withoutTheOtherParty(array $row): array
     {
         return array_replace($row, ['subject_type' => null, 'subject_id' => null, 'payload' => null]);
+    }
+
+    /**
+     * The grants this person bought for somebody else, without the recipient.
+     *
+     * What was bought, from whom, when and under which declaration is the purchaser's. Who received it is the
+     * recipient's, so the copy leaves out the two columns that name them (Art. 15(4)), as it leaves out the other
+     * party of an audit row. A grant the person bought and holds themselves is in the export already, on the buyer's
+     * axis, and is not repeated here. None when the model is not saved: a filter on no key would read as `IS NULL`
+     * and match every grant nobody bought.
+     *
+     * @return list<array<array-key, mixed>>
+     */
+    private function giftsBoughtBy(Model $owner): array
+    {
+        $key = $owner->getKey();
+
+        if (! is_int($key) && ! is_string($key)) {
+            return [];
+        }
+
+        return array_values(DB::table('billing_access_grants')
+            ->where('purchaser_type', $owner->getMorphClass())
+            ->where('purchaser_id', $key)
+            ->whereNot(fn (Builder $q): Builder => $q
+                ->where('owner_type', $owner->getMorphClass())->where('owner_id', $key))
+            ->get()
+            ->map(fn (object $row): array => array_replace((array) $row, ['owner_type' => null, 'owner_id' => null]))
+            ->all());
     }
 
     /**

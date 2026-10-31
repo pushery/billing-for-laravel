@@ -18,9 +18,10 @@ use Pushery\Billing\ValueObjects\PaymentCancellation;
  * is usually one, since it is created without a method so that every method of the account is offered: canceling it
  * comes back as a cancellation that did not happen, and the payment is reported when it expires.
  *
- * The Mollie rails implement it, the rails of a payment account included, and cancel in the account's mode. It is a
- * contract of its own rather than part of PaymentRails, so a PaymentRails of your own does not have to implement it:
- * ask with `instanceof` before calling it.
+ * The Mollie and the Stripe rails implement it, the rails of a payment account included, and cancel in the account's
+ * mode. On Stripe, canceling a charge made on its checkout page expires the Checkout Session. It is a contract of its
+ * own rather than part of PaymentRails, so a PaymentRails of your own does not have to implement it: ask with
+ * `instanceof` before calling it.
  */
 interface CancelsPayments
 {

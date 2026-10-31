@@ -6,6 +6,7 @@ namespace Pushery\Billing\Marketplace;
 
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\TierCatalog;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\ValueObjects\Plan;
 use Pushery\Billing\ValueObjects\TierIdentity;
 
@@ -27,19 +28,24 @@ final readonly class PlatformPlanCatalog implements PlanCatalog
         private TierCatalog $tiers,
     ) {}
 
-    public function planFor(string $tierKey): ?Plan
+    public function planFor(string $tierKey, ?BillingInterval $interval = null): ?Plan
     {
-        return $this->declaring($tierKey)->planFor($tierKey);
+        return $this->declaring($tierKey)->planFor($tierKey, $interval);
     }
 
-    public function providerPriceFor(string $tierKey): ?string
+    public function providerPriceFor(string $tierKey, ?BillingInterval $interval = null): ?string
     {
-        return $this->declaring($tierKey)->providerPriceFor($tierKey);
+        return $this->declaring($tierKey)->providerPriceFor($tierKey, $interval);
     }
 
     public function legacyPricesFor(string $tierKey): array
     {
         return $this->declaring($tierKey)->legacyPricesFor($tierKey);
+    }
+
+    public function intervalsFor(string $tierKey): array
+    {
+        return $this->declaring($tierKey)->intervalsFor($tierKey);
     }
 
     /**

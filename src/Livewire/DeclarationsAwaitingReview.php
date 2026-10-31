@@ -19,6 +19,7 @@ use Pushery\Billing\Consumer\DeclarationStatement;
 use Pushery\Billing\Consumer\WithdrawalFunction;
 use Pushery\Billing\Models\CancellationDeclaration;
 use Pushery\Billing\Models\WithdrawalDeclaration;
+use Pushery\Billing\Support\WireKit;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /**
@@ -30,6 +31,9 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  * and fail-closed, on every entry point. Resolving a cancellation records the end it came to: a day the person enters,
  * which the contract ends with at the close of that day in the zone the declarations are stated in, or none, which
  * keeps the end on the row.
+ *
+ * Drawn with WireKit's components where WireKit is in use, so that a host whose build reads WireKit's views styles it,
+ * and with plain markup otherwise.
  */
 final class DeclarationsAwaitingReview extends Component
 {
@@ -45,6 +49,13 @@ final class DeclarationsAwaitingReview extends Component
     #[Locked]
     public ?string $result = null;
 
+    /**
+     * Draw the plain markup even where WireKit is in use, as `<livewire:billing.declarations-awaiting-review plain />`.
+     * The admin console mounts the screen this way, because the console around it is plain markup throughout.
+     */
+    #[Locked]
+    public bool $plain = false;
+
     public function mount(): void
     {
         $this->authorizeAdmin();
@@ -56,7 +67,10 @@ final class DeclarationsAwaitingReview extends Component
         // withdrawn between two requests.
         $this->authorizeAdmin();
 
-        return ViewFacade::make('billing::livewire.declarations-awaiting-review', [
+        /** @var view-string $view one of the two views of the screen this package ships, see view() */
+        $view = $this->view();
+
+        return ViewFacade::make($view, [
             'cancellations' => CancellationDeclaration::model()::query()->awaitingReview()->get(),
             'withdrawals' => WithdrawalDeclaration::model()::query()->awaitingReview()->get(),
         ]);
@@ -112,6 +126,34 @@ final class DeclarationsAwaitingReview extends Component
         Container::getInstance()->make(WithdrawalFunction::class)->resolve($found, $this->actor());
 
         $this->result = 'resolved';
+    }
+
+    /**
+     * The view the screen is drawn with: WireKit's components where WireKit is in use, the plain markup otherwise.
+     *
+     * A host that published the plain markup and has no published copy of the WireKit variant keeps its own copy: it
+     * changed the screen before the variant existed, and the variant would take its place unannounced. Publishing the
+     * views anew brings the variant along, and from then on it is drawn as everywhere else.
+     */
+    private function view(): string
+    {
+        $plain = 'billing::livewire.declarations-awaiting-review';
+        $wirekit = 'billing::livewire.wirekit.declarations-awaiting-review';
+
+        if ($this->plain || ! WireKit::active() || ! ViewFacade::exists($wirekit)) {
+            return $plain;
+        }
+
+        return $this->publishedByTheHost($plain) && ! $this->publishedByTheHost($wirekit) ? $plain : $wirekit;
+    }
+
+    /** Whether a view resolves to a file outside this package's own views, a copy the host published or put there. */
+    private function publishedByTheHost(string $view): bool
+    {
+        $path = realpath(ViewFacade::getFinder()->find($view));
+        $own = realpath(dirname(__DIR__, 2).'/resources/views');
+
+        return $path !== false && $own !== false && ! str_starts_with($path, $own.DIRECTORY_SEPARATOR);
     }
 
     private function actor(): ?Model

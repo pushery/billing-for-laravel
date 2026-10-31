@@ -98,6 +98,7 @@ use Pushery\Billing\Contracts\AnnualEarningsCounter;
 use Pushery\Billing\Contracts\AppliesScheduledSwaps;
 use Pushery\Billing\Contracts\ArrearsClock;
 use Pushery\Billing\Contracts\ArrearsRoster;
+use Pushery\Billing\Contracts\AttachesToContractConfirmation;
 use Pushery\Billing\Contracts\BalanceSubscriptionTerms;
 use Pushery\Billing\Contracts\BillingActionUrls;
 use Pushery\Billing\Contracts\BillingEntityResolver;
@@ -152,6 +153,7 @@ use Pushery\Billing\Contracts\OwnerTimezone;
 use Pushery\Billing\Contracts\PausesSubscriptions;
 use Pushery\Billing\Contracts\PaymentAccounts;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
+use Pushery\Billing\Contracts\PaysOutstandingInvoices;
 use Pushery\Billing\Contracts\PdfRenderer;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
@@ -216,6 +218,7 @@ use Pushery\Billing\Events\CreatorReattestationDue;
 use Pushery\Billing\Events\CreatorTaxStatusChanged;
 use Pushery\Billing\Events\FallbackPaymentMethodCharged;
 use Pushery\Billing\Events\SellerDataReminderDue;
+use Pushery\Billing\Http\Controllers\AccountScriptController;
 use Pushery\Billing\Http\Controllers\BillingController;
 use Pushery\Billing\Http\Middleware\AccountContentSecurityPolicy;
 use Pushery\Billing\Http\Middleware\EnforceDunning;
@@ -307,6 +310,7 @@ use Pushery\Billing\Support\LocalSubscriptionStateReader;
 use Pushery\Billing\Support\MarketplaceSupportGuard;
 use Pushery\Billing\Support\MeteringSupportGuard;
 use Pushery\Billing\Support\NoBusinessBuyers;
+use Pushery\Billing\Support\NoConfirmationDocuments;
 use Pushery\Billing\Support\NoPaymentAccounts;
 use Pushery\Billing\Support\NoRetentionHolds;
 use Pushery\Billing\Support\NullScheduleHeartbeat;
@@ -779,6 +783,9 @@ final class BillingServiceProvider extends ServiceProvider
         // Which owners buy as a business. Nobody, until the application says: an offer only businesses may buy is
         // then shown to no one rather than to everyone.
         $this->app->bind(IdentifiesBusinessBuyers::class, NoBusinessBuyers::class);
+        // What the confirmation of a contract carries beside its text: nothing, until the application binds the
+        // documents of its own, its terms in the version accepted for instance.
+        $this->app->bind(AttachesToContractConfirmation::class, NoConfirmationDocuments::class);
         // A seller's VAT registration per member state, from its invoice party until the application binds a
         // record of its own: the document of a deemed supply of goods names the one where the goods are.
         $this->app->bind(SuppliesSellerVatRegistrations::class, PartyVatRegistrations::class);
@@ -1053,6 +1060,9 @@ final class BillingServiceProvider extends ServiceProvider
             $this->app->bind(ReadsSubscriptionPayments::class, LocalSubscriptionPayments::class);
             $this->app->bind(UpcomingInvoice::class, NullUpcomingInvoice::class);
             $this->app->bind(Invoices::class, NullInvoices::class);
+            // A capability is taken out rather than answered with a no-op, so a host that asks whether it is bound
+            // does not offer to pay an invoice nobody can pay.
+            $this->app->offsetUnset(PaysOutstandingInvoices::class);
         }
     }
 
@@ -1571,6 +1581,9 @@ final class BillingServiceProvider extends ServiceProvider
                 Route::get('/danger', DangerZone::class)->name('billing.account.danger');
                 Route::get('/portal', [BillingController::class, 'portal'])->name('billing.account.portal');
                 Route::get('/checkout/return', [BillingController::class, 'checkoutReturn'])->name('billing.account.checkout-return');
+                // The hub's own client scripts, as files of this origin: a host policy with `script-src 'self'`
+                // and no `'unsafe-inline'` runs them, where it dropped them inline. See AccountScript.
+                Route::get('/scripts/{script}.js', AccountScriptController::class)->name('billing.account.script');
             });
     }
 

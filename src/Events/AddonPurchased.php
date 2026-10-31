@@ -86,5 +86,12 @@ final readonly class AddonPurchased implements BillingDomainEvent, IdentifiesCus
          * business learns here that the buyer said otherwise.
          */
         public ?string $buyerTaxId = null,
+        /**
+         * When the provider reports the purchase completed, in Unix seconds, or null where it reports no moment.
+         *
+         * Read from what the provider sent, so a delivery that is replayed later still dates the purchase when it
+         * happened rather than when it was handled.
+         */
+        public ?int $occurredAt = null,
     ) {}
 }

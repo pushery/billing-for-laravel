@@ -21,6 +21,9 @@ enum StripeAccountRight: string
     /** Reading a payment back, which the account's webhooks do for every payment they report. */
     case PaymentIntentsRead = 'payment_intents_read';
 
+    /** Reading the disputes of a payment, which a change about a refund or a dispute lists. */
+    case DisputesRead = 'disputes_read';
+
     /** Reading a payment method a charge or a mandate names. */
     case PaymentMethodsRead = 'payment_methods_read';
 

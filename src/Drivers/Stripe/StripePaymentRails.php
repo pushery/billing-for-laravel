@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Drivers\Stripe;
 
 use Illuminate\Contracts\Config\Repository;
+use Pushery\Billing\Contracts\CancelsPayments;
 use Pushery\Billing\Contracts\PaymentRails;
 use Pushery\Billing\Contracts\ReadsRefunds;
 use Pushery\Billing\Contracts\RefundsPlatformFee;
@@ -20,6 +21,7 @@ use Pushery\Billing\ValueObjects\ChargeResult;
 use Pushery\Billing\ValueObjects\ChargeRouting;
 use Pushery\Billing\ValueObjects\MandateReference;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\PaymentCancellation;
 use Pushery\Billing\ValueObjects\RefundResult;
 use Pushery\Billing\ValueObjects\RefundState;
 use Pushery\Billing\ValueObjects\TokenizedMethod;
@@ -47,7 +49,7 @@ use Stripe\TransferReversal;
  * authenticate (3-D Secure) or be a bank debit still processing (SEPA). Those are carried out as
  * requires-action / pending on the ChargeResult, never collapsed onto "declined".
  */
-final readonly class StripePaymentRails implements PaymentRails, ReadsRefunds, RefundsPlatformFee
+final readonly class StripePaymentRails implements CancelsPayments, PaymentRails, ReadsRefunds, RefundsPlatformFee
 {
     /**
      * A PaymentIntent's `description` carries 1000 characters — four times Mollie's field.
@@ -287,6 +289,42 @@ final readonly class StripePaymentRails implements PaymentRails, ReadsRefunds, R
             // than none at all.
             failureCode: $successful ? null : $refund->failure_reason ?? $refund->status,
         );
+    }
+
+    /**
+     * Cancel a payment the customer has not completed, on the account the rails charge for.
+     *
+     * A charge on Stripe's checkout page is a Checkout Session, `cs_…`, and canceling it expires the session: the
+     * customer can no longer pay on its page, and the account's webhook reports `checkout.session.expired`. Stripe
+     * expires a session only while it is open. Every other reference is a payment intent, which Stripe cancels while
+     * it waits for a method, a confirmation, an action or a capture. A session or an intent Stripe keeps, because it
+     * is paid or already over, comes back as a cancellation that did not happen, with Stripe's code and words, and so
+     * does an id Stripe does not know. A refusal that says nothing about the payment (a key Stripe does not accept, a
+     * rate limit, an outage) travels, as a refund's does.
+     */
+    public function cancel(string $paymentReference): PaymentCancellation
+    {
+        $session = str_starts_with($paymentReference, 'cs_');
+
+        try {
+            $status = $session
+                ? $this->stripe->checkout->sessions->expire($paymentReference)->status
+                : $this->stripe->paymentIntents->cancel($paymentReference)->status;
+        } catch (RateLimitException $rateLimited) {
+            // A 429 is a subclass of InvalidRequestException in the SDK, and says nothing about the payment.
+            throw $rateLimited;
+        } catch (InvalidRequestException $refusal) {
+            return new PaymentCancellation(
+                paymentReference: $paymentReference,
+                canceled: false,
+                failureCode: $refusal->getStripeCode() ?? (string) $refusal->getHttpStatus(),
+                failureMessage: $refusal->getMessage(),
+            );
+        }
+
+        return $status === ($session ? 'expired' : 'canceled')
+            ? new PaymentCancellation($paymentReference, canceled: true)
+            : new PaymentCancellation($paymentReference, canceled: false, failureCode: $status);
     }
 
     /**

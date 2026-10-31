@@ -18,6 +18,7 @@ use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Drivers\NullSubscriptionActions;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Enums\SwapTiming;
 use Pushery\Billing\Events\SubscriptionPaused;
@@ -308,18 +309,27 @@ final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, 
      * are the default contract's. Prorating a sponsorship against them would credit the unused remainder of
      * a different contract, so that combination is refused before anything changes.
      */
-    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void
+    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null, ?BillingInterval $interval = null): void
     {
         if (! $this->eligibility->check($billable)) {
             throw EligibilityDenied::forMoneyMovement();
+        }
+
+        // The local engine bills a tier at its default interval; it keeps no interval on the subscription to bill another.
+        if ($interval instanceof BillingInterval && $interval !== $this->plans->planFor($tierKey)?->interval) {
+            throw new InvalidArgumentException("The local billing engine bills tier '{$tierKey}' at its default interval, not at {$interval->value}.");
         }
 
         $this->reprice($billable, $tierKey, $prorate, $merchant, $type);
     }
 
     /** The swap a scheduled change comes to, without asking the gate again: it was asked when the change was made. */
-    public function applyScheduledSwap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void
+    public function applyScheduledSwap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null, ?BillingInterval $interval = null): void
     {
+        if ($interval instanceof BillingInterval && $interval !== $this->plans->planFor($tierKey)?->interval) {
+            throw new InvalidArgumentException("The local billing engine bills tier '{$tierKey}' at its default interval, not at {$interval->value}.");
+        }
+
         $this->reprice($billable, $tierKey, $prorate, $merchant, $type);
     }
 

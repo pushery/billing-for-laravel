@@ -67,9 +67,25 @@
         </div>
     @endunless
 
+    @if ($intervals !== [])
+        <div class="flex flex-wrap items-center gap-3">
+            <span id="billing-period-label" class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ __('billing::account.manage.billing_period') }}</span>
+            <div role="group" aria-labelledby="billing-period-label"
+                class="inline-flex gap-1 rounded-lg border border-gray-200 bg-white p-1 dark:border-gray-800 dark:bg-gray-900">
+                @foreach ($intervals as $choice)
+                    <button type="button" aria-pressed="{{ $choice['selected'] ? 'true' : 'false' }}"
+                        wire:click="$set('interval', '{{ $choice['value'] }}')" wire:key="interval-{{ $choice['value'] }}"
+                        class="rounded-md px-3 py-1.5 text-sm font-medium {{ $choice['selected'] ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900' : 'text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800' }}">
+                        {{ $choice['label'] }}
+                    </button>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     <section class="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
         @forelse ($options as $option)
-            <div wire:key="plan-{{ $option['key'] }}" class="flex items-center justify-between p-4">
+            <div wire:key="plan-{{ $option['key'] }}-{{ $option['interval'] }}" class="flex items-center justify-between p-4">
                 <div>
                     <span class="font-medium">{{ $option['label'] }}</span>
                     <span class="ml-2 text-sm text-gray-500 dark:text-gray-400">

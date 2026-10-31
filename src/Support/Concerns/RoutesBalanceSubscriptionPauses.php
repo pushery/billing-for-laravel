@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Support\Concerns;
 
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Exceptions\BalanceSubscriptionRefused;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -37,12 +38,12 @@ trait RoutesBalanceSubscriptionPauses
         $this->inner->unpause($billable, $merchant, $type);
     }
 
-    public function applyScheduledSwap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void
+    public function applyScheduledSwap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null, ?BillingInterval $interval = null): void
     {
         if ($this->paidFromABalance($billable, $merchant, $type) instanceof Subscription) {
             throw BalanceSubscriptionRefused::cannotChange('change its tier');
         }
 
-        $this->inner->applyScheduledSwap($billable, $tierKey, $prorate, $merchant, $type);
+        $this->inner->applyScheduledSwap($billable, $tierKey, $prorate, $merchant, $type, $interval);
     }
 }

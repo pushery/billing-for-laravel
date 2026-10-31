@@ -9,6 +9,7 @@ use Illuminate\Contracts\View\Factory;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\HtmlString;
+use Pushery\Billing\Contracts\AttachesToContractConfirmation;
 use Pushery\Billing\Enums\BillingAction;
 use Pushery\Billing\Enums\ContractKind;
 use Pushery\Billing\Support\CatalogLabel;
@@ -64,10 +65,18 @@ final class ContractConfirmationNotification extends BillingNotification
 
         // Below the button: the operator's part is the long one, and the reader who wants the plan should not have to
         // scroll past a withdrawal notice to reach it.
-        return $mail->line(new HtmlString(Container::getInstance()->make(Factory::class)->make($view, [
+        $mail->line(new HtmlString(Container::getInstance()->make(Factory::class)->make($view, [
             'owner' => $notifiable,
             'contract' => $this->contract,
         ])->render()));
+
+        // The documents the operator keeps beside the text rather than in it, the terms in the version accepted for
+        // one. Asked as the mail is built, so a queued confirmation attaches what is current when it is sent.
+        foreach (Container::getInstance()->make(AttachesToContractConfirmation::class)->documentsFor($this->contract, $notifiable) as $document) {
+            $mail->attachData($document->contents, $document->filename, ['mime' => $document->mime]);
+        }
+
+        return $mail;
     }
 
     /** @return array<string, string|null> */

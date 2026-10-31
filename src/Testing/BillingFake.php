@@ -14,6 +14,7 @@ use Pushery\Billing\Contracts\MerchantOnboarding;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubscriptionActions;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Facades\Billing;
@@ -38,10 +39,10 @@ use Pushery\Billing\ValueObjects\SubscriptionStart;
  */
 final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding, OneTimeCharge, StartsSubscriptions, SubscriptionActions
 {
-    /** @var list<array{owner: Model, tier: string, coupon: ?string, declaration: ?string, country: ?string, collectTaxId: ?bool, type: ?string, callerReference: ?string}> */
+    /** @var list<array{owner: Model, tier: string, coupon: ?string, declaration: ?string, country: ?string, collectTaxId: ?bool, type: ?string, callerReference: ?string, interval: ?BillingInterval}> */
     private array $subscribes = [];
 
-    /** @var list<array{owner: Model, tier: string, prorate: bool, merchant: ?MerchantScope, type: ?string}> */
+    /** @var list<array{owner: Model, tier: string, prorate: bool, merchant: ?MerchantScope, type: ?string, interval: ?BillingInterval}> */
     private array $swaps = [];
 
     /** @var list<array{owner: Model, action: string, survey?: ?CancellationSurvey, endsAt?: CarbonImmutable, merchant: ?MerchantScope, type: ?string}> */
@@ -73,7 +74,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      */
     private bool $couponsAreHonored = false;
 
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null): ClientIntent
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null, ?BillingInterval $interval = null): ClientIntent
     {
         // The type is recorded too, because it is the one argument a consumer cannot verify any other way:
         // it decides which local row the sale will end up in, and a fake that dropped it would let a screen
@@ -82,7 +83,7 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         // The caller's own key for the same reason, one step further out: it decides whether the consumer's
         // row can be found again at all, and a fake that dropped it would let a screen pass while sending
         // a business purchase off with no key — which is the case that has no fallback.
-        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => $buyerCountry, 'collectTaxId' => $collectTaxId, 'type' => $type, 'callerReference' => $callerReference];
+        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => $buyerCountry, 'collectTaxId' => $collectTaxId, 'type' => $type, 'callerReference' => $callerReference, 'interval' => $interval];
 
         return $this->intent();
     }
@@ -95,9 +96,9 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      * seam or the driver-neutral one. Which of the two it was is an implementation detail of the driver
      * they configured, and the assertion surface should not move when they change it.
      */
-    public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): SubscriptionStart
+    public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?BillingInterval $interval = null): SubscriptionStart
     {
-        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => null, 'collectTaxId' => null, 'type' => null, 'callerReference' => null];
+        $this->subscribes[] = ['owner' => $billable, 'tier' => $tierKey, 'coupon' => $couponCode, 'declaration' => $declarationReference, 'country' => null, 'collectTaxId' => null, 'type' => null, 'callerReference' => null, 'interval' => $interval];
 
         return new SubscriptionStart(SubscriptionState::Activating, 'https://checkout.test/session');
     }
@@ -162,9 +163,9 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         $this->lifecycle[] = ['owner' => $billable, 'action' => 'cancelNow', 'merchant' => $merchant, 'type' => $type];
     }
 
-    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void
+    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null, ?BillingInterval $interval = null): void
     {
-        $this->swaps[] = ['owner' => $billable, 'tier' => $tierKey, 'prorate' => $prorate, 'merchant' => $merchant, 'type' => $type];
+        $this->swaps[] = ['owner' => $billable, 'tier' => $tierKey, 'prorate' => $prorate, 'merchant' => $merchant, 'type' => $type, 'interval' => $interval];
     }
 
     // ── Assertions ──────────────────────────────────────────────────────────────────────────────────────

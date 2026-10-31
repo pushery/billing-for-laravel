@@ -31,6 +31,7 @@ use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PairsReadersByTheirCode;
 use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
+use Pushery\Billing\Contracts\PaysOutstandingInvoices;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\ReadsProviderComputedTax;
 use Pushery\Billing\Contracts\ReadsRoutedInvoiceCommission;
@@ -206,6 +207,9 @@ final class StripeServiceProvider extends ServiceProvider
         $this->app->bind(Invoices::class, StripeInvoices::class);
         $this->app->bind(UpcomingInvoice::class, StripeUpcomingInvoice::class);
         $this->app->bind(SubscriptionActions::class, StripeSubscriptionActions::class);
+        // Paying the open invoice at the owner's request is a capability of the same kind as the reader path: the
+        // Mollie and the Shopify provider take it out again, and a host asks the container before it offers it.
+        $this->app->bind(PaysOutstandingInvoices::class, StripeOutstandingInvoices::class);
         // The payment behind a subscription's period in progress, which a withdrawal refunds against.
         $this->app->bind(ReadsSubscriptionPayments::class, StripeSubscriptionPayments::class);
         $this->app->bind(OneTimeCharge::class, StripeOneTimeCharge::class);

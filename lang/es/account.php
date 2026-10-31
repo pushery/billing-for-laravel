@@ -38,6 +38,7 @@ return [
         'swap_to' => 'Cambiar',
         'scheduled_swap' => 'Cambia a :plan el :date.',
         'scheduled_swap_cancel' => 'Cancelar el cambio programado',
+        'billing_period' => 'Periodo de facturación',
         'subscribe' => 'Suscribirte',
         'trial_days' => 'Incluye una prueba gratuita de :days días.',
         'preview' => 'Ver coste',
@@ -184,6 +185,14 @@ return [
         'incomplete' => 'Tu pago necesita confirmación antes de que empiece tu suscripción.',
         'incomplete_hint' => 'Tu banco te ha pedido que confirmes este pago. Confírmalo para activar tu suscripción.',
         'confirm' => 'Confirmar pago',
+        'pay_now' => 'Pagar ahora',
+        'outcome' => [
+            'paid' => 'Pago recibido. Tu suscripción vuelve a estar activa en cuanto el proveedor lo confirme.',
+            'pending' => 'Tu pago está en camino. Tu suscripción vuelve a estar activa cuando se haga efectivo.',
+            'declined' => 'Tu banco ha rechazado el pago. Actualiza tu método de pago y vuelve a intentarlo.',
+            'needs_confirmation' => 'Tu banco te pide que confirmes este pago. Vuelve a intentarlo en un momento.',
+            'nothing_owed' => 'Ahora mismo no hay nada que pagar.',
+        ],
     ],
 
     'reconfirm' => [

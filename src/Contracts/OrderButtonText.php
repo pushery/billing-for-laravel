@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Contracts;
 
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\Enums\BillingInterval;
 
 /**
  * The text a hosted checkout shows beside its order button.
@@ -19,8 +20,11 @@ use Illuminate\Database\Eloquent\Model;
  */
 interface OrderButtonText
 {
-    /** The text beside the order button of a subscription to $tierKey, or null for none. */
-    public function forSubscription(Model $billable, string $tierKey): ?string;
+    /**
+     * The text beside the order button of a subscription to $tierKey at $interval, or null for none. The total price of
+     * each billing period differs between a tier's intervals, so a null interval is the tier's default one.
+     */
+    public function forSubscription(Model $billable, string $tierKey, ?BillingInterval $interval = null): ?string;
 
     /** The text beside the order button of the one-time purchase of $addonKey, or null for none. */
     public function forAddon(Model $billable, string $addonKey): ?string;

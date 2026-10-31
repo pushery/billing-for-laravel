@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Contracts;
 
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
@@ -21,5 +22,5 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  */
 interface AppliesScheduledSwaps
 {
-    public function applyScheduledSwap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void;
+    public function applyScheduledSwap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null, ?BillingInterval $interval = null): void;
 }

@@ -26,22 +26,41 @@ if (count($webhookMiddleware) !== count($configuredMiddleware)) {
     throw new InvalidArgumentException('Every entry of [billing.webhook_middleware] has to name a middleware as a string.');
 }
 
-Route::post(Config::string('billing.webhook_path', 'billing/webhook'), WebhookReceiver::class)
-    ->middleware($webhookMiddleware)
-    ->name('billing.webhook');
+// The host all three webhook routes answer on, for an application whose machines call it on a host of their own,
+// such as `api.example.test`. Unset or empty, they answer on every host, as they always did. Anything but a string is
+// refused here, naming the key, for the reason Config::string() refuses one.
+$webhookDomain = Config::get('billing.webhook_domain');
 
-// Provider events about a merchant arrive on their own endpoint, signed with their own secret. It is a
-// separate route because it is a separate trust boundary: one endpoint whose verifier accepted either
-// secret would let the merchant key authenticate platform events, and those move the platform's own money.
-// The receiver answers 404 while the marketplace is off, so a single-seller install exposes nothing.
-Route::post(Config::string('billing.marketplace.webhook.path', 'billing/webhook/marketplace'), MarketplaceWebhookReceiver::class)
-    ->middleware($webhookMiddleware)
-    ->name('billing.webhook.marketplace');
+if ($webhookDomain !== null && ! is_string($webhookDomain)) {
+    throw new InvalidArgumentException('[billing.webhook_domain] has to name a host as a string, or be left empty.');
+}
 
-// The webhooks of a payment account arrive on an address that names its provider and its key, registered last so
-// the two fixed addresses above are matched first. The receiver answers 404 for a pair the application's
-// PaymentAccounts does not know, so the endpoint gives away no shop that exists.
-Route::post(Config::string('billing.webhook_path', 'billing/webhook').'/{provider}/{account}', AccountWebhookReceiver::class)
-    ->middleware($webhookMiddleware)
-    ->where(['provider' => '[a-z][a-z0-9_-]{0,31}', 'account' => '[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?'])
-    ->name('billing.webhook.account');
+$webhookRoutes = static function () use ($webhookMiddleware): void {
+    Route::post(Config::string('billing.webhook_path', 'billing/webhook'), WebhookReceiver::class)
+        ->middleware($webhookMiddleware)
+        ->name('billing.webhook');
+
+    // Provider events about a merchant arrive on their own endpoint, signed with their own secret. It is a
+    // separate route because it is a separate trust boundary: one endpoint whose verifier accepted either
+    // secret would let the merchant key authenticate platform events, and those move the platform's own money.
+    // The receiver answers 404 while the marketplace is off, so a single-seller install exposes nothing.
+    Route::post(Config::string('billing.marketplace.webhook.path', 'billing/webhook/marketplace'), MarketplaceWebhookReceiver::class)
+        ->middleware($webhookMiddleware)
+        ->name('billing.webhook.marketplace');
+
+    // The webhooks of a payment account arrive on an address that names its provider and its key, registered last so
+    // the two fixed addresses above are matched first. The receiver answers 404 for a pair the application's
+    // PaymentAccounts does not know, so the endpoint gives away no shop that exists.
+    Route::post(Config::string('billing.webhook_path', 'billing/webhook').'/{provider}/{account}', AccountWebhookReceiver::class)
+        ->middleware($webhookMiddleware)
+        ->where(['provider' => '[a-z][a-z0-9_-]{0,31}', 'account' => '[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?'])
+        ->name('billing.webhook.account');
+};
+
+// A group rather than a host set on each route afterwards: the router files a route under its host when it is
+// added, so the host has to be there before.
+if ($webhookDomain === null || $webhookDomain === '') {
+    $webhookRoutes();
+} else {
+    Route::domain($webhookDomain)->group($webhookRoutes);
+}

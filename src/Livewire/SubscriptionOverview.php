@@ -154,7 +154,8 @@ final class SubscriptionOverview extends AccountScreen
     private function planShown(): array
     {
         $key = $this->currentTierKey();
-        $plan = Container::getInstance()->make(PlanCatalog::class)->planFor($key);
+        // At the interval the subscription is billed at, which names the price it pays.
+        $plan = Container::getInstance()->make(PlanCatalog::class)->planFor($key, $this->subscription()?->billing_interval);
 
         return [
             'label' => CatalogLabel::translate(Container::getInstance()->make(TierCatalog::class)->label($key)),

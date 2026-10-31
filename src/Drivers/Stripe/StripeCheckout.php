@@ -19,6 +19,7 @@ use Pushery\Billing\Contracts\OrderButtonText;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
 use Pushery\Billing\Discounts\CouponCodes;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\ChargeType;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\ReceiveEligibilityDenied;
@@ -88,7 +89,7 @@ final readonly class StripeCheckout implements Checkout
         return Container::getInstance()->make(OrderButtonText::class);
     }
 
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null): ClientIntent
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null, ?BillingInterval $interval = null): ClientIntent
     {
         // Defense in depth: refuse to open a paid checkout for an ineligible owner even if a caller
         // bypassed the UI eligibility guard (mirrors StripeOneTimeCharge).
@@ -112,10 +113,12 @@ final readonly class StripeCheckout implements Checkout
             throw SubscriptionNotPermitted::untouchableTier($tierKey);
         }
 
-        $price = $this->priceFor($tierKey, $merchant);
+        $price = $this->priceFor($tierKey, $merchant, $interval);
 
         if ($price === null) {
-            throw new InvalidArgumentException("Tier '{$tierKey}' has no provider price to subscribe to.");
+            throw new InvalidArgumentException($interval instanceof BillingInterval
+                ? "Tier '{$tierKey}' has no provider price to subscribe to at the interval {$interval->value}."
+                : "Tier '{$tierKey}' has no provider price to subscribe to.");
         }
 
         $customerId = $this->customers->resolve($billable);
@@ -124,7 +127,7 @@ final readonly class StripeCheckout implements Checkout
         // trial/tax/promo/discount groups, a variable line-item list). The payload is a valid
         // subscription-mode Checkout Session request; its shape is asserted field-by-field in StripeCheckoutTest.
         // @phpstan-ignore argument.type (the SDK's generated shape cannot express a payload assembled at run time)
-        $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant, $declarationReference, $collectTaxId, $type, $callerReference));
+        $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant, $declarationReference, $collectTaxId, $type, $callerReference, $interval));
 
         $url = SafeExternalUrl::onHosts($session->url ?? null, StripeHostedPages::HOSTS);
 
@@ -141,7 +144,7 @@ final readonly class StripeCheckout implements Checkout
      *
      * @return array<string, mixed>
      */
-    private function payload(Model $billable, string $tierKey, string $price, string $customerId, ?string $couponCode, ?Model $merchant, ?string $declarationReference = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null): array
+    private function payload(Model $billable, string $tierKey, string $price, string $customerId, ?string $couponCode, ?Model $merchant, ?string $declarationReference = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null, ?BillingInterval $interval = null): array
     {
         $payload = [
             'mode' => 'subscription',
@@ -165,7 +168,7 @@ final readonly class StripeCheckout implements Checkout
         // The text beside that button, where the installation words one for this tier. § 312j Abs. 2 BGB asks for the
         // essential features, the price per billing period, the term and the cancellation conditions immediately before
         // the order, and on a hosted checkout that moment is on Stripe's page. No text, no field.
-        $message = $this->orderButtonText()->forSubscription($billable, $tierKey);
+        $message = $this->orderButtonText()->forSubscription($billable, $tierKey, $interval);
 
         if ($message !== null) {
             $payload['custom_text'] = StripeSubmitMessage::customText($message, "tier '{$tierKey}'");
@@ -399,13 +402,13 @@ final readonly class StripeCheckout implements Checkout
      * catalog otherwise. The anti-price-injection guarantee holds in both: a tier key resolves only to a
      * price the relevant catalog declares, never one the client submitted.
      */
-    private function priceFor(string $tierKey, ?Model $merchant): ?string
+    private function priceFor(string $tierKey, ?Model $merchant, ?BillingInterval $interval = null): ?string
     {
         if (! $merchant instanceof Model) {
-            return $this->plans->providerPriceFor($tierKey);
+            return $this->plans->providerPriceFor($tierKey, $interval);
         }
 
-        return $this->catalogs->planCatalog(MerchantScope::forMerchant($merchant))->providerPriceFor($tierKey);
+        return $this->catalogs->planCatalog(MerchantScope::forMerchant($merchant))->providerPriceFor($tierKey, $interval);
     }
 
     /**

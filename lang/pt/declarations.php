@@ -33,6 +33,17 @@ return [
         'button' => 'Confirmar a livre resolução',
         'declared_through' => 'Declarada ao premir o botão «:button» em :app.',
     ],
+    // Why a declaration waits for a person, after the colon of the review mail and of the admin console
+    // (`DeclarationFailure`). Each is a clause, so none ends in a period.
+    'failure' => [
+        'term_unknown' => 'o fim do primeiro prazo do contrato não é conhecido, pelo que não foi possível calcular o seu fim mais próximo',
+        'refund_refused' => 'o contrato terminou e o prestador de pagamentos recusou o reembolso devido à pessoa',
+        'withdrawal_window_closed' => 'o prazo de livre resolução já tinha terminado quando a livre resolução chegou',
+        'withdrawal_unavailable' => 'não foi possível exercer a livre resolução da subscrição automaticamente, por exemplo porque não foi encontrada nenhuma subscrição ativa ou o seu nível não dá aos consumidores direito de livre resolução',
+        'cancellation_unavailable' => 'não foi possível terminar o contrato automaticamente, porque não foi encontrada nenhuma subscrição ativa ou um pagamento ainda está a ser cobrado',
+        'end_inside_period_is_final' => 'a subscrição já termina num momento dentro do seu período, e esse fim não pode ser alterado',
+        'other' => 'o prestador de pagamentos ou a aplicação recusou-a',
+    ],
     'contract_name' => 'Subscrição :tier',
     'contract_unnamed' => 'Subscrição',
 ];

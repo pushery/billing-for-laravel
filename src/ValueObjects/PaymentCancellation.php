@@ -16,8 +16,8 @@ final readonly class PaymentCancellation
         public string $paymentReference,
         public bool $canceled,
         /**
-         * Why the provider kept the payment, in its own terms: Mollie's HTTP status, as Mollie names no error codes, or
-         * the status the payment still has. Null on a payment that was canceled.
+         * Why the provider kept the payment, in its own terms: Stripe's error code, the HTTP status where the provider
+         * names none, as Mollie never does, or the status the payment still has. Null on a payment that was canceled.
          */
         public ?string $failureCode = null,
         /** The provider's own words for keeping it, where it gave any. */

@@ -7,6 +7,7 @@ namespace Pushery\Billing\Support;
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\Entitlements;
 use Pushery\Billing\Entitlements\ConfigEntitlementsFactory;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SwapTiming;
 
 /**
@@ -31,12 +32,21 @@ final readonly class PlanSwapPlanner
 
     /**
      * When a swap from the current tier to the target tier should take effect, or null when they are the
-     * same tier — a no-op the caller must not schedule.
+     * same tier at the same interval — a no-op the caller must not schedule.
+     *
+     * The same tier at another interval is a change of the billing period alone. A longer one is paid in advance at
+     * once, as an upgrade is; a shorter one begins when the period already paid for ends, as a downgrade does, so a
+     * yearly subscriber who chooses the monthly price keeps the year. A change of tier goes by the tier's rank,
+     * whatever the interval does.
      */
-    public function timingFor(string $currentTierKey, string $targetTierKey): ?SwapTiming
+    public function timingFor(string $currentTierKey, string $targetTierKey, ?BillingInterval $currentInterval = null, ?BillingInterval $targetInterval = null): ?SwapTiming
     {
         if ($currentTierKey === $targetTierKey) {
-            return null;
+            if (! $currentInterval instanceof BillingInterval || ! $targetInterval instanceof BillingInterval || $currentInterval === $targetInterval) {
+                return null;
+            }
+
+            return $targetInterval->perYear() < $currentInterval->perYear() ? SwapTiming::Immediate : $this->downgradeDefault();
         }
 
         return $this->direction($currentTierKey, $targetTierKey) === Direction::Upgrade

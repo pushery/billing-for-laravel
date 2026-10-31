@@ -9,6 +9,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\SubscriptionActions;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\NotPossibleOnShopify;
 use Pushery\Billing\Models\Subscription;
@@ -96,7 +97,7 @@ final readonly class ShopifySubscriptionActions implements SubscriptionActions
      * Asks the eligibility gate first, as every seam where a payment begins does: an owner who may not transact is
      * told that, not where to subscribe.
      */
-    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void
+    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null, ?BillingInterval $interval = null): void
     {
         if (! $this->eligibility->check($billable)) {
             throw EligibilityDenied::forMoneyMovement();

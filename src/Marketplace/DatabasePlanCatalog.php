@@ -6,6 +6,7 @@ namespace Pushery\Billing\Marketplace;
 
 use Pushery\Billing\Contracts\MerchantTierRepository;
 use Pushery\Billing\Contracts\PlanCatalog;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\MerchantTierRow;
 use Pushery\Billing\ValueObjects\Plan;
@@ -26,14 +27,19 @@ final readonly class DatabasePlanCatalog implements PlanCatalog
         private MerchantScope $scope,
     ) {}
 
-    public function planFor(string $tierKey): ?Plan
+    /** A merchant's tier is sold at the one interval its row names, so another interval has no plan. */
+    public function planFor(string $tierKey, ?BillingInterval $interval = null): ?Plan
     {
-        return $this->repository->tierRow($this->scope, $tierKey)?->plan();
+        $plan = $this->repository->tierRow($this->scope, $tierKey)?->plan();
+
+        return ! $interval instanceof BillingInterval || $plan?->interval === $interval ? $plan : null;
     }
 
-    public function providerPriceFor(string $tierKey): ?string
+    public function providerPriceFor(string $tierKey, ?BillingInterval $interval = null): ?string
     {
-        return $this->repository->tierRow($this->scope, $tierKey)?->providerPrice;
+        $row = $this->repository->tierRow($this->scope, $tierKey);
+
+        return $row instanceof MerchantTierRow && (! $interval instanceof BillingInterval || $row->plan()->interval === $interval) ? $row->providerPrice : null;
     }
 
     public function legacyPricesFor(string $tierKey): array
@@ -41,6 +47,13 @@ final readonly class DatabasePlanCatalog implements PlanCatalog
         $row = $this->repository->tierRow($this->scope, $tierKey);
 
         return $row instanceof MerchantTierRow ? $row->legacyPrices : [];
+    }
+
+    public function intervalsFor(string $tierKey): array
+    {
+        $plan = $this->repository->tierRow($this->scope, $tierKey)?->plan();
+
+        return $plan instanceof Plan ? [$plan->interval] : [];
     }
 
     public function options(TierIdentity $current): array

@@ -92,7 +92,8 @@ final readonly class BillingMetricsReporter
 
             $activeByTier[$sub->tier_key] = ($activeByTier[$sub->tier_key] ?? 0) + 1;
 
-            $plan = $this->catalogOf($sub, $catalogs)->planFor($sub->tier_key);
+            // At the interval the row is billed at, so a yearly subscription counts a twelfth of its yearly price.
+            $plan = $this->catalogOf($sub, $catalogs)->planFor($sub->tier_key, $sub->billing_interval);
 
             if ($plan instanceof Plan) {
                 // Once per seat where the row carries a seat count, as the local engine bills it. A row without one is a
