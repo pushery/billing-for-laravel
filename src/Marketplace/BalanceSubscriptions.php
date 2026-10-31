@@ -51,8 +51,10 @@ use Throwable;
  *
  * The price comes from the merchant's catalog when the subscription starts, never from the caller, and is kept on the
  * subscription's item. A renewal takes that price, so a price the merchant changes later does not reach a running
- * subscription. The length of a period comes from the catalog at each renewal, and a tier the merchant no longer
- * sells ends the subscription with the last period it paid for.
+ * subscription. A price holds per period, so the length of the period is kept as well: a renewal cuts the next period
+ * to the interval of the one before, and a tier the merchant moves to another interval leaves a running subscription
+ * paying what it paid per period. Only a period no interval reaches, one set by hand, takes the catalog's interval. A
+ * tier the merchant no longer sells ends the subscription with the last period it paid for.
  *
  * ## A balance that does not cover a period
  *
@@ -303,9 +305,10 @@ final readonly class BalanceSubscriptions
                 return false;
             }
 
-            // The period that is due, from the end of the last one paid. A retry asks for the same period under the same
-            // key, so a debit that went through on an attempt that failed later is found instead of taken again.
-            $cycle = $subscription->nextCycle($plan->interval);
+            // The period that is due, from the end of the last one paid and as long as it. A retry asks for the same
+            // period under the same key, so a debit that went through on an attempt that failed later is found instead
+            // of taken again.
+            $cycle = $subscription->nextCycle($subscription->periodInterval() ?? $plan->interval);
             $from = CarbonImmutable::instance($subscription->current_period_end ?? $moment);
 
             try {

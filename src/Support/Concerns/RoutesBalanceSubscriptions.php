@@ -7,6 +7,7 @@ namespace Pushery\Billing\Support\Concerns;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\InternalBalance;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Exceptions\BalanceSubscriptionRefused;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Marketplace\BalanceSubscriptions;
@@ -80,7 +81,7 @@ trait RoutesBalanceSubscriptions
         $this->inner->cancelNow($billable, $merchant, $type);
     }
 
-    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void
+    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null, ?BillingInterval $interval = null): void
     {
         // An owner who may not transact is told that first, whichever side holds the subscription.
         if (! $this->eligibility->check($billable)) {
@@ -91,7 +92,7 @@ trait RoutesBalanceSubscriptions
             throw BalanceSubscriptionRefused::cannotChange('change its tier');
         }
 
-        $this->inner->swap($billable, $tierKey, $prorate, $merchant, $type);
+        $this->inner->swap($billable, $tierKey, $prorate, $merchant, $type, $interval);
     }
 
     /** The balance subscriptions, resolved only when an action reaches one. */

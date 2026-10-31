@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Contracts;
 
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\ValueObjects\ClientIntent;
 
 /**
@@ -32,6 +33,9 @@ interface Checkout
      * @param  ?bool  $collectTaxId  whether this checkout asks the buyer for a tax ID while the provider computes tax;
      *                               null follows `billing.checkout.tax_id_collection`. A marketplace selling to both
      *                               consumers and businesses leaves the field out of the one and asks for it on the other
+     * @param  ?BillingInterval  $interval  the interval to sell the tier at, where its catalog sells it at more than one;
+     *                                      null sells it at its default interval, and a driver that bills a tier at its
+     *                                      default interval alone refuses another
      */
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null): ClientIntent;
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null, ?BillingInterval $interval = null): ClientIntent;
 }

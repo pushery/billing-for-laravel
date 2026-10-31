@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers\Stripe;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\Checkout;
 use Pushery\Billing\Contracts\StartsSubscriptions;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\SubscriptionStart;
@@ -36,9 +37,9 @@ final readonly class StripeSubscriptionStarter implements StartsSubscriptions
 {
     public function __construct(private Checkout $checkout, private StripeCheckout $stripe) {}
 
-    public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): SubscriptionStart
+    public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?BillingInterval $interval = null): SubscriptionStart
     {
-        $intent = $this->checkout->subscribe($billable, $tierKey, $couponCode, $declarationReference);
+        $intent = $this->checkout->subscribe($billable, $tierKey, $couponCode, $declarationReference, interval: $interval);
 
         // Validated here rather than at the caller, and the caller keeps its own check as well. A payload
         // is provider-shaped and this is the seam that stops being provider-shaped, so a tampered or absent

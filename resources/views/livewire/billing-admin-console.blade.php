@@ -185,7 +185,8 @@
     </section>
 
     {{-- Declarations that wait for a person ------------------------------------------------------------ --}}
-    <livewire:billing.declarations-awaiting-review />
+    {{-- Plain like the rest of the console, also where WireKit is installed. --}}
+    <livewire:billing.declarations-awaiting-review :plain="true" />
 
     {{-- Audit viewer ------------------------------------------------------------------------------------ --}}
     <section aria-labelledby="audit-heading" class="space-y-4">

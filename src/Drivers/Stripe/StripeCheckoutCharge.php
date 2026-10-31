@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
+use Carbon\CarbonImmutable;
+use DateTimeInterface;
 use Illuminate\Contracts\Config\Repository;
 use InvalidArgumentException;
 use Pushery\Billing\Support\SafeExternalUrl;
@@ -86,6 +88,7 @@ final readonly class StripeCheckoutCharge
             'payment_method_types' => $options instanceof ChargeOptions ? $options->methods : [],
             'metadata' => $metadata,
             'payment_intent_data' => $intent,
+            'expires_at' => $this->expiresAt($options?->expiresAt),
         ], static fn (mixed $value): bool => $value !== null && $value !== []);
 
         // @phpstan-ignore argument.type (the SDK's generated shape cannot express a payload assembled at run time)
@@ -183,5 +186,24 @@ final readonly class StripeCheckoutCharge
             in_array($language, self::LOCALES, true) => $language,
             default => 'auto',
         };
+    }
+
+    /**
+     * The session's `expires_at`. Stripe takes a moment from 30 minutes to 24 hours after the session is created,
+     * so a lifetime outside that is refused here, before Stripe hears of the payment.
+     */
+    private function expiresAt(?DateTimeInterface $at): ?int
+    {
+        if (! $at instanceof DateTimeInterface) {
+            return null;
+        }
+
+        $seconds = $at->getTimestamp() - CarbonImmutable::now()->getTimestamp();
+
+        if ($seconds < 30 * 60 || $seconds > 24 * 60 * 60) {
+            throw new InvalidArgumentException('A payment on Stripe\'s checkout page expires between 30 minutes and 24 hours after it is created, and the charge asks for '.$at->format(DATE_ATOM).'.');
+        }
+
+        return $at->getTimestamp();
     }
 }

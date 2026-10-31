@@ -118,6 +118,7 @@ final readonly class StripeAccountSetup
             StripeAccountRight::CheckoutSessionsWrite => $stripe->checkout->sessions->create($probe),
             StripeAccountRight::PaymentIntentsWrite => $stripe->request('post', '/v1/payment_intents', $probe, []),
             StripeAccountRight::PaymentIntentsRead => $stripe->paymentIntents->all($probe),
+            StripeAccountRight::DisputesRead => $stripe->disputes->all($probe),
             StripeAccountRight::PaymentMethodsRead => $stripe->paymentMethods->all($probe),
             StripeAccountRight::RefundsWrite => $stripe->refunds->create($probe),
             StripeAccountRight::WebhookEndpointsWrite => $stripe->request('post', '/v1/webhook_endpoints', $probe, []),
@@ -126,7 +127,7 @@ final readonly class StripeAccountSetup
         };
     }
 
-    private function client(PaymentAccount $account): StripeClient
+    private function client(PaymentAccount $account): TimedStripeClient
     {
         return StripeAccountClient::for($account, $this->apiVersion());
     }

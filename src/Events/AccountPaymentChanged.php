@@ -6,6 +6,7 @@ namespace Pushery\Billing\Events;
 
 use Pushery\Billing\Enums\AccountPaymentStatus;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\PaymentChargeback;
 
 /**
  * A one-off payment into a payment account changed, as its provider reported it on the account's webhook address.
@@ -28,6 +29,9 @@ final readonly class AccountPaymentChanged implements BillingDomainEvent
      * @param  bool  $testmode  whether the payment ran in the provider's test mode, as the provider reports it: every
      *                          payment of a test account, and on a live account a payment made in test mode through
      *                          its OAuth access, such as a probe before the shop goes live
+     * @param  list<PaymentChargeback>  $chargebacks  every chargeback of the payment with its time, reason and outcome,
+     *                                                a reversed one included; `amountChargedBack` keeps counting only
+     *                                                what the bank still holds
      */
     public function __construct(
         public string $provider,
@@ -41,5 +45,6 @@ final readonly class AccountPaymentChanged implements BillingDomainEvent
         public array $metadata = [],
         public ?string $refundReference = null,
         public bool $testmode = false,
+        public array $chargebacks = [],
     ) {}
 }

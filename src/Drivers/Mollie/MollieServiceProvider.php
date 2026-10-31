@@ -32,6 +32,7 @@ use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PairsReadersByTheirCode;
 use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
+use Pushery\Billing\Contracts\PaysOutstandingInvoices;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
@@ -214,6 +215,8 @@ final class MollieServiceProvider extends ServiceProvider
         $this->app->offsetUnset(SubmitsDisputeEvidence::class);
         // Nor does a Mollie customer carry tax ids, so there is nowhere to attach a proven VAT number.
         $this->app->offsetUnset(AttachesVerifiedVatIds::class);
+        // A Mollie subscription is billed by the package's own engine, and Mollie holds no invoice to pay on request.
+        $this->app->offsetUnset(PaysOutstandingInvoices::class);
         // What became of a refund or a chargeback where Mollie's webhook does not say: a refund canceled before it was
         // paid out, one that failed, a chargeback the bank reversed. `billing:money-back:reconcile` reads them back daily.
         $this->app->bind(ReportsMoneyBackOutcomes::class, MollieMoneyBackOutcomes::class);

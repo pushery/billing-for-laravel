@@ -14,6 +14,7 @@ use Pushery\Billing\Consumer\WithdrawalGate;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Contracts\DedupesOnReference;
 use Pushery\Billing\Contracts\IdentifiesBusinessBuyers;
+use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\ContractKind;
@@ -55,6 +56,7 @@ final readonly class SendContractConfirmation implements DedupesOnReference
         private Repository $config,
         private BillingEventLog $log,
         private IdentifiesBusinessBuyers $businesses,
+        private PlanCatalog $plans,
     ) {}
 
     public function __invoke(SubscriptionStateChanged $event): void
@@ -76,6 +78,9 @@ final readonly class SendContractConfirmation implements DedupesOnReference
         }
 
         $tier = $event->tierKey;
+        // The plan at the interval the subscription is billed at, so a yearly subscription is confirmed at its
+        // yearly price and period.
+        $plan = $tier === null ? null : $this->plans->planFor($tier, $event->interval);
 
         Notification::send($owner, new ContractConfirmationNotification(new ContractConfirmation(
             view: trim($view),
@@ -83,10 +88,11 @@ final readonly class SendContractConfirmation implements DedupesOnReference
             startedAt: $this->moment($owner, $event->startedAt ?? $event->periodStart ?? $event->occurredAt) ?? OwnersZone::of($owner, CarbonImmutable::now()),
             productKey: $tier,
             productLabel: $tier === null ? null : $this->tiers->label($tier),
-            price: $tier === null ? null : $this->tiers->priceDisplay($tier),
+            price: $plan->amount ?? ($tier === null ? null : $this->tiers->priceDisplay($tier)),
             periodEndsAt: $this->moment($owner, $event->periodEnd),
             trialEndsAt: $this->moment($owner, $event->trialEnd),
             consent: $event->declarationReference === null ? null : $this->consents->for($owner, $event->declarationReference),
+            interval: $plan?->interval,
         )));
 
         $this->log->record('subscription.contract_confirmation_sent', $owner, [

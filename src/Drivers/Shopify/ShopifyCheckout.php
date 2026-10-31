@@ -72,7 +72,7 @@ final readonly class ShopifyCheckout implements Checkout
         private Repository $config,
     ) {}
 
-    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null): ClientIntent
+    public function subscribe(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?string $buyerCountry = null, ?bool $collectTaxId = null, ?string $type = null, ?string $callerReference = null, ?BillingInterval $interval = null): ClientIntent
     {
         if (! $this->eligibility->check($billable)) {
             throw EligibilityDenied::forMoneyMovement();
@@ -103,6 +103,11 @@ final readonly class ShopifyCheckout implements Checkout
 
         $plan = $this->plans->planFor($tierKey)
             ?? throw new InvalidArgumentException("Tier '{$tierKey}' has no price to subscribe to.");
+
+        // Shopify's webhook reports no interval this driver reads back, so a tier is sold at its default one alone.
+        if ($interval instanceof BillingInterval && $interval !== $plan->interval) {
+            throw new InvalidArgumentException("Tier '{$tierKey}' is sold on Shopify at its default interval, not at {$interval->value}.");
+        }
 
         // Usage past the allowance would be counted and never charged, so a tier that prices it is not sold here.
         $priced = array_find(

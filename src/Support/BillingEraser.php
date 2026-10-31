@@ -146,6 +146,15 @@ final readonly class BillingEraser
             $axes[$merchant]['retained'] ??= [];
             $purged = $this->sum($purged, $coupons);
 
+            // The access the person bought for somebody else. It is keyed to the recipient, so no axis reaches the
+            // person who paid; it stays, and they come off it. Counted on the buyer's axis, where the purchase is.
+            // After the axes, so a grant the person both bought and holds has already gone with their own.
+            $buyer = OwnerScopedTables::ownerAxis()->name;
+            $gifts = $this->unlinkGiftsBoughtBy($owner);
+            $axes[$buyer]['retained'] = $this->sum($axes[$buyer]['retained'] ?? [], $gifts);
+            $axes[$buyer]['purged'] ??= [];
+            $retained = $this->sum($retained, $gifts);
+
             // The owner's own audit rows go with them. Then one row records that the erasure happened:
             // accountability (Art. 5(2)) means being able to show it was done — and that record must not
             // itself become a fresh copy of the personal data, so it carries the morph class and nothing
@@ -205,6 +214,26 @@ final readonly class BillingEraser
         $redemptions = DB::table('billing_coupon_redemptions')->whereIn('coupon_id', (clone $coupons)->select('id'))->delete();
 
         return array_filter(['billing_coupon_redemptions' => $redemptions, 'billing_coupons' => $coupons->delete()]);
+    }
+
+    /**
+     * Take the person off the access they bought for somebody else, and count the grants.
+     *
+     * A gift belongs to its recipient, and the work stays theirs when the person who paid for it is erased. Only
+     * `purchaser_type`/`purchaser_id` name that person, so the grant is kept and those two go. Nothing needs them
+     * there afterwards: the money is on the purchase and the invoice, and the declaration about the right of
+     * withdrawal is on the consent, all three of which an erasure keeps, unlinked.
+     *
+     * @return array<string, int>
+     */
+    private function unlinkGiftsBoughtBy(Model $owner): array
+    {
+        $unlinked = DB::table('billing_access_grants')
+            ->where('purchaser_type', $owner->getMorphClass())
+            ->where('purchaser_id', $owner->getKey())
+            ->update(['purchaser_type' => null, 'purchaser_id' => null]);
+
+        return array_filter(['billing_access_grants' => $unlinked]);
     }
 
     /**

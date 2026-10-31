@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Mollie;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Mollie\Api\Exceptions\RequestException;
@@ -442,7 +443,24 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
             declarationReference: $this->stringOf($metadata, 'withdrawal_declaration'),
             provider: 'mollie',
             callerReference: $this->stringOf($metadata, 'caller_reference'),
+            occurredAt: $this->momentOf($payment->paidAt),
         );
+    }
+
+    /**
+     * A moment Mollie states as an ISO 8601 string, in Unix seconds, or null where it states none it can read.
+     *
+     * The payment it is asked about is paid, and the SDK calls a payment paid only while it names that moment
+     * (`isPaid()` reads a non-empty `paidAt`). An empty value is still read as none rather than handed to the
+     * parser, which would take it for the current moment.
+     */
+    private function momentOf(?string $value): ?int
+    {
+        try {
+            return $value === null || $value === '' ? null : CarbonImmutable::parse($value)->getTimestamp();
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /** A string out of the payment's metadata, or null where it is absent or empty. */

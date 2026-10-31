@@ -17,6 +17,7 @@ use Pushery\Billing\Enums\AccountPaymentStatus;
 use Pushery\Billing\Events\AccountPaymentChanged;
 use Pushery\Billing\ValueObjects\ChargeOptions;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\PaymentChargeback;
 
 /**
  * Reads a payment of one payment account back from Mollie when Mollie pings the account's webhook address, and reports
@@ -42,8 +43,9 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Webho
     ) {}
 
     /**
-     * The payment, its status and its amounts, so a refund or a chargeback is a delivery of its own: the status of a
-     * paid payment does not move when money goes back.
+     * The payment, its status, its amounts and the outcome of each of its chargebacks, so a refund or a chargeback is a
+     * delivery of its own: the status of a paid payment does not move when money goes back, and a second chargeback of
+     * the amount a reversed one had leaves the amounts where they stood.
      */
     public function deliveryKey(Request $request): ?string
     {
@@ -59,6 +61,10 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Webho
             $change->amountRefunded->minorUnits,
             $change->amountChargedBack->minorUnits,
             $change->refundReference ?? '',
+            implode(',', array_map(
+                static fn (PaymentChargeback $chargeback): string => $chargeback->reference.'='.$chargeback->outcome->value,
+                $change->chargebacks,
+            )),
         ]);
     }
 
@@ -94,9 +100,9 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Webho
     {
         $amount = MollieAmount::fromResource($payment->amount);
         $refunded = MollieAmount::fromOptionalResource($payment->amountRefunded, $amount->currency);
-        $chargedBack = $payment->hasChargebacks()
-            ? MollieChargebackEvents::standing($payment->chargebacks(), $amount->currency)
-            : Money::zero($amount->currency);
+        // Asked of Mollie once, and read twice: for what the bank still holds, and for the list the change carries.
+        $chargebacks = $payment->hasChargebacks() ? $payment->chargebacks() : [];
+        $chargedBack = MollieChargebackEvents::standing($chargebacks, $amount->currency);
         $failedRefund = $payment->isPaid() && $payment->hasRefunds() ? $this->failedNewest($payment->refunds()) : null;
         [$billingReference, $metadata] = $this->metadataOf($payment->metadata);
 
@@ -119,6 +125,7 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Webho
             $metadata,
             $failedRefund,
             testmode: MollieValue::of($payment->mode) === 'test',
+            chargebacks: MollieChargebackEvents::records($chargebacks),
         );
     }
 

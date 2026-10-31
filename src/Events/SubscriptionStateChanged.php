@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Events;
 
 use Pushery\Billing\Contracts\IdentifiesCustomer;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
@@ -109,5 +110,13 @@ final readonly class SubscriptionStateChanged implements BillingDomainEvent, Ide
          * subscription that has ended it is the moment it ended.
          */
         public ?int $endsAt = null,
+        /**
+         * The interval the subscription's price sells its tier at, where the catalog names one.
+         *
+         * A tier sold monthly and yearly under one key is the same tier at either price, so the tier key does not say
+         * which one the subscription pays. Null where the price names no interval, a legacy price or one the
+         * catalog does not list, and on every event of a driver that bills a tier at its one interval.
+         */
+        public ?BillingInterval $interval = null,
     ) {}
 }

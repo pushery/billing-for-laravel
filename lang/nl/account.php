@@ -38,6 +38,7 @@ return [
         'swap_to' => 'Wisselen',
         'scheduled_swap' => 'Wijzigt op :date naar :plan.',
         'scheduled_swap_cancel' => 'Geplande wijziging annuleren',
+        'billing_period' => 'Factuurperiode',
         'subscribe' => 'Abonneren',
         'trial_days' => 'Inclusief een gratis proefperiode van :days dagen.',
         'preview' => 'Kosten bekijken',
@@ -184,6 +185,14 @@ return [
         'incomplete' => 'Je betaling moet worden bevestigd voordat je abonnement start.',
         'incomplete_hint' => 'Je bank heeft je gevraagd deze betaling te bevestigen. Bevestig deze om je abonnement te activeren.',
         'confirm' => 'Betaling bevestigen',
+        'pay_now' => 'Nu betalen',
+        'outcome' => [
+            'paid' => 'Betaling ontvangen. Je abonnement is weer actief zodra de aanbieder het bevestigt.',
+            'pending' => 'Je betaling is onderweg. Je abonnement is weer actief zodra die is verwerkt.',
+            'declined' => 'Je bank heeft de betaling geweigerd. Werk je betaalmethode bij en probeer het opnieuw.',
+            'needs_confirmation' => 'Je bank vraagt je deze betaling te bevestigen. Probeer het zo meteen opnieuw.',
+            'nothing_owed' => 'Er valt op dit moment niets te betalen.',
+        ],
     ],
 
     'reconfirm' => [

@@ -8,6 +8,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use InvalidArgumentException;
 use Pushery\Billing\Consumer\ProratedCancellation;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
@@ -63,6 +64,15 @@ interface SubscriptionActions
     /** Cancel immediately, stopping billing now (no grace). Account deletion ends every contract this way. */
     public function cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void;
 
-    /** Swap to another tier's plan in-app, prorating unless told otherwise. */
-    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null): void;
+    /**
+     * Swap to another tier's plan in-app, prorating unless told otherwise.
+     *
+     * An interval sells the tier at that one, where its catalog sells it at more than one; the same tier at another
+     * interval is no change of tier. Without one, a driver that knows the interval the subscription is billed at
+     * keeps it where the new tier is sold at it, and every other swap takes the tier's default interval.
+     *
+     * @throws InvalidArgumentException when the tier has no price at the interval, or the driver bills a tier at its
+     *                                  default interval alone and another was asked for
+     */
+    public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null, ?BillingInterval $interval = null): void;
 }

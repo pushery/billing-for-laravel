@@ -38,6 +38,7 @@ return [
         'swap_to' => 'Changer',
         'scheduled_swap' => 'Passe à :plan le :date.',
         'scheduled_swap_cancel' => 'Annuler le changement programmé',
+        'billing_period' => 'Période de facturation',
         'subscribe' => 'S’abonner',
         'trial_days' => 'Inclut un essai gratuit de :days jours.',
         'preview' => 'Estimer le coût',
@@ -184,6 +185,14 @@ return [
         'incomplete' => 'Ton paiement doit être confirmé avant que ton abonnement démarre.',
         'incomplete_hint' => 'Ta banque t’a demandé de confirmer ce paiement. Confirme-le pour activer ton abonnement.',
         'confirm' => 'Confirmer le paiement',
+        'pay_now' => 'Payer maintenant',
+        'outcome' => [
+            'paid' => 'Paiement reçu. Ton abonnement est de nouveau actif dès que le prestataire le confirme.',
+            'pending' => 'Ton paiement est en cours. Ton abonnement est de nouveau actif dès qu’il est encaissé.',
+            'declined' => 'Ta banque a refusé le paiement. Mets à jour ton moyen de paiement et réessaie.',
+            'needs_confirmation' => 'Ta banque te demande de confirmer ce paiement. Réessaie dans un instant.',
+            'nothing_owed' => 'Il n’y a rien à payer pour le moment.',
+        ],
     ],
 
     'reconfirm' => [

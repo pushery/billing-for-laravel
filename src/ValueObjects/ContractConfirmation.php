@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\ValueObjects;
 
 use DateTimeInterface;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\ContractKind;
 
 /**
@@ -36,5 +37,10 @@ final readonly class ContractConfirmation
         public ?DateTimeInterface $trialEndsAt = null,
         /** What the buyer declared before the purchase, null where nothing is on file. */
         public ?WithdrawalConsent $consent = null,
+        /**
+         * For a subscription the interval the catalog charges its price in, so the price can be stated per billing
+         * period; null for a purchase and where the catalog names no price.
+         */
+        public ?BillingInterval $interval = null,
     ) {}
 }

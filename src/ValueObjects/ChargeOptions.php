@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\ValueObjects;
 
+use DateTimeInterface;
 use InvalidArgumentException;
 
 /**
@@ -30,6 +31,9 @@ final readonly class ChargeOptions
      * @param  ?string  $cardToken  the token the provider's card fields created for the card the customer entered
      * @param  ?string  $applePayToken  the token Apple Pay handed the page after the customer authorized the payment, as JSON
      * @param  ?string  $captureMode  `manual` to authorize the payment and capture it later, `automatic` for the provider's default
+     * @param  ?DateTimeInterface  $expiresAt  when the provider's payment page stops taking the payment, where a charge may set
+     *                                         it: a Checkout Session on Stripe expires then, from 30 minutes to 24 hours after
+     *                                         it is created. Mollie keeps the lifetime of each method.
      *
      * @throws InvalidArgumentException for an address that is not absolute http or https, a locale in another format,
      *                                  an empty method, metadata under the key the rails write or a value that is not
@@ -49,6 +53,7 @@ final readonly class ChargeOptions
         public ?string $cardToken = null,
         public ?string $applePayToken = null,
         public ?string $captureMode = null,
+        public ?DateTimeInterface $expiresAt = null,
     ) {
         foreach (['return' => $returnUrl, 'cancel' => $cancelUrl, 'webhook' => $webhookUrl] as $kind => $url) {
             if ($url !== null && ! $this->isAbsolute($url)) {

@@ -23,6 +23,7 @@ use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PairsReadersByTheirCode;
 use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
+use Pushery\Billing\Contracts\PaysOutstandingInvoices;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
 use Pushery\Billing\Contracts\SeatBilling;
@@ -117,11 +118,13 @@ final class ShopifyServiceProvider extends ServiceProvider
         // Uninstalling the app is what removes a merchant from Shopify's billing, so there is nobody to delete.
         $this->app->bind(CustomerRegistry::class, NullCustomerRegistry::class);
 
-        // No terminal, no dispute the app answers, no tax id the app attaches.
+        // No terminal, no dispute the app answers, no tax id the app attaches, and no invoice the app pays: Shopify
+        // collects the charges itself.
         $this->app->offsetUnset(CardPresentPayments::class);
         $this->app->offsetUnset(PairsReadersByTheirCode::class);
         $this->app->offsetUnset(SubmitsDisputeEvidence::class);
         $this->app->offsetUnset(AttachesVerifiedVatIds::class);
+        $this->app->offsetUnset(PaysOutstandingInvoices::class);
 
         $this->guardCredentials();
     }

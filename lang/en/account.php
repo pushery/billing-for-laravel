@@ -38,6 +38,7 @@ return [
         'swap_to' => 'Switch',
         'scheduled_swap' => 'Changes to :plan on :date.',
         'scheduled_swap_cancel' => 'Cancel scheduled change',
+        'billing_period' => 'Billing period',
         'subscribe' => 'Subscribe',
         'trial_days' => 'Includes a :days-day free trial.',
         'preview' => 'Preview cost',
@@ -184,6 +185,14 @@ return [
         'incomplete' => 'Your payment needs confirmation before your subscription starts.',
         'incomplete_hint' => 'Your bank asked you to confirm this payment. Confirm it to activate your subscription.',
         'confirm' => 'Confirm payment',
+        'pay_now' => 'Pay now',
+        'outcome' => [
+            'paid' => 'Payment received. Your subscription is active again as soon as the provider confirms it.',
+            'pending' => 'Your payment is on its way. Your subscription is active again once it has cleared.',
+            'declined' => 'Your bank declined the payment. Update your payment method and try again.',
+            'needs_confirmation' => 'Your bank asks you to confirm this payment. Try again in a moment.',
+            'nothing_owed' => 'There is nothing to pay right now.',
+        ],
     ],
 
     'reconfirm' => [

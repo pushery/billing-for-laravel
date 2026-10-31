@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Mollie;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 use Mollie\Api\Resources\Chargeback;
+use Pushery\Billing\Enums\ChargebackOutcome;
 use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\PaymentChargeback;
+use stdClass;
 use Throwable;
 
 /**
@@ -89,6 +93,50 @@ final readonly class MollieChargebackEvents
     }
 
     /**
+     * Every chargeback of the payment as an account's event reports it, a reversed one included, in Mollie's order.
+     *
+     * An entry whose amount cannot be read is left out and named in a warning, the way {@see self::from()} names one:
+     * an account's event reports it nowhere else.
+     *
+     * @param  iterable<mixed>  $chargebacks
+     * @return list<PaymentChargeback>
+     */
+    public static function records(iterable $chargebacks): array
+    {
+        $records = [];
+
+        foreach ($chargebacks as $chargeback) {
+            if (! $chargeback instanceof Chargeback) {
+                continue;
+            }
+
+            try {
+                $amount = MollieAmount::fromResource($chargeback->amount);
+            } catch (Throwable) {
+                Log::warning('billing: Mollie reported a chargeback amount this package cannot read, so it was left out', [
+                    'chargeback' => MollieValue::id($chargeback->id ?? null),
+                    'amount' => $chargeback->amount ?? null,
+                ]);
+
+                continue;
+            }
+
+            $reason = $chargeback->reason;
+
+            $records[] = new PaymentChargeback(
+                MollieValue::id($chargeback->id),
+                $amount,
+                is_string($chargeback->reversedAt) && $chargeback->reversedAt !== '' ? ChargebackOutcome::Reversed : ChargebackOutcome::Open,
+                self::time($chargeback->createdAt),
+                $reason instanceof stdClass ? self::text($reason->code ?? null) : null,
+                $reason instanceof stdClass ? self::text($reason->description ?? null) : null,
+            );
+        }
+
+        return $records;
+    }
+
+    /**
      * The ids of the chargebacks that still stand.
      *
      * @param  iterable<mixed>  $chargebacks
@@ -134,5 +182,25 @@ final readonly class MollieChargebackEvents
 
             yield [$chargeback, $amount];
         }
+    }
+
+    /** A time Mollie wrote in ISO-8601, or null where it wrote none or one that does not parse. */
+    private static function time(?string $value): ?CarbonImmutable
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($value);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /** A non-empty string Mollie wrote, or null. */
+    private static function text(mixed $value): ?string
+    {
+        return is_string($value) && $value !== '' ? $value : null;
     }
 }

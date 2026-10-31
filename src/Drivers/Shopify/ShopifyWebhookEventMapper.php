@@ -16,6 +16,7 @@ use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\Models\ShopifyPurchase;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\Money;
+use Throwable;
 
 /**
  * Translates Shopify's billing webhooks into the package's neutral events.
@@ -88,8 +89,9 @@ final readonly class ShopifyWebhookEventMapper implements DerivesDeliveryKey, We
             return $event instanceof SubscriptionStateChanged ? [$event] : [];
         }
 
-        $purchase = $this->id($this->resource($request, 'app_purchase_one_time'));
-        $event = $purchase === null ? null : $this->purchased($purchase);
+        $resource = $this->resource($request, 'app_purchase_one_time');
+        $purchase = $this->id($resource);
+        $event = $purchase === null ? null : $this->purchased($purchase, $this->momentOf($resource['updated_at'] ?? null));
 
         return $event instanceof AddonPurchased ? [$event] : [];
     }
@@ -149,8 +151,11 @@ final readonly class ShopifyWebhookEventMapper implements DerivesDeliveryKey, We
         return ShopifySubscriptionState::event($shop, $id, $node, $record, CarbonImmutable::now());
     }
 
-    /** The purchase as the add-on purchase every driver reports, once Shopify reports it active. */
-    private function purchased(string $id): ?AddonPurchased
+    /**
+     * The purchase as the add-on purchase every driver reports, once Shopify reports it active, dated by the moment the
+     * delivery says it last changed.
+     */
+    private function purchased(string $id, ?int $occurredAt): ?AddonPurchased
     {
         $purchase = ShopifyPurchase::model()::query()->where('purchase_id', $id)->first();
         $owner = $purchase instanceof ShopifyPurchase ? ShopifySubscriptionRecord::ownerOf($purchase->owner_type, $purchase->owner_id) : null;
@@ -175,7 +180,22 @@ final readonly class ShopifyWebhookEventMapper implements DerivesDeliveryKey, We
             declarationReference: $purchase->declaration_reference,
             provider: 'shopify',
             callerReference: $purchase->caller_reference,
+            occurredAt: $occurredAt,
         );
+    }
+
+    /** A moment Shopify states as an ISO 8601 string, in Unix seconds, or null where it states none it can read. */
+    private function momentOf(mixed $value): ?int
+    {
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($value)->getTimestamp();
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**

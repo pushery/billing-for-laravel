@@ -8,6 +8,7 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
 use Pushery\Billing\Catalogs\ConfigAddonCatalog;
@@ -18,6 +19,7 @@ use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\TierCatalog;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SwapTiming;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BuyerAudiences;
@@ -68,6 +70,12 @@ final class ManageSubscription extends AccountScreen
      */
     public string $couponCode = '';
 
+    /**
+     * The billing period the owner chose, as the value of a BillingInterval. The client sets it, so it is held against
+     * the intervals the offered tiers are sold at wherever it is read, and a value outside them reads as no choice.
+     */
+    public string $interval = '';
+
     protected function headingKey(): string
     {
         return 'billing::account.manage.heading';
@@ -83,6 +91,7 @@ final class ManageSubscription extends AccountScreen
         $current = $tiers->find($key) ?? new TierIdentity(key: $key, label: $tiers->label($key));
 
         $plans = $this->offeredPlans($current);
+        $selected = $this->selectedInterval();
 
         $trialPolicy = Container::getInstance()->make(TrialPolicy::class);
 
@@ -123,12 +132,14 @@ final class ManageSubscription extends AccountScreen
             'cardOnFile' => $this->cardOnFile(),
             // The purchasable one-time add-ons (top-ups), rendered in the #addons section the usage screen links to.
             'addons' => $this->addonOptions(),
+            // The billing periods to choose from, where an offered tier is sold at more than one.
+            'intervals' => $this->intervalChoices($selected),
             'options' => array_map(static fn (Plan $plan): array => [
                 'key' => $plan->key,
                 'label' => CatalogLabel::translate($tiers->label($plan->key)),
                 'price' => LocalizedMoney::format($plan->amount),
                 'interval' => $plan->interval->value,
-            ], $plans),
+            ], $this->atTheChosenInterval($plans, $current)),
         ]);
     }
 
@@ -228,7 +239,7 @@ final class ManageSubscription extends AccountScreen
         // `BindingResolutionException`. This contract is what every driver answers, each in its own shape.
         $this->spendProviderCall();
 
-        $start = Container::getInstance()->make(StartsSubscriptions::class)->start($this->owner(), $tierKey, $coupon, $declarationReference);
+        $start = Container::getInstance()->make(StartsSubscriptions::class)->start($this->owner(), $tierKey, $coupon, $declarationReference, $this->intervalFor($tierKey));
         $url = SafeExternalUrl::orNull($start->checkoutUrl);
 
         if ($url !== null) {
@@ -330,7 +341,7 @@ final class ManageSubscription extends AccountScreen
         // and a day of its own, {@see ProviderCallBudget::spend()} for why a minute does not bound a month.
         $this->spendProviderCall('swap-preview', [60 => 10, 3600 => 60, 86400 => 240]);
 
-        $plan = Container::getInstance()->make(PlanCatalog::class)->planFor($tierKey);
+        $plan = Container::getInstance()->make(PlanCatalog::class)->planFor($tierKey, $this->intervalFor($tierKey));
 
         $amount = $plan instanceof Plan
             ? Container::getInstance()->make(ProrationStrategy::class)->previewSwap($this->owner(), $plan)
@@ -360,8 +371,9 @@ final class ManageSubscription extends AccountScreen
         $this->spendProviderCall('swap', [60 => 5]);
 
         $subscription = $this->subscription();
+        $interval = $this->intervalFor($tierKey);
         $timing = $subscription instanceof Subscription
-            ? Container::getInstance()->make(PlanSwapPlanner::class)->timingFor($this->currentTierKey(), $tierKey)
+            ? Container::getInstance()->make(PlanSwapPlanner::class)->timingFor($this->currentTierKey(), $tierKey, $this->currentInterval(), $interval)
             : SwapTiming::Immediate;
 
         // A move to the same tier is a no-op the planner reports as null — don't call the provider or
@@ -386,8 +398,8 @@ final class ManageSubscription extends AccountScreen
         // releases behind the pin, which DevToolPinsTest now reports rather than leaving to be found
         // by a red integration run.
         if ($timing === SwapTiming::PeriodEnd) {
-            $subscription->scheduleSwap($tierKey, $subscription->current_period_end ?? Carbon::now()->utc());
-            $this->audit('subscription.swap_scheduled', ['tier' => $tierKey]);
+            $subscription->scheduleSwap($tierKey, $subscription->current_period_end ?? Carbon::now()->utc(), $interval);
+            $this->audit('subscription.swap_scheduled', ['tier' => $tierKey, 'interval' => $interval?->value]);
         } else {
             // The screen books no proration of its own. `SubscriptionActions::swap()` prorates unless told
             // otherwise: the local driver through the bound strategy, priced against the tier being left before
@@ -395,14 +407,14 @@ final class ManageSubscription extends AccountScreen
             //
             // Wrapped so a swap that fails leaves nothing behind, neither the proration the driver booked nor
             // the pending downgrade the upgrade would have superseded.
-            DB::transaction(function () use ($tierKey, $subscription): void {
-                Container::getInstance()->make(SubscriptionActions::class)->swap($this->owner(), $tierKey);
+            DB::transaction(function () use ($tierKey, $subscription, $interval): void {
+                Container::getInstance()->make(SubscriptionActions::class)->swap($this->owner(), $tierKey, interval: $interval);
 
                 // An immediate upgrade supersedes any pending downgrade — the customer just chose to move up now.
                 $subscription?->cancelScheduledSwap();
             });
 
-            $this->audit('subscription.swapped', ['tier' => $tierKey]);
+            $this->audit('subscription.swapped', ['tier' => $tierKey, 'interval' => $interval?->value]);
         }
 
         $this->previewTierKey = null;
@@ -424,6 +436,117 @@ final class ManageSubscription extends AccountScreen
             Container::getInstance()->make(PlanCatalog::class)->options($current),
             static fn (Plan $plan): bool => $audiences->mayBuyTier($owner, $plan->key),
         ));
+    }
+
+    /**
+     * The interval the owner chose, while an offered tier or the tier they hold is sold at it, or null.
+     */
+    private function selectedInterval(): ?BillingInterval
+    {
+        $chosen = BillingInterval::tryFrom($this->interval);
+
+        return $chosen instanceof BillingInterval && in_array($chosen, $this->intervalsOffered(), true) ? $chosen : null;
+    }
+
+    /**
+     * The intervals the offered tiers and the tier the owner holds are sold at, in the order the catalog names them.
+     *
+     * @return list<BillingInterval>
+     */
+    private function intervalsOffered(): array
+    {
+        $plans = Container::getInstance()->make(PlanCatalog::class);
+        $tiers = Container::getInstance()->make(TierCatalog::class);
+        $key = $this->currentTierKey();
+        $current = $tiers->find($key) ?? new TierIdentity(key: $key, label: $tiers->label($key));
+        $intervals = [];
+
+        foreach ([$key, ...array_map(static fn (Plan $plan): string => $plan->key, $this->offeredPlans($current))] as $tierKey) {
+            foreach ($plans->intervalsFor($tierKey) as $interval) {
+                if ($plans->planFor($tierKey, $interval) instanceof Plan && ! in_array($interval, $intervals, true)) {
+                    $intervals[] = $interval;
+                }
+            }
+        }
+
+        return $intervals;
+    }
+
+    /**
+     * The billing periods the screen offers to choose from, or none where no tier is sold at more than one.
+     *
+     * @return list<array{value: string, label: string, selected: bool}>
+     */
+    private function intervalChoices(?BillingInterval $selected): array
+    {
+        $intervals = $this->intervalsOffered();
+
+        if (count($intervals) < 2) {
+            return [];
+        }
+
+        $shown = $selected ?? $this->currentInterval() ?? $intervals[0];
+
+        return array_map(fn (BillingInterval $interval): array => [
+            'value' => $interval->value,
+            'label' => Str::ucfirst($this->intervalLabel($interval)),
+            'selected' => $interval === $shown,
+        ], $intervals);
+    }
+
+    /**
+     * The chosen interval for a tier where the tier is sold at it, or null, which sells the tier at its own interval and
+     * keeps a subscriber's where the driver can.
+     */
+    private function intervalFor(string $tierKey): ?BillingInterval
+    {
+        $selected = $this->selectedInterval();
+
+        return $selected instanceof BillingInterval && in_array($selected, Container::getInstance()->make(PlanCatalog::class)->intervalsFor($tierKey), true)
+            ? $selected
+            : null;
+    }
+
+    /** An interval as the plan list names it, `month` or `year` in the session's language. */
+    private function intervalLabel(BillingInterval $interval): string
+    {
+        $label = Lang::get('billing::account.interval.'.$interval->value);
+
+        return is_string($label) ? $label : $interval->value;
+    }
+
+    /** The interval the owner's subscription is billed at: the one its row keeps, else its tier's own. */
+    private function currentInterval(): ?BillingInterval
+    {
+        return $this->subscription()->billing_interval ?? Container::getInstance()->make(PlanCatalog::class)->planFor($this->currentTierKey())?->interval;
+    }
+
+    /**
+     * The offered plans at the chosen interval, each tier at its own where it is not sold at the chosen one, and the
+     * tier the owner holds at the chosen interval where that is a change of the billing period alone.
+     *
+     * @param  list<Plan>  $plans
+     * @return list<Plan>
+     */
+    private function atTheChosenInterval(array $plans, TierIdentity $current): array
+    {
+        $catalog = Container::getInstance()->make(PlanCatalog::class);
+        $out = [];
+        $selected = $this->selectedInterval();
+
+        if ($selected instanceof BillingInterval && $this->hasLiveSubscription() && $selected !== $this->currentInterval()) {
+            $own = $catalog->planFor($current->key, $selected);
+
+            if ($own instanceof Plan) {
+                $out[] = $own;
+            }
+        }
+
+        foreach ($plans as $plan) {
+            $out[] = $catalog->planFor($plan->key, $this->intervalFor($plan->key)) ?? $plan;
+        }
+
+        return $out;
     }
 
     /**
@@ -469,9 +592,12 @@ final class ManageSubscription extends AccountScreen
         }
 
         $tierKey = $subscription->scheduled_tier_key ?? '';
+        $label = CatalogLabel::translate(Container::getInstance()->make(TierCatalog::class)->label($tierKey));
+        $interval = $subscription->scheduled_billing_interval;
 
         return [
-            'tierLabel' => CatalogLabel::translate(Container::getInstance()->make(TierCatalog::class)->label($tierKey)),
+            // The billing period beside the tier where the change moves the subscription to another one.
+            'tierLabel' => $interval instanceof BillingInterval ? $label.' / '.$this->intervalLabel($interval) : $label,
             'date' => (string) LocalizedDate::long($subscription->scheduled_swap_at ?? Carbon::now()),
         ];
     }

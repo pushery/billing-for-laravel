@@ -22,10 +22,25 @@
                 @endif
             </p>
 
-            <button type="button" wire:click="updatePaymentMethod" wire:loading.attr="disabled"
-                class="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50">
-                {{ __('billing::account.recovery.update') }}
-            </button>
+            <div class="mt-4 flex flex-wrap gap-2">
+                <button type="button" wire:click="updatePaymentMethod" wire:loading.attr="disabled"
+                    class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50">
+                    {{ __('billing::account.recovery.update') }}
+                </button>
+
+                @if ($canPayNow)
+                    <button type="button" wire:click="payOutstanding" wire:loading.attr="disabled" wire:target="payOutstanding"
+                        class="rounded-lg border border-red-600 px-4 py-2 text-sm font-medium text-red-800 hover:bg-red-100 disabled:opacity-50 dark:text-red-200 dark:hover:bg-red-900/40">
+                        {{ __('billing::account.recovery.pay_now') }}
+                    </button>
+                @endif
+            </div>
+
+            @if ($outcome !== null)
+                <p role="status" class="mt-3 text-sm font-medium text-red-800 dark:text-red-200">
+                    {{ __('billing::account.recovery.outcome.'.$outcome->value) }}
+                </p>
+            @endif
         </section>
     @elseif ($needsConfirmation)
         <section class="rounded-xl border border-amber-200 bg-amber-50 p-6 dark:border-amber-900/50 dark:bg-amber-950/30">

@@ -38,6 +38,7 @@ return [
         'swap_to' => 'Wechseln',
         'scheduled_swap' => 'Wechselt am :date zu :plan.',
         'scheduled_swap_cancel' => 'Geplanten Wechsel abbrechen',
+        'billing_period' => 'Abrechnungszeitraum',
         'subscribe' => 'Abonnieren',
         'trial_days' => 'Inklusive :days Tage kostenlos testen.',
         'preview' => 'Kosten vorschauen',
@@ -184,6 +185,14 @@ return [
         'incomplete' => 'Deine Zahlung muss bestätigt werden, bevor dein Abo startet.',
         'incomplete_hint' => 'Deine Bank hat dich um Bestätigung dieser Zahlung gebeten. Bestätige sie, um dein Abo zu aktivieren.',
         'confirm' => 'Zahlung bestätigen',
+        'pay_now' => 'Jetzt bezahlen',
+        'outcome' => [
+            'paid' => 'Zahlung erhalten. Dein Abo ist wieder aktiv, sobald der Anbieter sie bestätigt.',
+            'pending' => 'Deine Zahlung ist unterwegs. Dein Abo ist wieder aktiv, sobald sie eingegangen ist.',
+            'declined' => 'Deine Bank hat die Zahlung abgelehnt. Aktualisiere deine Zahlungsmethode und versuche es erneut.',
+            'needs_confirmation' => 'Deine Bank möchte, dass du diese Zahlung bestätigst. Versuche es gleich noch einmal.',
+            'nothing_owed' => 'Gerade gibt es nichts zu bezahlen.',
+        ],
     ],
 
     'reconfirm' => [

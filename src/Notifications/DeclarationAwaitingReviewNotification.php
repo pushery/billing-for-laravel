@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\URL;
 use Override;
+use Pushery\Billing\Consumer\DeclarationFailure;
 use Pushery\Billing\Consumer\DeclarationStatement;
 use Pushery\Billing\Models\CancellationDeclaration;
 use Pushery\Billing\Models\WithdrawalDeclaration;
@@ -113,7 +114,7 @@ final class DeclarationAwaitingReviewNotification extends BillingNotification
     private function reason(CancellationDeclaration|WithdrawalDeclaration $declaration): string
     {
         return match (true) {
-            $declaration->failure !== null => Lang::get('billing::notifications.declaration_awaiting_review.reason_failure', ['failure' => $declaration->failure]),
+            $declaration->failure !== null => Lang::get('billing::notifications.declaration_awaiting_review.reason_failure', ['failure' => DeclarationFailure::sentence($declaration->failure)]),
             $declaration->owner_type === null => Lang::get('billing::notifications.declaration_awaiting_review.reason_signed_out'),
             $declaration->subscription_id === null => Lang::get('billing::notifications.declaration_awaiting_review.reason_unmatched'),
             default => Lang::get('billing::notifications.declaration_awaiting_review.reason_judgment'),

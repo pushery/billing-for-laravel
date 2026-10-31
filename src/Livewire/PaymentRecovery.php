@@ -6,7 +6,10 @@ namespace Pushery\Billing\Livewire;
 
 use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
+use Livewire\Attributes\Locked;
 use Pushery\Billing\Contracts\PaymentMethods;
+use Pushery\Billing\Contracts\PaysOutstandingInvoices;
+use Pushery\Billing\Enums\OutstandingPaymentOutcome;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Livewire\Concerns\DegradesGracefully;
 use Pushery\Billing\Livewire\Concerns\PollsWhileActivating;
@@ -17,7 +20,8 @@ use Pushery\Billing\ValueObjects\PaymentMethod;
 
 /**
  * The account-hub payment-recovery screen. When a payment has failed (a subscription is past due) it
- * guides the owner to fix their payment method so the provider can retry; otherwise it simply reports
+ * guides the owner to fix their payment method so the provider can retry, and where the driver pays an open
+ * invoice on request it offers to pay it at once with the method on file; otherwise it simply reports
  * that nothing needs recovering. Fixing the method redirects to the same hosted card page the
  * payment-methods screen uses.
  *
@@ -32,6 +36,10 @@ final class PaymentRecovery extends AccountScreen
     use DegradesGracefully;
     use PollsWhileActivating;
 
+    /** How the payment the owner asked for last ended, for the line the screen shows under its buttons. */
+    #[Locked]
+    public ?string $paymentOutcome = null;
+
     protected function headingKey(): string
     {
         return 'billing::account.recovery.heading';
@@ -43,6 +51,8 @@ final class PaymentRecovery extends AccountScreen
         $pastDue = in_array(SubscriptionState::PastDue, $states, true);
         $incomplete = in_array(SubscriptionState::Incomplete, $states, true);
         $recovering = $pastDue || $incomplete;
+        // Reading the method on file is a provider read; degrade to a notice rather than 500 the screen.
+        $default = $this->orDegrade($this->defaultMethod(...));
 
         return $this->view('billing::livewire.payment-recovery', [
             'needsRecovery' => $pastDue,
@@ -55,8 +65,15 @@ final class PaymentRecovery extends AccountScreen
             // confirm it (3-D Secure), not a new card. The banner already prompts "confirm payment";
             // without this branch the recovery screen answered "all good" to the same owner.
             'needsConfirmation' => $incomplete,
-            // Reading the method on file is a provider read; degrade to a notice rather than 500 the screen.
-            'default' => $this->orDegrade($this->defaultMethod(...)),
+            'default' => $default,
+            // The open invoice of the managed subscription can be paid at once where the driver offers it and a
+            // method is on file. A merchant's contract waits for the provider's retry, which the card added here
+            // serves as well.
+            'canPayNow' => $states[0] === SubscriptionState::PastDue && $default instanceof PaymentMethod
+                && Container::getInstance()->bound(PaysOutstandingInvoices::class),
+            // Not under the property's name: Livewire hands every public property to the view after this array,
+            // and the stored string would replace the outcome it names.
+            'outcome' => OutstandingPaymentOutcome::tryFrom((string) $this->paymentOutcome),
         ]);
     }
 
@@ -83,6 +100,34 @@ final class PaymentRecovery extends AccountScreen
         if ($url !== null) {
             $this->redirect($url);
         }
+    }
+
+    /**
+     * Pay the open invoice of the owner's subscription now, with the method on file, instead of waiting for the
+     * provider's retry. An owner whose bank asks for 3-D Secure is sent to the provider's page to confirm it.
+     */
+    public function payOutstanding(): void
+    {
+        $this->ensureEligible();
+
+        $container = Container::getInstance();
+
+        if (! $container->bound(PaysOutstandingInvoices::class)) {
+            return;
+        }
+
+        $this->spendProviderCall();
+
+        $payment = $container->make(PaysOutstandingInvoices::class)->payOutstanding($this->owner());
+        $url = SafeExternalUrl::orNull($payment->confirmationUrl);
+
+        if ($payment->outcome === OutstandingPaymentOutcome::NeedsConfirmation && $url !== null) {
+            $this->redirect($url);
+
+            return;
+        }
+
+        $this->paymentOutcome = $payment->outcome->value;
     }
 
     /**

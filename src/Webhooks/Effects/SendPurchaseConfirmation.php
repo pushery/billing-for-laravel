@@ -63,7 +63,7 @@ final readonly class SendPurchaseConfirmation implements DedupesOnReference
         Notification::send($owner, new ContractConfirmationNotification(new ContractConfirmation(
             view: trim($view),
             kind: ContractKind::Purchase,
-            startedAt: OwnersZone::of($owner, CarbonImmutable::now()),
+            startedAt: OwnersZone::of($owner, $event->occurredAt === null ? CarbonImmutable::now() : CarbonImmutable::createFromTimestamp($event->occurredAt)),
             productKey: $event->addonKey,
             productLabel: $this->addons->label($event->addonKey),
             price: $event->amount,

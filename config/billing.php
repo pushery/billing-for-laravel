@@ -80,6 +80,25 @@ return [
         // Stripe.js, PayPal, Klarna), for a charge confirmed on-session. Null rules such methods out, so
         // only a payment that stays on the page confirms there.
         'return_url' => env('BILLING_STRIPE_RETURN_URL'),
+
+        // How the client of a Stripe payment account talks to Stripe: seconds until a request gives up and
+        // seconds until a connection gives up (null keeps the SDK's 80 and 30), and how often a request that
+        // failed on the network is sent again (null keeps the SDK's own setting, which ships at none). Inside a
+        // web request the `request` set applies, so a caller waiting on Stripe hears at once that it cannot
+        // answer; queue workers, the scheduler and Artisan take the `background` set. An application that gave
+        // the Stripe SDK an HTTP client of another kind keeps it, with its own timeouts.
+        'account_http' => [
+            'request' => [
+                'timeout' => is_numeric($stripeRequestTimeout = env('BILLING_STRIPE_ACCOUNT_REQUEST_TIMEOUT')) && (int) $stripeRequestTimeout >= 1 ? (int) $stripeRequestTimeout : 10,
+                'connect_timeout' => is_numeric($stripeRequestConnectTimeout = env('BILLING_STRIPE_ACCOUNT_REQUEST_CONNECT_TIMEOUT')) && (int) $stripeRequestConnectTimeout >= 1 ? (int) $stripeRequestConnectTimeout : 3,
+                'retries' => is_numeric($stripeRequestRetries = env('BILLING_STRIPE_ACCOUNT_REQUEST_RETRIES')) && (int) $stripeRequestRetries >= 0 ? (int) $stripeRequestRetries : 0,
+            ],
+            'background' => [
+                'timeout' => is_numeric($stripeBackgroundTimeout = env('BILLING_STRIPE_ACCOUNT_BACKGROUND_TIMEOUT')) && (int) $stripeBackgroundTimeout >= 1 ? (int) $stripeBackgroundTimeout : null,
+                'connect_timeout' => is_numeric($stripeBackgroundConnectTimeout = env('BILLING_STRIPE_ACCOUNT_BACKGROUND_CONNECT_TIMEOUT')) && (int) $stripeBackgroundConnectTimeout >= 1 ? (int) $stripeBackgroundConnectTimeout : null,
+                'retries' => is_numeric($stripeBackgroundRetries = env('BILLING_STRIPE_ACCOUNT_BACKGROUND_RETRIES')) && (int) $stripeBackgroundRetries >= 0 ? (int) $stripeBackgroundRetries : null,
+            ],
+        ],
         // The customer-portal configuration every portal session opens with, a `bpc_...` id from the
         // Stripe dashboard. Null opens the account's default configuration, and what that allows,
         // canceling a subscription included, is decided in the dashboard alone.
@@ -231,11 +250,17 @@ return [
     | 'throttle:billing-webhooks' with a limiter of its own. Stripe and Mollie
     | answer a 429 by sending the delivery again later.
     |
+    | webhook_domain is the host all three webhook routes answer on, for an
+    | application whose machines call it on a host of its own, such as
+    | 'api.example.test'. Left empty they answer on every host.
+    |
     */
 
     'webhook_path' => env('BILLING_WEBHOOK_PATH', 'billing/webhook'),
 
     'webhook_middleware' => [],
+
+    'webhook_domain' => env('BILLING_WEBHOOK_DOMAIN'),
 
     /*
     |--------------------------------------------------------------------------
@@ -574,6 +599,19 @@ return [
     |     'price_display' => ['amount' => 1900, 'currency' => 'EUR'],
     |     'interval' => 'month',
     |     'dimensions' => ['requests'],
+    | ],
+    |
+    | A tier may be sold at more than one interval under its one key. Each entry
+    | under `intervals`, keyed by another interval, sells the same tier at that
+    | one, with the same entitlements:
+    |
+    | 'pro' => [
+    |     'provider_price' => env('BILLING_PRICE_PRO'),        // monthly
+    |     'price_display' => ['amount' => 1900, 'currency' => 'EUR'],
+    |     'intervals' => ['year' => [
+    |         'provider_price' => env('BILLING_PRICE_PRO_YEARLY'),
+    |         'price_display' => ['amount' => 19000, 'currency' => 'EUR'],
+    |     ]],
     | ],
     |
     | Rotating a price in the provider does not strand your existing subscribers:

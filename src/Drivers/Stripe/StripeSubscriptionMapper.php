@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers\Stripe;
 use Illuminate\Container\Container;
 use Pushery\Billing\Catalogs\TierPriceIndex;
 use Pushery\Billing\Catalogs\TierPriceIndexFactory;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -68,6 +69,7 @@ final readonly class StripeSubscriptionMapper
             subscriptionType: $this->subscriptionType($subscription),
             callerReference: $this->callerReference($subscription),
             endsAt: $this->endsAt($subscription),
+            interval: $this->interval($tierItem, $index),
         );
     }
 
@@ -164,6 +166,18 @@ final readonly class StripeSubscriptionMapper
         }
 
         return $this->int($subscription, $key);
+    }
+
+    /**
+     * The interval the tier item's price sells its tier at, or null where the catalog names none.
+     *
+     * @param  ?array<array-key, mixed>  $tierItem
+     */
+    private function interval(?array $tierItem, TierPriceIndex $index): ?BillingInterval
+    {
+        $price = $tierItem['price'] ?? null;
+
+        return is_array($price) ? $index->intervalForPrice($this->string($price, 'id')) : null;
     }
 
     /**

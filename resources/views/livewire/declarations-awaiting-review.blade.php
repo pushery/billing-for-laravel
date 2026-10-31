@@ -38,7 +38,7 @@
                 </dl>
 
                 @if ($declaration->failure !== null)
-                    <p class="text-sm text-amber-900 dark:text-amber-200">{{ __('billing::admin.declarations.failure', ['failure' => $declaration->failure]) }}</p>
+                    <p class="text-sm text-amber-900 dark:text-amber-200">{{ __('billing::admin.declarations.failure', ['failure' => \Pushery\Billing\Consumer\DeclarationFailure::sentence($declaration->failure)]) }}</p>
                 @endif
 
                 {{-- One row from `sm` up, every control 40px tall, as the console's forms are. --}}
@@ -49,15 +49,15 @@
                             <input class="sm:h-10 mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-base shadow-sm focus:border-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-900 sm:text-sm dark:border-gray-700 dark:bg-gray-900 dark:focus:ring-gray-100"
                                 type="date" id="declaration-ends-{{ $declaration->id }}" wire:model="endsOn.{{ $declaration->id }}">
                         </div>
-                        <button type="submit"
-                            class="rounded-lg sm:h-10 bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 dark:focus:ring-gray-100 dark:focus:ring-offset-gray-950">
+                        <button type="submit" wire:loading.attr="disabled" wire:target="resolveCancellation({{ $declaration->id }})"
+                            class="rounded-lg sm:h-10 bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 dark:focus:ring-gray-100 dark:focus:ring-offset-gray-950">
                             {{ __('billing::admin.declarations.resolve') }}
                         </button>
                     </form>
                 @else
                     <form wire:submit="resolveWithdrawal({{ $declaration->id }})">
-                        <button type="submit"
-                            class="rounded-lg sm:h-10 bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 dark:focus:ring-gray-100 dark:focus:ring-offset-gray-950">
+                        <button type="submit" wire:loading.attr="disabled" wire:target="resolveWithdrawal({{ $declaration->id }})"
+                            class="rounded-lg sm:h-10 bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 disabled:opacity-50 dark:bg-white dark:text-gray-900 dark:hover:bg-gray-200 dark:focus:ring-gray-100 dark:focus:ring-offset-gray-950">
                             {{ __('billing::admin.declarations.resolve') }}
                         </button>
                     </form>

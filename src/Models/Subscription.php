@@ -34,7 +34,9 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * @property ?string $provider_id
  * @property string $status
  * @property ?string $tier_key
+ * @property ?BillingInterval $billing_interval
  * @property ?string $scheduled_tier_key
+ * @property ?BillingInterval $scheduled_billing_interval
  * @property ?Carbon $scheduled_swap_at
  * @property ?Carbon $trial_ends_at
  * @property ?Carbon $ends_at
@@ -68,8 +70,8 @@ class Subscription extends Model
 
     /** @var list<string> */
     protected $fillable = [
-        'owner_type', 'owner_id', 'type', 'provider', 'provider_id', 'status', 'tier_key',
-        'scheduled_tier_key', 'scheduled_swap_at',
+        'owner_type', 'owner_id', 'type', 'provider', 'provider_id', 'status', 'tier_key', 'billing_interval',
+        'scheduled_tier_key', 'scheduled_billing_interval', 'scheduled_swap_at',
         'trial_ends_at', 'ends_at', 'terminated_at', 'delinquent_since', 'dunning_level', 'payment_reminded_on', 'synced_event_at',
         'current_period_start', 'current_period_end', 'scheduled_processing_at',
         'merchant_uid', 'merchant_type', 'merchant_id', 'declaration_reference', 'started_at',
@@ -121,6 +123,9 @@ class Subscription extends Model
         'seat_days_accrued' => 'integer',
         'tier_adjustment_accrued' => 'integer',
         'collection_timing' => CollectionTiming::class,
+        // The interval the subscription's price sells its tier at; null reads the tier's default interval.
+        'billing_interval' => BillingInterval::class,
+        'scheduled_billing_interval' => BillingInterval::class,
         'paused_at' => UtcDateTime::class,
     ];
 
@@ -257,15 +262,16 @@ class Subscription extends Model
     }
 
     /**
-     * Record a plan change to take effect later, replacing any earlier pending one.
+     * Record a plan change to take effect later, replacing any earlier pending one, with the interval it moves the
+     * subscription to where that differs from the one it is billed at.
      *
      * Overwriting rather than stacking is deliberate: two pending downgrades make no sense — the customer's
      * latest choice is the one that should land — and keeping only the newest means the effective date is
      * always the one the customer last saw on the screen.
      */
-    public function scheduleSwap(string $tierKey, CarbonInterface $at): void
+    public function scheduleSwap(string $tierKey, CarbonInterface $at, ?BillingInterval $interval = null): void
     {
-        $this->update(['scheduled_tier_key' => $tierKey, 'scheduled_swap_at' => $at]);
+        $this->update(['scheduled_tier_key' => $tierKey, 'scheduled_billing_interval' => $interval, 'scheduled_swap_at' => $at]);
     }
 
     /** Drop a pending plan change — the customer canceled it, or a new upgrade took effect immediately. */
@@ -274,11 +280,11 @@ class Subscription extends Model
         // Cleared when either column is set, not only when the tier is: a malformed row (a date with no
         // tier) must also be clearable, or the runner would re-select it by date on every pass and never
         // shake it loose. A row with both already null needs no write.
-        if ($this->scheduled_tier_key === null && $this->scheduled_swap_at === null) {
+        if ($this->scheduled_tier_key === null && $this->scheduled_swap_at === null && $this->scheduled_billing_interval === null) {
             return;
         }
 
-        $this->update(['scheduled_tier_key' => null, 'scheduled_swap_at' => null]);
+        $this->update(['scheduled_tier_key' => null, 'scheduled_billing_interval' => null, 'scheduled_swap_at' => null]);
     }
 
     /**
@@ -551,6 +557,30 @@ class Subscription extends Model
             // So does the tier: every day of the new period is at the tier in force now.
             'tier_adjustment_accrued' => 0,
         ];
+    }
+
+    /**
+     * The interval the current period was cut to, read from its two ends, or null where no interval reaches from
+     * the one to the other.
+     *
+     * Every period is cut by {@see BillingInterval::advance()} from its start, under the anchor the cycles are
+     * counted from, so exactly one interval lands on its end. A period set some other way reaches none.
+     */
+    public function periodInterval(): ?BillingInterval
+    {
+        $start = $this->current_period_start;
+        $end = $this->current_period_end;
+
+        if (! $start instanceof CarbonInterface || ! $end instanceof CarbonInterface) {
+            return null;
+        }
+
+        $anchor = $this->cycleAnchor();
+
+        return array_find(
+            BillingInterval::cases(),
+            static fn (BillingInterval $interval): bool => $interval->advance($start, $anchor)->equalTo($end),
+        );
     }
 
     /**

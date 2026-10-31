@@ -407,6 +407,8 @@ final readonly class SyncPlanFromSubscription
             // Never overwrite a known tier with null: an event whose price maps to no tier tells us
             // nothing about the tier, so the last one we resolved still stands.
             'tier_key' => $event->tierKey ?? $subscription?->tier_key,
+            // The same rule for the interval: an event whose price names none leaves the one we know.
+            'billing_interval' => $event->interval ?? $subscription?->billing_interval,
             'delinquent_since' => $delinquentSince,
             // Always null, and that is not the same as "never terminated". A terminated row only reaches
             // this line when the event carries a different provider subscription — isRevival above dropped

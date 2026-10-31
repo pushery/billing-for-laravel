@@ -10,6 +10,7 @@ use DateTimeImmutable;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 use Pushery\Billing\Contracts\EnsuresProviderCustomer;
 use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
 use Pushery\Billing\Contracts\PlanCatalog;
@@ -18,6 +19,7 @@ use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Discounts\CouponCodes;
 use Pushery\Billing\Discounts\CouponRedeemer;
 use Pushery\Billing\Discounts\TrialCodes;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\CollectionTiming;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Exceptions\CouponUnavailable;
@@ -82,8 +84,13 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         private CouponRedeemer $coupons,
     ) {}
 
-    public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null): SubscriptionStart
+    public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?BillingInterval $interval = null): SubscriptionStart
     {
+        // The local engine bills a tier at its default interval; it keeps no interval on the subscription to bill another.
+        if ($interval instanceof BillingInterval && $interval !== $this->plans->planFor($tierKey)?->interval) {
+            throw new InvalidArgumentException("The local billing engine bills tier '{$tierKey}' at its default interval, not at {$interval->value}.");
+        }
+
         // The key has to be a key of the tier map, not a path into it. The catalog resolves
         // `billing.tiers.{$key}` through dot notation, so `pro.price_display` reaches a node that is an
         // array — and `find()` therefore says yes to a tier that does not exist. The subscription is then

@@ -30,6 +30,7 @@ use Pushery\Billing\Contracts\IdentifiesBusinessBuyers;
 use Pushery\Billing\Contracts\JurisdictionProfile;
 use Pushery\Billing\Contracts\MandateNotifier;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
+use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProductTaxonomy;
 use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\ReportingProfile;
@@ -40,11 +41,13 @@ use Pushery\Billing\Contracts\SuppliesProductArchetypes;
 use Pushery\Billing\Contracts\SuppliesTaxRates;
 use Pushery\Billing\Contracts\SuspensionNotifier;
 use Pushery\Billing\Contracts\TaxDisclosurePolicy;
+use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Contracts\TrialNotifier;
 use Pushery\Billing\Contracts\UsageNotifier;
 use Pushery\Billing\Drivers\Stripe\StripeMarketplaceWebhookEventMapper;
 use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
 use Pushery\Billing\Drivers\Stripe\StripeWebhookEventMapper;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\BuyerAudience;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Enums\TaxArchetype;
@@ -66,6 +69,7 @@ use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
 use Pushery\Billing\Preflight\Profiles\GermanSellerStanding;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\BillingSchema;
+use Pushery\Billing\Support\KeyedConfig;
 use Pushery\Billing\Support\NoBusinessBuyers;
 use Pushery\Billing\Support\PaymentsModeSchema;
 use Pushery\Billing\Support\TableLookup;
@@ -76,7 +80,11 @@ use Pushery\Billing\Tax\TaxCalculatorFactory;
 use Pushery\Billing\Tax\TaxRateMatrix;
 use Pushery\Billing\Tax\UnionMembership;
 use Pushery\Billing\ValueObjects\ContentReference;
+use Pushery\Billing\ValueObjects\Money;
+use Stripe\Exception\InvalidRequestException;
+use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
+use Stripe\StripeObject;
 use Throwable;
 
 /**
@@ -171,7 +179,7 @@ final class DoctorCommand extends Command
         ConsumerWithdrawalPolicy::class => GermanWithdrawalPolicy::class,
     ];
 
-    public function handle(Repository $config, StripeClient $stripe, AddonCatalog $addons, AddonContentMap $works, DistanceSaleThresholdMonitor $thresholds, UnmovedMerchantShares $unmoved, BillingManager $drivers, BuyerPartyResolver $buyers, WithdrawalGate $withdrawals, WithdrawalTypeResolver $types, IdentifiesBusinessBuyers $businesses, EInvoice $einvoice): int
+    public function handle(Repository $config, StripeClient $stripe, AddonCatalog $addons, AddonContentMap $works, DistanceSaleThresholdMonitor $thresholds, UnmovedMerchantShares $unmoved, BillingManager $drivers, BuyerPartyResolver $buyers, WithdrawalGate $withdrawals, WithdrawalTypeResolver $types, IdentifiesBusinessBuyers $businesses, EInvoice $einvoice, TierCatalog $tiers, PlanCatalog $plans): int
     {
         if (! (bool) $config->get('billing.enabled', true)) {
             $this->components->info('Billing is disabled; nothing to check.');
@@ -243,6 +251,8 @@ final class DoctorCommand extends Command
         }
 
         $failing = $this->reportHostKeyTypeMismatch() || $failing;
+
+        $failing = $this->reportPricesStripeChargesOtherwise($config, $stripe, $tiers, $plans, $addons, $withdrawals) || $failing;
 
         $pinned = $this->pinnedVersion($config);
 
@@ -1397,6 +1407,156 @@ final class DoctorCommand extends Command
         $source = $this->profiles->profile()?->key() ?? 'none';
 
         $this->components->info("The profile ({$source}) distance-sale threshold was last checked {$age} days ago.");
+    }
+
+    /**
+     * Whether a tier or an add-on shows a price other than the one Stripe charges.
+     *
+     * The checkout charges the Stripe price a `provider_price` names, while a price page and the contract
+     * confirmation show `price_display`, which the catalog allows to be absent or stale. Shown to a consumer, the
+     * price has to be the one charged: the total price before the order (§ 312j Abs. 2 BGB) and a confirmation
+     * that states the contract as it was made (§ 312f BGB). So every Stripe price the catalog names is read, and an
+     * amount or a currency that differs from `price_display` is an error, as is a tier whose interval differs from
+     * the one Stripe bills in. A missing `price_display` is a warning: the catalog allows it, and nothing wrong is
+     * shown. A price Stripe does not know is an error, because the checkout cannot charge it either; a price Stripe
+     * could not be asked about is a warning, as with the endpoints.
+     *
+     * Only a price with one unit amount is compared. A price in tiers or in fractions of a cent has no single
+     * amount to hold the display against, and is named instead. The unit amount is compared as it stands. Where
+     * Stripe adds the tax on top of it, a consumer pays more than that amount, and the price a consumer is shown
+     * has to include the tax; so an exclusive tax behavior is named while a consumer-rights profile is active and
+     * the offer is not sold only to businesses.
+     */
+    private function reportPricesStripeChargesOtherwise(Repository $config, StripeClient $stripe, TierCatalog $tiers, PlanCatalog $plans, AddonCatalog $addons, WithdrawalGate $withdrawals): bool
+    {
+        if ($config->get('billing.default', 'stripe') !== 'stripe') {
+            return false;
+        }
+
+        $failing = false;
+        $agreeing = 0;
+        // A profile that names no reading is reported as the failure it is by the check on works. The prices are
+        // compared all the same, without the note on a tax added on top, which only an active profile asks for.
+        try {
+            $consumers = $withdrawals->isEnforced();
+        } catch (InvalidBillingConfig) {
+            $consumers = false;
+        }
+
+        foreach (array_keys($tiers->all()) as $key) {
+            $toConsumers = $consumers && KeyedConfig::setting($config, 'billing.tiers', $key, 'buyers') !== BuyerAudience::Business->value;
+
+            // The tier at its default interval first, as before, then at each further interval it is sold at.
+            foreach ([null, ...array_slice($plans->intervalsFor($key), 1)] as $interval) {
+                $priceId = $plans->providerPriceFor($key, $interval);
+
+                if ($priceId === null) {
+                    continue;
+                }
+
+                $plan = $plans->planFor($key, $interval);
+                $subject = $interval instanceof BillingInterval ? "tier '{$key}' at {$interval->value}" : "tier '{$key}'";
+                $verdict = $this->stripePriceVerdict($stripe, $subject, $priceId, $plan?->amount, $plan?->interval, $toConsumers);
+                $failing = $verdict === 'differs' || $failing;
+                $agreeing += $verdict === 'agrees' ? 1 : 0;
+            }
+        }
+
+        foreach ($addons->all() as $key) {
+            $priceId = $addons->providerPriceFor($key);
+
+            if ($priceId === null) {
+                continue;
+            }
+
+            $toConsumers = $consumers && KeyedConfig::setting($config, 'billing.addons', $key, 'buyers') !== BuyerAudience::Business->value;
+            $verdict = $this->stripePriceVerdict($stripe, "add-on '{$key}'", $priceId, $addons->priceFor($key), null, $toConsumers);
+            $failing = $verdict === 'differs' || $failing;
+            $agreeing += $verdict === 'agrees' ? 1 : 0;
+        }
+
+        if ($agreeing > 0) {
+            $this->components->info("The displayed price of {$agreeing} tier(s) and add-on(s) is the price Stripe charges.");
+        }
+
+        return $failing;
+    }
+
+    /**
+     * What the Stripe price behind one tier or add-on says against the price it shows, printed as it is found.
+     *
+     * @return 'agrees'|'differs'|'unchecked'
+     */
+    private function stripePriceVerdict(StripeClient $stripe, string $subject, string $priceId, ?Money $shown, ?BillingInterval $interval, bool $toConsumers): string
+    {
+        try {
+            $price = $stripe->prices->retrieve($priceId);
+        } catch (RateLimitException $e) {
+            // The SDK makes a 429 a kind of InvalidRequestException, and it says nothing about the price.
+            $this->components->warn("Could not read the Stripe price {$priceId} of {$subject}: {$e->getMessage()}");
+
+            return 'unchecked';
+        } catch (InvalidRequestException $e) {
+            if ($e->getStripeCode() !== 'resource_missing') {
+                $this->components->warn("Could not read the Stripe price {$priceId} of {$subject}: {$e->getMessage()}");
+
+                return 'unchecked';
+            }
+
+            $this->components->error(ucfirst($subject)." names {$priceId}, which Stripe does not know, so the checkout cannot charge it.");
+
+            return 'differs';
+        } catch (Throwable $e) {
+            $this->components->warn("Could not read the Stripe price {$priceId} of {$subject}: {$e->getMessage()}");
+
+            return 'unchecked';
+        }
+
+        if (! is_int($price->unit_amount)) {
+            $this->components->warn("Stripe prices {$priceId} of {$subject} in tiers or in fractions of a cent, so its displayed price is not compared.");
+
+            return 'unchecked';
+        }
+
+        $charged = Money::of($price->unit_amount, strtoupper($price->currency));
+
+        if (! $shown instanceof Money) {
+            $this->components->warn(ucfirst($subject)." shows no price, and Stripe charges {$charged->format()} for {$priceId}.");
+
+            return 'unchecked';
+        }
+
+        if (! $shown->equals($charged)) {
+            $this->components->error(ucfirst($subject)." shows {$shown->format()}, and Stripe charges {$charged->format()} for {$priceId}.");
+
+            return 'differs';
+        }
+
+        if ($interval instanceof BillingInterval) {
+            $recurring = $price->recurring;
+
+            if (! $recurring instanceof StripeObject) {
+                $this->components->error(ucfirst($subject)." is shown as billed every {$interval->value}, and Stripe charges {$priceId} once.");
+
+                return 'differs';
+            }
+
+            $billed = $recurring->interval_count === 1 ? $recurring->interval : "{$recurring->interval_count} {$recurring->interval}s";
+
+            if ($billed !== $interval->value) {
+                $this->components->error(ucfirst($subject)." is shown as billed every {$interval->value}, and Stripe bills {$priceId} every {$billed}.");
+
+                return 'differs';
+            }
+        }
+
+        if ($toConsumers && $price->tax_behavior === 'exclusive') {
+            $this->components->warn("Stripe adds the tax on top of {$priceId}, so a consumer pays more than the {$shown->format()} {$subject} shows.");
+
+            return 'unchecked';
+        }
+
+        return 'agrees';
     }
 
     /** The version the package pins, honoring an app override, else the tested default. */

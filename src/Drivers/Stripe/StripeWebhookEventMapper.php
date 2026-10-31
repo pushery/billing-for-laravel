@@ -219,7 +219,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
                 ...$this->subscriptionCycleEvents($object),
             ],
             'checkout.session.completed',
-            'checkout.session.async_payment_succeeded' => $this->checkoutEvents($object),
+            'checkout.session.async_payment_succeeded' => $this->checkoutEvents($object, $this->int($payload, 'created')),
             // A hosted checkout the buyer never paid closes the routed sale written down when it opened.
             'checkout.session.expired' => $this->expiredCheckoutEvents($object),
             // What a tax authority's register said about a buyer's tax ID. The checkout checks only the format, and
@@ -758,7 +758,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
      * @param  array<array-key, mixed>  $object
      * @return list<BillingDomainEvent>
      */
-    private function checkoutEvents(array $object): array
+    private function checkoutEvents(array $object, ?int $occurredAt): array
     {
         if ($this->string($object, 'mode') === 'setup') {
             return $this->collectedMethodEvents($object);
@@ -872,6 +872,7 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             // A tax ID the buyer entered on the provider's page, which nothing asked before the session opened. A
             // sale classified as one to somebody who is not a business has to be able to see it was not.
             $this->sessionTaxId($object),
+            occurredAt: $occurredAt,
         ), new SaleCountryReported(
             $customer,
             $id,
