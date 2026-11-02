@@ -45,6 +45,15 @@ return [
         'preview_due' => 'A pagar hoy con prorrateo: :amount.',
         'preview_unavailable' => 'No hay estimación disponible para este cambio.',
         'no_options' => 'No hay otros planes disponibles.',
+        'annual_term' => [
+            'ends_monthly' => 'Tu año termina el :date. Después, tu suscripción continúa cada mes a :price y puedes cancelarla al final de cualquier mes.',
+            'ends_twelfth' => 'Tu año termina el :date. Después, tu suscripción continúa cada mes a la duodécima parte del precio de tu año y puedes cancelarla al final de cualquier mes.',
+            'booked' => 'Has contratado un año más, hasta el :date. Después, tu suscripción continúa cada mes y puedes cancelarla al final de cualquier mes.',
+            'further_year' => 'Contrato un año más de :plan por :price, del :from al :until.',
+            'further_year_action' => 'Contratar un año más',
+            'further_year_unconfirmed' => 'Marca la casilla para contratar un año más.',
+            'further_year_failed' => 'No se pudo contratar el año adicional. Inténtalo de nuevo más tarde.',
+        ],
         'link_out' => [
             'body' => 'La facturación de esta cuenta se gestiona en el sitio de nuestro socio de facturación.',
             'action' => 'Gestionar facturación',

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Pushery\Billing\Consumer\CustomerTypes;
 use Pushery\Billing\Discounts\CouponCodes;
 use Pushery\Billing\Discounts\CouponRedeemer;
 use Pushery\Billing\Discounts\TrialCodes;
@@ -207,6 +208,11 @@ final readonly class StartSubscriptionOnMandate
                 // The moment the subscription became real, and with it the day its withdrawal window opens. A reused
                 // row starts again here rather than keeping the start of the subscription that ended.
                 'started_at' => $now,
+                // Whether the customer buys as a consumer or as a business, frozen as the subscription begins, and the
+                // moment it began under terms that name the monthly price a year goes on at. A reused row is a new
+                // subscription, so both are taken anew.
+                'customer_type' => $owner instanceof Model ? Container::getInstance()->make(CustomerTypes::class)->of($owner) : null,
+                'monthly_terms_at' => $now,
                 'current_period_start' => $now,
                 'current_period_end' => $periodEnd,
                 'scheduled_processing_at' => $firstRun,

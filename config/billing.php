@@ -121,22 +121,6 @@ return [
     |
     */
 
-    // Adyen posts several NotificationRequestItems in one request and signs each of them
-    // separately, inside the body. There is no request-level signature, so these keys are what
-    // stands between the endpoint and anybody who can reach it.
-    'adyen' => [
-        // The HMAC key generated in the Adyen dashboard for this notification endpoint. Without
-        // it the verifier refuses everything: an endpoint that cannot check a signature must not
-        // be the one deciding a payment succeeded.
-        'hmac_key' => env('BILLING_ADYEN_HMAC_KEY'),
-
-        // Optional HTTP basic auth on the notification endpoint, on top of the HMAC. Left unset
-        // the check is skipped rather than failed -- the HMAC alone is Adyen's documented
-        // default, and requiring credentials unasked would refuse every install that follows it.
-        'notification_user' => env('BILLING_ADYEN_NOTIFICATION_USER'),
-        'notification_password' => env('BILLING_ADYEN_NOTIFICATION_PASSWORD'),
-    ],
-
     'mollie' => [
         'api_key' => env('BILLING_MOLLIE_API_KEY'),
 
@@ -2133,6 +2117,15 @@ return [
     // `required_signals` is how many must name a country before a sale can rest on them. The legal answer
     // depends on turnover — one below a threshold, two non-contradicting above it — so the package ships the
     // stricter setting: too much evidence costs a checkout question, too little costs a defensible position.
+    // Who the application sells to: `business_and_consumer` (the default) or `business_only`. It decides whether the
+    // consumer rules apply at all. With `business_only` every customer is treated as a business: the checkout asks
+    // no customer type, the consumer-rights regime below stays off whatever its profile says, and an annual
+    // subscription renews for another year. That holds where the application states the restriction clearly and has
+    // it confirmed at the order button, and `CustomerDeclarations` keeps that confirmation with its wording. With
+    // `business_and_consumer` each customer declares which they are, and one who declares nothing is a consumer.
+    // Any other value is refused with an `InvalidBillingConfig` at the first question it answers.
+    'audience' => env('BILLING_AUDIENCE', 'business_and_consumer'),
+
     // Consumer-withdrawal rights (a digital work's 14-day right and how it extinguishes). This is
     // consumer law, not tax law, and the two do not move together — an operator can run one country's VAT
     // and another's consumer regime — so it is its own profile and not tied to the marketplace switch: a

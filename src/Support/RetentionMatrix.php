@@ -31,6 +31,7 @@ final class RetentionMatrix
         // A declaration is dated by the moment it arrived, which is the fact it keeps.
         'billing_cancellation_declarations' => 'declared_at',
         'billing_withdrawal_declarations' => 'declared_at',
+        'billing_customer_declarations' => 'declared_at',
         // A seller's declaration supports every supply made while it stood, and the last of those can be no later than
         // the seller's erasure. Counted from the declaration it could go years before the records it supports.
         'billing_seller_declarations' => 'merchant_erased_at',

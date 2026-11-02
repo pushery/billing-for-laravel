@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Webhooks\Effects;
 
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Pushery\Billing\Consumer\CustomerTypes;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Contracts\MerchantScopedCustomerDirectory;
 use Pushery\Billing\Enums\AuditSource;
+use Pushery\Billing\Enums\CustomerType;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Events\AccountBillingUpdated;
 use Pushery\Billing\Events\SubscriptionStateChanged;
@@ -142,7 +145,7 @@ final readonly class SyncPlanFromSubscription
             return false;
         }
 
-        $subscription->forceFill($this->attributes($subscription, $event));
+        $subscription->forceFill($this->attributes($subscription, $event, $owner));
 
         // Asked before the save, never after. `save()` on a model with nothing dirty returns early without
         // resyncing its change set, so `wasChanged()` keeps answering for the previous save — and the second
@@ -318,7 +321,7 @@ final readonly class SyncPlanFromSubscription
             'owner_id' => $owner->getKey(),
             'type' => $event->subscriptionType ?? Subscription::TYPE_DEFAULT,
             ...$this->merchantColumns($this->scope($event)),
-            ...$this->attributes(null, $event),
+            ...$this->attributes(null, $event, $owner),
             'created_at' => Carbon::now(),
             'updated_at' => Carbon::now(),
         ]);
@@ -345,6 +348,39 @@ final readonly class SyncPlanFromSubscription
             'merchant_type' => $merchant->isPlatform() ? null : $merchant->type,
             'merchant_id' => $merchant->isPlatform() ? null : $merchant->id,
         ];
+    }
+
+    /**
+     * Whether the customer bought this subscription as a consumer or as a business, frozen when it began.
+     *
+     * Kept for the same provider subscription, as the declarations key is, so a declaration made later does not
+     * reinterpret a year that is already running. A new subscription that takes the row over is a new purchase and
+     * freezes its own, read when its first event arrives, which follows the checkout the customer declared at.
+     */
+    private function customerType(?Subscription $subscription, SubscriptionStateChanged $event, Model $owner): string
+    {
+        if ($subscription instanceof Subscription && $subscription->provider_id === $event->subscriptionReference
+            && $subscription->customer_type instanceof CustomerType) {
+            return $subscription->customer_type->value;
+        }
+
+        return Container::getInstance()->make(CustomerTypes::class)->of($owner)->value;
+    }
+
+    /**
+     * When the subscription began under terms that name the monthly price an annual term goes on at.
+     *
+     * Kept for the same provider subscription, null included: a subscription that began before such terms keeps null,
+     * and goes on at a twelfth of the price of its year rather than at a monthly price nobody agreed to. Every other
+     * subscription begins under them, a new one that takes the row over included.
+     */
+    private function monthlyTermsAt(?Subscription $subscription, SubscriptionStateChanged $event): ?Carbon
+    {
+        if ($subscription instanceof Subscription && $subscription->provider_id === $event->subscriptionReference) {
+            return $subscription->monthly_terms_at;
+        }
+
+        return Carbon::now();
     }
 
     /**
@@ -396,7 +432,7 @@ final readonly class SyncPlanFromSubscription
      *
      * @return array<string, mixed>
      */
-    private function attributes(?Subscription $subscription, SubscriptionStateChanged $event): array
+    private function attributes(?Subscription $subscription, SubscriptionStateChanged $event, Model $owner): array
     {
         $delinquentSince = $this->delinquentSince($subscription, $event->state);
 
@@ -437,6 +473,17 @@ final readonly class SyncPlanFromSubscription
             'declaration_reference' => $this->declarationReference($subscription, $event),
             // When the subscription in the row began, so a withdrawal can find the day its window opened.
             'started_at' => $this->startedAt($subscription, $event),
+            // Whether the customer bought it as a consumer or as a business, which decides how an annual term goes on.
+            'customer_type' => $this->customerType($subscription, $event, $owner),
+            // When it began under terms that name the monthly price an annual term goes on at. Null stays null for a
+            // subscription that began before such terms, which goes on at a twelfth of the price of its year.
+            'monthly_terms_at' => $this->monthlyTermsAt($subscription, $event),
+            // The provider's schedule, as the provider names it, null included: a schedule that has run its course lets
+            // go of the subscription on its own, and the next event about the subscription is how the row learns it.
+            'provider_schedule_id' => $event->scheduleReference,
+            // And where none holds it, a plan change arranged for the end of the period is arranged no longer: `billing:run`
+            // arranges it again, or applies it when it comes due.
+            ...($event->scheduleReference === null ? ['scheduled_swap_arranged_at' => null] : []),
         ];
     }
 

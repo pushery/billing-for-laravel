@@ -15,6 +15,7 @@ use InvalidArgumentException;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\CollectionTiming;
+use Pushery\Billing\Enums\CustomerType;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -37,6 +38,10 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
  * @property ?BillingInterval $billing_interval
  * @property ?string $scheduled_tier_key
  * @property ?BillingInterval $scheduled_billing_interval
+ * @property ?CustomerType $customer_type
+ * @property ?string $provider_schedule_id
+ * @property ?Carbon $monthly_terms_at
+ * @property ?Carbon $scheduled_swap_arranged_at
  * @property ?Carbon $scheduled_swap_at
  * @property ?Carbon $trial_ends_at
  * @property ?Carbon $ends_at
@@ -76,7 +81,7 @@ class Subscription extends Model
         'current_period_start', 'current_period_end', 'scheduled_processing_at',
         'merchant_uid', 'merchant_type', 'merchant_id', 'declaration_reference', 'started_at',
         'seat_quantity', 'seat_quantity_since', 'seat_days_accrued', 'tier_adjustment_accrued', 'collection_timing',
-        'paused_at',
+        'paused_at', 'customer_type', 'provider_schedule_id', 'monthly_terms_at', 'scheduled_swap_arranged_at',
     ];
 
     /**
@@ -126,6 +131,9 @@ class Subscription extends Model
         // The interval the subscription's price sells its tier at; null reads the tier's default interval.
         'billing_interval' => BillingInterval::class,
         'scheduled_billing_interval' => BillingInterval::class,
+        'customer_type' => CustomerType::class,
+        'monthly_terms_at' => UtcDateTime::class,
+        'scheduled_swap_arranged_at' => UtcDateTime::class,
         'paused_at' => UtcDateTime::class,
     ];
 
@@ -271,20 +279,21 @@ class Subscription extends Model
      */
     public function scheduleSwap(string $tierKey, CarbonInterface $at, ?BillingInterval $interval = null): void
     {
-        $this->update(['scheduled_tier_key' => $tierKey, 'scheduled_billing_interval' => $interval, 'scheduled_swap_at' => $at]);
+        $this->update(['scheduled_tier_key' => $tierKey, 'scheduled_billing_interval' => $interval, 'scheduled_swap_at' => $at, 'scheduled_swap_arranged_at' => null]);
     }
 
     /** Drop a pending plan change — the customer canceled it, or a new upgrade took effect immediately. */
     public function cancelScheduledSwap(): void
     {
-        // Cleared when either column is set, not only when the tier is: a malformed row (a date with no
+        // Cleared when any of the columns is set, not only when the tier is: a malformed row (a date with no
         // tier) must also be clearable, or the runner would re-select it by date on every pass and never
-        // shake it loose. A row with both already null needs no write.
-        if ($this->scheduled_tier_key === null && $this->scheduled_swap_at === null && $this->scheduled_billing_interval === null) {
+        // shake it loose. A row with all of them already null needs no write.
+        if ($this->scheduled_tier_key === null && $this->scheduled_swap_at === null && $this->scheduled_billing_interval === null
+            && $this->scheduled_swap_arranged_at === null) {
             return;
         }
 
-        $this->update(['scheduled_tier_key' => null, 'scheduled_billing_interval' => null, 'scheduled_swap_at' => null]);
+        $this->update(['scheduled_tier_key' => null, 'scheduled_billing_interval' => null, 'scheduled_swap_at' => null, 'scheduled_swap_arranged_at' => null]);
     }
 
     /**

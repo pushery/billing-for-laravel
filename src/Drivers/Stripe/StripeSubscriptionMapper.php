@@ -70,7 +70,25 @@ final readonly class StripeSubscriptionMapper
             callerReference: $this->callerReference($subscription),
             endsAt: $this->endsAt($subscription),
             interval: $this->interval($tierItem, $index),
+            scheduleReference: $this->schedule($subscription),
         );
+    }
+
+    /**
+     * The subscription schedule that holds the subscription, by its id, or null. Stripe sends the id, and the object
+     * where a request expanded it.
+     *
+     * @param  array<array-key, mixed>  $subscription
+     */
+    private function schedule(array $subscription): ?string
+    {
+        $schedule = $subscription['schedule'] ?? null;
+
+        if (is_array($schedule)) {
+            $schedule = $schedule['id'] ?? null;
+        }
+
+        return is_string($schedule) && $schedule !== '' ? $schedule : null;
     }
 
     /**

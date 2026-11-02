@@ -1,9 +1,11 @@
 {{-- The screen in WireKit's components, the one an application with WireKit installed gets. Every look on it comes
      from a component, so a host whose build reads WireKit's views styles it without reading this package's: the view
      sets no class of its own. An application without WireKit gets the plain markup beside it. --}}
-<section aria-labelledby="declarations-heading">
+<section {{ new \Illuminate\View\ComponentAttributeBag(['aria-labelledby' => $headless ? null : 'declarations-heading']) }}>
     <x-wirekit::stack>
-        <x-wirekit::heading :level="2" size="lg" id="declarations-heading">{{ __('billing::admin.declarations.heading') }}</x-wirekit::heading>
+        @unless ($headless)
+            <x-wirekit::heading :level="2" size="lg" id="declarations-heading">{{ __('billing::admin.declarations.heading') }}</x-wirekit::heading>
+        @endunless
         <x-wirekit::text size="sm" intent="muted">{{ __('billing::admin.declarations.intro') }}</x-wirekit::text>
 
         {{-- Persistent live regions, as in the plain markup: the wrappers stay in the DOM and only their content toggles,
@@ -29,7 +31,7 @@
                 <x-wirekit::card as="article" wire:key="{{ $kind }}-{{ $declaration->id }}" aria-labelledby="{{ $kind }}-{{ $declaration->id }}-heading">
                     <x-wirekit::card.body>
                         <x-wirekit::stack>
-                            <x-wirekit::heading :level="3" size="base" id="{{ $kind }}-{{ $declaration->id }}-heading">{{ __('billing::admin.declarations.'.$kind) }}</x-wirekit::heading>
+                            <x-wirekit::heading :level="$headless ? 2 : 3" size="base" id="{{ $kind }}-{{ $declaration->id }}-heading">{{ __('billing::admin.declarations.'.$kind) }}</x-wirekit::heading>
 
                             {{-- The declaration as the person's confirmation states it, every value as they typed it. --}}
                             <x-wirekit::data-list layout="detail">

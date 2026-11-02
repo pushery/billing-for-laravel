@@ -11,6 +11,7 @@ use Illuminate\Support\ServiceProvider;
 use Mollie\Api\MollieApiClient;
 use Override;
 use Pushery\Billing\Contracts\AddonCatalog;
+use Pushery\Billing\Contracts\ArrangesAnnualTerms;
 use Pushery\Billing\Contracts\AttachesVerifiedVatIds;
 use Pushery\Billing\Contracts\BillingDriver;
 use Pushery\Billing\Contracts\CanTransactMoney;
@@ -74,6 +75,7 @@ use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\Support\CreditLedger;
 use Pushery\Billing\Support\CycleItemPricer;
+use Pushery\Billing\Support\LocalAnnualTerms;
 use Pushery\Billing\Support\LocalBillingEngine;
 use Pushery\Billing\Support\LocalSeatBilling;
 use Pushery\Billing\Support\LocalSubscriptionActions;
@@ -217,6 +219,9 @@ final class MollieServiceProvider extends ServiceProvider
         $this->app->offsetUnset(AttachesVerifiedVatIds::class);
         // A Mollie subscription is billed by the package's own engine, and Mollie holds no invoice to pay on request.
         $this->app->offsetUnset(PaysOutstandingInvoices::class);
+        // The package's own engine bills the subscription and decides when a year ends whether a month or a year
+        // follows, so the annual terms are the engine's own.
+        $this->app->bind(ArrangesAnnualTerms::class, static fn (): LocalAnnualTerms => new LocalAnnualTerms('mollie'));
         // What became of a refund or a chargeback where Mollie's webhook does not say: a refund canceled before it was
         // paid out, one that failed, a chargeback the bank reversed. `billing:money-back:reconcile` reads them back daily.
         $this->app->bind(ReportsMoneyBackOutcomes::class, MollieMoneyBackOutcomes::class);

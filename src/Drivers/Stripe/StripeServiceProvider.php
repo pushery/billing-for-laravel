@@ -9,6 +9,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 use Override;
 use Pushery\Billing\Contracts\AdoptsCollectedPaymentMethod;
+use Pushery\Billing\Contracts\ArrangesAnnualTerms;
 use Pushery\Billing\Contracts\AttachesVerifiedVatIds;
 use Pushery\Billing\Contracts\CardPresentPayments;
 use Pushery\Billing\Contracts\Checkout;
@@ -86,6 +87,7 @@ use Pushery\Billing\Support\WebhookSecretGuard;
 use Pushery\Billing\ValueObjects\PaymentAccount;
 use Pushery\Billing\Webhooks\AccountWebhooks;
 use Pushery\Billing\Webhooks\Effects\AdoptCollectedPaymentMethod;
+use Pushery\Billing\Webhooks\Effects\ArrangeMonthlyAfterAnnualTerm;
 use Pushery\Billing\Webhooks\Effects\ClaimChargebackClawback;
 use Pushery\Billing\Webhooks\Effects\CloseInPersonSale;
 use Pushery\Billing\Webhooks\Effects\CorrectChainOnChargeback;
@@ -207,6 +209,8 @@ final class StripeServiceProvider extends ServiceProvider
         $this->app->bind(Invoices::class, StripeInvoices::class);
         $this->app->bind(UpcomingInvoice::class, StripeUpcomingInvoice::class);
         $this->app->bind(SubscriptionActions::class, StripeSubscriptionActions::class);
+        // A consumer's annual subscription goes on monthly once its year ends, arranged at Stripe before the year ends.
+        $this->app->bind(ArrangesAnnualTerms::class, StripeAnnualTerms::class);
         // Paying the open invoice at the owner's request is a capability of the same kind as the reader path: the
         // Mollie and the Shopify provider take it out again, and a host asks the container before it offers it.
         $this->app->bind(PaysOutstandingInvoices::class, StripeOutstandingInvoices::class);
@@ -360,6 +364,9 @@ final class StripeServiceProvider extends ServiceProvider
     private function registerDefaultEffects(WebhookEffectRegistry $registry): void
     {
         $registry->on(SubscriptionStateChanged::class, SyncPlanFromSubscription::class);
+        // A consumer's annual subscription is arranged to go on monthly once its year ends. Its own job, read from the event,
+        // so it neither waits for the plan sync nor depends on its order.
+        $registry->on(SubscriptionStateChanged::class, ArrangeMonthlyAfterAnnualTerm::class);
         // A cancellation is only worth telling the customer about together with the date their access ends,
         // so this one keys on the grace state; it runs beside the plan sync, isolated in its own job.
         $registry->on(SubscriptionStateChanged::class, SendSubscriptionCanceledNotice::class);

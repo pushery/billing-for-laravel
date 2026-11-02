@@ -45,6 +45,15 @@ return [
         'preview_due' => 'Vandaag te betalen met verrekening: :amount.',
         'preview_unavailable' => 'Geen schatting beschikbaar voor deze wijziging.',
         'no_options' => 'Er zijn geen andere plannen beschikbaar.',
+        'annual_term' => [
+            'ends_monthly' => 'Je jaar eindigt op :date. Daarna loopt je abonnement maandelijks door voor :price, en je kunt het opzeggen tegen het einde van elke maand.',
+            'ends_twelfth' => 'Je jaar eindigt op :date. Daarna loopt je abonnement maandelijks door voor een twaalfde van de prijs van je jaar, en je kunt het opzeggen tegen het einde van elke maand.',
+            'booked' => 'Je hebt een extra jaar besteld, tot :date. Daarna loopt je abonnement maandelijks door, en je kunt het opzeggen tegen het einde van elke maand.',
+            'further_year' => 'Ik bestel een extra jaar :plan voor :price, van :from tot :until.',
+            'further_year_action' => 'Extra jaar bestellen',
+            'further_year_unconfirmed' => 'Vink het vakje aan om een extra jaar te bestellen.',
+            'further_year_failed' => 'Het extra jaar kon niet worden besteld. Probeer het later opnieuw.',
+        ],
         'link_out' => [
             'body' => 'De facturering van dit account wordt beheerd op de site van onze factureringspartner.',
             'action' => 'Facturering beheren',

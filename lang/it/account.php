@@ -45,6 +45,15 @@ return [
         'preview_due' => 'Da pagare oggi con conguaglio: :amount.',
         'preview_unavailable' => 'Nessuna stima disponibile per questa modifica.',
         'no_options' => 'Nessun altro piano disponibile.',
+        'annual_term' => [
+            'ends_monthly' => 'Il tuo anno termina il :date. Dopo, il tuo abbonamento prosegue ogni mese a :price e puoi disdirlo alla fine di qualsiasi mese.',
+            'ends_twelfth' => 'Il tuo anno termina il :date. Dopo, il tuo abbonamento prosegue ogni mese a un dodicesimo del prezzo del tuo anno e puoi disdirlo alla fine di qualsiasi mese.',
+            'booked' => 'Hai ordinato un anno in più, fino al :date. Dopo, il tuo abbonamento prosegue ogni mese e puoi disdirlo alla fine di qualsiasi mese.',
+            'further_year' => 'Ordino un anno in più di :plan a :price, dal :from al :until.',
+            'further_year_action' => 'Ordina un anno in più',
+            'further_year_unconfirmed' => 'Spunta la casella per ordinare un anno in più.',
+            'further_year_failed' => 'Non è stato possibile ordinare l’anno in più. Riprova più tardi.',
+        ],
         'link_out' => [
             'body' => 'La fatturazione di questo account è gestita sul sito del nostro partner di fatturazione.',
             'action' => 'Gestisci la fatturazione',

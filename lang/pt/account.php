@@ -45,6 +45,15 @@ return [
         'preview_due' => 'A pagar hoje, com valor proporcional: :amount.',
         'preview_unavailable' => 'Não há estimativa disponível para esta alteração.',
         'no_options' => 'Não há outros planos disponíveis.',
+        'annual_term' => [
+            'ends_monthly' => 'O teu ano termina a :date. Depois, a tua subscrição continua todos os meses a :price e podes cancelá-la no fim de qualquer mês.',
+            'ends_twelfth' => 'O teu ano termina a :date. Depois, a tua subscrição continua todos os meses a um duodécimo do preço do teu ano e podes cancelá-la no fim de qualquer mês.',
+            'booked' => 'Encomendaste mais um ano, até :date. Depois, a tua subscrição continua todos os meses e podes cancelá-la no fim de qualquer mês.',
+            'further_year' => 'Encomendo mais um ano de :plan por :price, de :from a :until.',
+            'further_year_action' => 'Encomendar mais um ano',
+            'further_year_unconfirmed' => 'Assinala a caixa para encomendar mais um ano.',
+            'further_year_failed' => 'Não foi possível encomendar mais um ano. Tenta novamente mais tarde.',
+        ],
         'link_out' => [
             'body' => 'A faturação desta conta é gerida no site do nosso parceiro de faturação.',
             'action' => 'Gerir faturação',

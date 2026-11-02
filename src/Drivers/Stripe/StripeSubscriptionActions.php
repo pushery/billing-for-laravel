@@ -8,6 +8,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Pushery\Billing\Consumer\ProratedCancellation;
 use Pushery\Billing\Contracts\AppliesScheduledSwaps;
@@ -33,6 +34,7 @@ use Stripe\PaymentMethod;
 use Stripe\StripeClient;
 use Stripe\Subscription as StripeSubscription;
 use Stripe\SubscriptionItem;
+use Throwable;
 
 /**
  * The Stripe implementation of the one provider-mutating subscription seam. It reads the provider
@@ -71,6 +73,8 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
         if (! $subscription instanceof Subscription || $reference === null || $subscription->endInsideItsPeriod() instanceof Carbon) {
             return;
         }
+
+        $this->letGoOfTheSchedule($subscription);
 
         $payload = ['cancel_at_period_end' => true];
 
@@ -125,7 +129,8 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
 
         $reference = $subscription?->provider_id;
 
-        if ($reference !== null) {
+        if ($subscription instanceof Subscription && $reference !== null) {
+            $this->letGoOfTheSchedule($subscription);
             $this->ignoringDeadSubscription($reference, fn () => $this->stripe->subscriptions->update($reference, ['cancel_at_period_end' => false]));
         }
     }
@@ -150,6 +155,7 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
         }
 
         $subscription->assertCanEndAt($endsAt);
+        $this->letGoOfTheSchedule($subscription);
 
         $this->ignoringDeadSubscription($reference, fn () => $this->stripe->subscriptions->update($reference, [
             'cancel_at' => $endsAt->getTimestamp(),
@@ -181,6 +187,7 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
             );
         }
 
+        $this->letGoOfTheSchedule($subscription);
         $this->stripe->subscriptions->update($reference, ['pause_collection' => ['behavior' => 'void']]);
 
         Event::dispatch(new SubscriptionPaused($billable));
@@ -206,11 +213,26 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
 
     public function cancelNow(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
-        $reference = $this->subscriptionFor($billable, $merchant, $type)?->provider_id;
+        $subscription = $this->subscriptionFor($billable, $merchant, $type);
+        $reference = $subscription?->provider_id;
 
-        if ($reference !== null) {
-            $this->ignoringDeadSubscription($reference, fn () => $this->stripe->subscriptions->cancel($reference));
+        if (! $subscription instanceof Subscription || $reference === null) {
+            return;
         }
+
+        // Taken off first, and never in the way: deleting an account calls this, and a schedule that cannot be
+        // released this once must not keep a subscription running. Stripe ends the schedule with its subscription.
+        try {
+            $this->letGoOfTheSchedule($subscription);
+        } catch (Throwable $failure) {
+            // @rate-limit-deliberate: a 429 here costs only the release of the schedule, and Stripe ends a schedule with the subscription canceled next.
+            Log::warning('billing: the schedule of a subscription could not be released before it was canceled', [
+                'subscription' => $reference,
+                'reason' => $failure->getMessage(),
+            ]);
+        }
+
+        $this->ignoringDeadSubscription($reference, fn () => $this->stripe->subscriptions->cancel($reference));
     }
 
     public function swap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null, ?BillingInterval $interval = null): void
@@ -246,9 +268,10 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
                 : "Tier '{$tierKey}' has no provider price to swap to.");
         }
 
-        $reference = $this->subscriptionFor($billable, $merchant, $type)?->provider_id;
+        $row = $this->subscriptionFor($billable, $merchant, $type);
+        $reference = $row?->provider_id;
 
-        if ($reference === null) {
+        if (! $row instanceof Subscription || $reference === null) {
             throw new InvalidArgumentException('Cannot swap: the billable has no active subscription.');
         }
 
@@ -276,6 +299,10 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
         if (! $interval instanceof BillingInterval) {
             $price = $this->priceAtTheCurrentInterval($catalog, $tierKey, $base) ?? $price;
         }
+
+        // A schedule would undo the new price at its next phase, so it comes off first. Where the subscription is still
+        // a consumer's annual one afterwards, the next event about it arranges its year again, at the new tier.
+        $this->letGoOfTheSchedule($row);
 
         // Only the base item is repriced. Any metered component or app-owned item on the subscription is
         // absent from the payload, which Stripe leaves exactly as it is — repricing it would destroy it.
@@ -386,6 +413,27 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
     private function hasEnded(string $reference): bool
     {
         return in_array($this->stripe->subscriptions->retrieve($reference)->status, ['canceled', 'incomplete_expired'], true);
+    }
+
+    /**
+     * Take the schedule off the subscription before a change to it, where one holds it.
+     *
+     * Stripe refuses a change to the cancellation of a subscription a schedule holds, and a schedule would undo any other
+     * change at its next phase. Where the arrangement still applies afterwards, the next event about the subscription
+     * arranges it again: a resumed consumer's year, a consumer's year at a new tier. A canceled year ends with its period.
+     * A plan change arranged for the end of the period goes back to `billing:run`, which arranges it again or applies it
+     * when it comes due.
+     */
+    private function letGoOfTheSchedule(Subscription $subscription): void
+    {
+        $schedule = $subscription->provider_schedule_id;
+
+        if ($schedule === null) {
+            return;
+        }
+
+        new StripeAnnualTerms($this->stripe)->release($schedule);
+        $subscription->forceFill(['provider_schedule_id' => null, 'scheduled_swap_arranged_at' => null])->save();
     }
 
     /**

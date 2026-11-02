@@ -85,7 +85,7 @@ final readonly class LocalSeatBilling implements SeatBilling
     private function squareTheRestOfThePeriod(Model $owner, Subscription $subscription, int $quantity, Carbon $at): void
     {
         $current = $subscription->seat_quantity ?? 1;
-        $plan = $subscription->tier_key === null ? null : $this->plans?->planFor($subscription->tier_key);
+        $plan = $subscription->tier_key === null || ! $this->plans instanceof PlanCatalog ? null : PeriodPlan::of($this->plans, $subscription, $subscription->tier_key);
 
         if (! $this->rest instanceof RestOfPeriod || ! $plan instanceof Plan || $quantity === $current) {
             return;

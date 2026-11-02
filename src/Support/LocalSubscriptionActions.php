@@ -386,10 +386,16 @@ final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, 
      */
     private function carryTheTierBeingLeft(Subscription $subscription, Plan $plan): void
     {
-        $current = $subscription->tier_key === null ? null : $this->plans->planFor($subscription->tier_key);
+        $current = $subscription->tier_key === null ? null : PeriodPlan::of($this->plans, $subscription, $subscription->tier_key);
 
         if ($current instanceof Plan && $subscription->scheduled_swap_at !== null) {
-            $subscription->accrueTierChange($current->amount, $plan->amount, $subscription->scheduled_swap_at);
+            $moved = PeriodPlan::movedTo($this->plans, $subscription, $plan);
+
+            $subscription->accrueTierChange(
+                PeriodPlan::scaled($current->amount, $current->interval, $subscription),
+                PeriodPlan::scaled($moved->amount, $moved->interval, $subscription),
+                $subscription->scheduled_swap_at,
+            );
         }
     }
 
