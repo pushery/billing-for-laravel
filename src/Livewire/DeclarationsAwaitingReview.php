@@ -56,6 +56,13 @@ final class DeclarationsAwaitingReview extends Component
     #[Locked]
     public bool $plain = false;
 
+    /**
+     * Leave out the screen's own heading, as `<livewire:billing.declarations-awaiting-review headless />`, where the page
+     * around it carries one. Each declaration's heading then moves up a level, so the outline keeps no gap.
+     */
+    #[Locked]
+    public bool $headless = false;
+
     public function mount(): void
     {
         $this->authorizeAdmin();

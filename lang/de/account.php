@@ -45,6 +45,15 @@ return [
         'preview_due' => 'Heute fällig mit Anrechnung: :amount.',
         'preview_unavailable' => 'Für diese Änderung ist keine Schätzung verfügbar.',
         'no_options' => 'Keine weiteren Tarife verfügbar.',
+        'annual_term' => [
+            'ends_monthly' => 'Dein Jahr endet am :date. Danach läuft dein Abo monatlich zu :price weiter, und du kannst es zum Ende jedes Monats kündigen.',
+            'ends_twelfth' => 'Dein Jahr endet am :date. Danach läuft dein Abo monatlich zu einem Zwölftel deines Jahrespreises weiter, und du kannst es zum Ende jedes Monats kündigen.',
+            'booked' => 'Du hast ein weiteres Jahr gebucht, bis zum :date. Danach läuft dein Abo monatlich weiter, und du kannst es zum Ende jedes Monats kündigen.',
+            'further_year' => 'Ich buche ein weiteres Jahr :plan zu :price, vom :from bis zum :until.',
+            'further_year_action' => 'Weiteres Jahr buchen',
+            'further_year_unconfirmed' => 'Setze den Haken, um ein weiteres Jahr zu buchen.',
+            'further_year_failed' => 'Das weitere Jahr konnte nicht gebucht werden. Bitte versuche es später noch einmal.',
+        ],
         'link_out' => [
             'body' => 'Die Abrechnung für dieses Konto wird auf der Seite unseres Abrechnungspartners verwaltet.',
             'action' => 'Abrechnung verwalten',

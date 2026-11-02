@@ -45,6 +45,15 @@ return [
         'preview_due' => 'Due today with proration: :amount.',
         'preview_unavailable' => 'No estimate available for this change.',
         'no_options' => 'No other plans are available.',
+        'annual_term' => [
+            'ends_monthly' => 'Your year ends on :date. After it, your subscription goes on monthly at :price, and you can cancel it at the end of any month.',
+            'ends_twelfth' => 'Your year ends on :date. After it, your subscription goes on monthly at a twelfth of the price of your year, and you can cancel it at the end of any month.',
+            'booked' => 'You booked a further year, until :date. After it, your subscription goes on monthly, and you can cancel it at the end of any month.',
+            'further_year' => 'I book a further year of :plan at :price, from :from to :until.',
+            'further_year_action' => 'Book a further year',
+            'further_year_unconfirmed' => 'Tick the box to book a further year.',
+            'further_year_failed' => 'The further year could not be booked. Please try again later.',
+        ],
         'link_out' => [
             'body' => 'Billing for this account is managed on our billing partner’s site.',
             'action' => 'Manage billing',

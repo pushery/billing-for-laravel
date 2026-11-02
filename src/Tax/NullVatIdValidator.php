@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Tax;
 
+use Pushery\Billing\Contracts\ChecksVatIds;
 use Pushery\Billing\Contracts\VatIdValidator;
 use Pushery\Billing\Enums\VatIdValidation;
+use Pushery\Billing\ValueObjects\VatIdCheck;
 
 /**
  * The default validator: it proves nothing (always Unavailable), so the package boots and runs offline and in
@@ -13,10 +15,15 @@ use Pushery\Billing\Enums\VatIdValidation;
  * never grants the reverse charge on an unvalidated id — it simply charges VAT until an app binds the
  * VIES-backed validator.
  */
-final class NullVatIdValidator implements VatIdValidator
+final class NullVatIdValidator implements ChecksVatIds, VatIdValidator
 {
     public function validate(?string $vatId): VatIdValidation
     {
         return VatIdValidation::Unavailable;
+    }
+
+    public function check(?string $vatId, ?string $requesterVatId = null): VatIdCheck
+    {
+        return new VatIdCheck(VatIdValidation::Unavailable);
     }
 }

@@ -13,11 +13,13 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Catalogs\MeterCatalog;
 use Pushery\Billing\Consumer\GermanWithdrawalPolicy;
 use Pushery\Billing\Consumer\WithdrawalGate;
 use Pushery\Billing\Consumer\WithdrawalTypeResolver;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\AddonContentMap;
+use Pushery\Billing\Contracts\ArrangesAnnualTerms;
 use Pushery\Billing\Contracts\BillingActionUrls;
 use Pushery\Billing\Contracts\BuyerPartyResolver;
 use Pushery\Billing\Contracts\ClassifiesReportability;
@@ -34,6 +36,7 @@ use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProductTaxonomy;
 use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\ReportingProfile;
+use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\SubscriptionEndingNotifier;
 use Pushery\Billing\Contracts\SubscriptionNotifier;
 use Pushery\Billing\Contracts\SuppliesBuyerAudiences;
@@ -49,6 +52,7 @@ use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
 use Pushery\Billing\Drivers\Stripe\StripeWebhookEventMapper;
 use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\BuyerAudience;
+use Pushery\Billing\Enums\CustomerAudience;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\WithdrawalType;
@@ -70,6 +74,8 @@ use Pushery\Billing\Preflight\Profiles\GermanSellerStanding;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\BillingSchema;
 use Pushery\Billing\Support\KeyedConfig;
+use Pushery\Billing\Support\LocalAnnualTerms;
+use Pushery\Billing\Support\LocalSubscriptionActions;
 use Pushery\Billing\Support\NoBusinessBuyers;
 use Pushery\Billing\Support\PaymentsModeSchema;
 use Pushery\Billing\Support\TableLookup;
@@ -80,6 +86,7 @@ use Pushery\Billing\Tax\TaxCalculatorFactory;
 use Pushery\Billing\Tax\TaxRateMatrix;
 use Pushery\Billing\Tax\UnionMembership;
 use Pushery\Billing\ValueObjects\ContentReference;
+use Pushery\Billing\ValueObjects\MeteredComponent;
 use Pushery\Billing\ValueObjects\Money;
 use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\RateLimitException;
@@ -234,6 +241,7 @@ final class DoctorCommand extends Command
         $failing = $this->reportAddonsTheCheckoutRefuses($config, $works, $withdrawals, $types) || $failing;
 
         $this->reportBusinessOffersNobodyIsShown($config, $businesses);
+        $this->reportAudience($config);
 
         $this->reportXRechnungSellerGaps($config, $einvoice);
 
@@ -832,6 +840,106 @@ final class DoctorCommand extends Command
     }
 
     /**
+     * Report an audience the configuration cannot name, and a consumer-rights profile beside `business_only`.
+     *
+     * The audience decides whether any consumer rule applies, so a value that names neither audience is reported here
+     * before a checkout meets it. Beside `business_only` a profile is obeyed by nothing: the regime stays off, because
+     * an application that sells only to businesses has no consumer to protect. Whoever reads the configuration should
+     * not have to know which of the two settings wins.
+     */
+    private function reportAudience(Repository $config): void
+    {
+        try {
+            $audience = CustomerAudience::configured($config);
+        } catch (InvalidBillingConfig $invalid) {
+            $this->components->error($invalid->getMessage());
+
+            return;
+        }
+
+        if ($audience === CustomerAudience::BusinessOnly
+            && ! in_array($config->get('billing.consumer_rights.profile'), [null, '', false], true)) {
+            $this->components->warn('billing.consumer_rights.profile is set, and billing.audience is business_only, so the '
+                .'consumer-rights regime stays off: an application that sells only to businesses has no consumer to protect. '
+                .'Unset the profile, or set the audience to business_and_consumer.');
+        }
+
+        if ($audience === CustomerAudience::BusinessOnly) {
+            return;
+        }
+
+        if (! Container::getInstance()->bound(ArrangesAnnualTerms::class)) {
+            $this->reportYearsTheEngineRenews($config);
+
+            return;
+        }
+
+        // A consumer's year goes on at the tier's monthly price, so a tier sold yearly without one leaves it nothing to go
+        // on at, and that year renews as a year. Said here, before the first year ends, rather than in the log after.
+        $plans = Container::getInstance()->make(PlanCatalog::class);
+        $meters = Container::getInstance()->make(MeterCatalog::class);
+        $tiers = $config->get('billing.tiers', []);
+        // The package's own engine charges the price a tier shows, a provider the price it holds.
+        $engine = $this->boundAnnualTerms() instanceof LocalAnnualTerms;
+
+        foreach (is_array($tiers) ? array_keys($tiers) : [] as $tierKey) {
+            if (! is_string($tierKey) || ! in_array(BillingInterval::Year, $plans->intervalsFor($tierKey), true)) {
+                continue;
+            }
+
+            if (($engine ? $plans->planFor($tierKey, BillingInterval::Month) : $plans->providerPriceFor($tierKey, BillingInterval::Month)) === null) {
+                $this->components->warn("Tier '{$tierKey}' is sold yearly and has no monthly price, so a consumer's year of it "
+                    .'renews as a year. Sell it monthly as well under the same key, or set billing.audience to business_only '
+                    .'if the application sells only to businesses.');
+            }
+
+            // A subscription with an item beside its tier's is not arranged, since the monthly phase would need a monthly
+            // price for every item. A metered component is such an item.
+            if (array_filter($meters->forTier($tierKey), static fn (MeteredComponent $component): bool => $component->isBillable()) !== []) {
+                $this->components->warn("Tier '{$tierKey}' is sold yearly and carries metered components, so a consumer's year "
+                    .'of it renews as a year: a subscription with an item beside its tier\'s cannot be arranged to go on '
+                    .'monthly. Meter it on a monthly tier, or set billing.audience to business_only if the application sells '
+                    .'only to businesses.');
+            }
+        }
+    }
+
+    /**
+     * Under the package's own billing engine with no annual terms bound, name every tier sold yearly: the engine then
+     * renews a tier at its own interval, so a consumer's year of it renews as a year, which a consumer cannot be held to
+     * by staying silent. Mollie binds the engine's own terms, so this is an application that took them out.
+     */
+    private function reportYearsTheEngineRenews(Repository $config): void
+    {
+        if (! $this->boundSubscriptionActions() instanceof LocalSubscriptionActions) {
+            return;
+        }
+
+        $plans = Container::getInstance()->make(PlanCatalog::class);
+        $tiers = $config->get('billing.tiers', []);
+
+        foreach (is_array($tiers) ? array_keys($tiers) : [] as $tierKey) {
+            if (is_string($tierKey) && in_array(BillingInterval::Year, $plans->intervalsFor($tierKey), true)) {
+                $this->components->warn("Tier '{$tierKey}' is sold yearly, and the package's own billing engine renews a "
+                    ."consumer's year of it as a year. Sell it monthly, or set billing.audience to business_only if the "
+                    .'application sells only to businesses.');
+            }
+        }
+    }
+
+    /** The annual terms bound, typed as the contract: each driver binds its own, and the checks above ask which. */
+    private function boundAnnualTerms(): ArrangesAnnualTerms
+    {
+        return Container::getInstance()->make(ArrangesAnnualTerms::class);
+    }
+
+    /** The subscription actions bound, typed as the contract: each driver binds its own. */
+    private function boundSubscriptionActions(): SubscriptionActions
+    {
+        return Container::getInstance()->make(SubscriptionActions::class);
+    }
+
+    /**
      * Say when an offer only businesses may buy is shown to nobody, because nothing names an owner as a business.
      *
      * A warning rather than a failure: the offer is hidden, which is the safe side, but it is probably not what the
@@ -849,8 +957,9 @@ final class DoctorCommand extends Command
             foreach (is_array($offers) ? $offers : [] as $key => $offer) {
                 if (is_array($offer) && ($offer['buyers'] ?? null) === BuyerAudience::Business->value) {
                     $this->components->warn(
-                        "{$kind} '{$key}' is sold only to businesses, and no IdentifiesBusinessBuyers is bound to "
-                        .'say which owners are, so the account hub shows it to nobody.'
+                        "{$kind} '{$key}' is sold only to businesses, and the bound NoBusinessBuyers names no owner as "
+                        .'one, so the account hub shows it to nobody. The default, DeclaredBusinessBuyers, reads what '
+                        .'customers declared.'
                     );
                 }
             }

@@ -4,6 +4,58 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.53.0] - 2026-11-02
+
+### ⚠️ Breaking
+
+- **A consumer's annual subscription no longer renews for a year, under Stripe or under the package's own billing engine.** Once its year ends it goes on monthly: at the tier's monthly price, or at a twelfth of the price of its year for a subscription that began before this version. A customer whose type nobody established counts as a consumer. An application that sells only to businesses therefore sets `BILLING_AUDIENCE=business_only` before it upgrades, and one that sells to both records what its customers declare through `CustomerDeclarations`. A business's annual subscription renews as before.
+
+  **Upgrade:** run `php artisan migrate` for the four migrations of this version, `2026_10_31_000191_create_billing_customer_declarations_table`, `2026_10_31_000192_add_customer_type_to_billing_subscriptions_table`, `2026_10_31_000193_add_annual_term_columns_to_billing_subscriptions_table` and `2026_10_31_000194_add_scheduled_swap_arranged_at_to_billing_subscriptions_table`, then set `BILLING_AUDIENCE`. `billing:doctor` names a tier sold yearly to consumers without a monthly price to go on at. The upgrade guide lists the rest.
+
+- **A webhook verifier that no driver used is gone, together with the three configuration keys it read and the client library the package suggested for it.** Nothing in the package called the verifier, so no request it handled changes.
+
+  **Upgrade:** nothing to do unless your application constructed the verifier itself. Then keep the class from 0.52.0 in your own code. A published `config/billing.php` may keep its old block, which nothing reads any more.
+
+### ✨ Added
+
+- **`billing.audience` says who the application sells to.** `business_and_consumer`, the default, has each customer declare at checkout whether they buy as a consumer or as a business, and one who declares nothing is a consumer. `business_only` treats every customer as a business: the checkout asks no customer type, and the consumer-rights regime stays off even where `consumer_rights.profile` names a reading. `billing:doctor` reports a value that names neither audience, a profile set beside `business_only`, a tier sold yearly to consumers without a monthly price to go on at, one sold yearly to consumers with a metered component, whose year renews as a year, and every tier sold yearly where an application took the annual terms out of the package's own billing engine.
+- **`CustomerDeclarations` keeps what a customer declared about themselves, with the wording they confirmed and its moment.** Each declaration is a row of its own in the new `billing_customer_declarations` table: the customer type, a business's name and address, its VAT number with the answer of the bound `VatIdValidator`, and a separate consent to the renewal terms of an annual subscription. The latest is the one in force, and the rows are kept and unlinked when their owner is erased, as the other declarations are. `CustomerTypes::of()` reads which the customer is, and `IdentifiesBusinessBuyers` is now bound to `DeclaredBusinessBuyers`, so an offer only businesses may buy is shown to the customers who declared themselves one. Run the migrations: they add the table and a `customer_type` column on `billing_subscriptions`, which freezes the answer when a subscription begins.
+- **A consumer's annual subscription goes on monthly once its year ends, arranged at Stripe before the year ends.** The new `ArrangeMonthlyAfterAnnualTerm` effect puts a consumer's yearly Stripe subscription on a subscription schedule as it begins, or as its trial ends: the year as it stands, then the tier's monthly price, after which the schedule lets go. Stripe moves the subscription at the moment the year ends and never raises an invoice for a second year, and a business's annual subscription renews for a year as before. A subscription a buyer holds at a merchant goes on at the monthly price of the merchant's tier, and every phase keeps the subscription's tax and where its money goes. A subscription that began before its terms named a monthly price goes on at a twelfth of the price of its year, rounded down. Canceling, resuming, pausing and changing the plan take the schedule off first, which Stripe asks for, and the next event arranges the year again where it still applies. `SubscriptionStateChanged` carries the schedule as `scheduleReference`, and `billing_subscriptions` gains `provider_schedule_id` and `monthly_terms_at`. An application's own driver whose provider renews on its own implements the new `ArrangesAnnualTerms`. Sell the tier monthly and yearly under one key, so its monthly price is there to go on at.
+- **The package's own billing engine, which bills Mollie, ends a consumer's year in a month as well.** The run that closes a consumer's year opens a month at the tier's monthly price, or at a twelfth of the year for a subscription sold before monthly terms, and the row keeps `billing_interval` at `month` from then on. A business's year, a year a further year was booked for and a subscription billed from lines of its own renew as a year, and the last is named in the log. A trial before the year does not end it, and a change of tier while the year goes on month by month keeps the month, with its days squared at the two tiers' monthly prices, and the plan screen names each tier at that month. Mollie binds the new `LocalAnnualTerms`, so the reminders name the monthly price there, the plan screen shows the term and books a further year, and `billing:doctor` names a tier sold yearly to consumers without a monthly `price_display`. The subscriptions the engine starts freeze `customer_type` and `monthly_terms_at` as they begin.
+- **`billing:annual-terms:remind` dispatches the reminders an annual term is owed, once each, and the application sends the mails.** `AnnualTermEndingSoon` goes out 38 days before a term ends, to a consumer as the reminder due before the year turns into a monthly contract and to a business as a courtesy. `MonthlyContinuationBeginsSoon` follows 14 days before a consumer's first monthly charge, and `MonthlyContinuationReminder` every six months of the monthly contract after. Each carries the tier, the day, the monthly price, the last day a cancellation can be declared in the owner's time zone, and the plan screen's URL. A subscription in its trial is reminded of nothing, since its year begins where the trial ends. The command is scheduled daily.
+- **`AnnualTerms` lets a consumer book a further year, and lets a subscription sold before monthly terms choose the monthly price.** A further year is offered once, in the last 60 days of a consumer's annual term, and booked as the customer's express order in the wording they confirmed; it sits between the running year and the month, and the reminders pass over the term it extends. A subscription that began before its terms named a monthly price may choose the tier's monthly price instead of the twelfth until its year ends. `ArrangesAnnualTerms` gains `arrangeFurtherYear()`, and `arrangeMonthlyAfterTerm()` takes `replace`.
+- **The plan screen shows a consumer's annual term, and takes the order of a further year.** Where the driver arranges the year, it names the day the term ends and the price it goes on at, or a twelfth of the year for a subscription sold before monthly terms. In the last 60 days it offers the further year as a box the customer ticks, worded with the tier, the price of its year and the year it runs in the customer's language, and records that wording as the order.
+
+- **The list of declarations awaiting a person can leave out its own heading.** `<livewire:billing.declarations-awaiting-review headless />` draws the list without the heading it brings, for a page that carries one, and each declaration's heading moves up a level, so the outline keeps no gap. Without the attribute the list is drawn as before, in both view families.
+
+  **Upgrade:** an application that published the views republishes them with `php artisan vendor:publish --tag=billing-views --force` to use the attribute.
+
+- **A VAT id check keeps what the register answered.** `ChecksVatIds::check()` returns a `VatIdCheck` with the verdict and, where VIES supplies them, the name and the address it holds for the number, the moment it answered, and for a qualified request, one that names the shop's own VAT id as the requester, the identifier VIES gave it. `ViesVatIdValidator` answers it on the endpoint `validate()` already asks, and any other bound `VatIdValidator` answers with its verdict alone. A requester VIES does not accept is `Unavailable`, as an outage is, and `validate()` answers as before.
+
+### 🐛 Fixed
+
+- **A plan change scheduled for the end of the period no longer comes after a renewal of the old plan under Stripe.** Stripe renews a subscription at the moment its period ends, and `billing:run` applied a scheduled change up to an hour later: a yearly subscriber who chose the monthly price was charged another year first and kept the rest as a credit balance, and a downgrade was charged one more period of the higher tier. `billing:run` now arranges the change at Stripe three days before it comes due, as a phase of a subscription schedule, and only clears the schedule on the row once it is due. Changing or dropping the scheduled change takes the arrangement off again. A change scheduled too close to the boundary, or one Stripe refused, is applied when due as before.
+
+- **A plan change scheduled for the end of a period collected in arrears opens the next period at the new tier's interval.** The run closes such a period before the change is applied, and it opened the next one at the interval of the tier being left: a yearly tier changed for a monthly one at the end of its year ran a year at the monthly price, and a monthly tier changed for a yearly one charged the price of a year for a month. Collected in advance, the engine takes the new tier first and opened the right period already.
+
+- **A plan changed at once between tiers sold at different intervals is billed at each tier's own rate, collected in arrears.** The period keeps the dates it was cut to, and it was closed at the price of the new tier's own interval: a monthly tier changed for a yearly one on the tenth day of a thirty-day month billed 133.00 for that month instead of 16.75, and a yearly tier changed for a monthly one billed its year at a fraction. Each tier now costs its rate for the time it held, the price of its interval spread over that interval's time, and a period no interval reaches, as a pause leaves it, keeps its price.
+
+- **The personal-data export writes a provider's event time as ISO 8601 as well.** `synced_event_at` on a subscription and `capabilities_event_at` on a payment account keep the seconds the provider reports, and `BillingDataExport::for()` handed them over as that number beside moments in ISO 8601. Both now come in UTC with their zone, and an integer column that holds a count stays a number.
+
+- **`billing:run` and `billing:usage:flush` hold the lock of a run that died for less than their cadence.** A run killed outright never releases its overlap lock, and the scheduler skips the command until the lock expires. `billing:run` held it for 120 minutes, so a killed run cost the next hourly run as well, without a word about it, and `billing:usage:flush` held it for ten minutes. They now expire after 55 minutes and five minutes, the limits a schedule guard of a host holds every task to, a package's included. A second run of `billing:run` that starts while the first still runs is safe: each cycle is claimed once through a unique key on its order.
+
+  **Upgrade:** nothing to do.
+
+### 📚 Documentation
+
+- **The README and the package description name the three drivers.** The description on Packagist spoke of two, Stripe and Mollie, while Shopify had joined them, and its keywords now name all three.
+
+  **Upgrade:** nothing to do.
+
+- **The installation page no longer says that `stripe/stripe-php` is capped below major 21.** `composer.json` accepts 21, and the paragraph made an install on 21 look blocked.
+
+  **Upgrade:** nothing to do.
+
 ## [0.52.0] - 2026-10-31
 
 ### ⚠️ Breaking
@@ -8322,7 +8374,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.52.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.53.0...HEAD
+[0.53.0]: https://github.com/pushery/billing-for-laravel/compare/v0.52.0...v0.53.0
 [0.52.0]: https://github.com/pushery/billing-for-laravel/compare/v0.51.0...v0.52.0
 [0.51.0]: https://github.com/pushery/billing-for-laravel/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/pushery/billing-for-laravel/compare/v0.49.0...v0.50.0

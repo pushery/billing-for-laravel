@@ -12,7 +12,9 @@ use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
 use Pushery\Billing\Catalogs\ConfigAddonCatalog;
+use Pushery\Billing\Consumer\AnnualTerms;
 use Pushery\Billing\Consumer\PurchaseDeclarations;
+use Pushery\Billing\Contracts\ArrangesAnnualTerms;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProrationStrategy;
@@ -25,15 +27,19 @@ use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BuyerAudiences;
 use Pushery\Billing\Support\CatalogLabel;
 use Pushery\Billing\Support\LinkOut;
+use Pushery\Billing\Support\LocalAnnualTerms;
 use Pushery\Billing\Support\LocalizedDate;
 use Pushery\Billing\Support\LocalizedMoney;
+use Pushery\Billing\Support\PeriodPlan;
 use Pushery\Billing\Support\PlanSwapPlanner;
 use Pushery\Billing\Support\SafeExternalUrl;
+use Pushery\Billing\Support\ScheduledSwapRunner;
 use Pushery\Billing\Support\TrialCallouts;
 use Pushery\Billing\Trials\TrialPolicy;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\Plan;
 use Pushery\Billing\ValueObjects\TierIdentity;
+use RuntimeException;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -76,6 +82,12 @@ final class ManageSubscription extends AccountScreen
      */
     public string $interval = '';
 
+    /**
+     * Whether the customer ticked the wording of a further year. Never ticked for them, so a further year is booked only
+     * as their express order.
+     */
+    public bool $furtherYearConfirmed = false;
+
     protected function headingKey(): string
     {
         return 'billing::account.manage.heading';
@@ -115,6 +127,9 @@ final class ManageSubscription extends AccountScreen
             // A downgrade the customer scheduled but that has not taken effect yet: shown as "changes on
             // {date}" with a cancel action, so a pending change is never a surprise on the next invoice.
             'scheduledSwap' => $this->scheduledSwap(),
+            // A consumer's annual term: when it ends, what it goes on at, and in its last 60 days the wording of a
+            // further year the customer can order.
+            'annualTerm' => $this->annualTerm(),
             // The "includes an X-day free trial" hint is about the subscription trial the owner gets on
             // subscribing, so it follows subscriptionTrialEnabled — a generic (pre-subscription) trial does
             // not belong on a plan row.
@@ -386,8 +401,9 @@ final class ManageSubscription extends AccountScreen
         }
 
         // A downgrade waits for the period end (the current cycle is already paid at the higher tier). It is
-        // recorded, shown, and cancellable until then — the provider is not touched now; ScheduledSwapRunner
-        // performs the swap when the date arrives. An upgrade takes effect immediately.
+        // recorded, shown, and cancellable until then. ScheduledSwapRunner arranges it a few days ahead at a
+        // provider that renews on its own, so the renewal is already the new plan, and otherwise performs the
+        // swap when the date arrives. An upgrade takes effect immediately.
         //
         // `$subscription` is non-null here by construction, and nothing restates it. `PeriodEnd` is
         // reachable only where a subscription was resolved, because the other branch of the ternary
@@ -398,6 +414,8 @@ final class ManageSubscription extends AccountScreen
         // releases behind the pin, which DevToolPinsTest now reports rather than leaving to be found
         // by a red integration run.
         if ($timing === SwapTiming::PeriodEnd) {
+            // A change arranged at the provider for an earlier choice comes off first, or the provider would still make it.
+            Container::getInstance()->make(ScheduledSwapRunner::class)->releaseArranged($subscription);
             $subscription->scheduleSwap($tierKey, $subscription->current_period_end ?? Carbon::now()->utc(), $interval);
             $this->audit('subscription.swap_scheduled', ['tier' => $tierKey, 'interval' => $interval?->value]);
         } else {
@@ -525,6 +543,9 @@ final class ManageSubscription extends AccountScreen
      * The offered plans at the chosen interval, each tier at its own where it is not sold at the chosen one, and the
      * tier the owner holds at the chosen interval where that is a change of the billing period alone.
      *
+     * While a consumer's year goes on month by month under the package's own engine, a tier changed to goes on at its
+     * month as well, so with no interval chosen each tier is named at the price the engine bills after the change.
+     *
      * @param  list<Plan>  $plans
      * @return list<Plan>
      */
@@ -533,6 +554,8 @@ final class ManageSubscription extends AccountScreen
         $catalog = Container::getInstance()->make(PlanCatalog::class);
         $out = [];
         $selected = $this->selectedInterval();
+        $subscription = $this->subscription();
+        $continues = $subscription instanceof Subscription && $this->billedByTheEngine($subscription) ? $subscription : null;
 
         if ($selected instanceof BillingInterval && $this->hasLiveSubscription() && $selected !== $this->currentInterval()) {
             $own = $catalog->planFor($current->key, $selected);
@@ -543,10 +566,26 @@ final class ManageSubscription extends AccountScreen
         }
 
         foreach ($plans as $plan) {
-            $out[] = $catalog->planFor($plan->key, $this->intervalFor($plan->key)) ?? $plan;
+            $chosen = $this->intervalFor($plan->key);
+            $listed = $catalog->planFor($plan->key, $chosen) ?? $plan;
+            $out[] = $continues instanceof Subscription && ! $chosen instanceof BillingInterval ? PeriodPlan::movedTo($catalog, $continues, $listed) : $listed;
         }
 
         return $out;
+    }
+
+    /** Whether the package's own engine bills the subscription, which decides what follows a consumer's year itself. */
+    private function billedByTheEngine(Subscription $subscription): bool
+    {
+        return Container::getInstance()->make(AnnualTerms::class)->arranges($subscription) && $this->boundAnnualTerms() instanceof LocalAnnualTerms;
+    }
+
+    /** The annual terms the driver binds, typed as the contract, or null where it binds none, as Shopify does. */
+    private function boundAnnualTerms(): ?ArrangesAnnualTerms
+    {
+        $container = Container::getInstance();
+
+        return $container->bound(ArrangesAnnualTerms::class) ? $container->make(ArrangesAnnualTerms::class) : null;
     }
 
     /**
@@ -602,6 +641,117 @@ final class ManageSubscription extends AccountScreen
         ];
     }
 
+    /**
+     * A consumer's annual term where the driver arranges what follows it: the day the term ends, the price it goes on at,
+     * a further year booked, and the wording of one offered now. Null for every other subscription, a business's annual
+     * term among them, which renews for a year by itself.
+     *
+     * @return array{ends: string, monthly: string|null, booked: string|null, furtherYear: string|null}|null
+     */
+    private function annualTerm(): ?array
+    {
+        $subscription = $this->subscription();
+        $terms = Container::getInstance()->make(AnnualTerms::class);
+        $end = $subscription instanceof Subscription ? $terms->termEnd($this->owner(), $subscription) : null;
+
+        if (! $subscription instanceof Subscription || $end === null || ! $terms->arranges($subscription)) {
+            return null;
+        }
+
+        // A subscription sold under terms that name the monthly price goes on at that price. One sold before goes on at a
+        // twelfth of the price of its year, which the screen states in words, since the provider works out the figure.
+        // Where the tier shows no monthly price, the screen has no price to state and shows no term at all.
+        $monthly = null;
+
+        if ($subscription->monthly_terms_at !== null) {
+            $monthly = Container::getInstance()->make(PlanCatalog::class)->planFor((string) $subscription->tier_key, BillingInterval::Month)?->amount;
+
+            if (! $monthly instanceof Money) {
+                return null;
+            }
+        }
+
+        $booked = null;
+
+        if ($terms->furtherYearBooked($this->owner(), $subscription, $end)) {
+            $booked = (string) LocalizedDate::long($end->addYear());
+        }
+
+        return [
+            'ends' => (string) LocalizedDate::long($end),
+            'monthly' => $monthly instanceof Money ? LocalizedMoney::format($monthly) : null,
+            'booked' => $booked,
+            'furtherYear' => $this->furtherYearStatement($subscription),
+        ];
+    }
+
+    /**
+     * The wording of a further year as the customer orders it, in the session's language: the tier, the price of its
+     * year and the year it runs. Null where none is offered now, or where the tier shows no price for its year.
+     */
+    private function furtherYearStatement(Subscription $subscription): ?string
+    {
+        $terms = Container::getInstance()->make(AnnualTerms::class);
+        $end = $terms->termEnd($this->owner(), $subscription);
+        $tierKey = (string) $subscription->tier_key;
+        $year = Container::getInstance()->make(PlanCatalog::class)->planFor($tierKey, BillingInterval::Year);
+
+        if ($end === null || ! $year instanceof Plan || ! $terms->offersFurtherYear($this->owner(), $subscription)) {
+            return null;
+        }
+
+        $statement = Lang::get('billing::account.manage.annual_term.further_year', [
+            'plan' => CatalogLabel::translate(Container::getInstance()->make(TierCatalog::class)->label($tierKey)),
+            'price' => LocalizedMoney::format($year->amount),
+            'from' => (string) LocalizedDate::long($end),
+            'until' => (string) LocalizedDate::long($end->addYear()),
+        ]);
+
+        return is_string($statement) ? $statement : null;
+    }
+
+    /**
+     * Book a further year of a consumer's annual term, as the customer's express order. It is offered in the last 60 days
+     * of the term and booked once the customer ticked its wording, which this screen writes and records as the order:
+     * the wording is never taken from the request.
+     */
+    public function bookFurtherYear(): void
+    {
+        $this->denyInAppCheckout();
+        $this->ensureEligible();
+
+        $subscription = $this->subscription();
+        $statement = $subscription instanceof Subscription ? $this->furtherYearStatement($subscription) : null;
+
+        if (! $subscription instanceof Subscription || $statement === null) {
+            throw new NotFoundHttpException;
+        }
+
+        $this->validate(['furtherYearConfirmed' => 'accepted'], [
+            'furtherYearConfirmed.accepted' => $this->screenText('billing::account.manage.annual_term.further_year_unconfirmed'),
+        ]);
+
+        $this->spendProviderCall('further_year');
+
+        try {
+            Container::getInstance()->make(AnnualTerms::class)->bookFurtherYear($this->owner(), $subscription, $statement, $this->actor());
+        } catch (RuntimeException) {
+            $this->addError('furtherYearConfirmed', $this->screenText('billing::account.manage.annual_term.further_year_failed'));
+
+            return;
+        }
+
+        $this->furtherYearConfirmed = false;
+    }
+
+    /** A line of the screen's text in the session's language, or its key where the language file lacks it. */
+    private function screenText(string $key): string
+    {
+        $line = Lang::get($key);
+
+        return is_string($line) ? $line : $key;
+    }
+
     /** Drop a downgrade the customer scheduled but changed their mind about, before it takes effect. */
     public function cancelScheduledSwap(): void
     {
@@ -610,6 +760,8 @@ final class ManageSubscription extends AccountScreen
         $subscription = $this->subscription();
 
         if ($subscription instanceof Subscription && $subscription->hasScheduledSwap()) {
+            // Arranged at the provider already, it comes off there too, or the provider would make it at the boundary.
+            Container::getInstance()->make(ScheduledSwapRunner::class)->releaseArranged($subscription);
             $subscription->cancelScheduledSwap();
             $this->audit('subscription.swap_schedule_canceled', []);
         }

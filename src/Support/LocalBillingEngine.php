@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Support;
 
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use DateTimeInterface;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -14,6 +16,8 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Pushery\Billing\Consumer\AnnualTerms;
+use Pushery\Billing\Consumer\CustomerTypes;
 use Pushery\Billing\Contracts\BillingEngine;
 use Pushery\Billing\Contracts\CollectsDirectDebits;
 use Pushery\Billing\Contracts\PaymentRails;
@@ -21,8 +25,10 @@ use Pushery\Billing\DirectDebit\PreNotifications;
 use Pushery\Billing\Discounts\CycleCouponApplier;
 use Pushery\Billing\Dunning\ConfigDunningLadder;
 use Pushery\Billing\Enums\AuditSource;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\CollectionTiming;
 use Pushery\Billing\Enums\CreditReason;
+use Pushery\Billing\Enums\CustomerType;
 use Pushery\Billing\Enums\FallbackAttempt;
 use Pushery\Billing\Enums\OrderItemType;
 use Pushery\Billing\Enums\OrderStatus;
@@ -561,7 +567,9 @@ final readonly class LocalBillingEngine implements BillingEngine
             : $subscription->tier_key;
 
         $next->forceFill(['tier_key' => $tier]);
-        $next->forceFill($next->nextCycle(new TierInterval($this->config)->for($tier)));
+        [$interval, $kept] = $this->nextInterval($next, $tier !== $subscription->tier_key ? $tier : null, quietly: true);
+        $next->forceFill(['billing_interval' => $kept]);
+        $next->forceFill($next->nextCycle($interval));
 
         return $this->preview($next);
     }
@@ -806,8 +814,9 @@ final readonly class LocalBillingEngine implements BillingEngine
         }
 
         if ($periodEnd instanceof Carbon && $periodEnd->lessThanOrEqualTo($moment) && $settled) {
+            $tier = $subscription->tier_key;
             $this->takeTheScheduledTier($subscription, $periodEnd);
-            $subscription->advanceCycle(new TierInterval($this->config)->for($subscription->tier_key));
+            $this->advanceIntoTheNextPeriod($subscription, $subscription->tier_key !== $tier ? $subscription->tier_key : null);
         }
 
         return true;
@@ -1664,7 +1673,7 @@ final readonly class LocalBillingEngine implements BillingEngine
             if ($subscription->collectsInAdvance()) {
                 $subscription->update(['scheduled_processing_at' => $subscription->endInsideItsPeriod() ?? $subscription->current_period_end]);
             } else {
-                $subscription->advanceCycle(new TierInterval($this->config)->for($subscription->tier_key));
+                $this->advanceIntoTheNextPeriod($subscription, $this->tierTakenWithThisPeriod($subscription));
             }
 
             // A collected cycle ends the arrears, whatever the status said. The clock goes with the level: the
@@ -2122,7 +2131,11 @@ final readonly class LocalBillingEngine implements BillingEngine
         return 'Subscription';
     }
 
-    /** What this subscription's tier costs, or null when nothing prices it. */
+    /**
+     * What a period of this subscription costs, or null when nothing prices it: its tier's price, and for a consumer's
+     * year that went on month by month the month it goes on at. A tier sold at another interval than the one the period
+     * was cut to costs its rate for the period's time ({@see PeriodPlan::scaled()}).
+     */
     private function planFor(Subscription $subscription): ?Money
     {
         $tier = $subscription->tier_key;
@@ -2131,6 +2144,152 @@ final readonly class LocalBillingEngine implements BillingEngine
             return null;
         }
 
+        $interval = new TierInterval($this->config)->for($tier);
+
+        if ($subscription->billing_interval === BillingInterval::Month && $interval === BillingInterval::Year) {
+            // A tier the customer changed to while the year went on month by month may name no monthly price, and goes on
+            // at a twelfth of its year rather than leaving the period unpriced.
+            $month = $this->monthAfterTheYear($subscription) ?? $this->twelfthOf($tier);
+
+            return $month instanceof Money ? PeriodPlan::scaled($month, BillingInterval::Month, $subscription) : null;
+        }
+
+        $own = $this->ownPrice($tier);
+
+        return $own instanceof Money ? PeriodPlan::scaled($own, $interval, $subscription) : null;
+    }
+
+    /**
+     * Open the period after this one: a month where a consumer's year ends, the tier's own interval otherwise. The row
+     * keeps the month it goes on at, which prices every period after.
+     *
+     * @param  string|null  $newTier  the tier a plan change moves to as this period ends, which opens a contract of its own
+     */
+    private function advanceIntoTheNextPeriod(Subscription $subscription, ?string $newTier): void
+    {
+        [$interval, $kept] = $this->nextInterval($subscription, $newTier);
+
+        if ($subscription->billing_interval !== $kept) {
+            $subscription->forceFill(['billing_interval' => $kept]);
+        }
+
+        $subscription->advanceCycle($interval);
+    }
+
+    /**
+     * The interval of the period after this one, and the `billing_interval` the row keeps for it.
+     *
+     * A consumer may not be held to a further year by staying silent, so a consumer's year goes on month by month once
+     * it ends, and stays a month after. It stays a year where the customer is a business, where a further year was
+     * booked for the year ending now, where the driver arranges no annual terms, and where a plan change opens a new
+     * contract at this moment, which runs at the new tier's own interval. A tier sold monthly keeps its month.
+     *
+     * Collected in advance, the engine has taken the new tier by the time it asks. Collected in arrears, the run closes
+     * the period before the scheduled change is applied, so the new tier is named here and its interval read.
+     *
+     * @param  string|null  $newTier  the tier a plan change moves to as this period ends
+     * @param  bool  $quietly  whether a year that renews for want of a monthly price goes unlogged, for a preview
+     * @return array{BillingInterval, BillingInterval|null}
+     */
+    private function nextInterval(Subscription $subscription, ?string $newTier, bool $quietly = false): array
+    {
+        $own = new TierInterval($this->config)->for($newTier ?? $subscription->tier_key);
+
+        if ($newTier !== null || $own !== BillingInterval::Year) {
+            return [$own, null];
+        }
+
+        if ($subscription->billing_interval === BillingInterval::Month || $this->aConsumersYearEnds($subscription, $quietly)) {
+            return [BillingInterval::Month, BillingInterval::Month];
+        }
+
+        return [$own, null];
+    }
+
+    /** The tier a plan change scheduled for the end of this period moves to, which opens the next period, or null. */
+    private function tierTakenWithThisPeriod(Subscription $subscription): ?string
+    {
+        $at = $subscription->scheduled_swap_at;
+        $end = $subscription->current_period_end;
+
+        return $at instanceof Carbon && $end instanceof Carbon && $at->lessThanOrEqualTo($end) ? $subscription->scheduled_tier_key : null;
+    }
+
+    /**
+     * Whether the year that ends now is a consumer's that goes on month by month: the period that ends ran for a year,
+     * the driver arranges annual terms for the subscription, the customer is a consumer, and no further year was booked
+     * for it. A shorter period opens the year rather than ending it: the trial before it, or the rest of a month on a
+     * tier the customer changed for a yearly one. A subscription billed from lines of its own, and a tier with no
+     * monthly price to go on at, renew as a year, and the log says so unless the question comes from a preview.
+     */
+    private function aConsumersYearEnds(Subscription $subscription, bool $quietly): bool
+    {
+        $container = Container::getInstance();
+        $owner = $this->ownerOf($subscription);
+        $start = $subscription->current_period_start;
+        $end = $subscription->current_period_end;
+
+        if (! $owner instanceof Model || ! $start instanceof Carbon || ! $end instanceof Carbon
+            || BillingInterval::Year->advance($start)->greaterThan($end)) {
+            return false;
+        }
+
+        $terms = $container->make(AnnualTerms::class);
+
+        if (! $terms->arranges($subscription)
+            || ($subscription->customer_type ?? $container->make(CustomerTypes::class)->of($owner)) !== CustomerType::Consumer
+            || $terms->furtherYearBooked($owner, $subscription, CarbonImmutable::instance($end))) {
+            return false;
+        }
+
+        // Lines carry amounts of their own, a fixed one the amount of a year, and the engine knows the month of the tier
+        // and of nothing else on the subscription, as a provider's schedule does.
+        $reason = match (true) {
+            $this->pricer instanceof CycleItemPricer && $subscription->items()->exists() => 'it is billed from lines of its own, and the engine knows the monthly price of its tier only',
+            ! $this->monthAfterTheYear($subscription) instanceof Money => 'its tier has no monthly price to go on at',
+            default => null,
+        };
+
+        if ($reason === null) {
+            return true;
+        }
+
+        if (! $quietly) {
+            Log::error("billing: a consumer's year renews as a year, since {$reason}", [
+                'tier' => $subscription->tier_key,
+                'subscription' => $subscription->getKey(),
+            ]);
+        }
+
+        return false;
+    }
+
+    /**
+     * What a consumer's year goes on at each month: the tier's monthly price, or a twelfth of the price of its year,
+     * rounded down, for a subscription that began before its terms named a monthly price.
+     */
+    private function monthAfterTheYear(Subscription $subscription): ?Money
+    {
+        $tier = (string) $subscription->tier_key;
+
+        if ($subscription->monthly_terms_at !== null) {
+            return Container::getInstance()->make(AnnualTerms::class)->plansFor($subscription)->planFor($tier, BillingInterval::Month)?->amount;
+        }
+
+        return $this->twelfthOf($tier);
+    }
+
+    /** A twelfth of the price of the tier's year, rounded down, or null when nothing prices it. */
+    private function twelfthOf(string $tier): ?Money
+    {
+        $year = $this->ownPrice($tier);
+
+        return $year instanceof Money ? Money::of(intdiv($year->minorUnits, 12), $year->currency) : null;
+    }
+
+    /** What the tier costs at its own interval, or null when nothing prices it. */
+    private function ownPrice(string $tier): ?Money
+    {
         $price = KeyedConfig::setting($this->config, 'billing.tiers', $tier, 'price_display');
 
         if (! is_array($price) || ! is_int($price['amount'] ?? null) || ! is_string($price['currency'] ?? null)) {

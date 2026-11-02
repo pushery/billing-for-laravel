@@ -4,13 +4,20 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Support;
 
+use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Pushery\Billing\Consumer\AnnualTerms;
+use Pushery\Billing\Consumer\CustomerTypes;
 use Pushery\Billing\Contracts\AppliesScheduledSwaps;
+use Pushery\Billing\Contracts\ArrangesAnnualTerms;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\AuditSource;
+use Pushery\Billing\Enums\BillingInterval;
+use Pushery\Billing\Enums\CustomerType;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Throwable;
@@ -22,11 +29,17 @@ use Throwable;
  * when its date arrives.
  *
  * It runs from the billing cycle tick (billing:run), which the local engine already fires on a schedule.
- * Under Stripe the provider drives its own cycle, but a locally-scheduled downgrade still has to be applied
- * to the provider when it comes due, so this runs regardless of driver.
+ * Under Stripe the provider drives its own cycle and renews at the boundary itself, so a change applied when
+ * it comes due would follow an invoice for another period of the old plan. Where the driver binds
+ * ArrangesAnnualTerms, a scheduled change is therefore arranged at the provider a few days ahead, and the
+ * provider makes it at the boundary. A change that could not be arranged is applied when it comes due, as
+ * under every other driver, so this runs regardless of driver.
  */
 final readonly class ScheduledSwapRunner
 {
+    /** How many days before a scheduled change comes due it is arranged at a provider that renews on its own. */
+    public const int ARRANGE_AHEAD_DAYS = 3;
+
     public function __construct(
         private SubscriptionActions $actions,
         private BillingEventLog $log,
@@ -43,6 +56,8 @@ final readonly class ScheduledSwapRunner
     {
         $now ??= Carbon::now()->utc();
         $applied = 0;
+
+        $this->arrangeAhead($now);
 
         // Selected by the due date: a NULL scheduled_swap_at fails the comparison in SQL, so only rows with
         // a real, past effective moment come through. A well-formed schedule always has a tier alongside the
@@ -93,6 +108,16 @@ final readonly class ScheduledSwapRunner
             return false;
         }
 
+        // Arranged at the provider ahead of time, and still held by the arrangement: the provider made the change at the
+        // boundary, and its event tells the row. Only the schedule on the row is left to clear, since a swap here would
+        // make the change a second time. An arrangement that came off in between leaves the swap below to make it.
+        if ($subscription->scheduled_swap_arranged_at !== null && $subscription->provider_schedule_id !== null) {
+            $subscription->cancelScheduledSwap();
+            $this->log->record('billing.scheduled_swap_applied', $owner, ['tier' => $targetTier, 'by' => 'provider'], AuditSource::System);
+
+            return true;
+        }
+
         // The swap prorates, as it does on the in-app path, and the driver decides how. A provider that prorates
         // itself does it there, at the moment it is told. The local driver bills the period when it closes, so it
         // carries the tier being left up to the moment the change was scheduled for, which is where the period
@@ -132,6 +157,116 @@ final readonly class ScheduledSwapRunner
         ], AuditSource::System);
 
         return true;
+    }
+
+    /**
+     * Arrange at the provider every scheduled change that comes due within the next days, so a provider that renews on
+     * its own renews into the new plan at the boundary instead of raising an invoice for another period of the old one.
+     *
+     * A change that cannot be arranged, or one scheduled too close to the boundary for a run to reach it before, is
+     * applied when it comes due, as before.
+     */
+    private function arrangeAhead(Carbon $now): void
+    {
+        $container = Container::getInstance();
+
+        if (! $container->bound(ArrangesAnnualTerms::class)) {
+            return;
+        }
+
+        $arrangements = $container->make(ArrangesAnnualTerms::class);
+
+        // The provider's own subscriptions, running and not ending: an ending one has no further period a change could
+        // begin. A merchant's is among them, since every checkout the package opens puts it on the platform's account.
+        $upcoming = Subscription::model()::query()
+            ->where('provider', $arrangements->provider())
+            ->whereNotNull('provider_id')
+            ->whereIn('status', ['active', 'trialing'])
+            ->whereNull('ends_at')
+            ->whereNotNull('scheduled_tier_key')
+            ->whereNull('scheduled_swap_arranged_at')
+            ->where('scheduled_swap_at', '>', $now)
+            ->where('scheduled_swap_at', '<=', $now->copy()->addDays(self::ARRANGE_AHEAD_DAYS))
+            ->orderBy('scheduled_swap_at')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($upcoming as $subscription) {
+            // A change that could not be arranged is tried again the next day, not on every hourly run, so a refusal that
+            // lasts, a subscription with a second item for one, is logged once a day and not every hour.
+            $key = $subscription->getKey();
+            $attempt = 'billing:scheduled-swap-arrangement:'.(is_scalar($key) ? (string) $key : '').':'.$subscription->scheduled_swap_at?->getTimestamp();
+
+            if (Cache::has($attempt)) {
+                continue;
+            }
+
+            try {
+                $arranged = $this->arrange($subscription, $arrangements, $now);
+            } catch (Throwable $failure) {
+                $arranged = false;
+
+                Log::error('billing: a scheduled plan change could not be arranged at the provider ahead of time, and is applied when it comes due', [
+                    'subscription' => $subscription->getKey(),
+                    'tier' => $subscription->scheduled_tier_key,
+                    'reason' => $failure->getMessage(),
+                ]);
+            }
+
+            if (! $arranged) {
+                Cache::put($attempt, true, $now->copy()->addDay());
+            }
+        }
+    }
+
+    /**
+     * The scheduled change as phases at the provider: the target's price for a period and, where a consumer moves to a
+     * yearly price, the tier's monthly price after that year, since a consumer is not held to another year by staying
+     * silent. False where the change cannot be arranged, and it is then applied when it comes due.
+     */
+    private function arrange(Subscription $subscription, ArrangesAnnualTerms $arrangements, Carbon $now): bool
+    {
+        $container = Container::getInstance();
+        $catalog = $container->make(AnnualTerms::class)->plansFor($subscription);
+        $tierKey = (string) $subscription->scheduled_tier_key;
+        // The interval the change moves to, or the one the subscription is billed at. A row that names neither was synced
+        // before the interval was recorded, and its swap reads the interval from the provider when it comes due.
+        $interval = $subscription->scheduled_billing_interval ?? $subscription->billing_interval;
+        $price = $interval instanceof BillingInterval ? $catalog->providerPriceFor($tierKey, $interval) : null;
+        $owner = $this->ownerOf($subscription);
+
+        if ($price === null || ! $owner instanceof Model) {
+            return false;
+        }
+
+        $consumer = ($subscription->customer_type ?? $container->make(CustomerTypes::class)->of($owner)) === CustomerType::Consumer;
+        $reference = $arrangements->arrangeChangeAtTermEnd((string) $subscription->provider_id, $price,
+            $consumer && $interval === BillingInterval::Year ? $catalog->providerPriceFor($tierKey, BillingInterval::Month) : null);
+
+        if ($reference === null) {
+            return false;
+        }
+
+        $subscription->forceFill(['provider_schedule_id' => $reference, 'scheduled_swap_arranged_at' => $now])->save();
+
+        return true;
+    }
+
+    /**
+     * Take a scheduled change that was arranged at the provider off again, before the customer changes or drops it.
+     * Without this the provider would still make the change at the boundary.
+     */
+    public function releaseArranged(Subscription $subscription): void
+    {
+        $schedule = $subscription->provider_schedule_id;
+        $container = Container::getInstance();
+
+        if ($subscription->scheduled_swap_arranged_at === null || $schedule === null || ! $container->bound(ArrangesAnnualTerms::class)) {
+            return;
+        }
+
+        $container->make(ArrangesAnnualTerms::class)->release($schedule);
+        $subscription->forceFill(['provider_schedule_id' => null, 'scheduled_swap_arranged_at' => null])->save();
     }
 
     /** Resolve the subscription's owner back to a model via the morph map (mirrors AdvanceDunningCommand). */

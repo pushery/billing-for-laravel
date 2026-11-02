@@ -18,9 +18,9 @@
 [![Code Style](https://img.shields.io/badge/code%20style-pint-orange.svg)](https://laravel.com/docs/pint)
 ![Databases](https://img.shields.io/badge/tested%20on-PostgreSQL%20%2B%20MySQL-336791.svg)
 
-Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Two drivers, one set of contracts.
+Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Three drivers, one set of contracts.
 
-Everything crosses a small set of contracts, so your app talks to _billing_ — not to a provider. **Stripe** runs the subscription cycle on its own side, behind a hosted checkout. **Mollie** establishes a mandate through a first payment and this package runs the cycle itself, which is the path any provider without a native subscription API takes. Your application code does not change between them; `billing.default` does. The marketplace, for platforms where other people sell through your app, runs on Stripe only.
+Everything crosses a small set of contracts, so your app talks to _billing_ — not to a provider. **Stripe** runs the subscription cycle on its own side, behind a hosted checkout. **Mollie** establishes a mandate through a first payment and this package runs the cycle itself, which is the path any provider without a native subscription API takes. **Shopify** bills the merchants of an app the Shopify App Store sells. Your application code does not change between them; `billing.default` does. The marketplace, for platforms where other people sell through your app, runs on Stripe only.
 
 ## Highlights
 

@@ -45,6 +45,15 @@ return [
         'preview_due' => 'À payer aujourd’hui avec prorata : :amount.',
         'preview_unavailable' => 'Aucune estimation disponible pour ce changement.',
         'no_options' => 'Aucun autre forfait n’est disponible.',
+        'annual_term' => [
+            'ends_monthly' => 'Ton année se termine le :date. Ensuite, ton abonnement continue chaque mois à :price, et tu peux le résilier à la fin de n’importe quel mois.',
+            'ends_twelfth' => 'Ton année se termine le :date. Ensuite, ton abonnement continue chaque mois à un douzième du prix de ton année, et tu peux le résilier à la fin de n’importe quel mois.',
+            'booked' => 'Tu as commandé une année supplémentaire, jusqu’au :date. Ensuite, ton abonnement continue chaque mois, et tu peux le résilier à la fin de n’importe quel mois.',
+            'further_year' => 'Je commande une année supplémentaire de :plan à :price, du :from au :until.',
+            'further_year_action' => 'Commander une année supplémentaire',
+            'further_year_unconfirmed' => 'Coche la case pour commander une année supplémentaire.',
+            'further_year_failed' => 'L’année supplémentaire n’a pas pu être commandée. Réessaie plus tard.',
+        ],
         'link_out' => [
             'body' => 'La facturation de ce compte est gérée sur le site de notre partenaire de facturation.',
             'action' => 'Gérer la facturation',

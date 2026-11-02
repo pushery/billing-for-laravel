@@ -156,6 +156,12 @@ final class OwnerScopedTables
         // A withdrawal sent through the withdrawal function, kept as it arrived and with the moment it was sent, which
         // is what decides whether it was in time. Kept and unlinked for the same reasons as a cancellation.
         'billing_withdrawal_declarations',
+
+        // What a customer declared about themselves before a purchase, a consumer or a business, in the wording they
+        // confirmed. It is the evidence of which rules a sale was made under: whether a right of withdrawal arose, and
+        // whether an annual subscription could renew for a year. So it outlives the person who declared it, unlinked
+        // rather than deleted, as the other declarations do.
+        'billing_customer_declarations',
     ];
 
     /** The row survives; the personal data inside it does not. */

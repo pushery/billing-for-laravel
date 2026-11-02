@@ -11,6 +11,7 @@ use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
+use Pushery\Billing\Support\PeriodPlan;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\Plan;
 
@@ -47,7 +48,7 @@ final readonly class InAdvanceProrationStrategy implements ProrationStrategy
             return null;
         }
 
-        return $this->rest->forTierChange($subscription, $current, $newPlan, Carbon::now());
+        return $this->rest->forTierChange($subscription, $current, PeriodPlan::movedTo($this->plans, $subscription, $newPlan), Carbon::now());
     }
 
     /**
@@ -65,7 +66,7 @@ final readonly class InAdvanceProrationStrategy implements ProrationStrategy
             return;
         }
 
-        $difference = $this->rest->forTierChange($subscription, $current, $newPlan, $now);
+        $difference = $this->rest->forTierChange($subscription, $current, PeriodPlan::movedTo($this->plans, $subscription, $newPlan), $now);
 
         if (! $difference instanceof Money || $difference->isZero()) {
             return;
@@ -94,11 +95,11 @@ final readonly class InAdvanceProrationStrategy implements ProrationStrategy
             ->first();
     }
 
-    /** The plan of the tier the subscription is on. */
+    /** The plan of the tier the subscription is on, at the price its periods are billed at. */
     private function currentPlan(?Subscription $subscription): ?Plan
     {
         $tierKey = $subscription?->tier_key;
 
-        return $tierKey === null ? null : $this->plans->planFor($tierKey);
+        return ! $subscription instanceof Subscription || $tierKey === null ? null : PeriodPlan::of($this->plans, $subscription, $tierKey);
     }
 }

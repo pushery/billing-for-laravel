@@ -19,6 +19,38 @@
             </div>
         @endif
 
+        {{-- A consumer's annual term: when it ends and what follows it, and in its last 60 days a further year the
+             customer orders by ticking its wording. The wording is the order, so the box is never ticked for them. --}}
+        @if ($annualTerm !== null)
+            <div class="mt-3 space-y-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-100">
+                <p>
+                    @if ($annualTerm['booked'] !== null)
+                        {{ __('billing::account.manage.annual_term.booked', ['date' => $annualTerm['booked']]) }}
+                    @elseif ($annualTerm['monthly'] !== null)
+                        {{ __('billing::account.manage.annual_term.ends_monthly', ['date' => $annualTerm['ends'], 'price' => $annualTerm['monthly']]) }}
+                    @else
+                        {{ __('billing::account.manage.annual_term.ends_twelfth', ['date' => $annualTerm['ends']]) }}
+                    @endif
+                </p>
+
+                @if ($annualTerm['furtherYear'] !== null)
+                    <form wire:submit="bookFurtherYear" class="space-y-2">
+                        <label class="flex items-start gap-2">
+                            <input type="checkbox" wire:model="furtherYearConfirmed" class="mt-0.5 rounded border-blue-300 dark:border-blue-800">
+                            <span>{{ $annualTerm['furtherYear'] }}</span>
+                        </label>
+                        @error('furtherYearConfirmed')
+                            <p role="alert" class="font-medium text-red-700 dark:text-red-400">{{ $message }}</p>
+                        @enderror
+                        <button type="submit" wire:loading.attr="disabled"
+                            class="rounded-md border border-blue-300 px-3 py-1 font-medium hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800 dark:hover:bg-blue-900">
+                            {{ __('billing::account.manage.annual_term.further_year_action') }}
+                        </button>
+                    </form>
+                @endif
+            </div>
+        @endif
+
         {{-- Trial-status note: how long is left, and (for a card-free trial) the hint to add one. --}}
         @if ($trial !== null)
             <p role="status" @class([

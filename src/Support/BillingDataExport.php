@@ -30,6 +30,18 @@ use Pushery\Billing\Webhooks\WebhookPayloadSecrets;
 final readonly class BillingDataExport
 {
     /**
+     * The integer columns that keep a moment as Unix seconds, by table.
+     *
+     * A provider's event time is kept as the seconds the provider reports, so that two of its events compare exactly.
+     * The schema cannot tell such a column from one that holds a count, so the package names them here, and a test
+     * holds the list to every integer column of the schema whose name ends in `_at`.
+     */
+    private const array UNIX_SECOND_COLUMNS = [
+        'billing_merchant_accounts' => ['capabilities_event_at'],
+        'billing_subscriptions' => ['synced_event_at'],
+    ];
+
+    /**
      * The shared table machinery is defaulted rather than required: this class is public surface a consumer
      * may legitimately construct with `new`, and it is stateless, so demanding the dependency would break
      * that for no benefit. The container still injects its own instance.
@@ -96,6 +108,8 @@ final readonly class BillingDataExport
     /**
      * The export with every moment in ISO 8601 with its offset, and a date as a date.
      *
+     * A moment kept as Unix seconds, in a column {@see self::UNIX_SECOND_COLUMNS} names, is written in UTC.
+     *
      * A row leaves the database as the database writes it, `2026-10-26 21:00:00`, without a `T` and without a zone,
      * and the person reading their copy cannot place it. Which columns hold a moment comes from the schema rather
      * than from their names: `period_start` and `decide_by` are moments as much as `created_at` is. Each is read in
@@ -121,12 +135,22 @@ final readonly class BillingDataExport
                 }
             }
 
-            $export[$table] = array_map(static function (array $row) use ($zones): array {
+            $seconds = self::UNIX_SECOND_COLUMNS[$table] ?? [];
+
+            $export[$table] = array_map(static function (array $row) use ($zones, $seconds): array {
                 foreach ($zones as $column => $zone) {
                     $value = $row[$column] ?? null;
 
                     if (is_string($value)) {
                         $row[$column] = CarbonImmutable::parse($value, $zone)->toIso8601String();
+                    }
+                }
+
+                foreach ($seconds as $column) {
+                    $value = $row[$column] ?? null;
+
+                    if (is_numeric($value)) {
+                        $row[$column] = CarbonImmutable::createFromTimestampUTC((int) $value)->toIso8601String();
                     }
                 }
 

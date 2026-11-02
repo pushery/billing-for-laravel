@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Consumer;
 
 use Illuminate\Contracts\Config\Repository;
+use Pushery\Billing\Enums\CustomerAudience;
 use Pushery\Billing\Exceptions\InvalidBillingConfig;
 
 /**
@@ -37,6 +38,12 @@ final readonly class ConsumerRightsProfile
      */
     public static function isActive(Repository $config, object $reading): bool
     {
+        // An application that sells only to businesses has no consumer to protect, so the regime is off there whatever
+        // the profile names. `billing:doctor` reports a profile set beside it, which says two things at once.
+        if (CustomerAudience::configured($config) === CustomerAudience::BusinessOnly) {
+            return false;
+        }
+
         $name = $config->get(self::KEY);
 
         if (in_array($name, [null, '', false], true)) {

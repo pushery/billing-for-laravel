@@ -118,5 +118,11 @@ final readonly class SubscriptionStateChanged implements BillingDomainEvent, Ide
          * catalog does not list, and on every event of a driver that bills a tier at its one interval.
          */
         public ?BillingInterval $interval = null,
+        /**
+         * The provider's schedule that holds the subscription, where one does: under Stripe, the subscription schedule
+         * that arranges how a consumer's annual term goes on. Null where nothing holds it, and on every event of a
+         * driver without schedules.
+         */
+        public ?string $scheduleReference = null,
     ) {}
 }

@@ -81,7 +81,9 @@ final readonly class PeriodResolver
     /** The cycle that holds the moment, stepped forward from the stored one the way the engine advances it. */
     private function following(BillingPeriod $period, Subscription $subscription, CarbonInterface $moment): BillingPeriod
     {
-        $interval = new TierInterval($this->config ?? Container::getInstance()->make(Repository::class))->for($subscription->tier_key);
+        // The row's own interval where it names one: a consumer's year that went on month by month advances by a month.
+        $interval = $subscription->billing_interval
+            ?? new TierInterval($this->config ?? Container::getInstance()->make(Repository::class))->for($subscription->tier_key);
 
         while (! $period->contains($moment)) {
             $period = new BillingPeriod($this->key($period->end), $period->end, $interval->advance($period->end)->utc());

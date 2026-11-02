@@ -68,6 +68,7 @@ use Pushery\Billing\Console\Commands\ReconcileUsageCommand;
 use Pushery\Billing\Console\Commands\RecordMarketAccessCommand;
 use Pushery\Billing\Console\Commands\RefreshMerchantCapabilitiesCommand;
 use Pushery\Billing\Console\Commands\ReleaseAbandonedClaimCommand;
+use Pushery\Billing\Console\Commands\RemindAnnualTermsCommand;
 use Pushery\Billing\Console\Commands\RemindDelinquentSubscriptionsCommand;
 use Pushery\Billing\Console\Commands\RemindReattestationsCommand;
 use Pushery\Billing\Console\Commands\ReplayWebhooksCommand;
@@ -96,6 +97,7 @@ use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\AddonContentMap;
 use Pushery\Billing\Contracts\AnnualEarningsCounter;
 use Pushery\Billing\Contracts\AppliesScheduledSwaps;
+use Pushery\Billing\Contracts\ArrangesAnnualTerms;
 use Pushery\Billing\Contracts\ArrearsClock;
 use Pushery\Billing\Contracts\ArrearsRoster;
 use Pushery\Billing\Contracts\AttachesToContractConfirmation;
@@ -106,6 +108,7 @@ use Pushery\Billing\Contracts\BundleContents;
 use Pushery\Billing\Contracts\BuyerPartyResolver;
 use Pushery\Billing\Contracts\CanReceiveMoney;
 use Pushery\Billing\Contracts\CanTransactMoney;
+use Pushery\Billing\Contracts\ChecksVatIds;
 use Pushery\Billing\Contracts\ClassifiesReportability;
 use Pushery\Billing\Contracts\ConformityUpdatePolicy;
 use Pushery\Billing\Contracts\ConsumerWithdrawalPolicy;
@@ -303,13 +306,13 @@ use Pushery\Billing\Support\BillingConfigValidator;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\ConfigOrderButtonText;
 use Pushery\Billing\Support\CustodyGuard;
+use Pushery\Billing\Support\DeclaredBusinessBuyers;
 use Pushery\Billing\Support\GoLivePreflightGuard;
 use Pushery\Billing\Support\LanguageFallbackLoader;
 use Pushery\Billing\Support\LocalSubscriptionPayments;
 use Pushery\Billing\Support\LocalSubscriptionStateReader;
 use Pushery\Billing\Support\MarketplaceSupportGuard;
 use Pushery\Billing\Support\MeteringSupportGuard;
-use Pushery\Billing\Support\NoBusinessBuyers;
 use Pushery\Billing\Support\NoConfirmationDocuments;
 use Pushery\Billing\Support\NoPaymentAccounts;
 use Pushery\Billing\Support\NoRetentionHolds;
@@ -337,6 +340,7 @@ use Pushery\Billing\Tax\PaymentCountryLeadsPolicy;
 use Pushery\Billing\Tax\PlaceOfSupplyResolver;
 use Pushery\Billing\Tax\ShippedTaxRates;
 use Pushery\Billing\Tax\TaxCalculatorFactory;
+use Pushery\Billing\Tax\VerdictOnlyVatIdChecks;
 use Pushery\Billing\Usage\CounterUsageProvider;
 use Pushery\Billing\Usage\DatabaseUsageHistory;
 use Pushery\Billing\Usage\NullUsageProvider;
@@ -738,6 +742,10 @@ final class BillingServiceProvider extends ServiceProvider
         // a reverse charge on an unvalidated id), an app that needs real EU B2B zero-rating binds ViesVatIdValidator.
         $this->app->bind(VatIdValidator::class, NullVatIdValidator::class);
 
+        // The register's answer with its details, from whichever validator is bound: one that reads the register
+        // answers itself, any other gives its verdict alone, so a validator of the application's own keeps working.
+        $this->app->bind(ChecksVatIds::class, static fn (Application $app): ChecksVatIds => VerdictOnlyVatIdChecks::of($app->make(VatIdValidator::class)));
+
         // The small-business register check. A separate binding from the one above: two registers, two
         // different consequences, and one class answering both would blur the distinction that decides
         // which of them happens. The default contacts nothing, so a bare checkout works offline.
@@ -780,9 +788,9 @@ final class BillingServiceProvider extends ServiceProvider
         // The zone an owner reads the day of a notice in. None until the application binds an answer: a notice then
         // names the day of the moment as stored, which this package keeps in UTC.
         $this->app->bind(OwnerTimezone::class, NoOwnerTimezone::class);
-        // Which owners buy as a business. Nobody, until the application says: an offer only businesses may buy is
-        // then shown to no one rather than to everyone.
-        $this->app->bind(IdentifiesBusinessBuyers::class, NoBusinessBuyers::class);
+        // Which owners buy as a business: every owner where `billing.audience` is `business_only`, otherwise the ones that
+        // declared themselves one at checkout. An offer only businesses may buy is shown to nobody else, never to everyone.
+        $this->app->bind(IdentifiesBusinessBuyers::class, DeclaredBusinessBuyers::class);
         // What the confirmation of a contract carries beside its text: nothing, until the application binds the
         // documents of its own, its terms in the version accepted for instance.
         $this->app->bind(AttachesToContractConfirmation::class, NoConfirmationDocuments::class);
@@ -1063,6 +1071,8 @@ final class BillingServiceProvider extends ServiceProvider
             // A capability is taken out rather than answered with a no-op, so a host that asks whether it is bound
             // does not offer to pay an invoice nobody can pay.
             $this->app->offsetUnset(PaysOutstandingInvoices::class);
+            // Nor is there a subscription whose year could be arranged.
+            $this->app->offsetUnset(ArrangesAnnualTerms::class);
         }
     }
 
@@ -1071,13 +1081,15 @@ final class BillingServiceProvider extends ServiceProvider
      *
      * A run killed outright (SIGKILL, the OOM killer, a container stopped after its grace period) never releases
      * its lock, and the scheduler skips the command until the lock expires: a day, unless the entry names a
-     * shorter time. Each value is longer than a run takes and short enough that a lost lock costs few runs: ten
-     * minutes for the minutely usage flush, whose claim is safe for a second worker anyway, two runs for the
-     * hourly cycle run, and half a day for a daily command, so the run it skips is never the next day's.
+     * shorter time. Each value is longer than a run takes and shorter than the cadence allows, so a lost lock
+     * costs at most the next run: five minutes for the minutely usage flush, whose claim is safe for a second
+     * worker anyway, 55 minutes for the hourly cycle run, which claims each cycle once through the unique
+     * (subscription_id, period_start) of its orders, and half a day for a daily command, so the run it skips is
+     * never the next day's.
      */
-    private const int LOCK_MINUTELY = 10;
+    private const int LOCK_MINUTELY = 5;
 
-    private const int LOCK_HOURLY = 120;
+    private const int LOCK_HOURLY = 55;
 
     private const int LOCK_DAILY = 720;
 
@@ -1304,6 +1316,7 @@ final class BillingServiceProvider extends ServiceProvider
                 WarnExpiringCardsCommand::class,
                 WarnEndingTrialsCommand::class,
                 WarnEndingSubscriptionsCommand::class,
+                RemindAnnualTermsCommand::class,
                 AdvanceBuyerProtectionCommand::class,
                 AdvanceDunningCommand::class,
                 TaxReturnExportCommand::class,
@@ -1445,6 +1458,9 @@ final class BillingServiceProvider extends ServiceProvider
             // And for the period a cancellation leaves: the owner keeps the plan until the end they paid for, and
             // resuming before that day keeps it without a gap, which nothing told them since the cancellation notice.
             $withHeartbeat($schedule->command('billing:subscriptions:warn')->dailyAt('09:10')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:subscriptions:warn');
+            // The reminders an annual term is owed: before it ends, before a consumer's first monthly charge, and every six
+            // months of the monthly contract it went on as. Daily, after the other reminders.
+            $withHeartbeat($schedule->command('billing:annual-terms:remind')->dailyAt('09:20')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:annual-terms:remind');
             // The tax-standing deadline, announced before it bites. Daily and early, because the value of
             // this message is entirely in how much time it leaves: a merchant needs longer to produce a
             // declaration than a checkout takes to fail. It is silent until an operator sets the date.

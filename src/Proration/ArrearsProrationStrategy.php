@@ -11,6 +11,7 @@ use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
+use Pushery\Billing\Support\PeriodPlan;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\Plan;
 
@@ -52,7 +53,9 @@ final readonly class ArrearsProrationStrategy implements ProrationStrategy
 
         [$remaining, $length] = $this->clock($subscription);
 
-        return $this->calculator->netForSwap($current->amount, $newPlan->amount, $remaining, $length);
+        [$from, $to] = $this->forThePeriod($subscription, $current, $newPlan);
+
+        return $this->calculator->netForSwap($from, $to, $remaining, $length);
     }
 
     /**
@@ -72,7 +75,8 @@ final readonly class ArrearsProrationStrategy implements ProrationStrategy
 
         $before = $subscription->tier_adjustment_accrued;
 
-        $subscription->accrueTierChange($current->amount, $newPlan->amount, Carbon::now());
+        [$from, $to] = $this->forThePeriod($subscription, $current, $newPlan);
+        $subscription->accrueTierChange($from, $to, Carbon::now());
 
         // The row says what the period's bill will carry, never why. Without this a support agent reading an
         // invoice whose plan line matches no list price has no way to see the change of tier behind it.
@@ -82,6 +86,22 @@ final readonly class ArrearsProrationStrategy implements ProrationStrategy
             'accrued' => $subscription->tier_adjustment_accrued - $before,
             'currency' => $current->amount->currency,
         ], AuditSource::System);
+    }
+
+    /**
+     * The tier being left and the one moved to, each at what it costs for the period in progress: the period is billed at
+     * those prices, and a tier sold at another interval than the period's costs its rate for the period's time.
+     *
+     * @return array{Money, Money}
+     */
+    private function forThePeriod(Subscription $subscription, Plan $current, Plan $newPlan): array
+    {
+        $moved = PeriodPlan::movedTo($this->plans, $subscription, $newPlan);
+
+        return [
+            PeriodPlan::scaled($current->amount, $current->interval, $subscription),
+            PeriodPlan::scaled($moved->amount, $moved->interval, $subscription),
+        ];
     }
 
     /** The owner's default subscription at the platform, the one the account hub swaps. */
@@ -95,12 +115,15 @@ final readonly class ArrearsProrationStrategy implements ProrationStrategy
             ->first();
     }
 
-    /** The plan of the tier the subscription is on: the price the cycle that closes the period starts from. */
+    /**
+     * The plan of the tier the subscription is on, at the price its periods are billed at: the price the cycle that
+     * closes the period starts from.
+     */
     private function currentPlan(?Subscription $subscription): ?Plan
     {
         $tierKey = $subscription?->tier_key;
 
-        return $tierKey === null ? null : $this->plans->planFor($tierKey);
+        return ! $subscription instanceof Subscription || $tierKey === null ? null : PeriodPlan::of($this->plans, $subscription, $tierKey);
     }
 
     /**

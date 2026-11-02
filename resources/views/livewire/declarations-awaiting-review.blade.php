@@ -1,5 +1,7 @@
-<section aria-labelledby="declarations-heading" class="space-y-4">
-    <h2 id="declarations-heading" class="text-base font-semibold">{{ __('billing::admin.declarations.heading') }}</h2>
+<section {{ new \Illuminate\View\ComponentAttributeBag(['aria-labelledby' => $headless ? null : 'declarations-heading']) }} class="space-y-4">
+    @unless ($headless)
+        <h2 id="declarations-heading" class="text-base font-semibold">{{ __('billing::admin.declarations.heading') }}</h2>
+    @endunless
     <p class="text-sm text-gray-600 dark:text-gray-300">{{ __('billing::admin.declarations.intro') }}</p>
 
     {{-- Persistent live regions, like the console's: the wrappers stay in the DOM and only their text toggles, so a
@@ -27,7 +29,11 @@
         @foreach ($declarations as $declaration)
             <article wire:key="{{ $kind }}-{{ $declaration->id }}" aria-labelledby="{{ $kind }}-{{ $declaration->id }}-heading"
                 class="space-y-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-                <h3 id="{{ $kind }}-{{ $declaration->id }}-heading" class="text-sm font-semibold">{{ __('billing::admin.declarations.'.$kind) }}</h3>
+                @if ($headless)
+                    <h2 id="{{ $kind }}-{{ $declaration->id }}-heading" class="text-sm font-semibold">{{ __('billing::admin.declarations.'.$kind) }}</h2>
+                @else
+                    <h3 id="{{ $kind }}-{{ $declaration->id }}-heading" class="text-sm font-semibold">{{ __('billing::admin.declarations.'.$kind) }}</h3>
+                @endif
 
                 {{-- The declaration as the person's confirmation states it, every value as they typed it. --}}
                 <dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">

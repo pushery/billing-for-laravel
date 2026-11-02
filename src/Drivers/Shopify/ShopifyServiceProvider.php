@@ -8,6 +8,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Container\Container;
 use Illuminate\Support\ServiceProvider;
 use Override;
+use Pushery\Billing\Contracts\ArrangesAnnualTerms;
 use Pushery\Billing\Contracts\AttachesVerifiedVatIds;
 use Pushery\Billing\Contracts\BillingDriver;
 use Pushery\Billing\Contracts\CardPresentPayments;
@@ -125,6 +126,8 @@ final class ShopifyServiceProvider extends ServiceProvider
         $this->app->offsetUnset(SubmitsDisputeEvidence::class);
         $this->app->offsetUnset(AttachesVerifiedVatIds::class);
         $this->app->offsetUnset(PaysOutstandingInvoices::class);
+        // Nor is there a Stripe subscription whose year a schedule could arrange, and a Shopify merchant buys as a business.
+        $this->app->offsetUnset(ArrangesAnnualTerms::class);
 
         $this->guardCredentials();
     }

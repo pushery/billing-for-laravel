@@ -7,10 +7,12 @@ namespace Pushery\Billing\Support;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use DateTimeImmutable;
+use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Pushery\Billing\Consumer\CustomerTypes;
 use Pushery\Billing\Contracts\EnsuresProviderCustomer;
 use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
 use Pushery\Billing\Contracts\PlanCatalog;
@@ -458,6 +460,10 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
                 'status' => SubscriptionState::Trialing->value,
                 'tier_key' => $tierKey,
                 'trial_ends_at' => $trialEndsAt,
+                // Whether the customer buys as a consumer or as a business, frozen as the subscription begins, and the
+                // moment it began under terms that name the monthly price a year goes on at.
+                'customer_type' => Container::getInstance()->make(CustomerTypes::class)->of($billable),
+                'monthly_terms_at' => $now,
                 // A new contract, whatever the row held before: its withdrawal window opens now.
                 'started_at' => $now,
                 'current_period_start' => $now,
