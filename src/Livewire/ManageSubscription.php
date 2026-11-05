@@ -23,7 +23,9 @@ use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SwapTiming;
+use Pushery\Billing\Exceptions\SwapAwaitsPayment;
 use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\BuyerAudiences;
 use Pushery\Billing\Support\CatalogLabel;
 use Pushery\Billing\Support\LinkOut;
@@ -425,12 +427,32 @@ final class ManageSubscription extends AccountScreen
             //
             // Wrapped so a swap that fails leaves nothing behind, neither the proration the driver booked nor
             // the pending downgrade the upgrade would have superseded.
-            DB::transaction(function () use ($tierKey, $subscription, $interval): void {
-                Container::getInstance()->make(SubscriptionActions::class)->swap($this->owner(), $tierKey, interval: $interval);
+            try {
+                DB::transaction(function () use ($tierKey, $subscription, $interval): void {
+                    Container::getInstance()->make(SubscriptionActions::class)->swap($this->owner(), $tierKey, interval: $interval);
 
-                // An immediate upgrade supersedes any pending downgrade — the customer just chose to move up now.
-                $subscription?->cancelScheduledSwap();
-            });
+                    // An immediate upgrade supersedes any pending downgrade — the customer just chose to move up now.
+                    $subscription?->cancelScheduledSwap();
+                });
+            } catch (SwapAwaitsPayment $held) {
+                // The provider holds the change until its charge is paid, so nothing changed yet, a pending downgrade
+                // included. The customer goes to pay where the provider offers a page, and is told otherwise.
+                $this->previewTierKey = null;
+                $this->previewAmount = null;
+                $this->audit('subscription.swap_awaits_payment', ['tier' => $tierKey, 'interval' => $interval?->value]);
+
+                $page = SafeExternalUrl::orNull($held->confirmationUrl);
+
+                if ($page !== null) {
+                    $this->toHostedPage($page);
+
+                    return;
+                }
+
+                $this->addError('swap', $this->screenText('billing::account.manage.swap_awaits_payment'));
+
+                return;
+            }
 
             $this->audit('subscription.swapped', ['tier' => $tierKey, 'interval' => $interval?->value]);
         }
@@ -461,9 +483,34 @@ final class ManageSubscription extends AccountScreen
      */
     private function selectedInterval(): ?BillingInterval
     {
-        $chosen = BillingInterval::tryFrom($this->interval);
+        $chosen = BillingInterval::tryFrom($this->interval) ?? $this->keptInterval();
 
         return $chosen instanceof BillingInterval && in_array($chosen, $this->intervalsOffered(), true) ? $chosen : null;
+    }
+
+    /**
+     * The interval a swap that names none keeps: the one the owner's subscription is billed at, where the driver keeps
+     * it, and otherwise none.
+     *
+     * Without it the screen listed and previewed every tier at its own interval while a Stripe swap kept the
+     * subscription's, so a yearly subscriber saw a monthly price and was moved to the yearly one. Read from the row,
+     * never from the provider, as everything the screen renders is: a row that names no interval preselects none.
+     */
+    private function keptInterval(): ?BillingInterval
+    {
+        if (! Container::getInstance()->make(BillingManager::class)->capabilities()->keepsTheIntervalOnSwap) {
+            return null;
+        }
+
+        $subscription = $this->subscription();
+
+        // A subscription the package's own engine continues is listed at the price its periods are billed at, and that
+        // stays the engine's to say.
+        if (! $subscription instanceof Subscription || $subscription->provider_id === null || $this->billedByTheEngine($subscription)) {
+            return null;
+        }
+
+        return $subscription->billing_interval;
     }
 
     /**

@@ -4,6 +4,54 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.54.0] - 2026-11-04
+
+### ⚠️ Breaking
+
+- **`SubscriptionActions::swap()` throws `SwapAwaitsPayment` where Stripe holds the change until its charge is paid.** A change Stripe charges at once, to a subscription paid by card or Link, applies only once its invoice is paid, and a declined card or a payment the bank wants confirmed left the subscription on its price while `swap()` returned as if the change were made. The exception names the subscription, the invoice and the page where the customer pays it, where Stripe offers one. The plan screen sends the customer to that page, or shows a notice where there is none, and records no swap.
+
+  **Upgrade:** an application that calls `swap()` itself catches `SwapAwaitsPayment` and sends the customer to `confirmationUrl`, or to its own page for paying an open invoice. `applyScheduledSwap()` throws it as well, and `billing:run` handles it.
+
+- **On PostgreSQL every moment in the package's tables is a `timestamptz`, and `created_at` and `updated_at` read back in the session's zone.** A `timestamp without time zone` stored a wall clock, and which moment it meant was a convention: UTC for a column cast with `UtcDateTime`, the application's zone for the timestamps Eloquent writes. An import, another system or a `NOW()` in a session with another zone wrote a different moment than it read. The migration `2026_11_02_000195_keep_every_moment_of_the_billing_tables_as_timestamptz` converts every such column of the billing tables from the zone its values were written in, and every model now writes its moments with their offset there. Migrations of the package create moments with `dateTimeTz()` from now on, a `timestamptz` on PostgreSQL and a `DATETIME` on MySQL. MySQL and SQLite are unchanged.
+
+  **Upgrade:** set `'timezone' => 'UTC'` on the PostgreSQL connection, because a moment a query binds goes out without an offset and PostgreSQL reads it in the session's zone. Then run the migrations. Where `app.timezone` is not UTC, the migration rewrites each table that holds `created_at` or `updated_at` once, locked while it does, so run it in a quiet window; with `app.timezone` set to UTC nothing is rewritten. A model's `created_at` and `updated_at` then come back in UTC, and an application formats them with `->timezone(config('app.timezone'))` where it shows them.
+
+### ✨ Added
+
+- **`MollieConnect::onboarding()` names the page in Mollie's dashboard where the merchant completes the onboarding.** `MollieOnboarding::$dashboard` carries the address Mollie gives under `_links.dashboard`, or null where it gives none, so a platform can send a merchant whose onboarding needs data straight to the page that asks for it.
+
+- **`PreviewsSwaps` says what a change of tier would cost before the customer makes it.** `previewSwap()` takes the arguments of `SubscriptionActions::swap()` and prices exactly the change the swap makes: the same item, the same price, the interval a swap keeps where it names none, and the same proration. It answers what the invoice after the change asks the customer to pay, or `null` where the swap would be refused or the provider gives no answer. The Stripe driver binds it, and the package's own engine and Shopify bind nothing, so a host asks the container whether it is bound.
+
+- **A checkout asks for a tax ID without Stripe Tax as well, where `billing.checkout.tax_id_collection` is `true`.** The field followed the provider's tax alone, so an installation that computes the tax itself could not let a business put its VAT ID on the invoice. Unset, the setting keeps that rule; `true` asks on every checkout and `false` never does, and `collectTaxId` still decides a single checkout.
+
+  **Upgrade:** nothing to do for an installation that leaves the variable unset. One that set `BILLING_CHECKOUT_TAX_ID_COLLECTION=true` without Stripe Tax, where it did nothing so far, now shows the field.
+
+- **`billing.stripe.setup_payment_method_types` limits what a customer can save on Stripe.** A setup intent and the hosted page of `addMethodUrl()` offered every payment method type enabled in the Stripe dashboard, so an application that lists and charges cards alone could not keep a customer from saving Link or SEPA as well, and a method saved that way could become the default without appearing in the application's list. `['card']` offers cards alone on both ways; null, the default, leaves the choice to the dashboard as before.
+
+- **`VatIdCheck::$requesterRefused` tells a requester the register refused from an outage.** A qualified check whose requester VIES does not accept answers `Unavailable` and no detail, as one VIES cannot answer does, and a caller could not tell the two apart. The flag is `true` for a refused requester only, so a caller can ask the same check again without one, which answers about the number.
+
+- **`billing:doctor` reports a PostgreSQL session that does not run in UTC.** It reads the session's offset in January and in July, so every name of UTC passes and a zone with summer time does not, Europe/London included.
+
+### 🐛 Fixed
+
+- **`billing:run` no longer records a scheduled change Stripe holds as applied.** A change for the end of a period that Stripe charges at once, such as a move from a yearly to a monthly price, is held until its invoice is paid where the subscription is paid by card or Link. The run cleared the schedule and recorded `billing.scheduled_swap_applied` all the same, so a hold that ran out left the old price in place and no change anywhere. The run now keeps the change, records `billing.scheduled_swap_awaits_payment`, and tries it again once the hold has run out.
+
+- **The plan screen prices a yearly subscriber's plans at the year until another period is chosen.** A Stripe swap that names no interval keeps the one the subscription is billed at, while the screen listed and previewed every tier at its own interval, so a yearly subscriber saw a monthly price and was moved to the yearly one. The screen now preselects the subscription's period wherever the driver keeps it on a swap, reported by the new `DriverCapabilities::$keepsTheIntervalOnSwap`, and lists, previews and swaps at it. The package's own engine and Shopify keep the screen they had.
+
+- **A checkout that asks for a tax ID lets Stripe save the name onto the customer.** It allowed the address alone, and Stripe requires permission to update an existing customer's name as well before it stores a tax ID there. The package resolves a customer before every checkout, so a checkout with Stripe Tax and the tax ID field could be refused when it opened.
+
+- **The payment-failed mail says when the access is paused.** A subscription that is past due or incomplete grants no access, and the `billing.dunning` middleware blocks the surfaces it guards, but the mail only asked the customer to update their payment details to keep the subscription active. Where the failure has paused the access, the mail now says so and that it comes back as soon as a payment goes through, in all seven languages. A failed payment that paused nothing keeps the plain wording.
+
+  **Upgrade:** nothing to do. Published translations fall back to the package's lines for the two new keys, `payment_failed.paused` and `payment_failed.outro_paused`.
+
+- **The data export hands over a declaration made without signing in.** A cancellation through the cancellation button or a withdrawal through the withdrawal function can be declared without an account, and such a row has no owner, so `BillingDataExport::for()` never found it and the person who declared it did not receive it in their copy (Art. 15 GDPR). The export now also finds a declaration made without signing in under the account's `email`, compared without regard to case, and every declaration that names a subscription the account holds. A declaration another account was signed in to make stays in that account's export.
+
+  **Upgrade:** nothing to do. An owner model that keeps its address somewhere other than an `email` attribute receives the declarations its subscriptions lead to, and not those made under its address.
+
+- **German times end in "Uhr".** `LocalizedDate::shortWithTime()` and `LocalizedDate::longWithSeconds()` wrote `03.09.2026 14:05` and `3. September 2026, 14:05:09 CEST` where German writes `03.09.2026 14:05 Uhr` and `3. September 2026, 14:05:09 Uhr CEST`. That reaches the event log of the admin console and the receipt of a declaration. A regional German such as `de_AT` writes it too, the other six locales read as before, and a date without a clock stays as it was.
+
+  **Upgrade:** nothing to do.
+
 ## [0.53.0] - 2026-11-02
 
 ### ⚠️ Breaking
@@ -8374,7 +8422,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.53.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.54.0...HEAD
+[0.54.0]: https://github.com/pushery/billing-for-laravel/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/pushery/billing-for-laravel/compare/v0.52.0...v0.53.0
 [0.52.0]: https://github.com/pushery/billing-for-laravel/compare/v0.51.0...v0.52.0
 [0.51.0]: https://github.com/pushery/billing-for-laravel/compare/v0.50.0...v0.51.0

@@ -44,6 +44,7 @@ return [
         'preview' => 'Anteprima costo',
         'preview_due' => 'Da pagare oggi con conguaglio: :amount.',
         'preview_unavailable' => 'Nessuna stima disponibile per questa modifica.',
+        'swap_awaits_payment' => 'La modifica del piano attende il pagamento. Si applica non appena il pagamento è confermato.',
         'no_options' => 'Nessun altro piano disponibile.',
         'annual_term' => [
             'ends_monthly' => 'Il tuo anno termina il :date. Dopo, il tuo abbonamento prosegue ogni mese a :price e puoi disdirlo alla fine di qualsiasi mese.',

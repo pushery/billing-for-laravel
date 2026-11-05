@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\UsageEventState;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One recorded unit-of-usage on its way to the provider that bills it.
@@ -37,6 +38,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class UsageEvent extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_usage_events';
 

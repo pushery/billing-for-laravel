@@ -24,5 +24,10 @@ final readonly class MollieOnboarding
         public bool $canReceivePayments = false,
         /** Whether Mollie pays the merchant's money out. */
         public bool $canReceiveSettlements = false,
+        /**
+         * The page in Mollie's dashboard where the merchant gives what the onboarding still needs, or null where Mollie
+         * names none.
+         */
+        public ?string $dashboard = null,
     ) {}
 }

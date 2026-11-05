@@ -12,6 +12,7 @@ use Pushery\Billing\Enums\AppendOnlyDeletion;
 use Pushery\Billing\Enums\TaxIdVerificationStatus;
 use Pushery\Billing\Models\Concerns\AppendOnly;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One answer the provider reported about a buyer's tax ID.
@@ -38,6 +39,7 @@ class TaxIdVerification extends Model
 {
     use AppendOnly;
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_tax_id_verifications';
 

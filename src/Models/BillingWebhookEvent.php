@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One verified provider webhook delivery, unique per (provider, account reference, event_id) so a
@@ -37,6 +38,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class BillingWebhookEvent extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_webhook_events';
 

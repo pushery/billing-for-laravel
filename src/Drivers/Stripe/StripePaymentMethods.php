@@ -88,6 +88,7 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
             // nothing: the provider attaches the method to the customer and leaves every default as it was.
             // The completion webhook carries this mark, and the mapper hands only a marked session on.
             'metadata' => [self::PURPOSE_KEY => self::PURPOSE_ADOPT],
+            ...$this->setupTypes(),
         ]);
 
         return SafeExternalUrl::onHosts($session->url, StripeHostedPages::HOSTS);
@@ -97,7 +98,7 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
     {
         $customerId = $this->customers->resolve($billable);
 
-        $intent = $this->stripe->setupIntents->create(['customer' => $customerId]);
+        $intent = $this->stripe->setupIntents->create(['customer' => $customerId, ...$this->setupTypes()]);
         $secret = $intent->client_secret ?? null;
 
         return new ClientIntent(
@@ -105,6 +106,26 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
             payload: ['client_secret' => is_string($secret) ? $secret : ''],
             offSessionCapable: true,
         );
+    }
+
+    /**
+     * The payment method types `billing.stripe.setup_payment_method_types` allows a customer to save, as the parameter
+     * Stripe takes, or nothing where the setting names none and the dashboard decides.
+     *
+     * @return array{payment_method_types?: list<string>}
+     */
+    private function setupTypes(): array
+    {
+        $configured = $this->config->get('billing.stripe.setup_payment_method_types');
+        $types = [];
+
+        foreach (is_array($configured) ? $configured : [] as $type) {
+            if (is_string($type) && trim($type) !== '') {
+                $types[] = trim($type);
+            }
+        }
+
+        return $types === [] ? [] : ['payment_method_types' => $types];
     }
 
     public function all(Model $billable): array

@@ -10,6 +10,7 @@ use Override;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Models\Concerns\AppendOnly;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * A return file that was produced, as the evidence it is.
@@ -34,6 +35,7 @@ class TaxReturnExportRecord extends Model
 {
     use AppendOnly;
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     /** A run of the consumer one-stop-shop return. */
     public const string ONE_STOP_SHOP = 'one_stop_shop';

@@ -10,6 +10,7 @@ use Override;
 use Pushery\Billing\Marketplace\ReportingPlausibilityGate;
 use Pushery\Billing\Models\Concerns\AppendOnly;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One person's answer to one finding, for one period.
@@ -49,6 +50,7 @@ class ReportingFindingAcknowledgement extends Model
 {
     use AppendOnly;
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_reporting_acknowledgements';
 

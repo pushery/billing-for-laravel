@@ -11,6 +11,7 @@ use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\SellerDataEscalationStage;
 use Pushery\Billing\Enums\SellerDataMeasure;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One episode of a seller's record staying incomplete: when it began, how far it went and how it ended.
@@ -44,6 +45,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class SellerDataEscalationEpisode extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_seller_data_escalations';
 

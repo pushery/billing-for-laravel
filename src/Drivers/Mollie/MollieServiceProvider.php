@@ -35,6 +35,7 @@ use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Contracts\PaysOutstandingInvoices;
 use Pushery\Billing\Contracts\PlanCatalog;
+use Pushery\Billing\Contracts\PreviewsSwaps;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
 use Pushery\Billing\Contracts\ReportsMoneyBackOutcomes;
@@ -219,6 +220,8 @@ final class MollieServiceProvider extends ServiceProvider
         $this->app->offsetUnset(AttachesVerifiedVatIds::class);
         // A Mollie subscription is billed by the package's own engine, and Mollie holds no invoice to pay on request.
         $this->app->offsetUnset(PaysOutstandingInvoices::class);
+        // Nor does Mollie price a change to a subscription the package's own engine bills.
+        $this->app->offsetUnset(PreviewsSwaps::class);
         // The package's own engine bills the subscription and decides when a year ends whether a month or a year
         // follows, so the annual terms are the engine's own.
         $this->app->bind(ArrangesAnnualTerms::class, static fn (): LocalAnnualTerms => new LocalAnnualTerms('mollie'));

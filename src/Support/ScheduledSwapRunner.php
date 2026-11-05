@@ -18,6 +18,7 @@ use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\CustomerType;
+use Pushery\Billing\Exceptions\SwapAwaitsPayment;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Throwable;
@@ -144,10 +145,26 @@ final readonly class ScheduledSwapRunner
         $prorate = $type === Subscription::TYPE_DEFAULT;
         $merchant = MerchantScope::fromUid($subscription->merchant_uid);
 
-        if ($this->actions instanceof AppliesScheduledSwaps) {
-            $this->actions->applyScheduledSwap($owner, $targetTier, prorate: $prorate, merchant: $merchant, type: $type, interval: $subscription->scheduled_billing_interval);
-        } else {
-            $this->actions->swap($owner, $targetTier, prorate: $prorate, merchant: $merchant, type: $type, interval: $subscription->scheduled_billing_interval);
+        // A change the provider holds until its charge is paid is no change made yet. The row keeps it, and it is tried again
+        // once the hold has run out rather than on every run, each of which could raise another charge for it: by then the
+        // provider has either made the change, and the swap finds it made, or let it go.
+        $held = 'billing:scheduled-swap-held:'.$this->scheduleKey($subscription);
+
+        if (Cache::has($held)) {
+            return false;
+        }
+
+        try {
+            if ($this->actions instanceof AppliesScheduledSwaps) {
+                $this->actions->applyScheduledSwap($owner, $targetTier, prorate: $prorate, merchant: $merchant, type: $type, interval: $subscription->scheduled_billing_interval);
+            } else {
+                $this->actions->swap($owner, $targetTier, prorate: $prorate, merchant: $merchant, type: $type, interval: $subscription->scheduled_billing_interval);
+            }
+        } catch (SwapAwaitsPayment $awaiting) {
+            Cache::put($held, true, $awaiting->expiresAt ?? Carbon::now()->addDay());
+            $this->log->record('billing.scheduled_swap_awaits_payment', $owner, ['tier' => $targetTier, 'invoice' => $awaiting->invoice], AuditSource::System);
+
+            return false;
         }
 
         $subscription->cancelScheduledSwap();
@@ -157,6 +174,14 @@ final readonly class ScheduledSwapRunner
         ], AuditSource::System);
 
         return true;
+    }
+
+    /** The row and the moment its change is scheduled for: a change scheduled again is a new one, and nothing held carries over. */
+    private function scheduleKey(Subscription $subscription): string
+    {
+        $key = $subscription->getKey();
+
+        return (is_scalar($key) ? (string) $key : '').':'.$subscription->scheduled_swap_at?->getTimestamp();
     }
 
     /**
@@ -194,8 +219,7 @@ final readonly class ScheduledSwapRunner
         foreach ($upcoming as $subscription) {
             // A change that could not be arranged is tried again the next day, not on every hourly run, so a refusal that
             // lasts, a subscription with a second item for one, is logged once a day and not every hour.
-            $key = $subscription->getKey();
-            $attempt = 'billing:scheduled-swap-arrangement:'.(is_scalar($key) ? (string) $key : '').':'.$subscription->scheduled_swap_at?->getTimestamp();
+            $attempt = 'billing:scheduled-swap-arrangement:'.$this->scheduleKey($subscription);
 
             if (Cache::has($attempt)) {
                 continue;

@@ -300,18 +300,23 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         $taxedHere = ! CreditTopUpVolume::isMoneyCredit($this->addons, $addonKey)
             || VoucherInstrumentType::fromConfigured($this->config->get(VoucherInstrumentType::CONFIG_KEY))->taxedAtIssue();
 
-        if ($this->context->providerTax() && $taxedHere) {
+        $providerTax = $this->context->providerTax() && $taxedHere;
+
+        // The same switch as the subscription lane, read the same way, and overridable for this checkout the same
+        // way. See StripeCheckout for why a platform selling to consumers turns it off. A purchase not taxed at
+        // issue asks for no tax ID, whatever the switch says: nothing on it would carry one.
+        $collect = $taxedHere && ($collectTaxId ?? StripeTaxIdCollection::byDefault($this->config, $providerTax));
+
+        if ($providerTax) {
             $payload['automatic_tax'] = ['enabled' => true];
+        }
 
-            // The same switch as the subscription lane, read the same way, and overridable for this checkout the same
-            // way. See StripeCheckout for why a platform selling to consumers turns it off.
-            if ($collectTaxId ?? $this->config->get('billing.checkout.tax_id_collection', true) !== false) {
-                $payload['tax_id_collection'] = ['enabled' => true];
-            }
+        if ($collect) {
+            $payload['tax_id_collection'] = ['enabled' => true];
+        }
 
-            // Stripe rejects automatic_tax against an existing customer without permission to save the
-            // address it collects — the same caveat, and the same fix, as the subscription lane.
-            $payload['customer_update'] = ['address' => 'auto'];
+        if ($providerTax || $collect) {
+            $payload['customer_update'] = StripeTaxIdCollection::customerUpdate($collect);
         }
 
         $session = $this->stripe->checkout->sessions->create($payload);

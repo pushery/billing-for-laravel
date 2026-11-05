@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Invoicing\Guards;
 
+use DateTimeInterface;
 use Pushery\Billing\Models\InvoiceRecord;
 use RuntimeException;
 
@@ -43,7 +44,7 @@ final class ImmutableIssuedInvoiceGuard
     public function assertUnchanged(InvoiceRecord $invoice): void
     {
         foreach (InvoiceRecord::FROZEN_SCALARS as $field) {
-            if ($invoice->isDirty($field)) {
+            if ($invoice->isDirty($field) && ! $this->sameMoment($invoice->getOriginal($field), $invoice->getAttribute($field))) {
                 throw $this->refusal($field);
             }
         }
@@ -61,6 +62,15 @@ final class ImmutableIssuedInvoiceGuard
         if (! in_array($buyer, [null, [], $invoice->getAttribute('buyer')])) {
             throw $this->refusal('buyer');
         }
+    }
+
+    /**
+     * Whether two values are one moment however each is written. On PostgreSQL a moment is written with its
+     * offset and read back in the server's own notation, so the text of an unchanged `issued_at` differs.
+     */
+    private function sameMoment(mixed $original, mixed $current): bool
+    {
+        return $original instanceof DateTimeInterface && $current instanceof DateTimeInterface && $original->getTimestamp() === $current->getTimestamp();
     }
 
     /** A JSON column as it was loaded, decoded, or null where it held nothing. */

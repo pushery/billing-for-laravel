@@ -8,6 +8,8 @@ return [
         'subject' => 'Não foi possível processar o teu pagamento',
         'intro' => 'Não conseguimos processar o teu último pagamento.',
         'outro' => 'Atualiza os teus dados de pagamento para manteres a tua subscrição ativa.',
+        'paused' => 'O teu acesso está em pausa até um pagamento ser processado, e volta assim que isso acontecer.',
+        'outro_paused' => 'Atualiza os teus dados de pagamento para o recuperares.',
         'cta' => 'Atualizar os dados de pagamento',
     ],
 

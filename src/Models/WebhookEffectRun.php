@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * The record of one effect run against one reference: did this effect already do its work for this
@@ -26,6 +27,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class WebhookEffectRun extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_webhook_effect_runs';
 

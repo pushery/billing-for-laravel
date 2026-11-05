@@ -15,6 +15,7 @@ use Pushery\Billing\Enums\FallbackAttempt;
 use Pushery\Billing\Enums\OrderItemType;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -46,6 +47,7 @@ use Pushery\Billing\ValueObjects\Money;
 class Order extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     /**
      * How long a claim may sit unanswered before it counts as abandoned.

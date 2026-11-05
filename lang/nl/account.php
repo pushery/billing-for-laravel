@@ -44,6 +44,7 @@ return [
         'preview' => 'Kosten bekijken',
         'preview_due' => 'Vandaag te betalen met verrekening: :amount.',
         'preview_unavailable' => 'Geen schatting beschikbaar voor deze wijziging.',
+        'swap_awaits_payment' => 'Je planwijziging wacht op de betaling. Die gaat in zodra de betaling is bevestigd.',
         'no_options' => 'Er zijn geen andere plannen beschikbaar.',
         'annual_term' => [
             'ends_monthly' => 'Je jaar eindigt op :date. Daarna loopt je abonnement maandelijks door voor :price, en je kunt het opzeggen tegen het einde van elke maand.',

@@ -6,6 +6,7 @@ namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * The row an owner's mandate storing locks per provider, so that two of them take turns, the first one included.
@@ -18,6 +19,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class PaymentMandateAnchor extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     public $timestamps = false;
 

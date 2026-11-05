@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One redemption of a coupon by an owner — the ledger row behind a coupon's max-redemptions and per-owner
@@ -27,6 +28,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class CouponRedemption extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_coupon_redemptions';
 

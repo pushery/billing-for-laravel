@@ -16,6 +16,7 @@ use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\MerchantCatalog;
 use Pushery\Billing\Contracts\PausesSubscriptions;
 use Pushery\Billing\Contracts\PlanCatalog;
+use Pushery\Billing\Contracts\PreviewsSwaps;
 use Pushery\Billing\Contracts\SubscriptionActions;
 use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\CancellationReason;
@@ -23,13 +24,17 @@ use Pushery\Billing\Events\SubscriptionPaused;
 use Pushery\Billing\Events\SubscriptionUnpaused;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\EndInsidePeriodIsFinal;
+use Pushery\Billing\Exceptions\SwapAwaitsPayment;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\MerchantScope;
+use Pushery\Billing\ValueObjects\Money;
 use RuntimeException;
 use Stripe\Customer;
+use Stripe\Exception\ApiErrorException;
 use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\RateLimitException;
+use Stripe\Invoice;
 use Stripe\PaymentMethod;
 use Stripe\StripeClient;
 use Stripe\Subscription as StripeSubscription;
@@ -47,7 +52,7 @@ use Throwable;
  * that carries no provider price, or onto a subscription whose tier item cannot be identified, is
  * rejected rather than silently doing nothing — or, worse, repricing the wrong item.
  */
-final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps, PausesSubscriptions, SubscriptionActions
+final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps, PausesSubscriptions, PreviewsSwaps, SubscriptionActions
 {
     /**
      * The payment methods, of those this driver collects, under which Stripe can hold a swap until it is paid.
@@ -245,16 +250,113 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
             throw EligibilityDenied::forMoneyMovement();
         }
 
-        $this->reprice($billable, $tierKey, $prorate, $merchant, $type, $interval);
+        $this->refuseAHeldChange($this->reprice($billable, $tierKey, $prorate, $merchant, $type, $interval));
     }
 
     /** The swap a scheduled change comes to, without asking the gate again: it was asked when the change was made. */
     public function applyScheduledSwap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null, ?BillingInterval $interval = null): void
     {
-        $this->reprice($billable, $tierKey, $prorate, $merchant, $type, $interval);
+        $this->refuseAHeldChange($this->reprice($billable, $tierKey, $prorate, $merchant, $type, $interval));
     }
 
-    private function reprice(Model $billable, string $tierKey, bool $prorate, ?MerchantScope $merchant, ?string $type, ?BillingInterval $interval = null): void
+    /**
+     * Say so where Stripe holds the change until its charge is paid: the subscription is still on its price, and a
+     * return would read as done. The screen that asked can send the customer to pay, and `billing:run` keeps the change
+     * it scheduled until the hold has run out.
+     *
+     * @throws SwapAwaitsPayment
+     */
+    private function refuseAHeldChange(StripeSubscription $updated): void
+    {
+        $pending = $updated->pending_update ?? null;
+
+        if ($pending === null) {
+            return;
+        }
+
+        $invoice = $updated->latest_invoice ?? null;
+        $expires = $pending->expires_at ?? null;
+
+        throw SwapAwaitsPayment::held(
+            $updated->id,
+            $invoice instanceof Invoice ? $invoice->id : (is_string($invoice) ? $invoice : null),
+            $invoice instanceof Invoice ? ($invoice->hosted_invoice_url ?? null) : null,
+            is_int($expires) ? Carbon::createFromTimestampUTC($expires) : null,
+        );
+    }
+
+    /**
+     * What a swap would cost, priced by Stripe for exactly the change {@see self::swap()} would make.
+     *
+     * The subscription, the item and the price come from the same lookup the swap uses, so the preview cannot name
+     * another interval or another item than the swap that follows it. Nothing is written: a schedule that holds the
+     * subscription stays on it, and the eligibility gate is not asked, because no money moves.
+     */
+    public function previewSwap(Model $billable, string $tierKey, bool $prorate = true, ?MerchantScope $merchant = null, ?string $type = null, ?BillingInterval $interval = null): ?Money
+    {
+        try {
+            $target = $this->swapTarget($billable, $tierKey, $merchant, $type, $interval);
+            $customer = $target['subscription']->customer ?? null;
+            $customerId = $customer instanceof Customer ? $customer->id : $customer;
+
+            $preview = $this->stripe->invoices->createPreview([
+                ...(is_string($customerId) ? ['customer' => $customerId] : []),
+                'subscription' => $target['reference'],
+                'subscription_details' => [
+                    'items' => [['id' => $target['base']->id, 'price' => $target['price']]],
+                    'proration_behavior' => $prorate ? 'create_prorations' : 'none',
+                ],
+            ]);
+        } catch (InvalidArgumentException|RuntimeException) {
+            // The swap would be refused, so there is no cost to show; the swap itself says why.
+            return null;
+        } catch (ApiErrorException $failure) {
+            // @rate-limit-deliberate: a 429 lands here as well, and answering it with no figure is right at this
+            // site. The preview writes nothing and marks nothing done, the screen asking for it shows a figure and
+            // nothing else, and asking again is the customer's next look at it. A failure is logged rather than
+            // silent, because a rotated key does not clear by itself.
+            Log::warning('Could not preview a subscription swap; showing no estimate.', [
+                'exception' => $failure::class,
+                'message' => $failure->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        return StripeAmount::toMoney($preview->amount_due, strtoupper($preview->currency));
+    }
+
+    /** The subscription as Stripe returns it after the change, with the invoice of a change it holds. */
+    private function reprice(Model $billable, string $tierKey, bool $prorate, ?MerchantScope $merchant, ?string $type, ?BillingInterval $interval = null): StripeSubscription
+    {
+        $target = $this->swapTarget($billable, $tierKey, $merchant, $type, $interval);
+
+        // A schedule would undo the new price at its next phase, so it comes off first. Where the subscription is still
+        // a consumer's annual one afterwards, the next event about it arranges its year again, at the new tier.
+        $this->letGoOfTheSchedule($target['row']);
+
+        $behavior = $this->paymentBehaviorFor($target['subscription']);
+
+        // Only the base item is repriced. Any metered component or app-owned item on the subscription is
+        // absent from the payload, which Stripe leaves exactly as it is — repricing it would destroy it.
+        // Where Stripe may hold the change, the invoice it holds it for comes back expanded, with the page where it is paid.
+        return $this->stripe->subscriptions->update($target['reference'], [
+            'items' => [['id' => $target['base']->id, 'price' => $target['price']]],
+            'proration_behavior' => $prorate ? 'create_prorations' : 'none',
+            ...$behavior,
+            ...($behavior === [] ? [] : ['expand' => ['latest_invoice']]),
+        ]);
+    }
+
+    /**
+     * The subscription a swap changes, its tier item and the price that item moves to.
+     *
+     * @return array{row: Subscription, reference: string, subscription: StripeSubscription, base: SubscriptionItem, price: string}
+     *
+     * @throws InvalidArgumentException when the tier has no price at the interval or there is no live subscription
+     * @throws RuntimeException when the tier item on the subscription cannot be identified
+     */
+    private function swapTarget(Model $billable, string $tierKey, ?MerchantScope $merchant, ?string $type, ?BillingInterval $interval): array
     {
         // The price comes from the merchant's catalog, so a marketplace swap reprices against the creator's
         // own tier — never the platform's, and never a price the client named. A null merchant reads the
@@ -300,17 +402,7 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
             $price = $this->priceAtTheCurrentInterval($catalog, $tierKey, $base) ?? $price;
         }
 
-        // A schedule would undo the new price at its next phase, so it comes off first. Where the subscription is still
-        // a consumer's annual one afterwards, the next event about it arranges its year again, at the new tier.
-        $this->letGoOfTheSchedule($row);
-
-        // Only the base item is repriced. Any metered component or app-owned item on the subscription is
-        // absent from the payload, which Stripe leaves exactly as it is — repricing it would destroy it.
-        $this->stripe->subscriptions->update($reference, [
-            'items' => [['id' => $base->id, 'price' => $price]],
-            'proration_behavior' => $prorate ? 'create_prorations' : 'none',
-            ...$this->paymentBehaviorFor($subscription),
-        ]);
+        return ['row' => $row, 'reference' => $reference, 'subscription' => $subscription, 'base' => $base, 'price' => $price];
     }
 
     /**

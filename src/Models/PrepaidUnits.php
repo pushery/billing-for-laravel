@@ -6,6 +6,7 @@ namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * An owner's prepaid balance for one meter — units they bought outright ("+1000 emails").
@@ -23,6 +24,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class PrepaidUnits extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_prepaid_units';
 

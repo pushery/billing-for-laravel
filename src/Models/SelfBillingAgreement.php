@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One accepted (and possibly later revoked) self-billing agreement with a creator.
@@ -37,6 +38,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class SelfBillingAgreement extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_self_billing_agreements';
 

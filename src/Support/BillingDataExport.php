@@ -42,6 +42,18 @@ final readonly class BillingDataExport
     ];
 
     /**
+     * The declarations anybody can make without signing in, by table, with the column holding the address the person
+     * gave as their own.
+     *
+     * The cancellation button asks for the person's address and, beside it, where the confirmation goes; the withdrawal
+     * function asks only for the address its confirmation goes to, so on a withdrawal that address is the person's.
+     */
+    private const array DECLARATION_ADDRESSES = [
+        'billing_cancellation_declarations' => 'email',
+        'billing_withdrawal_declarations' => 'confirmation_email',
+    ];
+
+    /**
      * The shared table machinery is defaulted rather than required: this class is public surface a consumer
      * may legitimately construct with `new`, and it is stateless, so demanding the dependency would break
      * that for no benefit. The container still injects its own instance.
@@ -90,6 +102,12 @@ final readonly class BillingDataExport
         // The access the person bought for somebody else. It is keyed to the recipient, so no axis reaches the person
         // who paid, and the purchase is theirs all the same.
         $export['billing_access_grants'] = [...$export['billing_access_grants'] ?? [], ...$this->giftsBoughtBy($owner)];
+
+        // A cancellation or a withdrawal declared without signing in is written unlinked, so no axis reaches it, and the
+        // person who declared it is entitled to it all the same. So is the holder of the contract a declaration names.
+        foreach (self::DECLARATION_ADDRESSES as $table => $addressColumn) {
+            $export[$table] = [...$export[$table] ?? [], ...$this->declarationsReachedOtherwise($owner, $table, $addressColumn, $export[$table] ?? [])];
+        }
 
         // The audit ledger keys on subject/actor, not owner — but a subject-access request covers the
         // owner's billing history all the same, so include the rows where they are the subject or the actor.
@@ -271,6 +289,53 @@ final readonly class BillingDataExport
                 ->where('owner_type', $owner->getMorphClass())->where('owner_id', $key))
             ->get()
             ->map(fn (object $row): array => array_replace((array) $row, ['owner_type' => null, 'owner_id' => null]))
+            ->all());
+    }
+
+    /**
+     * The declarations of one table that are the person's without naming them as their owner, each once.
+     *
+     * Two ways lead to such a row. One was declared without signing in under the address the account answers to, its
+     * `email`, compared without regard to case because the declaration keeps the address as it was typed. Only an
+     * unlinked row is read that way: one another account was signed in to make is that account's declaration, and
+     * handing it over by an address typed into it would hand over somebody else's data (Art. 15(4)). The other names
+     * one of the subscriptions the account holds, as a declaration does when a signed-in person picked one of the
+     * contracts listed to them, and the contract is the holder's.
+     *
+     * The eraser reaches neither, and it does not have to: each row is a business letter kept as proof, and one written
+     * without a signed-in owner is on the retention clock from the moment it arrived. None when the model is not saved.
+     *
+     * @param  'email'|'confirmation_email'  $addressColumn
+     * @param  list<array<array-key, mixed>>  $found  the rows of the table the owner axis found already
+     * @return list<array<array-key, mixed>>
+     */
+    private function declarationsReachedOtherwise(Model $owner, string $table, string $addressColumn, array $found): array
+    {
+        $key = $owner->getKey();
+
+        if (! is_int($key) && ! is_string($key)) {
+            return [];
+        }
+
+        $axis = OwnerScopedTables::ownerAxis();
+        $email = $owner->getAttribute('email');
+        $address = is_string($email) ? mb_strtolower(trim($email)) : '';
+
+        $subscriptions = DB::table('billing_subscriptions')
+            ->where($axis->typeColumn, $owner->getMorphClass())
+            ->where($axis->idColumn, $key)
+            ->select('id');
+
+        return array_values(DB::table($table)
+            ->whereNotIn('id', array_column($found, 'id'))
+            ->where(fn (Builder $q): Builder => $q
+                ->whereIn('subscription_id', $subscriptions)
+                ->when($address !== '', fn (Builder $q): Builder => $q->orWhere(fn (Builder $q): Builder => $q
+                    ->whereNull($axis->typeColumn)
+                    ->whereRaw('lower('.$addressColumn.') = ?', [$address]))))
+            ->orderBy('id')
+            ->get()
+            ->map(fn (object $row): array => (array) $row)
             ->all());
     }
 

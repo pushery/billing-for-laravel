@@ -192,6 +192,7 @@ final readonly class MollieConnect
             status: MollieValue::of($onboarding?->status),
             canReceivePayments: $onboarding?->canReceivePayments === true,
             canReceiveSettlements: $onboarding?->canReceiveSettlements === true,
+            dashboard: $this->linkOf($onboarding?->_links, 'dashboard'),
         );
     }
 
@@ -234,14 +235,22 @@ final readonly class MollieConnect
     /** The onboarding address a client link carries, or null where Mollie sent none. */
     private function clientLinkOf(ClientLink $link): ?string
     {
-        // The SDK declares the links an object, and a response that carries none leaves the property null.
-        $links = MollieValue::narrow($link->_links, stdClass::class);
+        return $this->linkOf($link->_links, 'clientLink');
+    }
 
-        if (! $links instanceof stdClass || ! property_exists($links, 'clientLink') || ! is_object($links->clientLink) || ! property_exists($links->clientLink, 'href')) {
+    /** The address of the named link in a resource's `_links`, or null where it carries none or no address. */
+    private function linkOf(mixed $links, string $name): ?string
+    {
+        // The SDK declares the links an object, and a response that carries none leaves the property null.
+        $links = MollieValue::narrow($links, stdClass::class);
+
+        if (! $links instanceof stdClass || ! property_exists($links, $name) || ! is_object($links->{$name}) || ! property_exists($links->{$name}, 'href')) {
             return null;
         }
 
-        return is_string($links->clientLink->href) && $links->clientLink->href !== '' ? $links->clientLink->href : null;
+        $href = $links->{$name}->href;
+
+        return is_string($href) && $href !== '' ? $href : null;
     }
 
     /**

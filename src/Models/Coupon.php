@@ -12,6 +12,7 @@ use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Contracts\ArrearsClock;
 use Pushery\Billing\Discounts\CouponCodes;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
@@ -65,6 +66,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 class Coupon extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_coupons';
 

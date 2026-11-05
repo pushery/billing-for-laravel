@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * Units of a meter an owner was given until a moment, such as the allowance a plan grants for its period.
@@ -34,6 +35,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class UsageGrant extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_usage_grants';
 

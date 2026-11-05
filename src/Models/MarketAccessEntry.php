@@ -11,6 +11,7 @@ use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\MarketAccess;
 use Pushery\Billing\Models\Concerns\AppendOnly;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One change in a market's standing.
@@ -27,6 +28,7 @@ class MarketAccessEntry extends Model
 {
     use AppendOnly;
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_market_access_log';
 

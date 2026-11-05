@@ -260,6 +260,8 @@ final class DoctorCommand extends Command
 
         $failing = $this->reportHostKeyTypeMismatch() || $failing;
 
+        $failing = $this->reportSessionTimeZone() || $failing;
+
         $failing = $this->reportPricesStripeChargesOtherwise($config, $stripe, $tiers, $plans, $addons, $withdrawals) || $failing;
 
         $pinned = $this->pinnedVersion($config);
@@ -1172,6 +1174,53 @@ final class DoctorCommand extends Command
             ."'{$actual}'. The setting is read when a table is created, so changing it later does not "
             .'alter tables that already exist. Every write keyed to one of your models will fail until the '
             .'columns are migrated to match — this is a data migration, not a setting change.'
+        );
+
+        return true;
+    }
+
+    /**
+     * A PostgreSQL session whose time zone is not UTC.
+     *
+     * The package keeps its moments there as `timestamptz` and writes each with its offset, but a moment a query binds,
+     * `where('ends_at', '<', $now->utc())`, goes out without one, and PostgreSQL reads it in the session's zone. In
+     * any other zone every such comparison is off by the difference: a sweep that expires a subscription early, a usage
+     * event counted in the period before. The connection's `timezone` setting is the remedy.
+     *
+     * The zone is read by its offset in January and in July, so every name of UTC passes and a zone that keeps
+     * summer time does not, Europe/London included, which is UTC in winter.
+     */
+    private function reportSessionTimeZone(): bool
+    {
+        $connection = Schema::getConnection();
+
+        if ($connection->getDriverName() !== 'pgsql') {
+            return false;
+        }
+
+        try {
+            $session = (array) $connection->selectOne(
+                "select current_setting('TimeZone') as zone, "
+                ."extract(timezone from timestamptz '2026-01-15 12:00:00+00') as winter, "
+                ."extract(timezone from timestamptz '2026-07-15 12:00:00+00') as summer",
+            );
+        } catch (Throwable) {
+            // A connection that does not answer is what the checks reading a table report.
+            return false;
+        }
+
+        $offset = static fn (mixed $seconds): float => is_numeric($seconds) ? (float) $seconds : 0.0;
+
+        if ($offset($session['winter'] ?? null) === 0.0 && $offset($session['summer'] ?? null) === 0.0) {
+            return false;
+        }
+
+        $zone = is_string($session['zone'] ?? null) ? $session['zone'] : 'not UTC';
+
+        $this->components->error(
+            "The database session runs in the time zone '{$zone}'. The package compares its moments in UTC, and "
+            ."PostgreSQL reads a moment a query binds in the session's zone, so every such comparison is off by the "
+            ."difference. Set 'timezone' => 'UTC' on the connection in config/database.php."
         );
 
         return true;

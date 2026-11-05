@@ -103,6 +103,10 @@ return [
         // Stripe dashboard. Null opens the account's default configuration, and what that allows,
         // canceling a subscription included, is decided in the dashboard alone.
         'portal_configuration' => env('BILLING_STRIPE_PORTAL_CONFIGURATION'),
+        // The payment method types a customer can save, as Stripe's `payment_method_types`: `['card']` where the
+        // application lists and charges cards alone. Read by `PaymentMethods::setupIntent()` and by the hosted page
+        // of `addMethodUrl()`. Null offers every type enabled in the Stripe dashboard.
+        'setup_payment_method_types' => null,
     ],
 
     /*
@@ -343,10 +347,12 @@ return [
         // likely to need. Absent it still falls back to the payment-methods route, exactly as before.
         'payment_methods_return_url' => env('BILLING_PAYMENT_METHODS_RETURN_URL'),
         'promotion_codes' => ! in_array(is_string($checkoutPromotionCodes = env('BILLING_CHECKOUT_PROMOTION_CODES')) ? strtolower(trim($checkoutPromotionCodes)) : $checkoutPromotionCodes, [false, '', '0', 'false', 'no', 'off'], true),
-        // Whether a provider-taxed checkout asks the buyer for a tax ID. Stripe reverse-charges on an ID's format
-        // before it verifies the ID, so a platform that sells to consumers can leave the field out and charge every
-        // buyer the tax of their country. Only read while the provider computes tax.
-        'tax_id_collection' => ! in_array(is_string($checkoutTaxIdCollection = env('BILLING_CHECKOUT_TAX_ID_COLLECTION')) ? strtolower(trim($checkoutTaxIdCollection)) : $checkoutTaxIdCollection, [false, '', '0', 'false', 'no', 'off'], true),
+        // Whether a checkout asks the buyer for a tax ID. Unset, a checkout asks where the provider computes tax and
+        // nowhere else. `true` asks on every checkout, with the provider computing tax or not, so a business gets its
+        // ID onto the invoice either way. `false` never asks: Stripe reverse-charges on an ID's format before it
+        // verifies the ID, so a platform that sells to consumers can leave the field out and charge every buyer the
+        // tax of their country.
+        'tax_id_collection' => ($checkoutTaxIdCollection = env('BILLING_CHECKOUT_TAX_ID_COLLECTION')) === null ? null : ! in_array(is_string($checkoutTaxIdCollection) ? strtolower(trim($checkoutTaxIdCollection)) : $checkoutTaxIdCollection, [false, '', '0', 'false', 'no', 'off'], true),
         // What the submit button of a hosted subscription checkout says, as Stripe's `submit_type`. `auto` leaves it
         // to Stripe, which writes "Subscribe" on a subscription; `pay` writes "Buy". A seller to consumers in Germany
         // sets `pay`, because the order button has to name the obligation to pay. An add-on purchase reads nothing

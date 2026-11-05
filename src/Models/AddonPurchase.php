@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One recorded one-time add-on purchase, unique per checkout `reference`.
@@ -32,6 +33,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class AddonPurchase extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_addon_purchases';
 

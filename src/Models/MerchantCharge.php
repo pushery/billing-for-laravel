@@ -18,6 +18,7 @@ use Pushery\Billing\Enums\SellerOfRecordPosture;
 use Pushery\Billing\Enums\SettlementState;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 use Pushery\Billing\ValueObjects\FeeLine;
 use Pushery\Billing\ValueObjects\GoodsConsignment;
 use Pushery\Billing\ValueObjects\Money;
@@ -77,6 +78,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
 class MerchantCharge extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_merchant_charges';
 

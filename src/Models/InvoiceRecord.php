@@ -44,6 +44,7 @@ use Pushery\Billing\Invoicing\Guards\SellerMatchesPostureGuard;
 use Pushery\Billing\Invoicing\Guards\TaxWithoutBasisGuard;
 use Pushery\Billing\Marketplace\DocumentRoleGuard;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 use Pushery\Billing\Tax\UnionMembership;
 use Pushery\Billing\ValueObjects\CountingPeriod;
 use Pushery\Billing\ValueObjects\Invoice;
@@ -140,6 +141,7 @@ use Pushery\Billing\ValueObjects\Money;
 class InvoiceRecord extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_invoices';
 

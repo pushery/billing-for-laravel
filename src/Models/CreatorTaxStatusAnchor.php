@@ -6,6 +6,7 @@ namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * The row a merchant's tax status recordings lock, so that two of them take turns, the first one included.
@@ -17,6 +18,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class CreatorTaxStatusAnchor extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     public $timestamps = false;
 

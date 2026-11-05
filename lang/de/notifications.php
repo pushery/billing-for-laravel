@@ -8,6 +8,8 @@ return [
         'subject' => 'Deine Zahlung konnte nicht verarbeitet werden',
         'intro' => 'Wir konnten deine letzte Zahlung nicht verarbeiten.',
         'outro' => 'Bitte aktualisiere deine Zahlungsdaten, damit dein Abo aktiv bleibt.',
+        'paused' => 'Dein Zugang ist pausiert, bis eine Zahlung durchgeht, und kommt zurück, sobald das geschieht.',
+        'outro_paused' => 'Bitte aktualisiere deine Zahlungsdaten, damit du ihn zurückbekommst.',
         'cta' => 'Zahlungsdaten aktualisieren',
     ],
 

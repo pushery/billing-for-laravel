@@ -11,6 +11,7 @@ use Override;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Models\Concerns\AppendOnly;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One row of the billing audit ledger.
@@ -28,6 +29,7 @@ class BillingEvent extends Model
 {
     use AppendOnly;
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_events';
 

@@ -8,6 +8,8 @@ return [
         'subject' => 'Non è stato possibile elaborare il tuo pagamento',
         'intro' => 'Non siamo riusciti a elaborare il tuo ultimo pagamento.',
         'outro' => 'Aggiorna i tuoi dati di pagamento per mantenere attivo l’abbonamento.',
+        'paused' => 'Il tuo accesso è sospeso finché un pagamento non va a buon fine, e torna non appena succede.',
+        'outro_paused' => 'Aggiorna i tuoi dati di pagamento per riaverlo.',
         'cta' => 'Aggiorna i dati di pagamento',
     ],
 

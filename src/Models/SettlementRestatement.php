@@ -11,6 +11,7 @@ use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\SettlementRestatementBlock;
 use Pushery\Billing\Enums\SettlementRestatementState;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One settlement that has to be issued again because the creator's standing was corrected.
@@ -33,6 +34,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class SettlementRestatement extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_settlement_restatements';
 

@@ -10,6 +10,7 @@ use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\UsTaxFormStatus;
 use Pushery\Billing\Enums\UsTaxFormType;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One declaration a seller gave, and when it stops counting.
@@ -29,6 +30,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class UsTaxForm extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_us_tax_forms';
 

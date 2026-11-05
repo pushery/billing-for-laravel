@@ -25,6 +25,7 @@ use Pushery\Billing\Contracts\PairsReadersByTheirCode;
 use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Contracts\PaysOutstandingInvoices;
+use Pushery\Billing\Contracts\PreviewsSwaps;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
 use Pushery\Billing\Contracts\SeatBilling;
@@ -126,6 +127,7 @@ final class ShopifyServiceProvider extends ServiceProvider
         $this->app->offsetUnset(SubmitsDisputeEvidence::class);
         $this->app->offsetUnset(AttachesVerifiedVatIds::class);
         $this->app->offsetUnset(PaysOutstandingInvoices::class);
+        $this->app->offsetUnset(PreviewsSwaps::class);
         // Nor is there a Stripe subscription whose year a schedule could arrange, and a Shopify merchant buys as a business.
         $this->app->offsetUnset(ArrangesAnnualTerms::class);
 

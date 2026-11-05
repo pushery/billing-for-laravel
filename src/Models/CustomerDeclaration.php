@@ -12,6 +12,7 @@ use Pushery\Billing\Enums\CustomerAudience;
 use Pushery\Billing\Enums\CustomerType;
 use Pushery\Billing\Enums\VatIdValidation;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One thing a customer declared about themselves: whether they buy as a consumer or as a business, in the wording they
@@ -41,6 +42,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class CustomerDeclaration extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_customer_declarations';
 

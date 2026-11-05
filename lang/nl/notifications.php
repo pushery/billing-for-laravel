@@ -8,6 +8,8 @@ return [
         'subject' => 'Je betaling kon niet worden verwerkt',
         'intro' => 'We konden je laatste betaling niet verwerken.',
         'outro' => 'Werk je betaalgegevens bij om je abonnement actief te houden.',
+        'paused' => 'Je toegang is gepauzeerd tot een betaling slaagt, en komt terug zodra dat gebeurt.',
+        'outro_paused' => 'Werk je betaalgegevens bij om hem terug te krijgen.',
         'cta' => 'Betaalgegevens bijwerken',
     ],
 

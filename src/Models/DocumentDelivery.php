@@ -13,6 +13,7 @@ use Pushery\Billing\Enums\AppendOnlyDeletion;
 use Pushery\Billing\Enums\DocumentDeliveryEvent;
 use Pushery\Billing\Models\Concerns\AppendOnly;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One thing that happened to a settlement document on its way to its recipient.
@@ -37,6 +38,7 @@ class DocumentDelivery extends Model
 {
     use AppendOnly;
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_document_deliveries';
 

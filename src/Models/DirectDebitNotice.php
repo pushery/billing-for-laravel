@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * A notice the local engine sent before it drew a SEPA direct debit: the amount, the mandate and the day.
@@ -32,6 +33,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class DirectDebitNotice extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     public $timestamps = false;
 

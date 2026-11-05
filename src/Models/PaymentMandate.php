@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Support\Carbon;
 use LogicException;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 use Pushery\Billing\ValueObjects\MandateReference;
 use Pushery\Billing\ValueObjects\PaymentMethod;
 
@@ -37,6 +38,7 @@ use Pushery\Billing\ValueObjects\PaymentMethod;
 class PaymentMandate extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     /**
      * The one status a mandate may be charged under. Stated as what is chargeable rather than what is not,
