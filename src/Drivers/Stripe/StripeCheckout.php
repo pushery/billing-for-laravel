@@ -199,25 +199,31 @@ final readonly class StripeCheckout implements Checkout
             $payload['allow_promotion_codes'] = true;
         }
 
-        if ($this->context->providerTax()) {
-            // Stripe Tax computes VAT on its own invoice. With an existing customer, automatic_tax
-            // requires permission to save the address it collects, or Stripe rejects the session.
+        $providerTax = $this->context->providerTax();
+
+        // Asking for a tax ID is a choice, and `billing.checkout.tax_id_collection` makes it one. Stripe checks
+        // only the format of an ID during the session and verifies it afterwards, yet reverse-charges on the
+        // format alone, so a consumer who types a well-formed invalid ID buys without VAT the platform still
+        // owes. A platform that sells to consumers may leave the field out and charge every buyer their
+        // country's tax. Unset, the field follows the provider's tax, so an existing installation keeps it, and
+        // `true` asks without the provider's tax as well, for a business that wants its ID on the invoice.
+        //
+        // A caller can decide it for this checkout, and the installation's setting is only the default. A
+        // marketplace selling to consumers and to businesses needs both answers at once: no field where a
+        // consumer buys, and the field where a business has to prove its status for the reverse charge.
+        $collect = $collectTaxId ?? StripeTaxIdCollection::byDefault($this->config, $providerTax);
+
+        if ($providerTax) {
+            // Stripe Tax computes VAT on its own invoice.
             $payload['automatic_tax'] = ['enabled' => true];
+        }
 
-            // Asking for a tax ID is a choice, and `billing.checkout.tax_id_collection` makes it one. Stripe checks
-            // only the format of an ID during the session and verifies it afterwards, yet reverse-charges on the
-            // format alone, so a consumer who types a well-formed invalid ID buys without VAT the platform still
-            // owes. A platform that sells to consumers may leave the field out and charge every buyer their
-            // country's tax. On by default, so an existing installation keeps the field.
-            //
-            // A caller can decide it for this checkout, and the installation's setting is only the default. A
-            // marketplace selling to consumers and to businesses needs both answers at once: no field where a
-            // consumer buys, and the field where a business has to prove its status for the reverse charge.
-            if ($collectTaxId ?? $this->config->get('billing.checkout.tax_id_collection', true) !== false) {
-                $payload['tax_id_collection'] = ['enabled' => true];
-            }
+        if ($collect) {
+            $payload['tax_id_collection'] = ['enabled' => true];
+        }
 
-            $payload['customer_update'] = ['address' => 'auto'];
+        if ($providerTax || $collect) {
+            $payload['customer_update'] = StripeTaxIdCollection::customerUpdate($collect);
         }
 
         // What rides on the subscription, assembled in one place before it is attached.

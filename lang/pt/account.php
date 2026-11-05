@@ -44,6 +44,7 @@ return [
         'preview' => 'Ver custo',
         'preview_due' => 'A pagar hoje, com valor proporcional: :amount.',
         'preview_unavailable' => 'Não há estimativa disponível para esta alteração.',
+        'swap_awaits_payment' => 'A mudança de plano aguarda o pagamento. Aplica-se assim que o pagamento for confirmado.',
         'no_options' => 'Não há outros planos disponíveis.',
         'annual_term' => [
             'ends_monthly' => 'O teu ano termina a :date. Depois, a tua subscrição continua todos os meses a :price e podes cancelá-la no fim de qualquer mês.',

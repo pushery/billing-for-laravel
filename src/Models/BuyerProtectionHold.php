@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\BuyerProtectionState;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One sale whose payout is waiting.
@@ -33,6 +34,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class BuyerProtectionHold extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_buyer_protection_holds';
 

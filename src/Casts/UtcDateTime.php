@@ -26,6 +26,14 @@ use Illuminate\Support\Carbon;
  * by the offset: a sweep that expires a subscription an hour early, a counting period whose first hour falls into
  * the one before. So every comparison against such a column binds the moment in UTC, `->utc()` on it or on a copy.
  *
+ * ## On PostgreSQL the moment carries its offset
+ *
+ * The package keeps its moments there as `timestamptz`, and PostgreSQL reads a literal without an offset in the zone
+ * of the session. The value is therefore written with `+00:00`, so it names its moment whatever zone the session runs
+ * in, and a value read back with an offset is moved to UTC. A `timestamp without time zone`, which an application may
+ * still cast with this class, ignores the offset in the literal. MySQL and SQLite get no offset: MySQL converts one in
+ * a DATETIME literal to the session's zone, and SQLite compares the text.
+ *
  * @implements CastsAttributes<Carbon, Carbon|DateTimeInterface|string>
  */
 final class UtcDateTime implements CastsAttributes
@@ -54,8 +62,9 @@ final class UtcDateTime implements CastsAttributes
             return Carbon::createFromTimestamp((int) $value, 'UTC');
         }
 
-        // Interpret the stored wall-clock string as UTC — the zone it was written in — never the app zone.
-        return is_string($value) ? Carbon::parse($value, 'UTC') : null;
+        // Interpret the stored wall-clock string as UTC — the zone it was written in — never the app zone. A value
+        // with an offset, as PostgreSQL reads out a timestamptz, keeps its moment and is moved to UTC.
+        return is_string($value) ? Carbon::parse($value, 'UTC')->utc() : null;
     }
 
     /**
@@ -71,6 +80,6 @@ final class UtcDateTime implements CastsAttributes
         // the column always holds a UTC wall-clock that get() can read back without a zone shift.
         $datetime = $value instanceof DateTimeInterface ? Carbon::instance($value) : Carbon::parse((string) $value);
 
-        return $datetime->utc()->format('Y-m-d H:i:s');
+        return $datetime->utc()->format($model->getConnection()->getDriverName() === 'pgsql' ? 'Y-m-d H:i:sP' : 'Y-m-d H:i:s');
     }
 }

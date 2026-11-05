@@ -15,6 +15,7 @@ use Pushery\Billing\Enums\RevokeReason;
 use Pushery\Billing\Enums\UpdatePolicy;
 use Pushery\Billing\Enums\WithdrawalType;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
@@ -67,6 +68,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 class AccessGrant extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_access_grants';
 

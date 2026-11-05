@@ -61,6 +61,14 @@ final readonly class DriverCapabilities
         // as on Shopify. The hub then opens the checkout for a plan change, schedules nothing for the end of a
         // period, and offers a new subscription instead of a resume.
         public bool $supportsInPlaceSubscriptionChanges = true,
+        // Appended last for the same reason. Whether a swap that names no interval keeps the one the subscription is
+        // billed at, where the new tier is sold at it, as `SubscriptionActions::swap()` allows a driver that knows that
+        // interval. The plan screen preselects that interval when it is true, so the plans it lists and previews are
+        // priced as the swap will charge them.
+        //
+        // Stripe does, from the interval its tier item recurs at. The package's own engine and Shopify bill a tier at
+        // its own interval, so false, the default, keeps a driver built before this flag at the screen it had.
+        public bool $keepsTheIntervalOnSwap = false,
     ) {}
 
     public function offersMethod(string $method): bool

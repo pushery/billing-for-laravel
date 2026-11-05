@@ -13,6 +13,7 @@ use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Enums\TaxRateCategory;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -41,6 +42,7 @@ use Pushery\Billing\ValueObjects\Money;
 class InPersonSaleRecord extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     /**
      * The name a receipt from the counter is filed under as its owner.

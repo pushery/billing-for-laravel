@@ -96,6 +96,9 @@ final readonly class StripeDriver implements BillingDriver, RoutesMoney
             // a TrialEnding event, and this driver registers SendTrialEndingNotice on it. The promise is
             // kept end to end, which is what lets the trial-warning command leave these customers alone.
             supportsProviderTrialNotice: true,
+            // StripeSubscriptionActions keeps the interval the tier item recurs at for a swap that names none, where
+            // the new tier is sold at it, so the plan screen prices a tier at that interval before the customer picks one.
+            keepsTheIntervalOnSwap: true,
         );
     }
 }

@@ -32,7 +32,8 @@ final class ViesVatIdValidator implements ChecksVatIds, VatIdValidator
      * member-state outage and signals it here; and a requester the register does not accept comes back as
      * `isValid: false` with INVALID_REQUESTER_INFO, about the requester and not the number. Each is Unavailable
      * (conservative) — never Invalid: it must neither reject a real business nor, via the caller, grant an
-     * unearned zero-rate.
+     * unearned zero-rate. A refused requester is marked on the check, so a caller can tell it from an outage
+     * and ask again without one.
      */
     private const array NO_VERDICT = [
         'MS_UNAVAILABLE', 'MS_MAX_CONCURRENT_REQ', 'SERVICE_UNAVAILABLE', 'GLOBAL_MAX_CONCURRENT_REQ', 'TIMEOUT', 'SERVER_BUSY',
@@ -77,7 +78,7 @@ final class ViesVatIdValidator implements ChecksVatIds, VatIdValidator
         $userError = $response->json('userError');
 
         if (is_string($userError) && in_array($userError, self::NO_VERDICT, true)) {
-            return new VatIdCheck(VatIdValidation::Unavailable);
+            return new VatIdCheck(VatIdValidation::Unavailable, requesterRefused: $userError === 'INVALID_REQUESTER_INFO');
         }
 
         return new VatIdCheck(

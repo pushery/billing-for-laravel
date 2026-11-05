@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\VoucherInstrumentType;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One voucher and what is left of it.
@@ -37,6 +38,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class Voucher extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_vouchers';
 

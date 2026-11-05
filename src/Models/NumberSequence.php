@@ -6,6 +6,7 @@ namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * The next value of a gap-free number sequence, one row per scope.
@@ -16,6 +17,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class NumberSequence extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_number_sequences';
 

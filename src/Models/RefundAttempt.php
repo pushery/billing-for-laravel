@@ -10,6 +10,7 @@ use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\RefundAttemptStatus;
 use Pushery\Billing\Enums\ReversalCause;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One intent to reverse money, recorded before the provider hears about it.
@@ -31,6 +32,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class RefundAttempt extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_refund_attempts';
 

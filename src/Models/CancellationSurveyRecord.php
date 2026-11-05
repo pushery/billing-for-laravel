@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\CancellationReason;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 
 /**
@@ -26,6 +27,7 @@ use Pushery\Billing\ValueObjects\CancellationSurvey;
 class CancellationSurveyRecord extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_cancellation_surveys';
 

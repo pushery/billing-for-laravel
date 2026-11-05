@@ -8,6 +8,8 @@ return [
         'subject' => 'Ton paiement n’a pas pu être traité',
         'intro' => 'Nous n’avons pas pu traiter ton dernier paiement.',
         'outro' => 'Mets à jour tes informations de paiement pour garder ton abonnement actif.',
+        'paused' => 'Ton accès est suspendu jusqu’à ce qu’un paiement aboutisse, et il revient dès que c’est le cas.',
+        'outro_paused' => 'Mets à jour tes informations de paiement pour le récupérer.',
         'cta' => 'Mettre à jour les informations de paiement',
     ],
 

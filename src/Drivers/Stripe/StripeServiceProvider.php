@@ -33,6 +33,7 @@ use Pushery\Billing\Contracts\PairsReadersByTheirCode;
 use Pushery\Billing\Contracts\PaymentCsp;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Contracts\PaysOutstandingInvoices;
+use Pushery\Billing\Contracts\PreviewsSwaps;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\ReadsProviderComputedTax;
 use Pushery\Billing\Contracts\ReadsRoutedInvoiceCommission;
@@ -209,6 +210,9 @@ final class StripeServiceProvider extends ServiceProvider
         $this->app->bind(Invoices::class, StripeInvoices::class);
         $this->app->bind(UpcomingInvoice::class, StripeUpcomingInvoice::class);
         $this->app->bind(SubscriptionActions::class, StripeSubscriptionActions::class);
+        // What a swap would cost, priced by Stripe for the change the swap makes. Bound on its own rather than read off
+        // `SubscriptionActions`, whose binding a balance wraps; the Mollie and the Shopify provider take it out again.
+        $this->app->bind(PreviewsSwaps::class, StripeSubscriptionActions::class);
         // A consumer's annual subscription goes on monthly once its year ends, arranged at Stripe before the year ends.
         $this->app->bind(ArrangesAnnualTerms::class, StripeAnnualTerms::class);
         // Paying the open invoice at the owner's request is a capability of the same kind as the reader path: the

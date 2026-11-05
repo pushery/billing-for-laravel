@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * A one-time purchase the app opened at Shopify.
@@ -30,6 +31,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class ShopifyPurchase extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_shopify_purchases';
 

@@ -6,6 +6,7 @@ namespace Pushery\Billing\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * An owner's credit balance in one currency (minor units; may be spent down toward zero).
@@ -18,6 +19,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class CreditBalance extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_credit_balances';
 

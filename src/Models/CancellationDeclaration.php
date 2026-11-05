@@ -16,6 +16,7 @@ use Pushery\Billing\Enums\CancellationTiming;
 use Pushery\Billing\Enums\DeclarationStatus;
 use Pushery\Billing\Models\Concerns\AppendOnly;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * A cancellation as it was declared through the cancellation button.
@@ -57,6 +58,7 @@ class CancellationDeclaration extends Model
 {
     use AppendOnly;
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_cancellation_declarations';
 

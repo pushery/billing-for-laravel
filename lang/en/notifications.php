@@ -8,6 +8,8 @@ return [
         'subject' => 'Your payment could not be processed',
         'intro' => 'We were unable to process your latest payment.',
         'outro' => 'Please update your payment details to keep your subscription active.',
+        'paused' => 'Your access is paused until a payment goes through, and it comes back as soon as one does.',
+        'outro_paused' => 'Please update your payment details to get it back.',
         'cta' => 'Update your payment details',
     ],
 

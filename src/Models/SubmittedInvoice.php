@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\ReviewState;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * A creator's own invoice, submitted through the fallback lane and awaiting (or having passed) reconciliation.
@@ -31,6 +32,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class SubmittedInvoice extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_submitted_invoices';
 

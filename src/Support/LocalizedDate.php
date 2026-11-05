@@ -69,13 +69,13 @@ final class LocalizedDate
         return self::render($moment, 'LL');
     }
 
-    /** Compact date plus the clock, in the locale's own convention — `14:05` in German, `2:05 PM` in English. */
+    /** Compact date plus the clock, in the locale's own convention — `14:05 Uhr` in German, `2:05 PM` in English. */
     public static function shortWithTime(?DateTimeInterface $moment): ?string
     {
         return self::render($moment, 'L LT');
     }
 
-    /** The month spelled out, the time to the second and the zone: `3. September 2026, 14:05:09 CEST`. */
+    /** The month spelled out, the time to the second and the zone: `3. September 2026, 14:05:09 Uhr CEST`. */
     public static function longWithSeconds(DateTimeInterface $moment): string
     {
         return (string) self::render($moment, 'LL, LTS z');
@@ -100,8 +100,26 @@ final class LocalizedDate
         // branch no run can enter, which the coverage floor would then report as an untested line
         // forever. `settings()` returns `static` unconditionally and produces the identical output,
         // verified across all seven shipped locales.
+        $locale = Lang::getLocale();
+
         return CarbonImmutable::instance($moment)
-            ->settings(['locale' => Lang::getLocale()])
-            ->isoFormat($format);
+            ->settings(['locale' => $locale])
+            ->isoFormat(self::withClockWord($format, $locale));
+    }
+
+    /**
+     * The format with the word German writes after a clock time: `14:05 Uhr`, as the host application
+     * writes its own times.
+     *
+     * Only German has one, so every other locale gets the format unchanged, and so does a German
+     * format without a clock. A regional German (`de_AT`, `de-CH`) writes it as well.
+     */
+    private static function withClockWord(string $format, string $locale): string
+    {
+        if (preg_match('/^de(?:[_-]|$)/i', $locale) !== 1) {
+            return $format;
+        }
+
+        return (string) preg_replace('/\bLTS?\b/', '$0 [Uhr]', $format);
     }
 }

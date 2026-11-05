@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * An owner's cap on what usage past the included allowance may cost per billing period.
@@ -27,6 +28,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class SpendCap extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_spend_caps';
 

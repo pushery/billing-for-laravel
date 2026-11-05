@@ -44,6 +44,7 @@ return [
         'preview' => 'Ver coste',
         'preview_due' => 'A pagar hoy con prorrateo: :amount.',
         'preview_unavailable' => 'No hay estimación disponible para este cambio.',
+        'swap_awaits_payment' => 'Tu cambio de plan espera su pago. Se aplica en cuanto se confirme el pago.',
         'no_options' => 'No hay otros planes disponibles.',
         'annual_term' => [
             'ends_monthly' => 'Tu año termina el :date. Después, tu suscripción continúa cada mes a :price y puedes cancelarla al final de cualquier mes.',

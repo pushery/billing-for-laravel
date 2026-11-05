@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\ExchangeRateBasis;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One published rate, as its publisher stated it.
@@ -28,6 +29,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class ExchangeRateRecord extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_exchange_rates';
 

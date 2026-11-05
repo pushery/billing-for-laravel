@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\ReservationState;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One hold on a metered allowance. The counter's `reserved` aggregate is what the ceiling check reads;
@@ -27,6 +28,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class UsageReservation extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_usage_reservations';
 

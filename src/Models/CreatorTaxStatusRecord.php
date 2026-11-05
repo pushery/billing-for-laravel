@@ -11,6 +11,7 @@ use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\CreatorTaxStatus;
 use Pushery\Billing\Enums\CreatorTaxStatusSource;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * One interval of a creator's tax standing.
@@ -33,6 +34,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class CreatorTaxStatusRecord extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_creator_tax_statuses';
 

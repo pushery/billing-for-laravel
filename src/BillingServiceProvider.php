@@ -160,6 +160,7 @@ use Pushery\Billing\Contracts\PaysOutstandingInvoices;
 use Pushery\Billing\Contracts\PdfRenderer;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
+use Pushery\Billing\Contracts\PreviewsSwaps;
 use Pushery\Billing\Contracts\ProductTaxonomy;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\PublishesExchangeRates;
@@ -1071,8 +1072,9 @@ final class BillingServiceProvider extends ServiceProvider
             // A capability is taken out rather than answered with a no-op, so a host that asks whether it is bound
             // does not offer to pay an invoice nobody can pay.
             $this->app->offsetUnset(PaysOutstandingInvoices::class);
-            // Nor is there a subscription whose year could be arranged.
+            // Nor is there a subscription whose year could be arranged, or whose change could be priced.
             $this->app->offsetUnset(ArrangesAnnualTerms::class);
+            $this->app->offsetUnset(PreviewsSwaps::class);
         }
     }
 

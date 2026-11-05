@@ -44,6 +44,7 @@ return [
         'preview' => 'Kosten vorschauen',
         'preview_due' => 'Heute fällig mit Anrechnung: :amount.',
         'preview_unavailable' => 'Für diese Änderung ist keine Schätzung verfügbar.',
+        'swap_awaits_payment' => 'Dein Tarifwechsel wartet auf seine Zahlung. Er gilt, sobald die Zahlung bestätigt ist.',
         'no_options' => 'Keine weiteren Tarife verfügbar.',
         'annual_term' => [
             'ends_monthly' => 'Dein Jahr endet am :date. Danach läuft dein Abo monatlich zu :price weiter, und du kannst es zum Ende jedes Monats kündigen.',

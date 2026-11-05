@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\FilingObligation;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * A record that one filing obligation, for one due date, has been announced.
@@ -21,6 +22,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class FilingReminder extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_filing_reminders';
 

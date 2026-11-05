@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * A record that one merchant was told the tax-standing deadline is coming.
@@ -21,6 +22,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class TaxHoldWarning extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_tax_hold_warnings';
 

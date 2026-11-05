@@ -44,6 +44,7 @@ return [
         'preview' => 'Preview cost',
         'preview_due' => 'Due today with proration: :amount.',
         'preview_unavailable' => 'No estimate available for this change.',
+        'swap_awaits_payment' => 'Your plan change waits for its payment. It applies once the payment is confirmed.',
         'no_options' => 'No other plans are available.',
         'annual_term' => [
             'ends_monthly' => 'Your year ends on :date. After it, your subscription goes on monthly at :price, and you can cancel it at the end of any month.',

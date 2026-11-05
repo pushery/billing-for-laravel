@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\VoucherEvent;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\VoucherMovement;
 
@@ -30,6 +31,7 @@ use Pushery\Billing\ValueObjects\VoucherMovement;
 class VoucherMovementRecord extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_voucher_movements';
 

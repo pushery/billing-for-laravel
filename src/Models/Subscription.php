@@ -18,6 +18,7 @@ use Pushery\Billing\Enums\CollectionTiming;
 use Pushery\Billing\Enums\CustomerType;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
@@ -70,6 +71,7 @@ use Pushery\Billing\ValueObjects\SubscriptionSnapshot;
 class Subscription extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_subscriptions';
 

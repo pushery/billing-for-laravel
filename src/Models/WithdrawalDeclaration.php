@@ -14,6 +14,7 @@ use Pushery\Billing\Enums\AppendOnlyDeletion;
 use Pushery\Billing\Enums\DeclarationStatus;
 use Pushery\Billing\Models\Concerns\AppendOnly;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * A withdrawal as it was declared through the withdrawal function.
@@ -49,6 +50,7 @@ class WithdrawalDeclaration extends Model
 {
     use AppendOnly;
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_withdrawal_declarations';
 

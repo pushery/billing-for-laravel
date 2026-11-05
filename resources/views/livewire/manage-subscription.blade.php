@@ -115,6 +115,11 @@
         </div>
     @endif
 
+    {{-- A change the provider holds until its charge is paid, where it offered no page to pay on. --}}
+    @error('swap')
+        <p role="alert" class="mb-3 rounded-lg bg-amber-50 p-3 text-sm font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">{{ $message }}</p>
+    @enderror
+
     <section class="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
         @forelse ($options as $option)
             <div wire:key="plan-{{ $option['key'] }}-{{ $option['interval'] }}" class="flex items-center justify-between p-4">

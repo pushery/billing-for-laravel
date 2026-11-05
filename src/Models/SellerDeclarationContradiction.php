@@ -11,6 +11,7 @@ use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\AppendOnlyDeletion;
 use Pushery\Billing\Models\Concerns\AppendOnly;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * A signal that contradicts what a seller declared, with the moment the platform observed it.
@@ -33,6 +34,7 @@ class SellerDeclarationContradiction extends Model
 {
     use AppendOnly;
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_seller_declaration_contradictions';
 

@@ -44,6 +44,7 @@ return [
         'preview' => 'Estimer le coût',
         'preview_due' => 'À payer aujourd’hui avec prorata : :amount.',
         'preview_unavailable' => 'Aucune estimation disponible pour ce changement.',
+        'swap_awaits_payment' => 'Ton changement de forfait attend son paiement. Il s’applique dès que le paiement est confirmé.',
         'no_options' => 'Aucun autre forfait n’est disponible.',
         'annual_term' => [
             'ends_monthly' => 'Ton année se termine le :date. Ensuite, ton abonnement continue chaque mois à :price, et tu peux le résilier à la fin de n’importe quel mois.',

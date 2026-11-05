@@ -9,6 +9,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\Enums\VoucherVolumeLevel;
 use Pushery\Billing\Models\Concerns\Replaceable;
+use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 
 /**
  * A record that one voucher-volume level, for one currency, in one year, has been announced.
@@ -27,6 +28,7 @@ use Pushery\Billing\Models\Concerns\Replaceable;
 class VoucherVolumeNotice extends Model
 {
     use Replaceable;
+    use StoresMomentsWithTheirOffset;
 
     protected $table = 'billing_voucher_volume_notices';
 

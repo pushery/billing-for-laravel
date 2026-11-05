@@ -19,6 +19,8 @@ final readonly class VatIdCheck
      * @param  string|null  $address  the address the register holds for the number, as one text
      * @param  CarbonImmutable|null  $checkedAt  the moment the register answered
      * @param  string|null  $reference  the identifier the register gave a qualified request
+     * @param  bool  $requesterRefused  whether the register refused the requester of a qualified request; the verdict
+     *                                  is Unavailable then, and the same check without a requester answers about the number
      */
     public function __construct(
         public VatIdValidation $verdict,
@@ -26,5 +28,6 @@ final readonly class VatIdCheck
         public ?string $address = null,
         public ?CarbonImmutable $checkedAt = null,
         public ?string $reference = null,
+        public bool $requesterRefused = false,
     ) {}
 }
