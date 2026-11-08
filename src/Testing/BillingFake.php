@@ -336,6 +336,102 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         ));
     }
 
+    /**
+     * The subscription start, with the buyer's country the caller passed. `null` asserts that none was passed, the
+     * state of a start through `StartsSubscriptions`, which takes no country.
+     */
+    public function assertSubscribeStartedWithCountry(Model $owner, string $tierKey, ?string $buyerCountry): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->subscribes as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['tier'] !== $tierKey) {
+                continue;
+            }
+
+            if ($call['country'] === $buyerCountry) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['country'] ?? 'none';
+        }
+
+        $this->assertFound(
+            $found,
+            sprintf('a checkout for tier [%s] with buyer country [%s]', $tierKey, $buyerCountry ?? 'none'),
+            'no checkout for that owner and tier was started at all',
+            'the buyer countries seen were',
+            $seen,
+        );
+    }
+
+    /**
+     * The subscription start, with whether the caller asked for the buyer's tax ID. `null` asserts that the caller
+     * left it to the configured default.
+     */
+    public function assertSubscribeStartedWithTaxIdCollection(Model $owner, string $tierKey, ?bool $collectTaxId): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->subscribes as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['tier'] !== $tierKey) {
+                continue;
+            }
+
+            if ($call['collectTaxId'] === $collectTaxId) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $this->taxIdCollection($call['collectTaxId']);
+        }
+
+        $this->assertFound(
+            $found,
+            sprintf('a checkout for tier [%s] with tax ID collection [%s]', $tierKey, $this->taxIdCollection($collectTaxId)),
+            'no checkout for that owner and tier was started at all',
+            'the tax ID collections seen were',
+            $seen,
+        );
+    }
+
+    /**
+     * The subscription start, with the interval the caller chose. `null` asserts that none was chosen, so the tier's
+     * own interval applies.
+     */
+    public function assertSubscribeStartedWithInterval(Model $owner, string $tierKey, ?BillingInterval $interval): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->subscribes as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['tier'] !== $tierKey) {
+                continue;
+            }
+
+            if ($call['interval'] === $interval) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['interval']->value ?? "the tier's own";
+        }
+
+        $this->assertFound(
+            $found,
+            sprintf('a checkout for tier [%s] with interval [%s]', $tierKey, $interval->value ?? "the tier's own"),
+            'no checkout for that owner and tier was started at all',
+            'the intervals seen were',
+            $seen,
+        );
+    }
+
     public function assertNothingSubscribed(): void
     {
         PHPUnit::assertSame([], $this->subscribes, 'Expected no checkout to have started, but at least one did.');
@@ -346,9 +442,10 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
      *
      * A contract type narrows it to that contract, the way a merchant does in the lifecycle assertions below:
      * null leaves the type out of the question, and `Subscription::TYPE_DEFAULT` names the default contract,
-     * which is what a swap without a type addresses.
+     * which is what a swap without a type addresses. A merchant narrows it to the subscription held with that
+     * merchant, and a swap recorded without one counts as the platform's, as it does for the lifecycle actions.
      */
-    public function assertSwapped(Model $owner, string $tierKey, ?string $type = null): void
+    public function assertSwapped(Model $owner, string $tierKey, ?string $type = null, ?MerchantScope $merchant = null): void
     {
         $found = false;
         $seen = [];
@@ -359,19 +456,84 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
             }
 
             $recorded = $call['type'] ?? Subscription::TYPE_DEFAULT;
+            $scope = ($call['merchant'] ?? MerchantScope::platform())->uid();
 
-            if ($type === null || $recorded === $type) {
+            if (($type === null || $recorded === $type) && (! $merchant instanceof MerchantScope || $scope === $merchant->uid())) {
                 $found = true;
 
                 continue;
             }
 
-            $seen[] = $recorded;
+            $seen[] = $merchant instanceof MerchantScope ? $recorded.' under '.$scope : $recorded;
         }
 
-        PHPUnit::assertTrue($found, $type === null || $seen === []
+        PHPUnit::assertTrue($found, ($type === null && ! $merchant instanceof MerchantScope) || $seen === []
             ? "Expected a swap to tier [{$tierKey}], but it did not happen."
-            : "Expected a swap to tier [{$tierKey}] of the [{$type}] contract, but it happened on [".implode(', ', $seen).'].');
+            : "Expected a swap to tier [{$tierKey}]"
+                .($type === null ? '' : " of the [{$type}] contract")
+                .($merchant instanceof MerchantScope ? ' under merchant ['.$merchant->uid().']' : '')
+                .', but it happened on ['.implode(', ', $seen).'].');
+    }
+
+    /**
+     * The swap to this tier, prorated or not. Whether the rest of the period is squared at once is the part of a
+     * change of tier that moves money, so a screen that offers a change at the end of the period asserts `false`.
+     */
+    public function assertSwappedWithProration(Model $owner, string $tierKey, bool $prorate): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->swaps as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['tier'] !== $tierKey) {
+                continue;
+            }
+
+            if ($call['prorate'] === $prorate) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['prorate'] ? 'prorated' : 'not prorated';
+        }
+
+        $this->assertFound(
+            $found,
+            sprintf('a swap to tier [%s] %s', $tierKey, $prorate ? 'prorated' : 'not prorated'),
+            'no swap of that owner to that tier happened at all',
+            'the swaps to that tier were',
+            $seen,
+        );
+    }
+
+    /** The swap to this tier, with the interval the caller chose. `null` asserts that none was chosen. */
+    public function assertSwappedWithInterval(Model $owner, string $tierKey, ?BillingInterval $interval): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->swaps as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['tier'] !== $tierKey) {
+                continue;
+            }
+
+            if ($call['interval'] === $interval) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['interval']->value ?? "the tier's own";
+        }
+
+        $this->assertFound(
+            $found,
+            sprintf('a swap to tier [%s] with interval [%s]', $tierKey, $interval->value ?? "the tier's own"),
+            'no swap of that owner to that tier happened at all',
+            'the intervals seen were',
+            $seen,
+        );
     }
 
     /**
@@ -381,6 +543,42 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
     public function assertCanceled(Model $owner, ?MerchantScope $merchant = null, ?string $type = null): void
     {
         $this->assertLifecycle($owner, 'cancel', $merchant, $type);
+    }
+
+    /**
+     * The cancellation, with the survey the customer answered: its reason and its detail. `null` asserts that the
+     * cancellation carried none. Held to the merchant and the contract type when they are named, as `assertCanceled()`
+     * is.
+     */
+    public function assertCanceledWithSurvey(Model $owner, ?CancellationSurvey $survey, ?MerchantScope $merchant = null, ?string $type = null): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->lifecycle as $call) {
+            if (! $this->sameOwner($call['owner'], $owner)
+                || $call['action'] !== 'cancel'
+                || ($merchant instanceof MerchantScope && ($call['merchant'] ?? MerchantScope::platform())->uid() !== $merchant->uid())
+                || ($type !== null && ($call['type'] ?? Subscription::TYPE_DEFAULT) !== $type)) {
+                continue;
+            }
+
+            if ($this->sameSurvey($call['survey'] ?? null, $survey)) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $this->survey($call['survey'] ?? null);
+        }
+
+        $this->assertFound(
+            $found,
+            sprintf('a cancellation with survey [%s]', $this->survey($survey)),
+            'no such cancellation happened for the owner at all',
+            'the surveys seen were',
+            $seen,
+        );
     }
 
     /**
@@ -496,6 +694,67 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
         ));
     }
 
+    /**
+     * The tip, with the declaration reference the caller passed. `null` asserts that none was passed, which is the
+     * case for a tip on a supply the buyer has no right of withdrawal for.
+     */
+    public function assertTippedWithDeclaration(Model $owner, Money $chosen, TaxArchetype $soldAlongside, ?string $declarationReference): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->tips as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || ! $call['amount']->equals($chosen) || $call['soldAlongside'] !== $soldAlongside) {
+                continue;
+            }
+
+            if ($call['declaration'] === $declarationReference) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['declaration'] ?? 'none';
+        }
+
+        $this->assertFound(
+            $found,
+            sprintf('a tip of %d %s paid on [%s] with declaration [%s]', $chosen->minorUnits, $chosen->currency, $soldAlongside->value, $declarationReference ?? 'none'),
+            'no such tip was opened for this owner',
+            'the declarations seen were',
+            $seen,
+        );
+    }
+
+    /** The tip, with the buyer's country the caller passed. `null` asserts that none was passed. */
+    public function assertTippedWithCountry(Model $owner, Money $chosen, TaxArchetype $soldAlongside, ?string $buyerCountry): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->tips as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || ! $call['amount']->equals($chosen) || $call['soldAlongside'] !== $soldAlongside) {
+                continue;
+            }
+
+            if ($call['country'] === $buyerCountry) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['country'] ?? 'none';
+        }
+
+        $this->assertFound(
+            $found,
+            sprintf('a tip of %d %s paid on [%s] with buyer country [%s]', $chosen->minorUnits, $chosen->currency, $soldAlongside->value, $buyerCountry ?? 'none'),
+            'no such tip was opened for this owner',
+            'the buyer countries seen were',
+            $seen,
+        );
+    }
+
     /** No tip checkout was opened at all — the assertion a screen that hides tipping actually needs. */
     public function assertNothingTipped(): void
     {
@@ -550,6 +809,99 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
                 ? 'no purchase of that add-on by that owner was recorded at all'
                 : 'the declarations seen were ['.implode(', ', $seen).']',
         ));
+    }
+
+    /** The purchase, with the buyer's country the caller passed. `null` asserts that none was passed. */
+    public function assertPurchasedWithCountry(Model $owner, string $addonKey, ?string $buyerCountry): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->purchases as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['addon'] !== $addonKey) {
+                continue;
+            }
+
+            if ($call['country'] === $buyerCountry) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['country'] ?? 'none';
+        }
+
+        $this->assertFound(
+            $found,
+            sprintf('add-on [%s] to have been purchased with buyer country [%s]', $addonKey, $buyerCountry ?? 'none'),
+            'no purchase of that add-on by that owner was recorded at all',
+            'the buyer countries seen were',
+            $seen,
+        );
+    }
+
+    /**
+     * The purchase, with whether the caller asked for the buyer's tax ID. `null` asserts that the caller left it to
+     * the configured default.
+     */
+    public function assertPurchasedWithTaxIdCollection(Model $owner, string $addonKey, ?bool $collectTaxId): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->purchases as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['addon'] !== $addonKey) {
+                continue;
+            }
+
+            if ($call['collectTaxId'] === $collectTaxId) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $this->taxIdCollection($call['collectTaxId']);
+        }
+
+        $this->assertFound(
+            $found,
+            sprintf('add-on [%s] to have been purchased with tax ID collection [%s]', $addonKey, $this->taxIdCollection($collectTaxId)),
+            'no purchase of that add-on by that owner was recorded at all',
+            'the tax ID collections seen were',
+            $seen,
+        );
+    }
+
+    /**
+     * The purchase, with the caller's own correlation key. A business purchase carries no declaration reference, so
+     * this is the key a screen selling to businesses has to be asserted on.
+     */
+    public function assertPurchasedWithCallerReference(Model $owner, string $addonKey, ?string $callerReference): void
+    {
+        $found = false;
+        $seen = [];
+
+        foreach ($this->purchases as $call) {
+            if (! $this->sameOwner($call['owner'], $owner) || $call['addon'] !== $addonKey) {
+                continue;
+            }
+
+            if ($call['callerReference'] === $callerReference) {
+                $found = true;
+
+                continue;
+            }
+
+            $seen[] = $call['callerReference'] ?? 'none';
+        }
+
+        $this->assertFound(
+            $found,
+            sprintf('add-on [%s] to have been purchased with caller reference [%s]', $addonKey, $callerReference ?? 'none'),
+            'no purchase of that add-on by that owner was recorded at all',
+            'the caller references seen were',
+            $seen,
+        );
     }
 
     public function assertNothingCharged(): void
@@ -727,6 +1079,47 @@ final class BillingFake implements CanReceiveMoney, Checkout, MerchantOnboarding
             .($type === null ? '' : ' on the ['.$type.'] contract');
 
         PHPUnit::assertSame([], $matching, "Expected no subscription action [{$action}] for the owner{$where}, but the owner saw: ".implode(', ', $seen).'.');
+    }
+
+    /**
+     * The last step of a value-carrying assertion. A failure names the values the matching calls did carry, or says
+     * that there was no matching call at all, the two answers every value-carrying assertion here gives.
+     *
+     * @param  list<string>  $seen
+     */
+    private function assertFound(bool $found, string $expected, string $nothing, string $seenWere, array $seen): void
+    {
+        PHPUnit::assertTrue($found, sprintf(
+            'Expected %s, but %s.',
+            $expected,
+            $seen === [] ? $nothing : $seenWere.' ['.implode(', ', $seen).']',
+        ));
+    }
+
+    /** Whether the caller asked for the buyer's tax ID, as a failure message names it. */
+    private function taxIdCollection(?bool $collect): string
+    {
+        return match ($collect) {
+            true => 'asked',
+            false => 'not asked',
+            null => 'the configured default',
+        };
+    }
+
+    /** Two surveys alike: the same reason and the same detail. */
+    private function sameSurvey(?CancellationSurvey $a, ?CancellationSurvey $b): bool
+    {
+        return $a?->reason === $b?->reason && $a?->detail === $b?->detail;
+    }
+
+    /** A survey as a failure message names it. */
+    private function survey(?CancellationSurvey $survey): string
+    {
+        if (! $survey instanceof CancellationSurvey) {
+            return 'none';
+        }
+
+        return $survey->detail === null ? $survey->reason->value : $survey->reason->value.': '.$survey->detail;
     }
 
     private function sameOwner(Model $a, Model $b): bool

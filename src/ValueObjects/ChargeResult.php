@@ -40,6 +40,12 @@ final readonly class ChargeResult
         public ?Money $applicationFee = null,
         /** The account the merchant's share was owed to, on a routed payment. */
         public ?string $destination = null,
+        /**
+         * The host of the provider's page for this charge where the package sent nobody there, because neither the
+         * driver nor the account names that host: the custom domain of a Stripe account whose `redirectHosts` lacks
+         * it. The host alone, never the address. Null where the page was handed out, or where there was none.
+         */
+        public ?string $refusedPageHost = null,
     ) {}
 
     /** Whether this payment carried a merchant's share at all. */

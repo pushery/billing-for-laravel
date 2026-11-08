@@ -17,9 +17,11 @@ use Pushery\Billing\Contracts\MerchantOnboarding;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubscriptionActions;
+use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Testing\BillingFake;
 use Pushery\Billing\Testing\FakeMarketplaceRails;
+use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -37,9 +39,15 @@ use Pushery\Billing\ValueObjects\Money;
  * @method static void assertSubscribeStartedWithDeclaration(Model $owner, string $tierKey, ?string $declarationReference)
  * @method static void assertSubscribeStartedWithType(Model $owner, string $tierKey, ?string $type)
  * @method static void assertSubscribeStartedWithCallerReference(Model $owner, string $tierKey, ?string $callerReference)
+ * @method static void assertSubscribeStartedWithCountry(Model $owner, string $tierKey, ?string $buyerCountry)
+ * @method static void assertSubscribeStartedWithTaxIdCollection(Model $owner, string $tierKey, ?bool $collectTaxId)
+ * @method static void assertSubscribeStartedWithInterval(Model $owner, string $tierKey, ?BillingInterval $interval)
  * @method static void assertNothingSubscribed()
- * @method static void assertSwapped(Model $owner, string $tierKey, ?string $type = null)
+ * @method static void assertSwapped(Model $owner, string $tierKey, ?string $type = null, ?MerchantScope $merchant = null)
+ * @method static void assertSwappedWithProration(Model $owner, string $tierKey, bool $prorate)
+ * @method static void assertSwappedWithInterval(Model $owner, string $tierKey, ?BillingInterval $interval)
  * @method static void assertCanceled(Model $owner, ?MerchantScope $merchant = null, ?string $type = null)
+ * @method static void assertCanceledWithSurvey(Model $owner, ?CancellationSurvey $survey, ?MerchantScope $merchant = null, ?string $type = null)
  * @method static void assertCanceledAt(Model $owner, ?CarbonInterface $endsAt = null, ?MerchantScope $merchant = null, ?string $type = null)
  * @method static void assertResumed(Model $owner, ?MerchantScope $merchant = null, ?string $type = null)
  * @method static void assertCanceledNow(Model $owner, ?MerchantScope $merchant = null, ?string $type = null)
@@ -49,8 +57,13 @@ use Pushery\Billing\ValueObjects\Money;
  * @method static void assertNotCanceledNow(Model $owner, ?MerchantScope $merchant = null, ?string $type = null)
  * @method static void assertPurchased(Model $owner, string $addonKey)
  * @method static void assertPurchasedWithDeclaration(Model $owner, string $addonKey, ?string $declarationReference)
+ * @method static void assertPurchasedWithCountry(Model $owner, string $addonKey, ?string $buyerCountry)
+ * @method static void assertPurchasedWithTaxIdCollection(Model $owner, string $addonKey, ?bool $collectTaxId)
+ * @method static void assertPurchasedWithCallerReference(Model $owner, string $addonKey, ?string $callerReference)
  * @method static void assertNothingCharged()
  * @method static void assertTipped(Model $owner, Money $chosen, TaxArchetype $soldAlongside)
+ * @method static void assertTippedWithDeclaration(Model $owner, Money $chosen, TaxArchetype $soldAlongside, ?string $declarationReference)
+ * @method static void assertTippedWithCountry(Model $owner, Money $chosen, TaxArchetype $soldAlongside, ?string $buyerCountry)
  * @method static void assertNothingTipped()
  * @method static void assertOnboardingStarted(Model $merchant, ?string $refreshUrl = null, ?string $returnUrl = null)
  * @method static void assertNothingOnboarded()

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Mollie;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Mollie\Api\Exceptions\RequestException;
 use Mollie\Api\Http\Auth\AccessTokenAuthenticator;
@@ -126,6 +127,7 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Webho
             $failedRefund,
             testmode: MollieValue::of($payment->mode) === 'test',
             chargebacks: MollieChargebackEvents::records($chargebacks),
+            observedAt: CarbonImmutable::now(),
         );
     }
 

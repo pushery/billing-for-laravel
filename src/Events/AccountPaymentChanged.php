@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Events;
 
+use Carbon\CarbonImmutable;
 use Pushery\Billing\Enums\AccountPaymentStatus;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PaymentChargeback;
@@ -11,9 +12,11 @@ use Pushery\Billing\ValueObjects\PaymentChargeback;
 /**
  * A one-off payment into a payment account changed, as its provider reported it on the account's webhook address.
  *
- * It carries where the payment stands now, never a delta: a redelivery or a later report about the same payment
- * carries the newer state, so a listener that stores the latest one is always right. Add-on, subscription and
- * marketplace events are not raised for an account's payments, so nothing of the install reads them as its own.
+ * It carries where the payment stood when the package read it, never a delta, and `observedAt` names that moment. A
+ * queue can run a report after a newer one about the same payment: a listener that failed and runs again later, or a
+ * replay. A listener that stores the latest state keeps the report with the later `observedAt` and drops the other.
+ * Add-on, subscription and marketplace events are not raised for an account's payments, so nothing of the install
+ * reads them as its own.
  */
 final readonly class AccountPaymentChanged implements BillingDomainEvent
 {
@@ -32,6 +35,8 @@ final readonly class AccountPaymentChanged implements BillingDomainEvent
      * @param  list<PaymentChargeback>  $chargebacks  every chargeback of the payment with its time, reason and outcome,
      *                                                a reversed one included; `amountChargedBack` keeps counting only
      *                                                what the bank still holds
+     * @param  CarbonImmutable  $observedAt  when the package worked out where the payment stands, so of two reports
+     *                                       about the same payment the later one is the newer state
      */
     public function __construct(
         public string $provider,
@@ -46,5 +51,6 @@ final readonly class AccountPaymentChanged implements BillingDomainEvent
         public ?string $refundReference = null,
         public bool $testmode = false,
         public array $chargebacks = [],
+        public CarbonImmutable $observedAt = new CarbonImmutable,
     ) {}
 }

@@ -82,6 +82,28 @@ final class SafeExternalUrl
     }
 
     /**
+     * The host of a page `onHosts()` refuses for its host alone, in lower case: a safe `https` address on a host
+     * neither `$hosts` nor `billing.redirect_hosts` names. Null for a page `onHosts()` lets through, and for one it
+     * refuses for another reason, because naming that host would not let the page through either. The host comes
+     * back without the address, so nothing can send a customer to the refused page from here.
+     *
+     * @param  list<string>  $hosts  the hosts the driver's pages are served from
+     */
+    public static function refusedHost(mixed $url, array $hosts): ?string
+    {
+        $safe = self::orNull($url);
+
+        if ($safe === null || self::servedFrom($safe, [...$hosts, ...self::listedHosts()])) {
+            return null;
+        }
+
+        $scheme = parse_url($safe, PHP_URL_SCHEME);
+        $host = parse_url($safe, PHP_URL_HOST);
+
+        return is_string($scheme) && strtolower($scheme) === 'https' && is_string($host) ? strtolower($host) : null;
+    }
+
+    /**
      * Whether a browser could open another host than `parse_url` reads. A browser takes a backslash in an
      * http(s) URL for a slash and drops tabs and line breaks, so `https://evil.example\@checkout.stripe.com/`
      * names `checkout.stripe.com` to PHP and opens `evil.example`. Credentials in the authority go with them:

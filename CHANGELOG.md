@@ -4,6 +4,28 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.55.0] - 2026-11-08
+
+### ✨ Added
+
+- **`AccountPaymentChanged` names when its state was read, as `observedAt`.** A queue can run a report after a newer one about the same payment, when a listener failed and runs again later or a delivery is replayed. A listener that stores the latest state keeps the report with the later `observedAt` and drops the other. The reports of Stripe and Mollie set it, and an event an application builds itself carries the moment it was built.
+
+- **A charge whose Checkout page was refused names the page's host.** A charge into a Stripe account that opens Checkout on a host neither Stripe nor the account names still comes back `pending` without a page, and `ChargeResult::$refusedPageHost` now says which host it was, in lower case and without the address. An account with a custom domain at Stripe serves every session there, and Stripe names that domain nowhere else, so an application can learn it from a refused session and decide whether to put it into the account's `redirectHosts`.
+
+  **Upgrade:** nothing to do. The new property is optional and `null` wherever a page was handed out.
+
+- **`Billing::fake()` asserts every value a billing call hands it.** The fake recorded the buyer's country, the choice about the tax ID, the interval, the proration and the merchant of a swap, the declaration and the country of a tip, the caller's key of a purchase and the survey of a cancellation, and no assertion read them, so a screen that passed a wrong one went unnoticed in its tests. These assertions read them: `assertSubscribeStartedWithCountry()`, `assertSubscribeStartedWithTaxIdCollection()`, `assertSubscribeStartedWithInterval()`, `assertPurchasedWithCountry()`, `assertPurchasedWithTaxIdCollection()`, `assertPurchasedWithCallerReference()`, `assertTippedWithDeclaration()`, `assertTippedWithCountry()`, `assertSwappedWithProration()`, `assertSwappedWithInterval()` and `assertCanceledWithSurvey()`. `assertSwapped()` takes a merchant as its last argument, as the lifecycle assertions do.
+
+  **Upgrade:** nothing to do. `assertSwapped()` without a merchant asserts what it did before.
+
+### 🔧 Changed
+
+- **The shipped VAT rate table and the German profile's rates are confirmed as of 2026-11-06.** All 27 standard rates agree with the source on that day, so the table keeps its rates and its `situation_on` moves to the check date. The German profile's 19% and 7% and its distance-sales threshold of 10,000 euros were read against § 12 and § 3c UStG the same day, and `GermanJurisdictionProfile::RATES_VALID_FROM` moves with them. `billing:doctor` and the age checks count from there.
+
+### 🐛 Fixed
+
+- **The events about a payment intent of a Stripe account no longer report a state older than one already reported.** Stripe delivers events out of the order they happened in. A `payment_intent.succeeded` delivered after the payment was refunded reported it as paid with nothing refunded, from the copy of the intent the event carried, and a listener that kept the latest report turned the refund back. Every event about a payment now reads the payment intent back with the account's key, as refunds and disputes already did, and so does `billing:webhooks:replay`. That is one more request to Stripe for each event about an intent.
+
 ## [0.54.0] - 2026-11-04
 
 ### ⚠️ Breaking
@@ -8422,7 +8444,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.54.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.55.0...HEAD
+[0.55.0]: https://github.com/pushery/billing-for-laravel/compare/v0.54.0...v0.55.0
 [0.54.0]: https://github.com/pushery/billing-for-laravel/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/pushery/billing-for-laravel/compare/v0.52.0...v0.53.0
 [0.52.0]: https://github.com/pushery/billing-for-laravel/compare/v0.51.0...v0.52.0

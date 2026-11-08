@@ -68,7 +68,7 @@ final readonly class GermanJurisdictionProfile implements DocumentsDeemedSupplyO
      * moved on its own would say nothing. `billing:doctor` reports the resulting age so an operator learns
      * the table has drifted from a diagnostic rather than from a tax return.
      */
-    public const string RATES_VALID_FROM = '2026-10-03';
+    public const string RATES_VALID_FROM = '2026-11-06';
 
     public function __construct(private Repository $config) {}
 
