@@ -95,8 +95,10 @@ final readonly class StripeCheckoutCharge
         $session = $this->stripe->checkout->sessions->create($payload, $idempotencyKey === null ? [] : ['idempotency_key' => $idempotencyKey]);
 
         // A page on a host neither Stripe nor the account serves from counts as none, so nobody is sent there, and the
-        // payment waits, as Mollie's does when its checkout is refused.
-        $page = SafeExternalUrl::onHosts($session->url ?? null, [...StripeHostedPages::HOSTS, ...$this->pageHosts]);
+        // payment waits, as Mollie's does when its checkout is refused. Its host comes back: Stripe names the custom
+        // domain of an account nowhere but in the address of a session, so the application learns it here.
+        $hosts = [...StripeHostedPages::HOSTS, ...$this->pageHosts];
+        $page = SafeExternalUrl::onHosts($session->url ?? null, $hosts);
 
         return new ChargeResult(
             successful: false,
@@ -105,6 +107,7 @@ final readonly class StripeCheckoutCharge
             requiresAction: $page !== null,
             pending: $page === null,
             clientSecret: $page,
+            refusedPageHost: $page === null ? SafeExternalUrl::refusedHost($session->url ?? null, $hosts) : null,
         );
     }
 

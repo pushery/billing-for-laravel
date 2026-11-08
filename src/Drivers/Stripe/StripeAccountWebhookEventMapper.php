@@ -23,24 +23,25 @@ use Stripe\StripeClient;
 /**
  * Reports the signed events about the payments of one Stripe payment account as AccountPaymentChanged.
  *
- * Stripe signs each event, so its type says what happened. An event about a payment intent carries the intent. An
- * event about a refund, a failed refund or a dispute only names it, so the intent is read back with the account's
- * client, together with its latest charge, and the amounts and the metadata are the payment's own. Its disputes are
- * read with it, so the change lists each chargeback with its time, reason and outcome, and what the bank holds
- * follows from them.
+ * Stripe signs each event, so its type says what happened. Every event about a payment names its payment intent, and
+ * the intent is read back with the account's client, together with its latest charge, so the amounts and the metadata
+ * are the payment's own as they stand when the event is mapped. Stripe delivers events out of the order they happened
+ * in, so the intent an event about the intent carries can be older than a refund or a dispute already reported, and
+ * the copy is not used. Its disputes are read with it, so the change lists each chargeback with its time, reason and
+ * outcome, and what the bank holds follows from them.
  *
  * A Checkout Session the customer never paid ends without a payment intent, because Stripe creates one only when
  * the customer pays. Its expiry is reported under the session's id, the reference its charge's result named.
  */
 final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapper
 {
-    /** The events about a payment intent, and where each leaves the payment. */
+    /** The events about a payment intent, each reported from the intent read back. */
     private const array INTENT_EVENTS = [
-        'payment_intent.processing' => AccountPaymentStatus::Pending,
-        'payment_intent.amount_capturable_updated' => AccountPaymentStatus::Authorized,
-        'payment_intent.succeeded' => AccountPaymentStatus::Paid,
-        'payment_intent.payment_failed' => AccountPaymentStatus::Failed,
-        'payment_intent.canceled' => AccountPaymentStatus::Canceled,
+        'payment_intent.processing',
+        'payment_intent.amount_capturable_updated',
+        'payment_intent.succeeded',
+        'payment_intent.payment_failed',
+        'payment_intent.canceled',
     ];
 
     /**
@@ -68,7 +69,7 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
      */
     public static function events(): array
     {
-        return [...array_keys(self::INTENT_EVENTS), 'charge.refunded', ...self::DISPUTE_EVENTS, ...self::REFUND_EVENTS, self::SESSION_EXPIRED];
+        return [...self::INTENT_EVENTS, 'charge.refunded', ...self::DISPUTE_EVENTS, ...self::REFUND_EVENTS, self::SESSION_EXPIRED];
     }
 
     /**
@@ -94,7 +95,7 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
         $id = $object['id'] ?? null;
 
         $change = match (true) {
-            array_key_exists($type, self::INTENT_EVENTS) => $this->ofIntent($object, self::INTENT_EVENTS[$type]),
+            in_array($type, self::INTENT_EVENTS, true) => $this->ofIntentEvent($id),
             $type === 'charge.refunded' => $this->ofNamedIntent($object['payment_intent'] ?? null),
             in_array($type, self::DISPUTE_EVENTS, true) => $this->ofNamedIntent($object['payment_intent'] ?? null, dispute: $object),
             in_array($type, self::REFUND_EVENTS, true) && ($object['status'] ?? null) === 'failed' => $this->ofNamedIntent(
@@ -110,8 +111,17 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
     }
 
     /**
-     * What an event about the intent itself reports, from the intent it carries. Nothing has gone back at that point,
-     * so the refunded and the charged-back amount are zero.
+     * What an event about the intent itself reports: the intent it names, read back as a reference to it would be. A
+     * `payment_intent.succeeded` delivered after a refund reports the refund, and so does a replay of it.
+     */
+    private function ofIntentEvent(mixed $intentId): ?AccountPaymentChanged
+    {
+        return is_string($intentId) && $intentId !== '' ? $this->ofIntentReference($intentId) : null;
+    }
+
+    /**
+     * What an intent read back reports in a state in which nothing has gone back yet: on its way, authorized,
+     * canceled or declined. The refunded and the charged-back amount are zero.
      *
      * @param  array<array-key, mixed>  $intent
      */
@@ -423,6 +433,7 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
             $refund,
             $testmode,
             $chargebacks,
+            CarbonImmutable::now(),
         );
     }
 
