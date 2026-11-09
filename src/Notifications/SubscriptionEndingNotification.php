@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Enums\BillingAction;
 use Pushery\Billing\Support\LocalizedDate;
+use Pushery\Billing\Support\MarkdownText;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
@@ -41,7 +42,8 @@ final class SubscriptionEndingNotification extends BillingNotification
         $action = null;
 
         if ($this->merchantName !== null) {
-            $intro = Lang::get('billing::notifications.subscription_ending.intro_merchant', ['date' => $date, 'merchant' => $this->merchantName]);
+            // The merchant names itself, so its name goes into the Markdown line as text.
+            $intro = MarkdownText::interpolate((string) Lang::get('billing::notifications.subscription_ending.intro_merchant', ['date' => $date]), ['merchant' => $this->merchantName]);
         }
 
         if (! $this->heldWithAMerchant()) {
@@ -57,7 +59,7 @@ final class SubscriptionEndingNotification extends BillingNotification
         $tier = $this->heldWithAMerchant() ? null : $this->tierAfterTheEnd();
 
         if ($tier !== null) {
-            $mail->line(Lang::get('billing::notifications.subscription_ending.tier_after', ['tier' => $tier]));
+            $mail->line(MarkdownText::interpolate((string) Lang::get('billing::notifications.subscription_ending.tier_after'), ['tier' => $tier]));
         }
 
         return $this->withAction($mail, Lang::get('billing::notifications.subscription_ending.cta'), $action);

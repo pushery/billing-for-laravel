@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers\Stripe;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Pushery\Billing\Contracts\NamesThePayment;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Enums\AccountPaymentStatus;
 use Pushery\Billing\Enums\ChargebackOutcome;
@@ -33,7 +34,7 @@ use Stripe\StripeClient;
  * A Checkout Session the customer never paid ends without a payment intent, because Stripe creates one only when
  * the customer pays. Its expiry is reported under the session's id, the reference its charge's result named.
  */
-final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapper
+final readonly class StripeAccountWebhookEventMapper implements NamesThePayment, WebhookEventMapper
 {
     /** The events about a payment intent, each reported from the intent read back. */
     private const array INTENT_EVENTS = [
@@ -83,15 +84,13 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
      */
     public function map(Request $request): iterable
     {
-        $payload = json_decode($request->getContent(), true);
-        $type = is_array($payload) ? ($payload['type'] ?? null) : null;
-        $data = is_array($payload) ? ($payload['data'] ?? null) : null;
-        $object = is_array($data) ? ($data['object'] ?? null) : null;
+        $event = $this->eventIn($request);
 
-        if (! is_string($type) || ! is_array($object)) {
+        if ($event === null) {
             return $this->ofReference($request->input('id'));
         }
 
+        [$type, $object] = $event;
         $id = $object['id'] ?? null;
 
         $change = match (true) {
@@ -108,6 +107,44 @@ final readonly class StripeAccountWebhookEventMapper implements WebhookEventMapp
         };
 
         return $change instanceof AccountPaymentChanged ? [$change] : [];
+    }
+
+    /**
+     * The payment an event is about, read from the event alone, as the change this mapper reports for it names the
+     * payment: the intent an event about the intent is, the intent a charge, a dispute or a refund names, and the
+     * Checkout Session that expired. An event this mapper reports nothing for is named all the same where it names an
+     * intent, such as a refund that went through. A request that carries no event, such as a reference a return page
+     * reads back, is no delivery and names none.
+     */
+    public function paymentReference(Request $request): ?string
+    {
+        $event = $this->eventIn($request);
+
+        if ($event === null) {
+            return null;
+        }
+
+        [$type, $object] = $event;
+        $reference = in_array($type, self::INTENT_EVENTS, true) || $type === self::SESSION_EXPIRED
+            ? ($object['id'] ?? null)
+            : ($object['payment_intent'] ?? null);
+
+        return is_string($reference) && $reference !== '' ? $reference : null;
+    }
+
+    /**
+     * The type of the event a request carries and the object it is about, or null for a request that carries no event.
+     *
+     * @return array{0: string, 1: array<array-key, mixed>}|null
+     */
+    private function eventIn(Request $request): ?array
+    {
+        $payload = json_decode($request->getContent(), true);
+        $type = is_array($payload) ? ($payload['type'] ?? null) : null;
+        $data = is_array($payload) ? ($payload['data'] ?? null) : null;
+        $object = is_array($data) ? ($data['object'] ?? null) : null;
+
+        return is_string($type) && is_array($object) ? [$type, $object] : null;
     }
 
     /**

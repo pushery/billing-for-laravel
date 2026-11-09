@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Pushery\Billing;
 
+use Closure;
 use Illuminate\Broadcasting\BroadcastManager;
 use Illuminate\Console\Application as ConsoleApplication;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Container\Container;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Contracts\Foundation\CachesConfiguration;
@@ -61,6 +63,7 @@ use Pushery\Billing\Console\Commands\PlatformSupplyRecordsExportCommand;
 use Pushery\Billing\Console\Commands\ProbeRatesCommand;
 use Pushery\Billing\Console\Commands\PruneBillingCommand;
 use Pushery\Billing\Console\Commands\RecapitulativeStatementExportCommand;
+use Pushery\Billing\Console\Commands\ReconcileAccountPaymentsCommand;
 use Pushery\Billing\Console\Commands\ReconcileMerchantJournalCommand;
 use Pushery\Billing\Console\Commands\ReconcileMoneyBackCommand;
 use Pushery\Billing\Console\Commands\ReconcileTaxStatusCommand;
@@ -142,6 +145,7 @@ use Pushery\Billing\Contracts\LedgerBalanceReader;
 use Pushery\Billing\Contracts\License;
 use Pushery\Billing\Contracts\ListsContracts;
 use Pushery\Billing\Contracts\ListsEarningCurrencies;
+use Pushery\Billing\Contracts\ListsPaymentAccounts;
 use Pushery\Billing\Contracts\MandateNotifier;
 use Pushery\Billing\Contracts\MerchantAccountDirectory;
 use Pushery\Billing\Contracts\MerchantCatalog;
@@ -1354,6 +1358,7 @@ final class BillingServiceProvider extends ServiceProvider
                 ReconcileMerchantJournalCommand::class,
                 ReconcileUsageCommand::class,
                 ReconcileMoneyBackCommand::class,
+                ReconcileAccountPaymentsCommand::class,
                 DatevExportCommand::class,
                 CancelSubscriptionCommand::class,
                 GrantTierCommand::class,
@@ -1432,6 +1437,7 @@ final class BillingServiceProvider extends ServiceProvider
             // the billing of a SaaS application, which this mode leaves off.
             if ($scheduleConfig->get('billing.mode') === 'payments') {
                 $withHeartbeat($schedule->command('billing:prune')->dailyAt('03:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:prune');
+                self::scheduleAccountReconcile($schedule, $container, $withHeartbeat);
 
                 return;
             }
@@ -1490,6 +1496,7 @@ final class BillingServiceProvider extends ServiceProvider
             if ($container->bound(ReportsMoneyBackOutcomes::class)) {
                 $withHeartbeat($schedule->command('billing:money-back:reconcile')->dailyAt('04:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:money-back:reconcile');
             }
+            self::scheduleAccountReconcile($schedule, $container, $withHeartbeat);
             // The notice before the hold below: when an attestation's renewal falls due at the year boundary,
             // and again shortly before it runs out. Safe unconditionally: with nothing due it touches nothing
             // and exits zero.
@@ -1739,6 +1746,33 @@ final class BillingServiceProvider extends ServiceProvider
     private function switchedOn(string $key): bool
     {
         return $this->app->make(Repository::class)->get($key, true) !== false;
+    }
+
+    /**
+     * Schedule the account run where the application lists its accounts, in either mode.
+     *
+     * Mollie calls no webhook for a refund canceled before it is paid out, and the run that picks such payments up has to
+     * know the accounts to read. An application whose PaymentAccounts does not list them gets no entry, so
+     * `schedule:list` shows the run only where it does something.
+     *
+     * @param  Closure(Event, string): Event  $withHeartbeat
+     */
+    private static function scheduleAccountReconcile(Schedule $schedule, Container $container, Closure $withHeartbeat): void
+    {
+        if (self::paymentAccounts($container) instanceof ListsPaymentAccounts) {
+            $withHeartbeat($schedule->command('billing:accounts:reconcile')->dailyAt('04:40')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:accounts:reconcile');
+        }
+    }
+
+    /**
+     * The application's PaymentAccounts, typed as the contract.
+     *
+     * The package binds NoPaymentAccounts, which lists nothing, and an application replaces that binding with its own.
+     * Read through the contract, whether the bound class lists its accounts stays a question the schedule asks.
+     */
+    private static function paymentAccounts(Container $container): PaymentAccounts
+    {
+        return $container->make(PaymentAccounts::class);
     }
 
     /** Whether the application runs in payments-only mode, as the manager decides it everywhere else. */

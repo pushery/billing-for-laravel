@@ -73,30 +73,49 @@ final readonly class SubjectScopedRecords
     {
         $scrubbed = [];
 
-        foreach ($axis->scrubbed as $table => $columns) {
-            $values = array_fill_keys($columns, null);
-
-            // Where the axis names a stamp, the scrub records when it happened, so a later write can tell a
-            // value that was scrubbed from one that was never there and leave the first alone.
-            if (isset($axis->scrubbedAt[$table])) {
-                $values[$axis->scrubbedAt[$table]] = Carbon::now();
-            }
-
-            // Only rows that still hold something: counting rows already scrubbed would report work that did
-            // not happen, and this count is what an erasure receipt is written from. The alternatives are
-            // nested — at the top level an `orWhere` would sit beside the two morph conditions and turn
-            // "this person's rows that hold data" into "this person's rows, or anyone's row that holds
-            // data", scrubbing strangers.
-            $scrubbed[$table] = $this->scoped($axis, $table, $subject)
-                ->where(static function (Builder $q) use ($columns): void {
-                    foreach ($columns as $column) {
-                        $q->orWhereNotNull($column);
-                    }
-                })
-                ->update($values);
+        foreach (array_keys($axis->scrubbed) as $table) {
+            $scrubbed[$table] = $this->scrubRows($axis, $table, $this->scoped($axis, $table, $subject));
         }
 
         return $scrubbed;
+    }
+
+    /**
+     * Null the personal columns the axis names for a table in the rows a query selects, and count the rows that held
+     * something.
+     *
+     * The caller chooses the rows: the person's own, or the deliveries about a payment where the package knows no
+     * person. The columns and the stamp come from the axis either way, so a scrub clears the same columns however its
+     * rows were found.
+     */
+    public function scrubRows(ErasureAxis $axis, string $table, Builder $rows): int
+    {
+        $columns = $axis->scrubbed[$table] ?? [];
+
+        if ($columns === []) {
+            return 0;
+        }
+
+        $values = array_fill_keys($columns, null);
+
+        // Where the axis names a stamp, the scrub records when it happened, so a later write can tell a
+        // value that was scrubbed from one that was never there and leave the first alone.
+        if (isset($axis->scrubbedAt[$table])) {
+            $values[$axis->scrubbedAt[$table]] = Carbon::now();
+        }
+
+        // Only rows that still hold something: counting rows already scrubbed would report work that did
+        // not happen, and this count is what an erasure receipt is written from. The alternatives are
+        // nested — at the top level an `orWhere` would sit beside the conditions that chose the rows and
+        // turn "this person's rows that hold data" into "this person's rows, or anyone's row that holds
+        // data", scrubbing strangers.
+        return $rows
+            ->where(static function (Builder $q) use ($columns): void {
+                foreach ($columns as $column) {
+                    $q->orWhereNotNull($column);
+                }
+            })
+            ->update($values);
     }
 
     /**

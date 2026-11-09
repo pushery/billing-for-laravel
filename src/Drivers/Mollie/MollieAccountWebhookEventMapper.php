@@ -13,6 +13,7 @@ use Mollie\Api\MollieApiClient;
 use Mollie\Api\Resources\Payment;
 use Mollie\Api\Resources\Refund;
 use Pushery\Billing\Contracts\DerivesDeliveryKey;
+use Pushery\Billing\Contracts\NamesThePayment;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Enums\AccountPaymentStatus;
 use Pushery\Billing\Events\AccountPaymentChanged;
@@ -33,10 +34,13 @@ use Pushery\Billing\ValueObjects\PaymentChargeback;
  * and Mollie does not show a test payment to a request in live mode. So for such an account a payment that is unknown
  * in live mode is asked for once more in test mode, and the change reports which mode the payment ran in.
  */
-final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, WebhookEventMapper
+final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, NamesThePayment, WebhookEventMapper
 {
     /** @var array<string, ?AccountPaymentChanged> */
     private array $read = [];
+
+    /** @var array<string, list<string>> payment id => the ids of its refunds that paid nothing out */
+    private array $refundsThatPaidNothing = [];
 
     public function __construct(
         private readonly MollieApiClient $client,
@@ -44,9 +48,15 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Webho
     ) {}
 
     /**
-     * The payment, its status, its amounts and the outcome of each of its chargebacks, so a refund or a chargeback is a
-     * delivery of its own: the status of a paid payment does not move when money goes back, and a second chargeback of
-     * the amount a reversed one had leaves the amounts where they stood.
+     * The payment, its status, its amounts, the outcome of each of its chargebacks and the refunds that paid nothing
+     * out, so a refund or a chargeback is a delivery of its own: the status of a paid payment does not move when money
+     * goes back, and a second chargeback of the amount a reversed one had leaves the amounts where they stood.
+     *
+     * A refund that failed or was canceled takes its amount back out of the refunded total, so the payment can return to
+     * a standing it reported before: paid again once a refund waiting for its payout is canceled, or refunded in part
+     * again once a refund fails and the next one of the same amount is on its way. Without those refunds the key would be
+     * the key of the earlier report, and the return would be recorded as a redelivery of it. They are named only where
+     * there are any, so a payment without one keeps the key it always had.
      */
     public function deliveryKey(Request $request): ?string
     {
@@ -56,7 +66,7 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Webho
             return null;
         }
 
-        return implode(':', [
+        $parts = [
             $change->paymentReference,
             $change->status->value,
             $change->amountRefunded->minorUnits,
@@ -66,7 +76,20 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Webho
                 static fn (PaymentChargeback $chargeback): string => $chargeback->reference.'='.$chargeback->outcome->value,
                 $change->chargebacks,
             )),
-        ]);
+        ];
+        $paidNothing = $this->refundsThatPaidNothing[$change->paymentReference] ?? [];
+
+        if ($paidNothing !== []) {
+            $parts[] = implode(',', $paidNothing);
+        }
+
+        return implode(':', $parts);
+    }
+
+    /** The payment a ping names, read from the ping alone: the change this mapper reports for it carries the same id. */
+    public function paymentReference(Request $request): ?string
+    {
+        return $this->paymentIdOf($request);
     }
 
     /** @return iterable<AccountPaymentChanged> */
@@ -104,13 +127,17 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Webho
         // Asked of Mollie once, and read twice: for what the bank still holds, and for the list the change carries.
         $chargebacks = $payment->hasChargebacks() ? $payment->chargebacks() : [];
         $chargedBack = MollieChargebackEvents::standing($chargebacks, $amount->currency);
-        $failedRefund = $payment->isPaid() && $payment->hasRefunds() ? $this->failedNewest($payment->refunds()) : null;
+        // Asked of Mollie once as well, and read twice: for the refund that failed last, and for the delivery key.
+        $refunds = $payment->isPaid() && $payment->hasRefunds() ? $payment->refunds() : [];
+        $failedRefund = $this->failedNewest($refunds);
         [$billingReference, $metadata] = $this->metadataOf($payment->metadata);
+        $reference = MollieValue::id($payment->id);
+        $this->refundsThatPaidNothing[$reference] = $this->paidNothing($refunds);
 
         return new AccountPaymentChanged(
             'mollie',
             $this->account,
-            MollieValue::id($payment->id),
+            $reference,
             match (true) {
                 $payment->isPaid() => $this->paidStatus($amount, $refunded, $chargedBack, $failedRefund),
                 $payment->isAuthorized() => AccountPaymentStatus::Authorized,
@@ -162,6 +189,27 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Webho
         }
 
         return $newest instanceof Refund && $newest->isFailed() ? MollieValue::id($newest->id) : null;
+    }
+
+    /**
+     * The ids of the refunds that failed or were canceled, sorted, so two reads of the same refunds give the same key.
+     *
+     * @param  iterable<mixed>  $refunds
+     * @return list<string>
+     */
+    private function paidNothing(iterable $refunds): array
+    {
+        $ids = [];
+
+        foreach ($refunds as $refund) {
+            if ($refund instanceof Refund && ($refund->isFailed() || $refund->isCanceled())) {
+                $ids[] = MollieValue::id($refund->id);
+            }
+        }
+
+        sort($ids, SORT_STRING);
+
+        return $ids;
     }
 
     /**

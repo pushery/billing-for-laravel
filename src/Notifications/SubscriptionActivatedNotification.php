@@ -8,6 +8,7 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\BillingAction;
 use Pushery\Billing\Support\CatalogLabel;
+use Pushery\Billing\Support\MarkdownText;
 
 /**
  * Confirms the subscription is live and names the tier the customer is now on. It is not the receipt —
@@ -25,7 +26,7 @@ final class SubscriptionActivatedNotification extends BillingNotification
     {
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.subscription_activated.subject'))
-            ->line(Lang::get('billing::notifications.subscription_activated.intro', ['tier' => CatalogLabel::translate($this->tierLabel)]))
+            ->line(MarkdownText::interpolate((string) Lang::get('billing::notifications.subscription_activated.intro'), ['tier' => CatalogLabel::translate($this->tierLabel)]))
             ->line(Lang::get('billing::notifications.subscription_activated.outro'));
 
         return $this->withAction(
