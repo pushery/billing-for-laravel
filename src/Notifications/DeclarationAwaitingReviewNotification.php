@@ -16,7 +16,7 @@ use Pushery\Billing\Consumer\DeclarationFailure;
 use Pushery\Billing\Consumer\DeclarationStatement;
 use Pushery\Billing\Models\CancellationDeclaration;
 use Pushery\Billing\Models\WithdrawalDeclaration;
-use Pushery\Billing\Support\MailText;
+use Pushery\Billing\Support\MarkdownText;
 
 /**
  * The operator's notice of a declaration that waits for a person: why it waits, and the declaration line by line.
@@ -77,7 +77,7 @@ final class DeclarationAwaitingReviewNotification extends BillingNotification
             : DeclarationStatement::withdrawalLines($declaration);
 
         foreach ($lines as $line) {
-            $mail->line(MailText::line(':label: :value', $line));
+            $mail->line(MarkdownText::interpolate(':label: :value', $line));
         }
 
         return $this->withAction($mail, Lang::get('billing::notifications.declaration_awaiting_review.cta'), $this->reviewUrl());

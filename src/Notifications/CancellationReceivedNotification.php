@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Lang;
 use Override;
 use Pushery\Billing\Consumer\DeclarationStatement;
 use Pushery\Billing\Models\CancellationDeclaration;
-use Pushery\Billing\Support\MailText;
+use Pushery\Billing\Support\MarkdownText;
 
 /**
  * The confirmation of a cancellation declared through the cancellation button: its content, the date and time it
@@ -19,8 +19,8 @@ use Pushery\Billing\Support\MailText;
  * The row is the receipt, not this message: `declared_at` was stamped before anything was queued, and a mail server
  * that never accepts the mail does not undo it. The notice carries the id and reads the row when it is sent, so it
  * says what was done with the declaration by then. It is written from {@see DeclarationStatement}, so it says what a
- * receipt page says, and every value the person typed reaches the mail through {@see MailText}, as typed and unable
- * to become a link.
+ * receipt page says, and every value the person typed reaches the mail through {@see MarkdownText}, as text that no
+ * Markdown and no mail program turns into a link.
  */
 final class CancellationReceivedNotification extends BillingNotification
 {
@@ -45,10 +45,10 @@ final class CancellationReceivedNotification extends BillingNotification
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.cancellation_received.subject'))
             ->line(Lang::get('billing::notifications.cancellation_received.intro'))
-            ->line(MailText::line(':sentence', ['sentence' => DeclarationStatement::cancellationDeclaredThrough()]));
+            ->line(MarkdownText::text(DeclarationStatement::cancellationDeclaredThrough()));
 
         foreach (DeclarationStatement::cancellationLines($declaration) as $line) {
-            $mail->line(MailText::line(':label: :value', $line));
+            $mail->line(MarkdownText::interpolate(':label: :value', $line));
         }
 
         return $this->withAction(

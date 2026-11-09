@@ -4,6 +4,29 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.57.0] - 2026-11-09
+
+### ✨ Added
+
+- **`billing:annual-terms:arrange` arranges a consumer's annual term again where nothing that goes on past its period holds it.** Every consumer's annual subscription the package arranged at Stripe under 0.53.0 to 0.56.x is held by a schedule of its year alone, because Stripe refused the later phases, and nothing arranged it again: each later event finds the schedule and leaves it, so the year would renew as a year. The command asks the driver about every consumer's running annual term, keeps each arrangement that goes on past its period and arranges the rest; `--dry-run` names the subscriptions it would ask about. `AnnualTerms::arrangeAgain()` and `canArrangeAgain()` do the same for one subscription.
+
+  **Upgrade:** an application that ran 0.53.0 to 0.56.x with Stripe runs `php artisan billing:annual-terms:arrange` once after updating.
+
+- **`StripeAccountSetup::seesWebhookEndpoint()` says whether an account's key sees its webhook endpoint.** An endpoint lives on one Stripe account and in one mode, so a new key that does not see the account's endpoint belongs to another Stripe account, and an application can refuse it before the refunds and open payments of the old account are lost. Only Stripe's answer that it has no such endpoint is `false`; a key Stripe does not accept, a rate limit or an outage throws.
+
+### 🐛 Fixed
+
+- **Stripe accepts the schedule that arranges the end of an annual term again.** Since 0.53.0 the schedule that moves a consumer's year to the monthly price, books a further year or arranges a plan change at the end of the period wrote each later phase with `iterations`, which the Stripe API version the package pins no longer accepts, and Stripe refused it with `Received unknown parameter: phases[iterations]`. Each later phase now lasts one period of its price, as `duration`. A schedule whose later phases Stripe refuses is let go at once instead of holding the subscription with its period alone, and a schedule of that shape found holding a subscription is replaced the next time the subscription is arranged, instead of being taken for the arrangement.
+
+- **The first deploy of an application that installs billing no longer stops `sqlens:predeploy` at a migration that runs nothing on its engine.** Three migrations change columns on one engine only: the contents of the kept documents and the UTC moments on MySQL and MariaDB, and every moment as `timestamptz` on PostgreSQL. On every other engine they end before their first statement, which SQLens reads as a migration that ran and produced nothing, and its deploy preflight stopped there. Each now names the engines it runs nothing on in `#[NoSqlOnDriver]`, with the reason, and `composer.json` suggests `pushery/sqlens-for-laravel`, which reads the attribute.
+- **An e-mail address in a value somebody typed keeps its characters in the mails.** The mails set typed values as text and write the dot of a domain with a look-alike character, so that no mail program links it. An e-mail address came out with that look-alike too, so a mail program did not offer it as an address and a copy of it was not the address that was typed. An address now stays as typed; a web address and a network path are still broken as before.
+
+### 🔒 Security
+
+- **The confirmations of a cancellation and of a withdrawal, and the notice of a declaration awaiting review, break a web address that a typed value carries.** These mails already set what the person typed as text, so a Markdown link in it stayed characters, but a mail program still linked an address written out in plain text, such as `https://evil.example` typed as a name, and the name of the application in the line that says how the declaration was made. The doubled slash of such an address and a dot before a label are now written with look-alike characters, as billing's other mails write them.
+
+  **Upgrade:** nothing to do. A test that compares the lines of these mails expects the look-alikes where a value holds a web address.
+
 ## [0.56.0] - 2026-11-09
 
 ### ✨ Added
@@ -8478,7 +8501,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.56.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.57.0...HEAD
+[0.57.0]: https://github.com/pushery/billing-for-laravel/compare/v0.56.0...v0.57.0
 [0.56.0]: https://github.com/pushery/billing-for-laravel/compare/v0.55.0...v0.56.0
 [0.55.0]: https://github.com/pushery/billing-for-laravel/compare/v0.54.0...v0.55.0
 [0.54.0]: https://github.com/pushery/billing-for-laravel/compare/v0.53.0...v0.54.0

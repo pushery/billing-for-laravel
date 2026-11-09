@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\Schema;
+use Pushery\SQLens\Attributes\NoSqlOnDriver;
 
 /**
  * Every moment in the package's tables becomes `timestamptz` on PostgreSQL, so that the column says which moment it
@@ -36,7 +37,11 @@ use Illuminate\Support\Facades\Schema;
  *
  * Server-only.
  */
-return new class extends Migration
+return new
+#[NoSqlOnDriver('mysql', reason: 'timestamptz is a PostgreSQL type; MySQL keeps these columns as they are')]
+#[NoSqlOnDriver('mariadb', reason: 'timestamptz is a PostgreSQL type; MariaDB keeps these columns as they are')]
+#[NoSqlOnDriver('sqlite', reason: 'timestamptz is a PostgreSQL type; SQLite keeps these columns as they are')]
+class extends Migration
 {
     /**
      * The columns a model of the package cast with UtcDateTime when this migration was written: their values are UTC.

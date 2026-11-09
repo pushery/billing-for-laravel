@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Lang;
 use Override;
 use Pushery\Billing\Consumer\DeclarationStatement;
 use Pushery\Billing\Models\WithdrawalDeclaration;
-use Pushery\Billing\Support\MailText;
+use Pushery\Billing\Support\MarkdownText;
 
 /**
  * The confirmation of receipt for a withdrawal sent through the withdrawal function: its content and the date and
@@ -18,7 +18,8 @@ use Pushery\Billing\Support\MailText;
  *
  * It goes out before the withdrawal is carried out and does not wait for it, because the confirmation of receipt may
  * not depend on a payment provider being reachable. The notice carries the id and reads the row when it is sent, and
- * every value the person typed reaches the mail through {@see MailText}, as typed and unable to become a link.
+ * every value the person typed reaches the mail through {@see MarkdownText}, as text that no Markdown and no mail
+ * program turns into a link.
  */
 final class WithdrawalReceivedNotification extends BillingNotification
 {
@@ -43,10 +44,10 @@ final class WithdrawalReceivedNotification extends BillingNotification
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.withdrawal_received.subject'))
             ->line(Lang::get('billing::notifications.withdrawal_received.intro'))
-            ->line(MailText::line(':sentence', ['sentence' => DeclarationStatement::withdrawalDeclaredThrough()]));
+            ->line(MarkdownText::text(DeclarationStatement::withdrawalDeclaredThrough()));
 
         foreach (DeclarationStatement::withdrawalLines($declaration) as $line) {
-            $mail->line(MailText::line(':label: :value', $line));
+            $mail->line(MarkdownText::interpolate(':label: :value', $line));
         }
 
         return $this->withAction(

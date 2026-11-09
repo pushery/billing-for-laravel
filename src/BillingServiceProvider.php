@@ -36,6 +36,7 @@ use Pushery\Billing\Console\Commands\AdvanceDunningCommand;
 use Pushery\Billing\Console\Commands\AnnounceLapsedAttestationsCommand;
 use Pushery\Billing\Console\Commands\AnnounceUpcomingFilingsCommand;
 use Pushery\Billing\Console\Commands\AnnounceVoucherVolumeCommand;
+use Pushery\Billing\Console\Commands\ArrangeAnnualTermsCommand;
 use Pushery\Billing\Console\Commands\BillingRunCommand;
 use Pushery\Billing\Console\Commands\CancelSubscriptionCommand;
 use Pushery\Billing\Console\Commands\CheckMetersCommand;
@@ -1323,6 +1324,7 @@ final class BillingServiceProvider extends ServiceProvider
                 WarnEndingTrialsCommand::class,
                 WarnEndingSubscriptionsCommand::class,
                 RemindAnnualTermsCommand::class,
+                ArrangeAnnualTermsCommand::class,
                 AdvanceBuyerProtectionCommand::class,
                 AdvanceDunningCommand::class,
                 TaxReturnExportCommand::class,

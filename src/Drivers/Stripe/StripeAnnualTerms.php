@@ -6,6 +6,7 @@ namespace Pushery\Billing\Drivers\Stripe;
 
 use Illuminate\Support\Facades\Log;
 use Pushery\Billing\Contracts\ArrangesAnnualTerms;
+use Stripe\Exception\ApiErrorException;
 use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
@@ -31,6 +32,13 @@ use Stripe\StripeObject;
  * A subscription sold before its terms named a monthly price goes on at a twelfth of the price of its year, rounded down,
  * as a price of the same product made for the purpose. A higher price agreed by staying silent would not bind the
  * customer, and rounding down keeps the month at no more than its share of the year.
+ *
+ * ## A later phase lasts one period of its price
+ *
+ * Stripe takes the length of a phase as `duration`, an interval and a count of it: the API version 2025-09-30 removed
+ * `iterations`, and the package pins a later one. A price named by its id is read for the interval it recurs at, and a
+ * twelfth recurs monthly. A schedule whose later phases Stripe refuses is let go at once, so the subscription is not left
+ * held by a schedule of its period alone, which arranges nothing.
  *
  * ## One item only
  *
@@ -84,7 +92,8 @@ final readonly class StripeAnnualTerms implements ArrangesAnnualTerms
      * A schedule that holds the subscription already is the answer, unless it is to be replaced: for a further year,
      * which sits between the two phases it has, for another monthly price, or for a plan change at the end of the
      * period. Stripe names the schedule that holds the subscription, so a row that has not learned of it yet does not
-     * keep the old one in place.
+     * keep the old one in place. A schedule of the period alone that lets go after it arranges nothing, and is replaced
+     * as well.
      *
      * @param  list<array{price: string}|null>  $after  the phases after the current one; null is a twelfth of the year
      */
@@ -95,7 +104,7 @@ final readonly class StripeAnnualTerms implements ArrangesAnnualTerms
         $held = $held instanceof StripeObject ? ($held->id ?? null) : $held;
 
         if (is_string($held) && $held !== '') {
-            if (! $replace) {
+            if (! $replace && $this->arrangesBeyondThePeriod($held)) {
                 return $held;
             }
 
@@ -117,13 +126,18 @@ final readonly class StripeAnnualTerms implements ArrangesAnnualTerms
         $later = [];
 
         foreach ($after as $price) {
-            $price ??= $this->twelfthOf($items[0], $subscriptionReference);
-
             if ($price === null) {
+                $price = $this->twelfthOf($items[0], $subscriptionReference);
+                $period = $price === null ? null : ['interval' => $price['price_data']['recurring']['interval'], 'interval_count' => 1];
+            } else {
+                $period = $this->onePeriodOf($price['price'], $subscriptionReference);
+            }
+
+            if ($price === null || $period === null) {
                 return null;
             }
 
-            $later[] = $price;
+            $later[] = [$price, $period];
         }
 
         $schedule = $this->stripe->subscriptionSchedules->create(['from_subscription' => $subscriptionReference]);
@@ -141,17 +155,92 @@ final readonly class StripeAnnualTerms implements ArrangesAnnualTerms
         $phases = [[...$written, ...$routing]];
         $quantity = $written['items'][0]['quantity'] ?? 1;
 
-        foreach ($later as $price) {
-            $phases[] = ['items' => [[...$price, 'quantity' => $quantity]], 'iterations' => 1, 'proration_behavior' => 'none', ...$carried];
+        foreach ($later as [$price, $period]) {
+            $phases[] = ['items' => [[...$price, 'quantity' => $quantity]], 'duration' => $period, 'proration_behavior' => 'none', ...$carried];
         }
 
-        $this->stripe->subscriptionSchedules->update($schedule->id, [
-            'end_behavior' => 'release',
-            'proration_behavior' => 'none',
-            'phases' => $phases,
-        ]);
+        try {
+            $this->stripe->subscriptionSchedules->update($schedule->id, [
+                'end_behavior' => 'release',
+                'proration_behavior' => 'none',
+                'phases' => $phases,
+            ]);
+        } catch (RateLimitException $rateLimited) {
+            // A 429 is an InvalidRequestException as well. The phases were not written either way, so the schedule is
+            // let go before the limit goes on as the transient refusal it is.
+            $this->letGoOfARefusedSchedule($schedule->id, $subscriptionReference);
+
+            throw $rateLimited;
+        } catch (ApiErrorException $refused) {
+            // Kept, the schedule would hold the subscription with its period alone, and a later call that does not
+            // replace would have to find that out first. It lets go, and the refusal goes on as it came.
+            $this->letGoOfARefusedSchedule($schedule->id, $subscriptionReference);
+
+            throw $refused;
+        }
 
         return $schedule->id;
+    }
+
+    /**
+     * Let go of a schedule whose later phases Stripe refused, so that it does not hold the subscription with its period
+     * alone. The refusal of the phases goes on to the caller, so a release Stripe refuses as well is logged: the schedule
+     * is replaced at the next arrangement.
+     */
+    private function letGoOfARefusedSchedule(string $scheduleReference, string $subscriptionReference): void
+    {
+        try {
+            $this->release($scheduleReference);
+        } catch (ApiErrorException $stuck) {
+            // @rate-limit-deliberate: the refusal of the phases goes on to the caller right after this, so a limit on the
+            // release loses no answer: the caller arranges again, and that arrangement replaces this schedule.
+            Log::warning('billing: Stripe refused the later phases of a schedule and then its release, so the schedule '
+                .'holds the subscription with its period alone until the next arrangement replaces it', [
+                    'subscription' => $subscriptionReference,
+                    'schedule' => $scheduleReference,
+                    'release' => $stuck->getMessage(),
+                ]);
+        }
+    }
+
+    /**
+     * Whether the schedule that holds the subscription arranges anything past the period it is in. A schedule made from
+     * the subscription holds that period alone until its later phases are written, and letting go after it arranges
+     * nothing. One that ends the subscription after its period, or goes on past it, is an arrangement.
+     */
+    private function arrangesBeyondThePeriod(string $reference): bool
+    {
+        $schedule = $this->stripe->subscriptionSchedules->retrieve($reference);
+        $phases = $schedule->phases ?? null;
+
+        return ! is_array($phases) || count($phases) > 1 || ($schedule->end_behavior ?? 'release') !== 'release';
+    }
+
+    /**
+     * One period of a price, as the `duration` of a phase names it: the interval the price recurs at, and how many.
+     *
+     * A price that recurs at no interval, one charged once, cannot carry a phase of its own, and that is logged: the
+     * subscription would renew as it stands.
+     *
+     * @return array{interval: string, interval_count: int}|null
+     */
+    private function onePeriodOf(string $priceReference, string $subscriptionReference): ?array
+    {
+        $recurring = $this->stripe->prices->retrieve($priceReference)->recurring ?? null;
+        $interval = $recurring instanceof StripeObject ? ($recurring->interval ?? null) : null;
+        $count = $recurring instanceof StripeObject ? ($recurring->interval_count ?? 1) : 1;
+
+        if (! is_string($interval) || $interval === '') {
+            Log::error('billing: a price a subscription would go on with at the end of its period recurs at no interval, so '
+                .'it cannot be arranged, and Stripe will renew the subscription as it stands', [
+                    'subscription' => $subscriptionReference,
+                    'price' => $priceReference,
+                ]);
+
+            return null;
+        }
+
+        return ['interval' => $interval, 'interval_count' => max(1, $count)];
     }
 
     public function release(string $arrangementReference): void
