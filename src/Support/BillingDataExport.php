@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use InvalidArgumentException;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\Webhooks\WebhookPayloadSecrets;
@@ -64,6 +65,7 @@ final readonly class BillingDataExport
     public function __construct(
         private SubjectScopedRecords $records = new SubjectScopedRecords,
         private ?BillingManager $manager = null,
+        private PaymentDeliveries $payments = new PaymentDeliveries,
     ) {}
 
     /**
@@ -121,6 +123,31 @@ final readonly class BillingDataExport
             ->all());
 
         return $this->withMoments($this->withoutDeliverySecrets($export));
+    }
+
+    /**
+     * What a provider sent about given payments of a payment account, as plain data, for the person who made them.
+     *
+     * A payment into a payment account belongs to the application's customer, and the package records no owner for its
+     * deliveries, so `for()` does not include them. The application knows which payments were the person's and asks
+     * for them here, by the provider's ids `AccountPaymentChanged` reported them under. The deliveries come the way
+     * `for()` hands deliveries over: with their payloads, without the fields a provider asks not to be kept, and every
+     * moment with its offset.
+     *
+     * @param  list<string>  $payments  the provider's ids of the payments, as `AccountPaymentChanged::$paymentReference`
+     * @return array<string, list<array<array-key, mixed>>>
+     *
+     * @throws InvalidArgumentException when the account is not a payment account's key
+     */
+    public function forPayments(string $provider, string $account, array $payments): array
+    {
+        $rows = $this->payments->of($provider, $account, $payments)
+            ->orderBy('id')
+            ->get()
+            ->map(static fn (object $row): array => (array) $row)
+            ->all();
+
+        return $this->withMoments($this->withoutDeliverySecrets([OwnerScopedTables::SCRUBBED => array_values($rows)]));
     }
 
     /**

@@ -55,6 +55,13 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  *
  * It all happens in one transaction: a half-erased owner is worse than an un-erased one, because nobody
  * would know which half.
+ *
+ * ## The deliveries to a payment account
+ *
+ * A payment into a payment account belongs to the application's customer, and the package records no owner for its
+ * webhook deliveries, so `erase()` never reaches them. The application knows which payments were the person's and
+ * passes them to `erasePayments()`. When it removes an account altogether, `eraseAccount()` removes what the package
+ * holds about it.
  */
 final readonly class BillingEraser
 {
@@ -63,6 +70,7 @@ final readonly class BillingEraser
         private CustomerRegistry $customers,
         private BillingManager $manager,
         private SubjectScopedRecords $records = new SubjectScopedRecords,
+        private PaymentDeliveries $payments = new PaymentDeliveries,
     ) {}
 
     public function erase(Model $owner): ErasureReport
@@ -183,6 +191,57 @@ final readonly class BillingEraser
             ]), AuditSource::System);
 
             return new ErasureReport($purged, $retained, $credit, $axes);
+        });
+    }
+
+    /**
+     * Scrub what a provider sent about given payments of a payment account, the way an erasure scrubs a person's
+     * deliveries: the payload and the error recorded beside it go, and the row stays, stamped, so a redelivery does not
+     * write the payload back.
+     *
+     * The payments are named by the provider's ids `AccountPaymentChanged` reported them under. This reaches no
+     * provider and touches nothing but those deliveries.
+     *
+     * @param  list<string>  $payments  the provider's ids of the payments, as `AccountPaymentChanged::$paymentReference`
+     *
+     * @throws InvalidArgumentException when the account is not a payment account's key
+     */
+    public function erasePayments(string $provider, string $account, array $payments): ErasureReport
+    {
+        $table = OwnerScopedTables::SCRUBBED;
+        $scrubbed = DB::transaction(fn (): int => $this->records->scrubRows(
+            OwnerScopedTables::ownerAxis(),
+            $table,
+            $this->payments->of($provider, $account, $payments),
+        ));
+
+        return new ErasureReport(array_filter([$table => $scrubbed]), []);
+    }
+
+    /**
+     * Remove everything the package holds about a payment account, for an application that removes the account, such
+     * as a shop that closes: the deliveries to it and the runs of the effects they drove.
+     *
+     * Deleted rather than scrubbed. A delivery is kept so that a failed effect can run again and a redelivery is
+     * recognized, and neither happens without the account: a replay reads a delivery with the account's own mapper,
+     * and the account's webhook address answers 404 once the application no longer knows it. So call this after the
+     * application stopped knowing the account; until then a redelivery to its address is recorded again, as a new
+     * delivery, and its effects run again.
+     *
+     * @throws InvalidArgumentException when the account is not a payment account's key
+     */
+    public function eraseAccount(string $provider, string $account): ErasureReport
+    {
+        return DB::transaction(function () use ($provider, $account): ErasureReport {
+            $deliveries = $this->payments->ofAccount($provider, $account);
+
+            // The runs go first, while the deliveries they point at are still there to find them by.
+            $runs = DB::table('billing_webhook_effect_runs')->whereIn('delivery_id', (clone $deliveries)->select('id'))->delete();
+
+            return new ErasureReport(array_filter([
+                'billing_webhook_effect_runs' => $runs,
+                OwnerScopedTables::SCRUBBED => $deliveries->delete(),
+            ]), []);
         });
     }
 

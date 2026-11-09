@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\BillingSchema;
 use Pushery\Billing\Support\TableLookup;
@@ -56,6 +57,18 @@ return new class extends Migration
 
     public function down(): void
     {
+        // up() leaves the owner of billing_webhook_events standing where it already existed, so a rollback cannot
+        // know it removes only what its own up() added. The owner is the record of whose account an event concerned,
+        // so the rollback refuses while any event carries one.
+        $owned = DB::table('billing_webhook_events')->whereNotNull('owner_type')->count();
+
+        if ($owned > 0) {
+            throw new RuntimeException(sprintf(
+                'Refusing to roll back the owner of billing webhook events: %d event(s) record the owner they concerned, and dropping owner_type and owner_id would delete that record. Export the events and remove the columns by hand if they have to go.',
+                $owned,
+            ));
+        }
+
         Schema::table('billing_webhook_events', function (Blueprint $table): void {
             $table->dropMorphs('owner');
         });

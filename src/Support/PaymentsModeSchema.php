@@ -44,6 +44,8 @@ final class PaymentsModeSchema
         '2026_10_02_000139_redact_stored_errors_on_billing_webhook_effect_runs_table',
         '2026_10_04_000158_make_the_uuid_host_key_of_the_webhook_owner_native_on_postgresql',
         '2026_10_19_000181_strip_client_secrets_from_billing_webhook_events_table',
+        '2026_11_08_000196_add_payment_reference_to_billing_webhook_events_table',
+        '2026_11_08_000197_index_the_payment_reference_on_billing_webhook_events_table',
     ];
 
     /**

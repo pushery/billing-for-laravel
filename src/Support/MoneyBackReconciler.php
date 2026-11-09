@@ -9,11 +9,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Contracts\ReportsMoneyBackOutcomes;
-use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Events\ChargebackReversed;
 use Pushery\Billing\Events\RefundFailed;
 use Pushery\Billing\Models\BillingWebhookEvent;
-use Pushery\Billing\Models\WebhookEffectRun;
 use Pushery\Billing\Webhooks\WebhookEffectRegistry;
 
 /**
@@ -51,7 +49,7 @@ final readonly class MoneyBackReconciler
         foreach ($this->provider->outcomesSince($refundsSince, $chargebacksSince) as $outcome) {
             $delivery = $this->deliveries->record($this->driver, $this->keyOf($outcome), $this->typeOf($outcome), $this->factsOf($outcome));
 
-            if (! $this->owesWork($delivery)) {
+            if (! $this->deliveries->owesWork($delivery)) {
                 continue;
             }
 
@@ -73,19 +71,6 @@ final readonly class MoneyBackReconciler
         }
 
         return $dispatched;
-    }
-
-    /** Whether an outcome still has work to do: it was never handled, or an effect of it did not finish. */
-    private function owesWork(BillingWebhookEvent $delivery): bool
-    {
-        if ($delivery->status !== WebhookEventState::Handled) {
-            return true;
-        }
-
-        return WebhookEffectRun::model()::query()
-            ->where('delivery_id', $delivery->getKey())
-            ->where('status', '!=', WebhookEventState::Handled->value)
-            ->exists();
     }
 
     /** Attribute the row to the owner the customer reference names, as the receiver does for a delivery. */

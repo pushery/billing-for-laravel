@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Models\BillingWebhookEvent;
+use Pushery\Billing\Models\WebhookEffectRun;
 use Pushery\Billing\Webhooks\WebhookPayloadSecrets;
 
 /**
@@ -76,6 +77,46 @@ final class WebhookEventLedger
             'owner_type' => $owner->getMorphClass(),
             'owner_id' => $owner->getKey(),
         ])->save();
+    }
+
+    /**
+     * Record which payment a delivery is about, where it names one and has none recorded yet.
+     *
+     * A delivery to a payment account has no owner the package knows, and its payload can name the person who paid.
+     * An application that keeps the payments of its accounts finds the deliveries about one of them by this, to scrub
+     * them when that person is erased or to hand them over when the person asks for their data.
+     *
+     * A reference longer than the column is not recorded. No provider's payment id comes near it, and a delivery whose
+     * name could not be written would fail and be sent again for as long as the provider retries.
+     */
+    public function namePayment(BillingWebhookEvent $delivery, ?string $paymentReference): void
+    {
+        $paymentReference = $paymentReference === null ? '' : trim($paymentReference);
+
+        if ($paymentReference === '' || mb_strlen($paymentReference) > 255 || $delivery->payment_reference !== null) {
+            return;
+        }
+
+        $delivery->forceFill(['payment_reference' => $paymentReference])->save();
+    }
+
+    /**
+     * Whether a delivery still has work to do: it was never handled, or an effect of it did not finish.
+     *
+     * A run that reads a provider's lists again, instead of being called by a webhook, asks this before it dispatches,
+     * because the effect bus fires the framework event on every dispatch: what the ledger holds as handled would be
+     * announced again on every run for as long as the provider still lists it.
+     */
+    public function owesWork(BillingWebhookEvent $delivery): bool
+    {
+        if ($delivery->status !== WebhookEventState::Handled) {
+            return true;
+        }
+
+        return WebhookEffectRun::model()::query()
+            ->where('delivery_id', $delivery->getKey())
+            ->where('status', '!=', WebhookEventState::Handled->value)
+            ->exists();
     }
 
     public function markHandled(BillingWebhookEvent $delivery): void

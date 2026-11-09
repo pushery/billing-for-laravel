@@ -60,7 +60,7 @@ final readonly class PaymentAccount
             throw new InvalidArgumentException("A payment account names its provider the way the driver is registered, such as `mollie` or `stripe`, not `{$provider}`.");
         }
 
-        if (preg_match(self::KEY_PATTERN, $key) !== 1) {
+        if (! self::isKey($key)) {
             throw new InvalidArgumentException("The key of a payment account becomes part of its webhook address: lowercase letters, digits and inner hyphens, at most 64 characters, not `{$key}`.");
         }
 
@@ -73,6 +73,17 @@ final readonly class PaymentAccount
                 throw new InvalidArgumentException("A redirect host of the payment account `{$provider}/{$key}` is a host name, such as `payments.example.com`, without a scheme or a path.");
             }
         }
+    }
+
+    /**
+     * Whether a string has the shape of a payment account's key, the part of the webhook address that names the account.
+     *
+     * The deliveries to an account are recorded under its key. The platform's own carry none, and a merchant of the
+     * marketplace is recorded under the provider's id for it, such as `acct_…`, whose underscore no key can hold.
+     */
+    public static function isKey(string $key): bool
+    {
+        return preg_match(self::KEY_PATTERN, $key) === 1;
     }
 
     /**

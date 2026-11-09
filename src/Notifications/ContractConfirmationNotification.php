@@ -14,6 +14,7 @@ use Pushery\Billing\Enums\BillingAction;
 use Pushery\Billing\Enums\ContractKind;
 use Pushery\Billing\Support\CatalogLabel;
 use Pushery\Billing\Support\LocalizedDate;
+use Pushery\Billing\Support\MarkdownText;
 use Pushery\Billing\ValueObjects\ContractConfirmation;
 use Pushery\Billing\ValueObjects\WithdrawalConsent;
 
@@ -36,10 +37,11 @@ final class ContractConfirmationNotification extends BillingNotification
         $purchase = $this->contract->kind === ContractKind::Purchase;
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.contract_confirmation.subject'))
+            // The name of a tier or an add-on can be one a merchant typed, so it goes into the Markdown line as text.
             ->line(match (true) {
-                $purchase => Lang::get('billing::notifications.contract_confirmation.intro_purchase', ['addon' => $label ?? (string) $this->contract->productKey, 'date' => $date]),
-                $label === null => Lang::get('billing::notifications.contract_confirmation.intro_untitled', ['date' => $date]),
-                default => Lang::get('billing::notifications.contract_confirmation.intro', ['tier' => $label, 'date' => $date]),
+                $purchase => MarkdownText::interpolate((string) Lang::get('billing::notifications.contract_confirmation.intro_purchase', ['date' => $date]), ['addon' => $label ?? (string) $this->contract->productKey]),
+                $label !== null => MarkdownText::interpolate((string) Lang::get('billing::notifications.contract_confirmation.intro', ['date' => $date]), ['tier' => $label]),
+                default => Lang::get('billing::notifications.contract_confirmation.intro_untitled', ['date' => $date]),
             });
 
         // Each declaration in its wording, and only the ones the buyer made. A subscription asks for the request that

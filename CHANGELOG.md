@@ -4,6 +4,40 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.56.0] - 2026-11-09
+
+### ✨ Added
+
+- **A payment of a Mollie payment account that changed without a webhook reaches the effects of `AccountPaymentChanged`.** Mollie calls no webhook for a refund canceled before it is paid out, and documents none for a chargeback the bank reverses, so such a payment returned to a standing that no listener heard of. `billing:accounts:reconcile` reads the refunds and the chargebacks of each Mollie account back with the account's own credential, 30 and 180 days by default, and records each such payment where it stands now, as its ping would have been, and only once: a standing that a ping or an earlier run recorded is not announced again. It runs daily where the application's `PaymentAccounts` also implements the new `Pushery\Billing\Contracts\ListsPaymentAccounts`, in payments-only mode as well. Without it the command reads nothing and is not scheduled.
+
+  **Upgrade:** nothing to do. An application that wants the run implements `ListsPaymentAccounts::all($provider)` on its `PaymentAccounts`.
+
+- **The webhook deliveries about a payment into a payment account can be erased and exported by that payment.** Such a delivery can name the person who paid, a Stripe event with the payment's `billing_details`, `receipt_email`, `shipping` and the last four digits of the card, and the package records no owner for it, because the person is the application's customer. So `BillingEraser::erase()` and `BillingDataExport::for()` never reached these deliveries, and an application had to find them through the shape of each provider's payload. The receiver now records the id of the payment a delivery is about in the new, indexed column `payment_reference`, as the account's mapper names it: the payment intent or an expired Checkout Session on Stripe, the `tr_` id on Mollie, the same id `AccountPaymentChanged::$paymentReference` carries. `BillingEraser::erasePayments($provider, $account, $references)` scrubs the payloads of those deliveries the way an erasure does, `BillingDataExport::forPayments(…)` hands them over the way an export does, and `BillingEraser::eraseAccount($provider, $account)` deletes the deliveries to an account and the runs of their effects, for an application that removes the account. A custom mapper names payments by implementing `Pushery\Billing\Contracts\NamesThePayment`.
+
+  **Upgrade:** two migrations, in payments-only mode as well. `2026_11_08_000196_add_payment_reference_to_billing_webhook_events_table` adds the column, and `2026_11_08_000197_index_the_payment_reference_on_billing_webhook_events_table` its index; on PostgreSQL the index is built with `CREATE INDEX CONCURRENTLY`, outside a transaction, so the deliveries table takes writes while it builds. The deliveries recorded before the upgrade are named from their stored payload the first time their account's payments are asked for.
+
+### 🐛 Fixed
+
+- **A rollback no longer deletes the owner of billing webhook events.** Migration `2026_07_14_000016_add_erasure_columns` adds `owner_type` and `owner_id` to `billing_webhook_events` only where they are missing, and its `down()` dropped them unconditionally, so `migrate:rollback` could take with it the owner an earlier install had already recorded. The `down()` now refuses with a `RuntimeException` that names how many events carry an owner, while any does, and rolls back as before over events that carry none.
+
+  **Upgrade:** nothing to do. A rollback that has to remove the owner is done by hand after exporting the events.
+
+- **A Mollie account payment that returns to a standing it reported before is a delivery of its own.** The key a ping of an account's payment is recorded under was built from where the payment stands: its status, its amounts, the newest failed refund and its chargebacks. A refund that fails or is canceled takes its amount back out of the refunded total, so a payment that was paid, then refunded in part, and then paid again once the refund was canceled read like its first ping, and a payment refunded in part again after a failed refund, with the same amount on a second one, read like the ping before the failure. Each was recorded as a redelivery, and the effects registered for `AccountPaymentChanged` never heard of it. The key now names the refunds that failed or were canceled, where there are any, so such a return is a delivery of its own, and a real redelivery of it is still recognized as one.
+
+  **Upgrade:** nothing to do. A payment without a failed or canceled refund keeps the key it had. One with such a refund reports its standing once more at its next ping, under the longer key, and a listener that keeps the latest `observedAt` takes it as the same standing.
+
+### 🔒 Security
+
+- **A merchant's name and the name of a tier or an add-on reach billing's mails as text.** The mails are Markdown, and a name typed as `[Sign in](https://…)` arrived in them as a real link: the merchant's name in the reminder before a subscription held with a merchant ends, the tier in that reminder and in the activation notice, and the tier or the add-on in the contract confirmation. On a marketplace a merchant types these names, and the mail goes to the merchant's customer. They are now set as text: their Markdown stays characters, and a web address in them is written so that a mail program does not link it. The dates and amounts beside them are set as before.
+
+  **Upgrade:** nothing to do in the application. A test that compares the lines of these mails reads them through `strval()`, because they are `HtmlString`s now.
+
+### 📚 Documentation
+
+- **The upgrade guide no longer shows a minor to pin.** Its example pinned `~0.13.0`, a version from August, on a page whose newest section was 0.54.0, and a project that copied it was held to that minor. The guide now says that the caret `composer require` writes already keeps `composer update` inside the installed minor, and that requiring the package again moves to the newest one.
+
+  **Upgrade:** a project that copied the example reads the sections of the guide from its minor up to the newest, then runs `composer require pushery/billing-for-laravel` and `php artisan migrate`.
+
 ## [0.55.0] - 2026-11-08
 
 ### ✨ Added
@@ -8444,7 +8478,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.55.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.56.0...HEAD
+[0.56.0]: https://github.com/pushery/billing-for-laravel/compare/v0.55.0...v0.56.0
 [0.55.0]: https://github.com/pushery/billing-for-laravel/compare/v0.54.0...v0.55.0
 [0.54.0]: https://github.com/pushery/billing-for-laravel/compare/v0.53.0...v0.54.0
 [0.53.0]: https://github.com/pushery/billing-for-laravel/compare/v0.52.0...v0.53.0

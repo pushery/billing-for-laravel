@@ -6,7 +6,6 @@ namespace Pushery\Billing\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\MarketplaceWebhookEventMapper;
 use Pushery\Billing\Contracts\PaymentAccounts;
@@ -18,6 +17,7 @@ use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\WebhookEffectLedger;
 use Pushery\Billing\ValueObjects\PaymentAccount;
 use Pushery\Billing\Webhooks\RepeatableEffect;
+use Pushery\Billing\Webhooks\StoredDeliveryRequest;
 use Pushery\Billing\Webhooks\WebhookEffectRegistry;
 
 /**
@@ -89,7 +89,7 @@ final class ReplayWebhooksCommand extends Command
         $released = 0;
 
         foreach ($deliveries as $delivery) {
-            $events = $this->mapperFor($delivery, $platform)->map($this->rebuild($delivery));
+            $events = $this->mapperFor($delivery, $platform)->map(StoredDeliveryRequest::of($delivery));
             $effects = 0;
 
             foreach ($events as $event) {
@@ -233,22 +233,5 @@ final class ReplayWebhooksCommand extends Command
         }
 
         return $this->laravel->make(MarketplaceWebhookEventMapper::class);
-    }
-
-    /**
-     * Rebuild the request the provider sent from the payload we stored, so the same mapper that ran live
-     * maps it — no second, replay-only mapping path that could drift out of step with the real one.
-     */
-    private function rebuild(BillingWebhookEvent $delivery): Request
-    {
-        return Request::create(
-            '/',
-            'POST',
-            [],
-            [],
-            [],
-            ['CONTENT_TYPE' => 'application/json'],
-            json_encode($delivery->payload ?? [], JSON_THROW_ON_ERROR),
-        );
     }
 }

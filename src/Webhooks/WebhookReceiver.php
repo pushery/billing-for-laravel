@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Contracts\DerivesDeliveryKey;
 use Pushery\Billing\Contracts\IdentifiesCustomer;
+use Pushery\Billing\Contracts\NamesThePayment;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Contracts\WebhookVerifier;
 use Pushery\Billing\Events\BillingDomainEvent;
@@ -88,6 +89,12 @@ final readonly class WebhookReceiver
             $payload,
             $this->accountReference,
         );
+
+        // Named before the payload is mapped, from the request alone, so a delivery whose mapping fails is found by its
+        // payment all the same.
+        if ($this->mapper instanceof NamesThePayment) {
+            $this->deliveries->namePayment($delivery, $this->mapper->paymentReference($request));
+        }
 
         foreach ($this->mapper->map($request) as $event) {
             $this->attribute($delivery, $event);
