@@ -104,6 +104,31 @@ final readonly class StripeAccountSetup
     }
 
     /**
+     * Whether the account's key sees the webhook endpoint, which tells a key of the account the endpoint was created
+     * on from a key of another Stripe account: an endpoint lives on one account, and in one mode.
+     *
+     * Only Stripe's answer that it has no such endpoint is false. A key Stripe does not accept, a limit or an outage
+     * says nothing about the endpoint, and its exception reaches the caller.
+     */
+    public function seesWebhookEndpoint(PaymentAccount $account, string $endpointId): bool
+    {
+        try {
+            $this->client($account)->webhookEndpoints->retrieve($endpointId);
+        } catch (RateLimitException $rateLimited) {
+            // A 429 is an InvalidRequestException as well, and it says nothing about the endpoint.
+            throw $rateLimited;
+        } catch (InvalidRequestException $refused) {
+            if ($refused->getStripeCode() !== 'resource_missing') {
+                throw $refused;
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * One right asked for, with the parameter no endpoint knows and nothing else.
      *
      * Three of them go through the client's own request(): the typed create() of payment intents, webhook

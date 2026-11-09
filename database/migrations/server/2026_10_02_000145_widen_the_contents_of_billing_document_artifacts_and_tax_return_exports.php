@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\SQLens\Attributes\NoSqlOnDriver;
 
 /**
  * A kept document keeps all of its bytes on MySQL as well.
@@ -18,7 +19,10 @@ use Illuminate\Support\Facades\Schema;
  * The rollback leaves the wide column in place: narrowing it again would refuse or cut the documents it may now
  * hold, and those are records the law asks to be kept as they were.
  */
-return new class extends Migration
+return new
+#[NoSqlOnDriver('pgsql', reason: 'PostgreSQL stores text without a limit, so there is nothing to widen')]
+#[NoSqlOnDriver('sqlite', reason: 'SQLite stores text without a limit, so there is nothing to widen')]
+class extends Migration
 {
     public function up(): void
     {

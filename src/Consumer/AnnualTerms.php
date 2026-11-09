@@ -137,6 +137,49 @@ final readonly class AnnualTerms
     }
 
     /**
+     * Whether {@see arrangeAgain()} asks the driver about this subscription: a consumer's running annual term at the
+     * provider the driver arranges for, kept there as a schedule, and followed by no further year the customer booked.
+     */
+    public function canArrangeAgain(Model $owner, Subscription $subscription): bool
+    {
+        $end = $this->termEnd($owner, $subscription);
+
+        return $end instanceof CarbonImmutable && $this->arranges($subscription) && ! $this->billedByTheEngine($subscription)
+            && ! $this->furtherYearBooked($owner, $subscription, $end);
+    }
+
+    /**
+     * Asks the driver once more to arrange the end of a consumer's annual term, and records what holds it now.
+     *
+     * The driver keeps an arrangement that goes on past the period, so a term arranged already stays as it is and a
+     * second call changes nothing. What it arranges again is a term no arrangement reached, and one a schedule holds with
+     * its period alone, which a refused write of the later phases leaves. A term the customer booked a further year
+     * after is not asked about: that year is its arrangement. Answers null wherever {@see canArrangeAgain()} is false.
+     *
+     * @throws RuntimeException when the tier has no monthly price to go on at, or the driver could not arrange the term
+     */
+    public function arrangeAgain(Model $owner, Subscription $subscription): ?string
+    {
+        if (! $this->canArrangeAgain($owner, $subscription)) {
+            return null;
+        }
+
+        $tierKey = (string) $subscription->tier_key;
+        // Sold before monthly terms, the subscription goes on at a twelfth of its year, which the driver works out.
+        $monthly = $subscription->monthly_terms_at === null ? null : $this->plansFor($subscription)->providerPriceFor($tierKey, BillingInterval::Month);
+
+        if ($subscription->monthly_terms_at !== null && $monthly === null) {
+            throw new RuntimeException('Tier '.$tierKey.' is sold yearly to a consumer and has no monthly price to go on at.');
+        }
+
+        $arrangement = $this->arrangements()->arrangeMonthlyAfterTerm((string) $subscription->provider_id, $monthly);
+
+        $this->arranged($subscription, $arrangement);
+
+        return $arrangement;
+    }
+
+    /**
      * When the subscription's annual term ends, or null where it is not a consumer's annual term that is running, has
      * not ended and is not ending. A trial is not the term: the year begins where the trial ends.
      */

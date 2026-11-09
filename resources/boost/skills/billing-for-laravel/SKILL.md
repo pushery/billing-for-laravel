@@ -89,6 +89,7 @@ the command reference at <https://docs.pushery.com/billing-for-laravel/reference
 | `billing:trials:warn` | Daily: warns owners whose generic trial is about to end |
 | `billing:subscriptions:warn` | Daily: reminds owners whose canceled subscription is about to end |
 | `billing:annual-terms:remind` | Daily: reminds customers whose annual term ends soon, and consumers of the monthly contract their year goes on as |
+| `billing:annual-terms:arrange` | Once, after an update from 0.53.0 to 0.56.x with Stripe: arranges each consumer's annual term again where nothing that goes on past its period holds it; `--dry-run` names the subscriptions it would ask about |
 | `billing:usage:reconcile` | Daily: reads the provider's usage totals back and alarms on drift; `--redrive` retries the rollups a flush gave up on |
 | `billing:money-back:reconcile` | Daily where the driver reads them back: records refunds that failed or were canceled and chargebacks the bank reversed, which no webhook reports |
 | `billing:accounts:reconcile` | Daily where `PaymentAccounts` implements `ListsPaymentAccounts`: records each payment of a Mollie payment account whose refund failed or was canceled, or whose chargeback was reversed, as `AccountPaymentChanged`, which no webhook reports |

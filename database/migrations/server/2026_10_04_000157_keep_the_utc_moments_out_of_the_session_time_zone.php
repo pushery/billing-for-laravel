@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\SQLens\Attributes\NoSqlOnDriver;
 
 /**
  * The moments the package keeps in UTC become DATETIME on MySQL, so that they no longer pass through the session time
@@ -29,7 +30,10 @@ use Illuminate\Support\Facades\Schema;
  *
  * Server-only.
  */
-return new class extends Migration
+return new
+#[NoSqlOnDriver('pgsql', reason: 'a TIMESTAMP and a DATETIME are the same type on PostgreSQL, so there is nothing to change')]
+#[NoSqlOnDriver('sqlite', reason: 'a TIMESTAMP and a DATETIME are the same type on SQLite, so there is nothing to change')]
+class extends Migration
 {
     public function up(): void
     {
