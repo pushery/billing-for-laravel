@@ -25,9 +25,10 @@ use Pushery\Billing\Webhooks\StoredDeliveryRequest;
  * that knows which payments were the person's asks for those instead. The eraser and the export read the deliveries
  * here, so the two cannot come to disagree about which ones belong to a payment.
  *
- * The receiver names the payment of each delivery as it records it. A delivery an earlier version recorded is named
- * here, from its stored payload and by the account's own mapper, the first time the account's deliveries are asked for
- * by payment. Where the application no longer knows the account, its mapper cannot be built and those stay unnamed;
+ * The receiver names the payment of each delivery as it records it, by the id the delivery names and by the other id
+ * the payment goes by. A delivery an earlier version recorded is named here, from its stored payload and by the
+ * account's own mapper, the first time the account's deliveries are asked for by payment, and so is the other id of one
+ * an earlier version named by the first alone. Where the application no longer knows the account, its mapper cannot be built and those stay unnamed;
  * removing the account's deliveries altogether reaches them.
  *
  * @internal
@@ -56,7 +57,11 @@ final readonly class PaymentDeliveries
             static fn (string $payment): bool => $payment !== '',
         )));
 
-        return $this->ofAccount($provider, $account)->whereIn('payment_reference', $payments);
+        // A payment can go by two ids, and the application may know it by either: the delivery's own name, or the other
+        // id the payment goes by, which holds the same name where it has no other.
+        return $this->ofAccount($provider, $account)->where(static function (Builder $query) use ($payments): void {
+            $query->whereIn('payment_reference', $payments)->orWhereIn('payment_alias', $payments);
+        });
     }
 
     /**
@@ -86,11 +91,13 @@ final readonly class PaymentDeliveries
     }
 
     /**
-     * Name the payment of each delivery to the account that an earlier version recorded without one.
+     * Name the payment of each delivery to the account that an earlier version recorded without one, or without the
+     * other id its payment goes by.
      *
-     * Only a delivery that still holds its payload can be named, and only one that has no name yet is read, so after
-     * the first question this reads the few deliveries that name no payment at all. The payloads go with the retention
-     * clock, and those few with them.
+     * Only a delivery that still holds its payload can be named, and only one without the other id is read. Naming
+     * writes that id on every delivery that names a payment, its own name where it has no other, so after the first
+     * question this reads the few deliveries that name no payment at all. The payloads go with the retention clock,
+     * and those few with them.
      */
     private function nameEarlierDeliveries(string $provider, string $account): void
     {
@@ -105,11 +112,11 @@ final readonly class PaymentDeliveries
         BillingWebhookEvent::model()::query()
             ->where('provider', $provider)
             ->where('account_reference', $account)
-            ->whereNull('payment_reference')
+            ->whereNull('payment_alias')
             ->whereNotNull('payload')
             ->chunkById(self::CHUNK, static function (Collection $deliveries) use ($mapper, $ledger): void {
                 foreach ($deliveries as $delivery) {
-                    $ledger->namePayment($delivery, $mapper->paymentReference(StoredDeliveryRequest::of($delivery)));
+                    $ledger->namePaymentOf($delivery, $mapper, StoredDeliveryRequest::of($delivery));
                 }
             });
     }

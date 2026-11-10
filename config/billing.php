@@ -24,7 +24,7 @@ return [
     |
     */
 
-    'enabled' => ! in_array(is_string($enabled = env('BILLING_ENABLED')) ? strtolower(trim($enabled)) : $enabled, [false, '', '0', 'false', 'no', 'off'], true),
+    'enabled' => ! in_array(is_string($enabled = env('BILLING_ENABLED')) ? strtolower(trim($enabled)) : $enabled, [false, '0', 'false', 'no', 'off'], true),
 
     /*
     |--------------------------------------------------------------------------
@@ -346,13 +346,14 @@ return [
         // that an adopter could not discover by reading the published config was the one they were most
         // likely to need. Absent it still falls back to the payment-methods route, exactly as before.
         'payment_methods_return_url' => env('BILLING_PAYMENT_METHODS_RETURN_URL'),
-        'promotion_codes' => ! in_array(is_string($checkoutPromotionCodes = env('BILLING_CHECKOUT_PROMOTION_CODES')) ? strtolower(trim($checkoutPromotionCodes)) : $checkoutPromotionCodes, [false, '', '0', 'false', 'no', 'off'], true),
+        'promotion_codes' => ! in_array(is_string($checkoutPromotionCodes = env('BILLING_CHECKOUT_PROMOTION_CODES')) ? strtolower(trim($checkoutPromotionCodes)) : $checkoutPromotionCodes, [false, '0', 'false', 'no', 'off'], true),
         // Whether a checkout asks the buyer for a tax ID. Unset, a checkout asks where the provider computes tax and
         // nowhere else. `true` asks on every checkout, with the provider computing tax or not, so a business gets its
         // ID onto the invoice either way. `false` never asks: Stripe reverse-charges on an ID's format before it
         // verifies the ID, so a platform that sells to consumers can leave the field out and charge every buyer the
         // tax of their country.
-        'tax_id_collection' => ($checkoutTaxIdCollection = env('BILLING_CHECKOUT_TAX_ID_COLLECTION')) === null ? null : ! in_array(is_string($checkoutTaxIdCollection) ? strtolower(trim($checkoutTaxIdCollection)) : $checkoutTaxIdCollection, [false, '', '0', 'false', 'no', 'off'], true),
+        // An empty line says nothing, as a missing one does.
+        'tax_id_collection' => in_array($checkoutTaxIdCollection = is_string($rawTaxIdCollection = env('BILLING_CHECKOUT_TAX_ID_COLLECTION')) ? strtolower(trim($rawTaxIdCollection)) : $rawTaxIdCollection, [null, ''], true) ? null : ! in_array($checkoutTaxIdCollection, [false, '0', 'false', 'no', 'off'], true),
         // What the submit button of a hosted subscription checkout says, as Stripe's `submit_type`. `auto` leaves it
         // to Stripe, which writes "Subscribe" on a subscription; `pay` writes "Buy". A seller to consumers in Germany
         // sets `pay`, because the order button has to name the obligation to pay. An add-on purchase reads nothing
@@ -1383,7 +1384,7 @@ return [
     */
 
     'tax_oss' => [
-        'threshold_waived' => ! in_array(is_string($taxOssThresholdWaived = env('BILLING_TAX_OSS_THRESHOLD_WAIVED')) ? strtolower(trim($taxOssThresholdWaived)) : $taxOssThresholdWaived, [false, '', '0', 'false', 'no', 'off'], true),
+        'threshold_waived' => ! in_array(is_string($taxOssThresholdWaived = env('BILLING_TAX_OSS_THRESHOLD_WAIVED')) ? strtolower(trim($taxOssThresholdWaived)) : $taxOssThresholdWaived, [false, '0', 'false', 'no', 'off'], true),
         'waived_since' => env('BILLING_TAX_OSS_WAIVED_SINCE'),
 
         // How many years a declaration that gave up the threshold binds for. The operator's tax authority
@@ -1466,7 +1467,7 @@ return [
         // standard rating. There is deliberately no switch for the opposite direction: a platform count under
         // the limit proves nothing (external turnover exists), so an automatic flip back is never offered.
         // The asymmetry is an invariant, not a default.
-        'auto_flip_enabled' => ! in_array(is_string($taxSbAutoFlip = env('BILLING_TAX_SB_AUTO_FLIP')) ? strtolower(trim($taxSbAutoFlip)) : $taxSbAutoFlip, [false, '', '0', 'false', 'no', 'off'], true),
+        'auto_flip_enabled' => ! in_array(is_string($taxSbAutoFlip = env('BILLING_TAX_SB_AUTO_FLIP')) ? strtolower(trim($taxSbAutoFlip)) : $taxSbAutoFlip, [false, '0', 'false', 'no', 'off'], true),
 
         'warning_levels' => [0.80, 0.95],
         // How long a confirmed small-business registration stands before it is asked again. A registration
@@ -1519,7 +1520,7 @@ return [
         // (the charge lands automatically when the trial ends); false lets the owner trial without one
         // (Stripe collects the card only if the trial converts). Per-tier override:
         // tiers.<key>.trial.requires_payment_method.
-        'requires_payment_method' => ! in_array(is_string($trialRequiresPm = env('BILLING_TRIAL_REQUIRES_PM')) ? strtolower(trim($trialRequiresPm)) : $trialRequiresPm, [false, '', '0', 'false', 'no', 'off'], true),
+        'requires_payment_method' => ! in_array(is_string($trialRequiresPm = env('BILLING_TRIAL_REQUIRES_PM')) ? strtolower(trim($trialRequiresPm)) : $trialRequiresPm, [false, '0', 'false', 'no', 'off'], true),
 
         // How many days before a trial ends the app-shell banner starts nudging the owner to pick a plan.
         'ending_within_days' => 3,
@@ -1852,7 +1853,7 @@ return [
         // different basis — whether a creator is still a small business — and it keeps running, which a
         // test asserts by switching this off and reading that one.
         'dac7' => [
-            'enabled' => ! in_array(is_string($taxCounterDac7Enabled = env('BILLING_TAX_COUNTER_DAC7_ENABLED')) ? strtolower(trim($taxCounterDac7Enabled)) : $taxCounterDac7Enabled, [false, '', '0', 'false', 'no', 'off'], true),
+            'enabled' => ! in_array(is_string($taxCounterDac7Enabled = env('BILLING_TAX_COUNTER_DAC7_ENABLED')) ? strtolower(trim($taxCounterDac7Enabled)) : $taxCounterDac7Enabled, [false, '0', 'false', 'no', 'off'], true),
         ],
     ],
 
@@ -2251,7 +2252,7 @@ return [
         //
         // Turn it off where your reading of data minimization differs. The rest of the evidence is
         // untouched, and a state counter then runs honestly on `unknown` rather than quietly on a guess.
-        'collect_subdivision' => ! in_array(is_string($taxEvidenceSubdivision = env('BILLING_TAX_EVIDENCE_SUBDIVISION')) ? strtolower(trim($taxEvidenceSubdivision)) : $taxEvidenceSubdivision, [false, '', '0', 'false', 'no', 'off'], true),
+        'collect_subdivision' => ! in_array(is_string($taxEvidenceSubdivision = env('BILLING_TAX_EVIDENCE_SUBDIVISION')) ? strtolower(trim($taxEvidenceSubdivision)) : $taxEvidenceSubdivision, [false, '0', 'false', 'no', 'off'], true),
 
         // Which countries' subdivisions are worth recording at all.
         //
@@ -2314,17 +2315,17 @@ return [
         // in place after a goodwill refund is common and often the point -- the work has already been read, so
         // taking it back costs nothing to skip and turns a recovered customer into an angry one. Ending it is
         // right where the refund was a return rather than a gesture.
-        'revoke_on_refund' => ! in_array(is_string($revokeOnRefund = env('BILLING_REVOKE_ON_REFUND')) ? strtolower(trim($revokeOnRefund)) : $revokeOnRefund, [false, '', '0', 'false', 'no', 'off'], true),
+        'revoke_on_refund' => ! in_array(is_string($revokeOnRefund = env('BILLING_REVOKE_ON_REFUND')) ? strtolower(trim($revokeOnRefund)) : $revokeOnRefund, [false, '0', 'false', 'no', 'off'], true),
 
         // The same question for a lost dispute, and a different situation: a chargeback is involuntary,
         // decided by somebody else, and the money is already gone. There is no version of it where the
         // platform chose to give the work away, which is why the shipped answer is to end access.
-        'revoke_on_chargeback' => ! in_array(is_string($revokeOnChargeback = env('BILLING_REVOKE_ON_CHARGEBACK')) ? strtolower(trim($revokeOnChargeback)) : $revokeOnChargeback, [false, '', '0', 'false', 'no', 'off'], true),
+        'revoke_on_chargeback' => ! in_array(is_string($revokeOnChargeback = env('BILLING_REVOKE_ON_CHARGEBACK')) ? strtolower(trim($revokeOnChargeback)) : $revokeOnChargeback, [false, '0', 'false', 'no', 'off'], true),
 
         // Whether access a chargeback ended comes back when the bank takes the chargeback back. On, because the
         // customer has paid after all. Only a grant the chargeback revoked returns; one that ended for another
         // reason stays revoked. Off where somebody should look before access returns.
-        'restore_on_chargeback_reversal' => ! in_array(is_string($restoreOnReversal = env('BILLING_RESTORE_ON_CHARGEBACK_REVERSAL')) ? strtolower(trim($restoreOnReversal)) : $restoreOnReversal, [false, '', '0', 'false', 'no', 'off'], true),
+        'restore_on_chargeback_reversal' => ! in_array(is_string($restoreOnReversal = env('BILLING_RESTORE_ON_CHARGEBACK_REVERSAL')) ? strtolower(trim($restoreOnReversal)) : $restoreOnReversal, [false, '0', 'false', 'no', 'off'], true),
     ],
 
     // Multi-merchant: a buyer pays this platform, and the money is destined for somebody else.
@@ -2459,7 +2460,7 @@ return [
         | baked into code it would silently apply somebody else's.
         */
         'negative_balance' => [
-            'offset_against_payouts' => ! in_array(is_string($marketplaceOffsetDebt = env('BILLING_MARKETPLACE_OFFSET_DEBT')) ? strtolower(trim($marketplaceOffsetDebt)) : $marketplaceOffsetDebt, [false, '', '0', 'false', 'no', 'off'], true),
+            'offset_against_payouts' => ! in_array(is_string($marketplaceOffsetDebt = env('BILLING_MARKETPLACE_OFFSET_DEBT')) ? strtolower(trim($marketplaceOffsetDebt)) : $marketplaceOffsetDebt, [false, '0', 'false', 'no', 'off'], true),
             'claim_after_days' => is_numeric($claimAfterDays = env('BILLING_MARKETPLACE_CLAIM_AFTER_DAYS')) && (int) $claimAfterDays >= 1 ? (int) $claimAfterDays : 90,
         ],
 
@@ -2492,7 +2493,7 @@ return [
 
             // Default classification of what is sold. true = electronically-supplied service (Art. 9a
             // applies); false = physical goods. Override per product class through the resolver.
-            'supplies_are_electronic' => ! in_array(is_string($marketplaceSuppliesElectronic = env('BILLING_MARKETPLACE_SUPPLIES_ELECTRONIC')) ? strtolower(trim($marketplaceSuppliesElectronic)) : $marketplaceSuppliesElectronic, [false, '', '0', 'false', 'no', 'off'], true),
+            'supplies_are_electronic' => ! in_array(is_string($marketplaceSuppliesElectronic = env('BILLING_MARKETPLACE_SUPPLIES_ELECTRONIC')) ? strtolower(trim($marketplaceSuppliesElectronic)) : $marketplaceSuppliesElectronic, [false, '0', 'false', 'no', 'off'], true),
 
             // The Art. 9a rebuttal: `seller_of_record` for an electronic supply is refused unless all four are
             // true. A platform that sets its own terms, authorizes billing or approves the supply cannot
@@ -2558,7 +2559,7 @@ return [
         'seller_record_route' => env('BILLING_MARKETPLACE_SELLER_RECORD_ROUTE'),
 
         'seller_record' => [
-            'collect_precautionary' => ! in_array(is_string($marketplaceCollectPrecautionary = env('BILLING_MARKETPLACE_COLLECT_PRECAUTIONARY')) ? strtolower(trim($marketplaceCollectPrecautionary)) : $marketplaceCollectPrecautionary, [false, '', '0', 'false', 'no', 'off'], true),
+            'collect_precautionary' => ! in_array(is_string($marketplaceCollectPrecautionary = env('BILLING_MARKETPLACE_COLLECT_PRECAUTIONARY')) ? strtolower(trim($marketplaceCollectPrecautionary)) : $marketplaceCollectPrecautionary, [false, '0', 'false', 'no', 'off'], true),
         ],
 
         // When a seller is active enough to be asked to declare their standing.
@@ -2647,8 +2648,8 @@ return [
         // A jurisdiction profile that requires the hold overrides all three of these: there the hold is a
         // legal condition rather than a rollout, and a date cannot postpone it.
         'tax_status_hold' => [
-            'blocks_payouts' => ! in_array(is_string($marketplaceHoldBlocksPayouts = env('BILLING_MARKETPLACE_HOLD_BLOCKS_PAYOUTS')) ? strtolower(trim($marketplaceHoldBlocksPayouts)) : $marketplaceHoldBlocksPayouts, [false, '', '0', 'false', 'no', 'off'], true),
-            'blocks_sales' => ! in_array(is_string($marketplaceHoldBlocksSales = env('BILLING_MARKETPLACE_HOLD_BLOCKS_SALES')) ? strtolower(trim($marketplaceHoldBlocksSales)) : $marketplaceHoldBlocksSales, [false, '', '0', 'false', 'no', 'off'], true),
+            'blocks_payouts' => ! in_array(is_string($marketplaceHoldBlocksPayouts = env('BILLING_MARKETPLACE_HOLD_BLOCKS_PAYOUTS')) ? strtolower(trim($marketplaceHoldBlocksPayouts)) : $marketplaceHoldBlocksPayouts, [false, '0', 'false', 'no', 'off'], true),
+            'blocks_sales' => ! in_array(is_string($marketplaceHoldBlocksSales = env('BILLING_MARKETPLACE_HOLD_BLOCKS_SALES')) ? strtolower(trim($marketplaceHoldBlocksSales)) : $marketplaceHoldBlocksSales, [false, '0', 'false', 'no', 'off'], true),
             'enforce_from' => env('BILLING_MARKETPLACE_HOLD_ENFORCE_FROM'),
 
             // How many days before that date the merchants who have not declared are told it is coming.
@@ -2715,9 +2716,9 @@ return [
             // invoice — and never calls the engine. It is a backstop, not the routing decision: the caller
             // checks this before settling, and the engine refuses loudly if it is reached while off, rather
             // than issue a document a disabled platform never meant to.
-            'enabled' => ! in_array(is_string($marketplaceSelfBillingEnabled = env('BILLING_MARKETPLACE_SELF_BILLING_ENABLED')) ? strtolower(trim($marketplaceSelfBillingEnabled)) : $marketplaceSelfBillingEnabled, [false, '', '0', 'false', 'no', 'off'], true),
+            'enabled' => ! in_array(is_string($marketplaceSelfBillingEnabled = env('BILLING_MARKETPLACE_SELF_BILLING_ENABLED')) ? strtolower(trim($marketplaceSelfBillingEnabled)) : $marketplaceSelfBillingEnabled, [false, '0', 'false', 'no', 'off'], true),
 
-            'require_agreement' => ! in_array(is_string($marketplaceSelfBillingAgreement = env('BILLING_MARKETPLACE_SELF_BILLING_AGREEMENT')) ? strtolower(trim($marketplaceSelfBillingAgreement)) : $marketplaceSelfBillingAgreement, [false, '', '0', 'false', 'no', 'off'], true),
+            'require_agreement' => ! in_array(is_string($marketplaceSelfBillingAgreement = env('BILLING_MARKETPLACE_SELF_BILLING_AGREEMENT')) ? strtolower(trim($marketplaceSelfBillingAgreement)) : $marketplaceSelfBillingAgreement, [false, '0', 'false', 'no', 'off'], true),
         ],
 
         // What the buyer's receipt collects, and when.

@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Pushery\Billing\Support;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Contracts\NamesAnotherIdOfThePayment;
+use Pushery\Billing\Contracts\NamesThePayment;
 use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Models\BillingWebhookEvent;
 use Pushery\Billing\Models\WebhookEffectRun;
@@ -80,24 +83,60 @@ final class WebhookEventLedger
     }
 
     /**
-     * Record which payment a delivery is about, where it names one and has none recorded yet.
+     * Record which payment a delivery is about, as the mapper reads it from the request: by the id it names, and by
+     * the other id it names where the mapper knows one.
+     */
+    public function namePaymentOf(BillingWebhookEvent $delivery, NamesThePayment $mapper, Request $request): void
+    {
+        $this->namePayment(
+            $delivery,
+            $mapper->paymentReference($request),
+            $mapper instanceof NamesAnotherIdOfThePayment ? $mapper->otherPaymentReference($request) : null,
+        );
+    }
+
+    /**
+     * Record which payment a delivery is about, where it names one: the provider's id for it, and the other id the
+     * payment goes by.
      *
      * A delivery to a payment account has no owner the package knows, and its payload can name the person who paid.
-     * An application that keeps the payments of its accounts finds the deliveries about one of them by this, to scrub
-     * them when that person is erased or to hand them over when the person asks for their data.
+     * An application that keeps the payments of its accounts finds the deliveries about one of them by either id, to
+     * scrub them when that person is erased or to hand them over when the person asks for their data. A payment that
+     * goes by one id is recorded under it twice, so a delivery once named is never read again to name it.
      *
-     * A reference longer than the column is not recorded. No provider's payment id comes near it, and a delivery whose
-     * name could not be written would fail and be sent again for as long as the provider retries.
+     * A name once recorded stays: a redelivery names the same payment, and the name is what an earlier erasure found
+     * the delivery by. A reference longer than the column is not recorded. No provider's payment id comes near it, and
+     * a delivery whose name could not be written would fail and be sent again for as long as the provider retries.
      */
-    public function namePayment(BillingWebhookEvent $delivery, ?string $paymentReference): void
+    public function namePayment(BillingWebhookEvent $delivery, ?string $paymentReference, ?string $otherReference = null): void
     {
-        $paymentReference = $paymentReference === null ? '' : trim($paymentReference);
+        $paymentReference = $this->paymentId($paymentReference);
 
-        if ($paymentReference === '' || mb_strlen($paymentReference) > 255 || $delivery->payment_reference !== null) {
+        if ($paymentReference === null) {
             return;
         }
 
-        $delivery->forceFill(['payment_reference' => $paymentReference])->save();
+        $names = [];
+
+        if ($delivery->payment_reference === null) {
+            $names['payment_reference'] = $paymentReference;
+        }
+
+        if ($delivery->payment_alias === null) {
+            $names['payment_alias'] = $this->paymentId($otherReference) ?? $delivery->payment_reference ?? $paymentReference;
+        }
+
+        if ($names !== []) {
+            $delivery->forceFill($names)->save();
+        }
+    }
+
+    /** A provider's id of a payment as the columns hold it, or null for one that is empty or longer than they are. */
+    private function paymentId(?string $reference): ?string
+    {
+        $reference = $reference === null ? '' : trim($reference);
+
+        return $reference === '' || mb_strlen($reference) > 255 ? null : $reference;
     }
 
     /**

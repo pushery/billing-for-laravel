@@ -22,6 +22,9 @@ final readonly class PaymentChargeback
      * @param  ?CarbonImmutable  $bookedAt  when the provider booked it, where the provider names a time
      * @param  ?string  $reasonCode  the provider's code for the reason, such as Mollie's `AC04` or Stripe's `fraudulent`
      * @param  ?string  $reason  the provider's description of the reason, where it gives one
+     * @param  ?Money  $fee  what the provider charged for handling the chargeback, where it names it: Stripe states it
+     *                       on the dispute's balance transactions and gives it back with a won one, which nets to
+     *                       zero. Mollie's chargeback names no fee
      */
     public function __construct(
         public string $reference,
@@ -30,5 +33,6 @@ final readonly class PaymentChargeback
         public ?CarbonImmutable $bookedAt = null,
         public ?string $reasonCode = null,
         public ?string $reason = null,
+        public ?Money $fee = null,
     ) {}
 }

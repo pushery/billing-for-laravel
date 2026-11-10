@@ -4,6 +4,24 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.58.0] - 2026-11-10
+
+### ✨ Added
+
+- **A chargeback names the provider's fee for it.** `PaymentChargeback::$fee` is what Stripe charged for handling a dispute on a payment account, read from the dispute's balance transactions as the platform's own disputes are, so a won dispute whose fee came back reads `0.00`. Where no transaction states a fee it is `null`, and so it is for Mollie, whose chargeback names none.
+
+### 🐛 Fixed
+
+- **An empty line in the `.env` keeps a switch as it ships.** `env()` reads `BILLING_ENABLED=` as an empty string, and eighteen switches counted it among the words that switch them off, `BILLING_ENABLED` and `BILLING_ACCOUNT_CSP` among them, so a line left empty by copying a template switched billing off while a missing line kept it on. Only `false`, `0`, `no` and `off` switch them off now. `BILLING_CHECKOUT_TAX_ID_COLLECTION=` says nothing, as a missing line does, and the provider's tax decides again.
+
+- **The delivery of an expired Checkout Session is found by the payment intent it holds.** A session the customer tried to pay holds a payment intent, and the payment goes by that intent from then on, so an application that moved on to the intent asked `BillingEraser::erasePayments()` and `BillingDataExport::forPayments()` by it and missed the delivery, whose payload names the person who paid. The receiver now records the intent beside the session, and either id finds the delivery. A session nobody tried to pay holds no intent and is found by its own id, as before.
+
+  **Upgrade:** two migrations, in payments-only mode as well. `2026_11_09_000198_add_payment_alias_to_billing_webhook_events_table` adds the column `payment_alias` of `billing_webhook_events`, and `2026_11_09_000199_index_the_payment_alias_on_billing_webhook_events_table` its index; on PostgreSQL it is built concurrently, so the table keeps taking writes. The deliveries an earlier version recorded are named by both ids the first time their account's payments are asked for, which reads each of them that still holds its payload once.
+
+### 📚 Documentation
+
+- **The account hub's subscription, plan and invoice screens, the mail of a failed payment and the confirmation of a cancellation are shown on their pages.** Each image is rendered from the package itself, nothing in it drawn by hand.
+
 ## [0.57.0] - 2026-11-09
 
 ### ✨ Added
@@ -8501,7 +8519,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.57.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.58.0...HEAD
+[0.58.0]: https://github.com/pushery/billing-for-laravel/compare/v0.57.0...v0.58.0
 [0.57.0]: https://github.com/pushery/billing-for-laravel/compare/v0.56.0...v0.57.0
 [0.56.0]: https://github.com/pushery/billing-for-laravel/compare/v0.55.0...v0.56.0
 [0.55.0]: https://github.com/pushery/billing-for-laravel/compare/v0.54.0...v0.55.0

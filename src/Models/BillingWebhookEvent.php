@@ -25,6 +25,9 @@ use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
  * @property string $account_reference
  * @property ?string $payment_reference the provider's id of the payment a delivery to a payment account is about, as
  *                                      the account's mapper names it; null where the delivery names none
+ * @property ?string $payment_alias the other id the payment goes by, such as the payment intent of an expired Checkout
+ *                                  Session that holds one, and the `payment_reference` itself where it goes by one id;
+ *                                  null where the delivery names no payment
  * @property string $event_id
  * @property string $type
  * @property ?array<array-key, mixed> $payload

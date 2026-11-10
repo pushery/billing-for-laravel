@@ -46,6 +46,8 @@ final class PaymentsModeSchema
         '2026_10_19_000181_strip_client_secrets_from_billing_webhook_events_table',
         '2026_11_08_000196_add_payment_reference_to_billing_webhook_events_table',
         '2026_11_08_000197_index_the_payment_reference_on_billing_webhook_events_table',
+        '2026_11_09_000198_add_payment_alias_to_billing_webhook_events_table',
+        '2026_11_09_000199_index_the_payment_alias_on_billing_webhook_events_table',
     ];
 
     /**
