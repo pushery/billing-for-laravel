@@ -7,7 +7,7 @@ namespace Pushery\Billing\Drivers\Stripe;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Pushery\Billing\Contracts\NamesThePayment;
+use Pushery\Billing\Contracts\NamesAnotherIdOfThePayment;
 use Pushery\Billing\Contracts\WebhookEventMapper;
 use Pushery\Billing\Enums\AccountPaymentStatus;
 use Pushery\Billing\Enums\ChargebackOutcome;
@@ -32,9 +32,11 @@ use Stripe\StripeClient;
  * outcome, and what the bank holds follows from them.
  *
  * A Checkout Session the customer never paid ends without a payment intent, because Stripe creates one only when
- * the customer pays. Its expiry is reported under the session's id, the reference its charge's result named.
+ * the customer pays. Its expiry is reported under the session's id, the reference its charge's result named. A session
+ * the customer tried to pay holds an intent, and the payment goes by that intent from then on, so the delivery of its
+ * expiry is named by both.
  */
-final readonly class StripeAccountWebhookEventMapper implements NamesThePayment, WebhookEventMapper
+final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOfThePayment, WebhookEventMapper
 {
     /** The events about a payment intent, each reported from the intent read back. */
     private const array INTENT_EVENTS = [
@@ -130,6 +132,23 @@ final readonly class StripeAccountWebhookEventMapper implements NamesThePayment,
             : ($object['payment_intent'] ?? null);
 
         return is_string($reference) && $reference !== '' ? $reference : null;
+    }
+
+    /**
+     * The payment intent an expired Checkout Session holds, which its payment goes by from the customer's first attempt
+     * to pay on. Every other event names its payment by one id, and a session nobody tried to pay holds no intent.
+     */
+    public function otherPaymentReference(Request $request): ?string
+    {
+        $event = $this->eventIn($request);
+
+        if ($event === null || $event[0] !== self::SESSION_EXPIRED) {
+            return null;
+        }
+
+        $intent = $event[1]['payment_intent'] ?? null;
+
+        return is_string($intent) && $intent !== '' ? $intent : null;
     }
 
     /**
@@ -409,7 +428,7 @@ final readonly class StripeAccountWebhookEventMapper implements NamesThePayment,
      *
      * A dispute that was won gave the money back, and a lost one leaves it with the bank. An inquiry (`warning_*`) and
      * a prevented dispute never became a chargeback, and Stripe takes no money for either. Stripe names a reason by its
-     * code alone, such as `fraudulent`.
+     * code alone, such as `fraudulent`. The fee is read as the platform's mapper reads it, see {@see StripeDisputeFee}.
      *
      * @param  array<array-key, mixed>  $values
      */
@@ -436,6 +455,7 @@ final readonly class StripeAccountWebhookEventMapper implements NamesThePayment,
             },
             is_int($created) ? CarbonImmutable::createFromTimestampUTC($created) : null,
             is_string($reason) && $reason !== '' ? $reason : null,
+            fee: StripeDisputeFee::from($values, $amount->currency),
         );
     }
 

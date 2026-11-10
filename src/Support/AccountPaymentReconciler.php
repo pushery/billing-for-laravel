@@ -53,7 +53,7 @@ final readonly class AccountPaymentReconciler
         }
 
         if ($mapper instanceof NamesThePayment) {
-            $this->deliveries->namePayment($delivery, $mapper->paymentReference($request));
+            $this->deliveries->namePaymentOf($delivery, $mapper, $request);
         }
 
         $changes = [];

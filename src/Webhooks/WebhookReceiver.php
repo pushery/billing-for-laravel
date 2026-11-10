@@ -93,7 +93,7 @@ final readonly class WebhookReceiver
         // Named before the payload is mapped, from the request alone, so a delivery whose mapping fails is found by its
         // payment all the same.
         if ($this->mapper instanceof NamesThePayment) {
-            $this->deliveries->namePayment($delivery, $this->mapper->paymentReference($request));
+            $this->deliveries->namePaymentOf($delivery, $this->mapper, $request);
         }
 
         foreach ($this->mapper->map($request) as $event) {

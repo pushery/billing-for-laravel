@@ -95,7 +95,7 @@ return [
     */
 
     'csp' => [
-        'enabled' => ! in_array(is_string($accountCsp = env('BILLING_ACCOUNT_CSP')) ? strtolower(trim($accountCsp)) : $accountCsp, [false, '', '0', 'false', 'no', 'off'], true),
+        'enabled' => ! in_array(is_string($accountCsp = env('BILLING_ACCOUNT_CSP')) ? strtolower(trim($accountCsp)) : $accountCsp, [false, '0', 'false', 'no', 'off'], true),
         'additional' => [],
     ],
 
