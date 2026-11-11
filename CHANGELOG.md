@@ -4,6 +4,12 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.59.0] - 2026-11-11
+
+### 🔧 Changed
+
+- **Every switch reads its rule from the package, so a later fix to it reaches a published config.** `config/billing.php` and `config/account.php` spelled out for each of their 45 switches which values turn it off or on, and a host that published either file kept that rule as it was on the day it published it, the fix of 0.58.0 for an empty `.env` line included. The switches call `EnvSwitch::read(env('…'), $default)` now, and the rule ships in `src/Support/EnvSwitch.php`: `false`, `0`, `no` and `off` turn a switch off, `true`, `1`, `yes` and `on` turn it on, trimmed and in any case, and anything else keeps the value the package ships. Each switch reads the same value as before. **Upgrade:** in a published copy, replace each expression of the form `! in_array(is_string($x = env('KEY')) ? strtolower(trim($x)) : $x, [false, '0', 'false', 'no', 'off'], true)` once with `EnvSwitch::read(env('KEY'), true)`, each of the form `in_array(is_string($x = env('KEY')) ? strtolower(trim($x)) : $x, [true, '1', 'true', 'yes', 'on'], true)` with `EnvSwitch::read(env('KEY'), false)`, and add `use Pushery\Billing\Support\EnvSwitch;` at the top of the file.
+
 ## [0.58.0] - 2026-11-10
 
 ### ✨ Added
@@ -8519,7 +8525,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.58.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.59.0...HEAD
+[0.59.0]: https://github.com/pushery/billing-for-laravel/compare/v0.58.0...v0.59.0
 [0.58.0]: https://github.com/pushery/billing-for-laravel/compare/v0.57.0...v0.58.0
 [0.57.0]: https://github.com/pushery/billing-for-laravel/compare/v0.56.0...v0.57.0
 [0.56.0]: https://github.com/pushery/billing-for-laravel/compare/v0.55.0...v0.56.0
