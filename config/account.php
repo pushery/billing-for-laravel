@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Pushery\Billing\Support\EnvSwitch;
+
 return [
 
     /*
@@ -18,7 +20,7 @@ return [
     |
     */
 
-    'enabled' => ! in_array(is_string($accountEnabled = env('BILLING_ACCOUNT_ENABLED')) ? strtolower(trim($accountEnabled)) : $accountEnabled, [false, '0', 'false', 'no', 'off'], true),
+    'enabled' => EnvSwitch::read(env('BILLING_ACCOUNT_ENABLED'), true),
 
     /*
     |--------------------------------------------------------------------------
@@ -62,7 +64,7 @@ return [
     |
     */
 
-    'cancel_requires_confirmation' => in_array(is_string($cancelConfirm = env('BILLING_CANCEL_CONFIRM')) ? strtolower(trim($cancelConfirm)) : $cancelConfirm, [true, '1', 'true', 'yes', 'on'], true),
+    'cancel_requires_confirmation' => EnvSwitch::read(env('BILLING_CANCEL_CONFIRM'), false),
 
     /*
     |--------------------------------------------------------------------------
@@ -95,7 +97,7 @@ return [
     */
 
     'csp' => [
-        'enabled' => ! in_array(is_string($accountCsp = env('BILLING_ACCOUNT_CSP')) ? strtolower(trim($accountCsp)) : $accountCsp, [false, '0', 'false', 'no', 'off'], true),
+        'enabled' => EnvSwitch::read(env('BILLING_ACCOUNT_CSP'), true),
         'additional' => [],
     ],
 
