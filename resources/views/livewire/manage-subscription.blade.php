@@ -115,14 +115,20 @@
         </div>
     @endif
 
-    {{-- A change the provider holds until its charge is paid, where it offered no page to pay on. --}}
+    {{-- A change the provider holds until its charge is paid, where it offered no page to pay on, or one asked of a
+         subscription that rests. --}}
     @error('swap')
         <p role="alert" class="mb-3 rounded-lg bg-amber-50 p-3 text-sm font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">{{ $message }}</p>
     @enderror
 
+    {{-- A paused subscription is offered no plan change until it goes on, so the rows below carry no action then. --}}
+    @if ($canSwap && $paused)
+        <p role="status" class="mb-3 rounded-lg bg-amber-50 p-3 text-sm font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">{{ __('billing::account.manage.swap_while_paused') }}</p>
+    @endif
+
     <section class="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white shadow-sm dark:divide-gray-800 dark:border-gray-800 dark:bg-gray-900">
         @forelse ($options as $option)
-            <div wire:key="plan-{{ $option['key'] }}-{{ $option['interval'] }}" class="flex items-center justify-between p-4">
+            <div wire:key="plan-{{ $option['key'] }}-{{ $option['interval'] }}" class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                     <span class="font-medium">{{ $option['label'] }}</span>
                     <span class="ml-2 text-sm text-gray-500 dark:text-gray-400">
@@ -145,19 +151,23 @@
                         @endif
                     @endunless
                 </div>
-                <div class="flex items-center gap-2">
+                {{-- Below sm the actions share the width of the row. From sm up the row is only as wide as its labels,
+                     and an equal share of it would wrap the longer one, so each button keeps the width of its own label. --}}
+                <div class="flex w-full gap-2 sm:w-auto sm:items-center">
                     @if ($canSwap)
-                        <button type="button" wire:click="preview('{{ $option['key'] }}')" wire:loading.attr="disabled"
-                            class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
-                            {{ __('billing::account.manage.preview') }}
-                        </button>
-                        <button type="button" wire:click="swap('{{ $option['key'] }}')" wire:loading.attr="disabled"
-                            class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900">
-                            {{ __('billing::account.manage.swap_to') }}
-                        </button>
+                        @unless ($paused)
+                            <button type="button" wire:click="preview('{{ $option['key'] }}')" wire:loading.attr="disabled"
+                                class="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 sm:flex-none dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+                                {{ __('billing::account.manage.preview') }}
+                            </button>
+                            <button type="button" wire:click="swap('{{ $option['key'] }}')" wire:loading.attr="disabled"
+                                class="flex-1 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 sm:flex-none dark:bg-white dark:text-gray-900">
+                                {{ __('billing::account.manage.swap_to') }}
+                            </button>
+                        @endunless
                     @else
                         <button type="button" wire:click="subscribe('{{ $option['key'] }}')" wire:loading.attr="disabled"
-                            class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900">
+                            class="flex-1 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 sm:flex-none dark:bg-white dark:text-gray-900">
                             {{ __('billing::account.manage.subscribe') }}
                         </button>
                     @endif

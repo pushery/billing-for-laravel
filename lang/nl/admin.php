@@ -58,7 +58,7 @@ return [
         'empty' => 'Er wacht geen verklaring op een persoon.',
         'cancellation' => 'Opzegging',
         'withdrawal' => 'Herroeping',
-        'failure' => 'Het uitvoeren is mislukt: :failure.',
+        'failure' => 'Het uitvoeren is mislukt: :failure',
         'ends_on' => 'Contract eindigt op (optioneel)',
         'resolve' => 'Afhandelen',
         'resolved' => 'Verklaring afgehandeld.',

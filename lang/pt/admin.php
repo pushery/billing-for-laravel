@@ -58,7 +58,7 @@ return [
         'empty' => 'Nenhuma declaração espera por uma pessoa.',
         'cancellation' => 'Cancelamento',
         'withdrawal' => 'Livre resolução',
-        'failure' => 'A execução falhou: :failure.',
+        'failure' => 'A execução falhou: :failure',
         'ends_on' => 'O contrato termina a (opcional)',
         'resolve' => 'Resolver',
         'resolved' => 'Declaração resolvida.',

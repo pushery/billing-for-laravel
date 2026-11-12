@@ -10,7 +10,7 @@ return [
 
     'overview' => [
         'heading' => 'Factureringsoverzicht',
-        'current_plan' => 'Huidig plan: :plan.',
+        'current_plan' => 'Huidig plan: :plan',
     ],
 
     'banner' => [
@@ -31,8 +31,8 @@ return [
 
     'manage' => [
         'heading' => 'Plan wijzigen',
-        'current' => 'Huidig plan: :plan.',
-        'card_on_file' => 'Opgeslagen kaart: :brand eindigend op :last4.',
+        'current' => 'Huidig plan: :plan',
+        'card_on_file' => 'Opgeslagen kaart: :brand eindigend op :last4',
         'addons_heading' => 'Add-ons',
         'addon_buy' => 'Kopen',
         'swap_to' => 'Wisselen',
@@ -42,9 +42,10 @@ return [
         'subscribe' => 'Abonneren',
         'trial_days' => 'Inclusief een gratis proefperiode van :days dagen.',
         'preview' => 'Kosten bekijken',
-        'preview_due' => 'Vandaag te betalen met verrekening: :amount.',
+        'preview_due' => 'Vandaag te betalen met verrekening: :amount',
         'preview_unavailable' => 'Geen schatting beschikbaar voor deze wijziging.',
         'swap_awaits_payment' => 'Je planwijziging wacht op de betaling. Die gaat in zodra de betaling is bevestigd.',
+        'swap_while_paused' => 'Je facturering staat op pauze. Hervat hem om van plan te wisselen.',
         'no_options' => 'Er zijn geen andere plannen beschikbaar.',
         'annual_term' => [
             'ends_monthly' => 'Je jaar eindigt op :date. Daarna loopt je abonnement maandelijks door voor :price, en je kunt het opzeggen tegen het einde van elke maand.',
@@ -106,9 +107,9 @@ return [
     'subscription' => [
         'heading' => 'Abonnement',
         'status' => 'Status',
-        'plan' => 'Plan: :plan.',
-        'plan_priced' => 'Plan: :plan, :price / :interval.',
-        'next_invoice' => 'Volgende factuur: :amount op :date.',
+        'plan' => 'Plan: :plan',
+        'plan_priced' => 'Plan: :plan, :price / :interval',
+        'next_invoice' => 'Volgende factuur: :amount op :date',
         'access_ends' => 'Je toegang eindigt op :date.',
         'access_ended' => 'Je toegang is geëindigd op :date.',
         'cancel' => 'Abonnement opzeggen',

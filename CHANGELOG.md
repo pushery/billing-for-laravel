@@ -4,6 +4,21 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.60.0] - 2026-11-12
+
+### 🔧 Changed
+
+- **Status lines end with their value, without a period.** The current plan and the card on file of the plan screen, the plan, its price and the next invoice of the subscription screen, the amount due with proration, the mandate reference and the creditor identifier of the direct debit notice, and the failure line of a declaration in the admin console and its review mail, in every shipped language.
+- **Actions are buttons, not text links.** The billing portal of the subscription screen, the top-up or upgrade of a usage limit, the download of an invoice and the action of a notice banner render as secondary buttons beside the primary one.
+- **The plans of the plan screen stack on a phone.** The name and the price take the first line, and the buttons share the full width of the second. From `sm` up the layout stays as it was: a plan keeps its one row, and each button the width of its label.
+- **A reversed top-up shows its mark before the price**, so the prices and dates of the usage history stand under each other.
+
+### 🐛 Fixed
+
+- **A plan change no longer charges a paused subscription.** On a driver the package bills itself, `swap()` went ahead while a subscription rested: an upgrade charged the rest of the period at once, measured to a period end the pause had not moved yet, and a downgrade was scheduled for that end. It now throws `SwapRefusedWhilePaused`, an `InvalidArgumentException` as `swap()` declares. A change scheduled before the pause waits while the subscription rests and moves with the period when it goes on, where it used to land at the old period end. The subscription screen offers no plan change while a subscription rests, on either driver, and says why.
+- **The migration to `timestamptz` leaves the application's own tables alone.** `keep_every_moment_of_the_billing_tables_as_timestamptz` chose the columns it converts by the table prefix `billing_` alone, so a table of the application whose name starts with it had its timestamps converted on PostgreSQL, and its `timestamptz` columns turned into timestamps by a rollback. It now converts the package's 68 tables only, as they stood when it was written. A database that ran it, from 0.54.0 on, keeps what it did: a `timestamptz` column of an application's own `billing_` table that was a timestamp before was converted then, read in the application's time zone.
+- **Payments-only mode keeps its moments as `timestamptz` too.** The full-mode migration `keep_every_moment_of_the_billing_tables_as_timestamptz` does not run in payments-only mode, so on PostgreSQL its two tables kept their timestamps without a time zone. The new migration `2026_11_02_000195_keep_every_moment_of_the_webhook_tables_as_timestamptz` converts them the same way, read in the application's time zone. In full mode it finds both converted already and changes nothing.
+
 ## [0.59.0] - 2026-11-11
 
 ### 🔧 Changed
@@ -8525,7 +8540,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.59.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.60.0...HEAD
+[0.60.0]: https://github.com/pushery/billing-for-laravel/compare/v0.59.0...v0.60.0
 [0.59.0]: https://github.com/pushery/billing-for-laravel/compare/v0.58.0...v0.59.0
 [0.58.0]: https://github.com/pushery/billing-for-laravel/compare/v0.57.0...v0.58.0
 [0.57.0]: https://github.com/pushery/billing-for-laravel/compare/v0.56.0...v0.57.0

@@ -10,7 +10,7 @@ return [
 
     'overview' => [
         'heading' => 'Abrechnungsübersicht',
-        'current_plan' => 'Aktueller Tarif: :plan.',
+        'current_plan' => 'Aktueller Tarif: :plan',
     ],
 
     'banner' => [
@@ -31,8 +31,8 @@ return [
 
     'manage' => [
         'heading' => 'Tarif ändern',
-        'current' => 'Aktueller Tarif: :plan.',
-        'card_on_file' => 'Hinterlegte Karte: :brand endend auf :last4.',
+        'current' => 'Aktueller Tarif: :plan',
+        'card_on_file' => 'Hinterlegte Karte: :brand endend auf :last4',
         'addons_heading' => 'Add-ons',
         'addon_buy' => 'Kaufen',
         'swap_to' => 'Wechseln',
@@ -42,9 +42,10 @@ return [
         'subscribe' => 'Abonnieren',
         'trial_days' => 'Inklusive :days Tage kostenlos testen.',
         'preview' => 'Kosten vorschauen',
-        'preview_due' => 'Heute fällig mit Anrechnung: :amount.',
+        'preview_due' => 'Heute fällig mit Anrechnung: :amount',
         'preview_unavailable' => 'Für diese Änderung ist keine Schätzung verfügbar.',
         'swap_awaits_payment' => 'Dein Tarifwechsel wartet auf seine Zahlung. Er gilt, sobald die Zahlung bestätigt ist.',
+        'swap_while_paused' => 'Deine Abrechnung ist pausiert. Setze sie fort, um deinen Tarif zu wechseln.',
         'no_options' => 'Keine weiteren Tarife verfügbar.',
         'annual_term' => [
             'ends_monthly' => 'Dein Jahr endet am :date. Danach läuft dein Abo monatlich zu :price weiter, und du kannst es zum Ende jedes Monats kündigen.',
@@ -106,9 +107,9 @@ return [
     'subscription' => [
         'heading' => 'Abo',
         'status' => 'Status',
-        'plan' => 'Tarif: :plan.',
-        'plan_priced' => 'Tarif: :plan, :price / :interval.',
-        'next_invoice' => 'Nächste Rechnung: :amount am :date.',
+        'plan' => 'Tarif: :plan',
+        'plan_priced' => 'Tarif: :plan, :price / :interval',
+        'next_invoice' => 'Nächste Rechnung: :amount am :date',
         'access_ends' => 'Dein Zugang endet am :date.',
         'access_ended' => 'Dein Zugang endete am :date.',
         'cancel' => 'Abo kündigen',

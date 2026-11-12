@@ -76,14 +76,16 @@
                     @foreach ($topups as $index => $topup)
                         <li wire:key="topup-{{ $index }}" class="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3 text-sm shadow-sm dark:border-gray-800 dark:bg-gray-900">
                             <span class="font-medium">{{ $addonLabels[$topup->addonKey] ?? $topup->addonKey }}</span>
-                            <span class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
-                                <span>{{ \Pushery\Billing\Support\LocalizedMoney::format($topup->amount) }}</span>
-                                <span class="text-xs">{{ \Pushery\Billing\Support\LocalizedDate::short($topup->purchasedAt) }}</span>
+                            {{-- The mark of a reversed top-up stands before the price, so the price and the date
+                                 end every row at the same place and stand under each other. --}}
+                            <span class="flex items-center gap-2 text-gray-500 tabular-nums dark:text-gray-400">
                                 @if ($topup->reversed)
                                     <span class="rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                                         {{ __('billing::account.usage_history.reversed') }}
                                     </span>
                                 @endif
+                                <span>{{ \Pushery\Billing\Support\LocalizedMoney::format($topup->amount) }}</span>
+                                <span class="text-xs">{{ \Pushery\Billing\Support\LocalizedDate::short($topup->purchasedAt) }}</span>
                             </span>
                         </li>
                     @endforeach
