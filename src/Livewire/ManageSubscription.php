@@ -126,6 +126,8 @@ final class ManageSubscription extends AccountScreen
             // its portal instead of offering the in-app checkout below — the app is not the merchant of record.
             'linkOut' => Container::getInstance()->make(LinkOut::class)->url(),
             'canSwap' => $this->hasLiveSubscription(),
+            // A paused subscription is offered no plan change, only the reason, until it goes on.
+            'paused' => $this->subscription()?->paused() === true,
             // A downgrade the customer scheduled but that has not taken effect yet: shown as "changes on
             // {date}" with a cancel action, so a pending change is never a surprise on the next invoice.
             'scheduledSwap' => $this->scheduledSwap(),
@@ -381,6 +383,15 @@ final class ManageSubscription extends AccountScreen
             if ($tierKey !== $this->currentTierKey()) {
                 $this->subscribe($tierKey);
             }
+
+            return;
+        }
+
+        // A subscription that rests changes no plan until it goes on: an upgrade would prorate against a period end
+        // the pause has not moved yet, and a downgrade would be scheduled for that end. The screen offers no change
+        // then, and says why where one is asked for all the same.
+        if ($this->subscription()?->paused() === true) {
+            $this->addError('swap', $this->screenText('billing::account.manage.swap_while_paused'));
 
             return;
         }

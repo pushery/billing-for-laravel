@@ -84,7 +84,7 @@
                     @if ($dimension->isOver() || $dimension->isWarning())
                         @php($remedy = $dimension->policy->overRemedy())
                         <a href="{{ $remedy === 'upgrade' ? route('billing.account.plan') : route('billing.account.plan').'#addons' }}"
-                            class="mt-2 inline-flex text-xs font-medium text-blue-600 hover:underline dark:text-blue-400">
+                            class="mt-3 inline-flex rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
                             {{ $remedy === 'upgrade' ? __('billing::account.usage.cta_upgrade') : __('billing::account.usage.cta_topup') }}
                         </a>
                     @endif

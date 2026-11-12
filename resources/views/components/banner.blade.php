@@ -13,7 +13,7 @@
         <span>{{ __($notice->messageKey) }}</span>
     @endif
     @if ($notice->ctaRoute !== null && $notice->ctaKey !== null && Route::has($notice->ctaRoute))
-        <a href="{{ route($notice->ctaRoute) }}" class="shrink-0 font-medium underline underline-offset-2">
+        <a href="{{ route($notice->ctaRoute) }}" class="inline-flex shrink-0 rounded-lg border border-current px-3 py-1.5 font-medium hover:bg-black/5 dark:hover:bg-white/10">
             {{ __($notice->ctaKey) }}
         </a>
     @endif

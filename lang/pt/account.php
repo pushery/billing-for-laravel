@@ -10,7 +10,7 @@ return [
 
     'overview' => [
         'heading' => 'Resumo da faturação',
-        'current_plan' => 'Plano atual: :plan.',
+        'current_plan' => 'Plano atual: :plan',
     ],
 
     'banner' => [
@@ -31,8 +31,8 @@ return [
 
     'manage' => [
         'heading' => 'Mudar de plano',
-        'current' => 'Plano atual: :plan.',
-        'card_on_file' => 'Cartão guardado: :brand terminado em :last4.',
+        'current' => 'Plano atual: :plan',
+        'card_on_file' => 'Cartão guardado: :brand terminado em :last4',
         'addons_heading' => 'Complementos',
         'addon_buy' => 'Comprar',
         'swap_to' => 'Mudar',
@@ -42,9 +42,10 @@ return [
         'subscribe' => 'Subscrever',
         'trial_days' => 'Inclui um período de teste gratuito de :days dias.',
         'preview' => 'Ver custo',
-        'preview_due' => 'A pagar hoje, com valor proporcional: :amount.',
+        'preview_due' => 'A pagar hoje, com valor proporcional: :amount',
         'preview_unavailable' => 'Não há estimativa disponível para esta alteração.',
         'swap_awaits_payment' => 'A mudança de plano aguarda o pagamento. Aplica-se assim que o pagamento for confirmado.',
+        'swap_while_paused' => 'A tua faturação está em pausa. Retoma-a para mudares de plano.',
         'no_options' => 'Não há outros planos disponíveis.',
         'annual_term' => [
             'ends_monthly' => 'O teu ano termina a :date. Depois, a tua subscrição continua todos os meses a :price e podes cancelá-la no fim de qualquer mês.',
@@ -106,9 +107,9 @@ return [
     'subscription' => [
         'heading' => 'Subscrição',
         'status' => 'Estado',
-        'plan' => 'Plano: :plan.',
-        'plan_priced' => 'Plano: :plan, :price / :interval.',
-        'next_invoice' => 'Próxima fatura: :amount a :date.',
+        'plan' => 'Plano: :plan',
+        'plan_priced' => 'Plano: :plan, :price / :interval',
+        'next_invoice' => 'Próxima fatura: :amount a :date',
         'access_ends' => 'O teu acesso termina a :date.',
         'access_ended' => 'O teu acesso terminou a :date.',
         'cancel' => 'Cancelar subscrição',

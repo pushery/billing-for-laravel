@@ -10,7 +10,7 @@ return [
 
     'overview' => [
         'heading' => 'Panoramica della fatturazione',
-        'current_plan' => 'Piano attuale: :plan.',
+        'current_plan' => 'Piano attuale: :plan',
     ],
 
     'banner' => [
@@ -31,8 +31,8 @@ return [
 
     'manage' => [
         'heading' => 'Cambia piano',
-        'current' => 'Piano attuale: :plan.',
-        'card_on_file' => 'Carta salvata: :brand con finale :last4.',
+        'current' => 'Piano attuale: :plan',
+        'card_on_file' => 'Carta salvata: :brand con finale :last4',
         'addons_heading' => 'Componenti aggiuntivi',
         'addon_buy' => 'Acquista',
         'swap_to' => 'Cambia',
@@ -42,9 +42,10 @@ return [
         'subscribe' => 'Abbonati',
         'trial_days' => 'Include una prova gratuita di :days giorni.',
         'preview' => 'Anteprima costo',
-        'preview_due' => 'Da pagare oggi con conguaglio: :amount.',
+        'preview_due' => 'Da pagare oggi con conguaglio: :amount',
         'preview_unavailable' => 'Nessuna stima disponibile per questa modifica.',
         'swap_awaits_payment' => 'La modifica del piano attende il pagamento. Si applica non appena il pagamento è confermato.',
+        'swap_while_paused' => 'La tua fatturazione è in pausa. Riprendila per cambiare piano.',
         'no_options' => 'Nessun altro piano disponibile.',
         'annual_term' => [
             'ends_monthly' => 'Il tuo anno termina il :date. Dopo, il tuo abbonamento prosegue ogni mese a :price e puoi disdirlo alla fine di qualsiasi mese.',
@@ -106,9 +107,9 @@ return [
     'subscription' => [
         'heading' => 'Abbonamento',
         'status' => 'Stato',
-        'plan' => 'Piano: :plan.',
-        'plan_priced' => 'Piano: :plan, :price / :interval.',
-        'next_invoice' => 'Prossima fattura: :amount il :date.',
+        'plan' => 'Piano: :plan',
+        'plan_priced' => 'Piano: :plan, :price / :interval',
+        'next_invoice' => 'Prossima fattura: :amount il :date',
         'access_ends' => 'Il tuo accesso termina il :date.',
         'access_ended' => 'Il tuo accesso è terminato il :date.',
         'cancel' => 'Annulla abbonamento',

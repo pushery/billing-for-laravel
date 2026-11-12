@@ -10,7 +10,7 @@ return [
 
     'overview' => [
         'heading' => 'Resumen de facturación',
-        'current_plan' => 'Plan actual: :plan.',
+        'current_plan' => 'Plan actual: :plan',
     ],
 
     'banner' => [
@@ -31,8 +31,8 @@ return [
 
     'manage' => [
         'heading' => 'Cambiar de plan',
-        'current' => 'Plan actual: :plan.',
-        'card_on_file' => 'Tarjeta registrada: :brand terminada en :last4.',
+        'current' => 'Plan actual: :plan',
+        'card_on_file' => 'Tarjeta registrada: :brand terminada en :last4',
         'addons_heading' => 'Complementos',
         'addon_buy' => 'Comprar',
         'swap_to' => 'Cambiar',
@@ -42,9 +42,10 @@ return [
         'subscribe' => 'Suscribirte',
         'trial_days' => 'Incluye una prueba gratuita de :days días.',
         'preview' => 'Ver coste',
-        'preview_due' => 'A pagar hoy con prorrateo: :amount.',
+        'preview_due' => 'A pagar hoy con prorrateo: :amount',
         'preview_unavailable' => 'No hay estimación disponible para este cambio.',
         'swap_awaits_payment' => 'Tu cambio de plan espera su pago. Se aplica en cuanto se confirme el pago.',
+        'swap_while_paused' => 'Tu facturación está en pausa. Reanúdala para cambiar de plan.',
         'no_options' => 'No hay otros planes disponibles.',
         'annual_term' => [
             'ends_monthly' => 'Tu año termina el :date. Después, tu suscripción continúa cada mes a :price y puedes cancelarla al final de cualquier mes.',
@@ -106,9 +107,9 @@ return [
     'subscription' => [
         'heading' => 'Suscripción',
         'status' => 'Estado',
-        'plan' => 'Plan: :plan.',
-        'plan_priced' => 'Plan: :plan, :price / :interval.',
-        'next_invoice' => 'Próxima factura: :amount el :date.',
+        'plan' => 'Plan: :plan',
+        'plan_priced' => 'Plan: :plan, :price / :interval',
+        'next_invoice' => 'Próxima factura: :amount el :date',
         'access_ends' => 'Tu acceso termina el :date.',
         'access_ended' => 'Tu acceso terminó el :date.',
         'cancel' => 'Cancelar suscripción',

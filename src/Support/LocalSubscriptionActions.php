@@ -25,6 +25,7 @@ use Pushery\Billing\Events\SubscriptionPaused;
 use Pushery\Billing\Events\SubscriptionUnpaused;
 use Pushery\Billing\Exceptions\EligibilityDenied;
 use Pushery\Billing\Exceptions\EndInsidePeriodIsFinal;
+use Pushery\Billing\Exceptions\SwapRefusedWhilePaused;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\CancellationSurvey;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -197,7 +198,7 @@ final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, 
      *
      * Collected in advance, the period was paid before the pause, so the paid days that were left when it began are
      * there after it. Collected in arrears, the bill that closes the period prices the days the customer had, not the
-     * days it rested. The next run is moved by the same time.
+     * days it rested. The next run is moved by the same time, and so is a plan change scheduled for the period end.
      */
     public function unpause(Model $billable, ?MerchantScope $merchant = null, ?string $type = null): void
     {
@@ -209,12 +210,16 @@ final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, 
         }
 
         $seconds = max(0, CarbonImmutable::now()->getTimestamp() - $pausedAt->getTimestamp());
+        $swapAt = $subscription->scheduled_swap_at;
 
         $subscription->update([
             'status' => SubscriptionState::Active->value,
             'paused_at' => null,
             'current_period_end' => $subscription->current_period_end?->copy()->addSeconds($seconds),
             'scheduled_processing_at' => $subscription->scheduled_processing_at?->copy()->addSeconds($seconds),
+            // A change scheduled for the period end moves with it. One whose moment came before the pause began
+            // belongs to a period the pause did not reach, and keeps that moment.
+            'scheduled_swap_at' => $swapAt instanceof Carbon && $swapAt->greaterThan($pausedAt) ? $swapAt->copy()->addSeconds($seconds) : $swapAt,
         ]);
 
         Event::dispatch(new SubscriptionUnpaused($billable, $seconds));
@@ -345,6 +350,12 @@ final readonly class LocalSubscriptionActions implements AppliesScheduledSwaps, 
 
         if (! $subscription instanceof Subscription) {
             throw new InvalidArgumentException('Cannot swap: the billable has no subscription.');
+        }
+
+        // No run collects a paused subscription, and a swap prorates against a period end the pause has not moved
+        // yet. So the change waits for it to go on: refused when a person asks, and kept by the runner when it is due.
+        if ($subscription->paused()) {
+            throw SwapRefusedWhilePaused::forSwap();
         }
 
         if ($prorate && ($type ?? Subscription::TYPE_DEFAULT) !== Subscription::TYPE_DEFAULT) {

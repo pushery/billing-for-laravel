@@ -19,6 +19,7 @@ use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\CustomerType;
 use Pushery\Billing\Exceptions\SwapAwaitsPayment;
+use Pushery\Billing\Exceptions\SwapRefusedWhilePaused;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Throwable;
@@ -164,6 +165,10 @@ final readonly class ScheduledSwapRunner
             Cache::put($held, true, $awaiting->expiresAt ?? Carbon::now()->addDay());
             $this->log->record('billing.scheduled_swap_awaits_payment', $owner, ['tier' => $targetTier, 'invoice' => $awaiting->invoice], AuditSource::System);
 
+            return false;
+        } catch (SwapRefusedWhilePaused) {
+            // A subscription that rests keeps its change, and nothing is recorded: the change is made once it goes on,
+            // at the moment the end of the pause moved it to.
             return false;
         }
 

@@ -58,7 +58,7 @@ return [
         'empty' => 'Keine Erklärung wartet auf einen Menschen.',
         'cancellation' => 'Kündigung',
         'withdrawal' => 'Widerruf',
-        'failure' => 'Die Ausführung ist gescheitert: :failure.',
+        'failure' => 'Die Ausführung ist gescheitert: :failure',
         'ends_on' => 'Vertrag endet am (optional)',
         'resolve' => 'Erledigt',
         'resolved' => 'Erklärung erledigt.',

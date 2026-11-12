@@ -26,7 +26,7 @@
                         </div>
                         @if ($invoice->isDownloadable())
                             <a href="{{ route('billing.account.invoice-download', $invoice->id) }}"
-                                class="shrink-0 text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
+                                class="inline-flex shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
                                 {{ __('billing::account.invoices.download') }}
                             </a>
                         @endif
@@ -58,7 +58,7 @@
                                     {{-- A plain href to a dedicated, bookmarkable route — works without JS,
                                          and the route owner-checks the id before streaming anything. --}}
                                     <a href="{{ route('billing.account.invoice-download', $invoice->id) }}"
-                                        class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
+                                        class="inline-flex rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
                                         {{ __('billing::account.invoices.download') }}
                                     </a>
                                 @endif

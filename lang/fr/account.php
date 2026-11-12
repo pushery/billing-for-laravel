@@ -10,7 +10,7 @@ return [
 
     'overview' => [
         'heading' => 'Aperçu de la facturation',
-        'current_plan' => 'Forfait actuel : :plan.',
+        'current_plan' => 'Forfait actuel : :plan',
     ],
 
     'banner' => [
@@ -31,8 +31,8 @@ return [
 
     'manage' => [
         'heading' => 'Changer de forfait',
-        'current' => 'Forfait actuel : :plan.',
-        'card_on_file' => 'Carte enregistrée : :brand se terminant par :last4.',
+        'current' => 'Forfait actuel : :plan',
+        'card_on_file' => 'Carte enregistrée : :brand se terminant par :last4',
         'addons_heading' => 'Options',
         'addon_buy' => 'Acheter',
         'swap_to' => 'Changer',
@@ -42,9 +42,10 @@ return [
         'subscribe' => 'S’abonner',
         'trial_days' => 'Inclut un essai gratuit de :days jours.',
         'preview' => 'Estimer le coût',
-        'preview_due' => 'À payer aujourd’hui avec prorata : :amount.',
+        'preview_due' => 'À payer aujourd’hui avec prorata : :amount',
         'preview_unavailable' => 'Aucune estimation disponible pour ce changement.',
         'swap_awaits_payment' => 'Ton changement de forfait attend son paiement. Il s’applique dès que le paiement est confirmé.',
+        'swap_while_paused' => 'Ta facturation est en pause. Reprends-la pour changer de forfait.',
         'no_options' => 'Aucun autre forfait n’est disponible.',
         'annual_term' => [
             'ends_monthly' => 'Ton année se termine le :date. Ensuite, ton abonnement continue chaque mois à :price, et tu peux le résilier à la fin de n’importe quel mois.',
@@ -106,9 +107,9 @@ return [
     'subscription' => [
         'heading' => 'Abonnement',
         'status' => 'Statut',
-        'plan' => 'Forfait : :plan.',
-        'plan_priced' => 'Forfait : :plan, :price / :interval.',
-        'next_invoice' => 'Prochaine facture : :amount le :date.',
+        'plan' => 'Forfait : :plan',
+        'plan_priced' => 'Forfait : :plan, :price / :interval',
+        'next_invoice' => 'Prochaine facture : :amount le :date',
         'access_ends' => 'Ton accès se termine le :date.',
         'access_ended' => 'Ton accès s’est terminé le :date.',
         'cancel' => 'Résilier l’abonnement',

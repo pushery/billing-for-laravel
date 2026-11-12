@@ -27,8 +27,9 @@ use Pushery\SQLens\Attributes\NoSqlOnDriver;
  * its own, so a table is locked only while it changes. A run that stops part of the way leaves the tables it reached
  * converted, and running it again converts the rest: it reads which columns are still a timestamp.
  *
- * The columns are read from the catalog, so a column an application added to one of the tables is converted too, from
- * the application's time zone.
+ * The columns are read from the catalog, so a column an application added to one of the package's tables is converted
+ * too, from the application's time zone. The tables are the package's own, named below: a table of the application
+ * whose name starts with the same prefix keeps its columns as they are, in both directions.
  *
  * MySQL and SQLite stay as they are. MySQL keeps the package's moments as DATETIME since 000157, which stores the wall
  * clock as it is, and SQLite stores text.
@@ -171,6 +172,86 @@ class extends Migration
     ];
 
     /**
+     * The package's tables when this migration was written, and the only ones it converts. A table of the application
+     * whose name starts with the same prefix is not the package's: its columns keep the types the application gave them,
+     * on the way up and on the way back.
+     *
+     * Written out rather than read from the migrations, for the same reason as the list above.
+     *
+     * @var list<string>
+     */
+    private const array TABLES = [
+        'billing_access_grants',
+        'billing_addon_purchases',
+        'billing_ai_spend',
+        'billing_buyer_protection_holds',
+        'billing_cancellation_declarations',
+        'billing_cancellation_surveys',
+        'billing_coupon_redemptions',
+        'billing_coupons',
+        'billing_creator_tax_status_anchors',
+        'billing_creator_tax_statuses',
+        'billing_credit_balances',
+        'billing_credit_ledger_entries',
+        'billing_customer_declarations',
+        'billing_direct_debit_notices',
+        'billing_disputes',
+        'billing_document_artifacts',
+        'billing_document_deliveries',
+        'billing_events',
+        'billing_exchange_rates',
+        'billing_filing_reminders',
+        'billing_in_person_sales',
+        'billing_invoice_exchange_rates',
+        'billing_invoices',
+        'billing_mandate_consents',
+        'billing_market_access_log',
+        'billing_merchant_accounts',
+        'billing_merchant_balances',
+        'billing_merchant_charges',
+        'billing_merchant_creditor_accounts',
+        'billing_merchant_customers',
+        'billing_number_sequences',
+        'billing_order_items',
+        'billing_orders',
+        'billing_payment_mandate_anchors',
+        'billing_payment_mandates',
+        'billing_place_evidence',
+        'billing_prepaid_units',
+        'billing_provider_fees',
+        'billing_refund_attempts',
+        'billing_reporting_acknowledgements',
+        'billing_reporting_exports',
+        'billing_reporting_filings',
+        'billing_self_billing_agreements',
+        'billing_seller_data_escalations',
+        'billing_seller_declaration_contradictions',
+        'billing_seller_declarations',
+        'billing_settlement_restatements',
+        'billing_shopify_purchases',
+        'billing_spend_caps',
+        'billing_submitted_invoices',
+        'billing_subscription_intents',
+        'billing_subscription_items',
+        'billing_subscriptions',
+        'billing_tax_hold_warnings',
+        'billing_tax_id_verifications',
+        'billing_tax_return_exports',
+        'billing_us_tax_forms',
+        'billing_usage_counters',
+        'billing_usage_events',
+        'billing_usage_grants',
+        'billing_usage_reservations',
+        'billing_voucher_movements',
+        'billing_voucher_volume_notices',
+        'billing_vouchers',
+        'billing_webhook_effect_runs',
+        'billing_webhook_events',
+        'billing_withdrawal_consents',
+        'billing_withdrawal_declarations',
+    ];
+
+    /**
      * Running the tables in transactions of their own rather than in the one a migration runs in, so that no table
      * stays locked while the others change.
      */
@@ -210,6 +291,11 @@ class extends Migration
         ) as $row) {
             $column = (array) $row;
             $table = substr(is_string($column['table_name'] ?? null) ? $column['table_name'] : '', strlen($prefix));
+
+            if (! in_array($table, self::TABLES, true)) {
+                continue;
+            }
+
             $name = is_string($column['column_name'] ?? null) ? $column['column_name'] : '';
             $precision = is_numeric($column['datetime_precision'] ?? null) ? (int) $column['datetime_precision'] : 0;
             $zone = in_array($table.'.'.$name, self::UTC, true) ? 'UTC' : $applicationZone;

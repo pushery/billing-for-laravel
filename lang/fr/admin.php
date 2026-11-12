@@ -58,7 +58,7 @@ return [
         'empty' => 'Aucune déclaration n\'attend une personne.',
         'cancellation' => 'Résiliation',
         'withdrawal' => 'Rétractation',
-        'failure' => 'Son exécution a échoué : :failure.',
+        'failure' => 'Son exécution a échoué : :failure',
         'ends_on' => 'Le contrat prend fin le (facultatif)',
         'resolve' => 'Régler',
         'resolved' => 'Déclaration réglée.',

@@ -58,7 +58,7 @@ return [
         'empty' => 'No declaration waits for a person.',
         'cancellation' => 'Cancellation',
         'withdrawal' => 'Withdrawal',
-        'failure' => 'Carrying it out failed: :failure.',
+        'failure' => 'Carrying it out failed: :failure',
         'ends_on' => 'Contract ends on (optional)',
         'resolve' => 'Resolve',
         'resolved' => 'Declaration resolved.',

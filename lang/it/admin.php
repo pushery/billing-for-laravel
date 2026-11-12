@@ -58,7 +58,7 @@ return [
         'empty' => 'Nessuna dichiarazione aspetta una persona.',
         'cancellation' => 'Disdetta',
         'withdrawal' => 'Recesso',
-        'failure' => 'L\'esecuzione non è riuscita: :failure.',
+        'failure' => 'L\'esecuzione non è riuscita: :failure',
         'ends_on' => 'Il contratto termina il (facoltativo)',
         'resolve' => 'Risolvi',
         'resolved' => 'Dichiarazione risolta.',

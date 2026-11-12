@@ -10,7 +10,7 @@ return [
 
     'overview' => [
         'heading' => 'Billing overview',
-        'current_plan' => 'Current plan: :plan.',
+        'current_plan' => 'Current plan: :plan',
     ],
 
     'banner' => [
@@ -31,8 +31,8 @@ return [
 
     'manage' => [
         'heading' => 'Change plan',
-        'current' => 'Current plan: :plan.',
-        'card_on_file' => 'Card on file: :brand ending :last4.',
+        'current' => 'Current plan: :plan',
+        'card_on_file' => 'Card on file: :brand ending :last4',
         'addons_heading' => 'Add-ons',
         'addon_buy' => 'Buy',
         'swap_to' => 'Switch',
@@ -42,9 +42,10 @@ return [
         'subscribe' => 'Subscribe',
         'trial_days' => 'Includes a :days-day free trial.',
         'preview' => 'Preview cost',
-        'preview_due' => 'Due today with proration: :amount.',
+        'preview_due' => 'Due today with proration: :amount',
         'preview_unavailable' => 'No estimate available for this change.',
         'swap_awaits_payment' => 'Your plan change waits for its payment. It applies once the payment is confirmed.',
+        'swap_while_paused' => 'Your billing is paused. Resume it to change your plan.',
         'no_options' => 'No other plans are available.',
         'annual_term' => [
             'ends_monthly' => 'Your year ends on :date. After it, your subscription goes on monthly at :price, and you can cancel it at the end of any month.',
@@ -106,9 +107,9 @@ return [
     'subscription' => [
         'heading' => 'Subscription',
         'status' => 'Status',
-        'plan' => 'Plan: :plan.',
-        'plan_priced' => 'Plan: :plan, :price / :interval.',
-        'next_invoice' => 'Next invoice: :amount on :date.',
+        'plan' => 'Plan: :plan',
+        'plan_priced' => 'Plan: :plan, :price / :interval',
+        'next_invoice' => 'Next invoice: :amount on :date',
         'access_ends' => 'Your access ends on :date.',
         'access_ended' => 'Your access ended on :date.',
         'cancel' => 'Cancel subscription',
