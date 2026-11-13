@@ -88,6 +88,7 @@ the command reference at <https://docs.pushery.com/billing-for-laravel/reference
 | `billing:cards:warn` | Daily: warns owners whose card is about to expire |
 | `billing:trials:warn` | Daily: warns owners whose generic trial is about to end |
 | `billing:subscriptions:warn` | Daily: reminds owners whose canceled subscription is about to end |
+| `billing:price-changes:announce` | Daily: announces each declared price change once to every running subscription it reaches, with the day the new price holds from (none under Stripe, which prices its own invoices); exits with 1 while a declared change breaks a rule |
 | `billing:annual-terms:remind` | Daily: reminds customers whose annual term ends soon, and consumers of the monthly contract their year goes on as |
 | `billing:annual-terms:arrange` | Once, after an update from 0.53.0 to 0.56.x with Stripe: arranges each consumer's annual term again where nothing that goes on past its period holds it; `--dry-run` names the subscriptions it would ask about |
 | `billing:usage:reconcile` | Daily: reads the provider's usage totals back and alarms on drift; `--redrive` retries the rollups a flush gave up on |

@@ -33,7 +33,7 @@
                     {{ __('billing::account.danger.confirm_yes') }}
                 </button>
                 <button type="button" wire:click="abort"
-                    class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-800">
+                    class="rounded-lg px-4 py-2 text-sm font-medium bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600">
                     {{ __('billing::account.danger.confirm_no') }}
                 </button>
             </div>

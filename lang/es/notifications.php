@@ -7,6 +7,7 @@ return [
     'payment_failed' => [
         'subject' => 'No hemos podido procesar tu pago',
         'intro' => 'No hemos podido procesar tu último pago.',
+        'summary' => 'Importe: :amount · Factura: :invoice',
         'outro' => 'Actualiza tus datos de pago para mantener tu suscripción activa.',
         'paused' => 'Tu acceso está en pausa hasta que se complete un pago, y vuelve en cuanto se complete.',
         'outro_paused' => 'Actualiza tus datos de pago para recuperarlo.',
@@ -16,6 +17,7 @@ return [
     'fallback_method_charged' => [
         'subject' => 'Hemos cobrado tu método de pago de reserva',
         'intro' => 'No hemos podido cobrar tu método de pago predeterminado, así que hemos cobrado tu método de reserva.',
+        'summary' => 'Importe: :amount · Método de pago: :method · Referencia: :reference',
         'outro' => 'Revisa tu método de pago predeterminado. En tu próximo pago se volverá a intentar primero.',
         'cta' => 'Revisar los métodos de pago',
     ],
@@ -23,6 +25,7 @@ return [
     'payment_succeeded' => [
         'subject' => 'Tu recibo de pago',
         'intro' => 'Gracias: hemos recibido tu pago.',
+        'summary' => 'Importe: :amount · Referencia: :reference',
         'declarations' => 'Tus declaraciones antes de que comenzara la prestación:',
         'outro' => 'Tienes una copia de este recibo en tu historial de facturación.',
         'cta' => 'Ver los recibos',
@@ -31,8 +34,17 @@ return [
     'trial_ending' => [
         'subject' => 'Tu prueba termina pronto',
         'intro' => 'Tu prueba gratuita termina el :date.',
+        'first_charge' => 'Tu primer cargo de :amount se cobra el :date.',
+        'cancel' => 'Puedes cancelar antes en la página de suscripción de tu cuenta.',
         'outro' => 'Añade un método de pago antes de que termine para que tu suscripción siga sin interrupciones.',
         'cta' => 'Añadir un método de pago',
+    ],
+
+    'price_change' => [
+        'subject' => 'Tu precio cambia',
+        'intro' => 'A partir del :date se aplica un nuevo precio a tu suscripción.',
+        'cancel' => 'Si no quieres continuar con el nuevo precio, puedes cancelar tu suscripción para ese día en la página de suscripción de tu cuenta.',
+        'cta' => 'Ver tu suscripción',
     ],
 
     'subscription_canceled' => [
@@ -167,15 +179,17 @@ return [
         'subject' => 'Tu próximo adeudo directo',
         'intro' => ':payee cargará :amount en tu cuenta mediante adeudo directo SEPA el :date.',
         'recurring' => 'Después, se cargará el mismo importe en cada fecha de vencimiento de tu suscripción. Si el importe cambia, recibirás un aviso antes del cargo.',
-        'account' => 'Cuenta terminada en :account.',
-        'mandate' => 'Referencia del mandato: :reference',
-        'creditor' => 'Identificador del acreedor: :creditor',
+        'account_label' => 'Cuenta',
+        'account_value' => 'terminada en :account',
+        'mandate_label' => 'Referencia del mandato',
+        'creditor_label' => 'Identificador del acreedor',
         'outro' => 'No tienes que hacer nada.',
         'cta' => 'Ver tus métodos de pago',
     ],
 
     'cancellation_received' => [
         'subject' => 'Hemos recibido tu cancelación',
+        'heading' => 'Tu cancelación',
         'intro' => 'Te confirmamos la cancelación que declaraste, con todo su contenido y la fecha y la hora en que nos llegó.',
         'outro' => 'Guarda este correo. Es tu constancia de la cancelación y del momento en que nos llegó.',
         'cta' => 'Ver tu cancelación',
@@ -183,6 +197,7 @@ return [
 
     'withdrawal_received' => [
         'subject' => 'Hemos recibido tu desistimiento',
+        'heading' => 'Tu desistimiento',
         'intro' => 'Te confirmamos el desistimiento que declaraste, con todo su contenido y la fecha y la hora en que nos llegó.',
         'outro' => 'Guarda este correo. Es tu constancia del desistimiento y del momento en que nos llegó.',
         'cta' => 'Ver tu desistimiento',

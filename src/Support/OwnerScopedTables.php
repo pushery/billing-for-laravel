@@ -69,6 +69,9 @@ final class OwnerScopedTables
         // discounted lives on the retained invoice). It goes with the person; the coupon definition itself is
         // owner-less and stays.
         'billing_coupon_redemptions',
+        // A discount allowance is an entitlement in the same way as prepaid units: once the person is gone there is
+        // nobody left whose cycles could use it, and the money it took off any of them lives on the retained invoice.
+        'billing_discount_allowances',
         // A subscription intent is a request somebody made that has not become anything yet — no money, no
         // document, nothing anybody is entitled to keep. It goes with the person, and it goes even when it
         // was never claimed: an unclaimed one names an owner who asked to buy something, which is the kind
@@ -179,7 +182,9 @@ final class OwnerScopedTables
      */
     public const array CASCADED = [
         'billing_subscription_items' => ['parent' => 'billing_subscriptions', 'foreign_key' => 'billing_subscription_id'],
+        'billing_price_change_announcements' => ['parent' => 'billing_subscriptions', 'foreign_key' => 'billing_subscription_id'],
         'billing_order_items' => ['parent' => 'billing_orders', 'foreign_key' => 'order_id'],
+        'billing_discount_allowance_uses' => ['parent' => 'billing_discount_allowances', 'foreign_key' => 'discount_allowance_id'],
     ];
 
     /**

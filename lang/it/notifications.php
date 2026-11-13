@@ -7,6 +7,7 @@ return [
     'payment_failed' => [
         'subject' => 'Non è stato possibile elaborare il tuo pagamento',
         'intro' => 'Non siamo riusciti a elaborare il tuo ultimo pagamento.',
+        'summary' => 'Importo: :amount · Fattura: :invoice',
         'outro' => 'Aggiorna i tuoi dati di pagamento per mantenere attivo l’abbonamento.',
         'paused' => 'Il tuo accesso è sospeso finché un pagamento non va a buon fine, e torna non appena succede.',
         'outro_paused' => 'Aggiorna i tuoi dati di pagamento per riaverlo.',
@@ -16,6 +17,7 @@ return [
     'fallback_method_charged' => [
         'subject' => 'Abbiamo addebitato il tuo metodo di pagamento di riserva',
         'intro' => 'Non è stato possibile addebitare il tuo metodo di pagamento predefinito, quindi abbiamo addebitato quello di riserva.',
+        'summary' => 'Importo: :amount · Metodo di pagamento: :method · Riferimento: :reference',
         'outro' => 'Controlla il tuo metodo di pagamento predefinito. Al prossimo pagamento verrà provato di nuovo per primo.',
         'cta' => 'Controlla i metodi di pagamento',
     ],
@@ -23,6 +25,7 @@ return [
     'payment_succeeded' => [
         'subject' => 'La tua ricevuta di pagamento',
         'intro' => 'Grazie: abbiamo ricevuto il tuo pagamento.',
+        'summary' => 'Importo: :amount · Riferimento: :reference',
         'declarations' => 'Le tue dichiarazioni prima dell\'inizio della fornitura:',
         'outro' => 'Trovi una copia di questa ricevuta nel tuo storico di fatturazione.',
         'cta' => 'Vedi le ricevute',
@@ -31,8 +34,17 @@ return [
     'trial_ending' => [
         'subject' => 'La tua prova termina a breve',
         'intro' => 'La tua prova gratuita termina il :date.',
+        'first_charge' => 'Il tuo primo addebito di :amount avviene il :date.',
+        'cancel' => 'Puoi annullare prima nella pagina dell\'abbonamento del tuo account.',
         'outro' => 'Aggiungi un metodo di pagamento prima della fine così il tuo abbonamento continua senza interruzioni.',
         'cta' => 'Aggiungi un metodo di pagamento',
+    ],
+
+    'price_change' => [
+        'subject' => 'Il tuo prezzo cambia',
+        'intro' => 'Dal :date al tuo abbonamento si applica un nuovo prezzo.',
+        'cancel' => 'Se non vuoi continuare al nuovo prezzo, puoi annullare il tuo abbonamento per quel giorno nella pagina dell\'abbonamento del tuo account.',
+        'cta' => 'Vedi il tuo abbonamento',
     ],
 
     'subscription_canceled' => [
@@ -167,15 +179,17 @@ return [
         'subject' => 'Il tuo prossimo addebito diretto',
         'intro' => ':payee addebiterà :amount sul tuo conto con addebito diretto SEPA il :date.',
         'recurring' => 'Dopo, lo stesso importo verrà addebitato a ogni scadenza del tuo abbonamento. Se l\'importo cambia, riceverai un avviso prima dell\'addebito.',
-        'account' => 'Conto che termina con :account.',
-        'mandate' => 'Riferimento del mandato: :reference',
-        'creditor' => 'Identificativo del creditore: :creditor',
+        'account_label' => 'Conto',
+        'account_value' => 'che termina con :account',
+        'mandate_label' => 'Riferimento del mandato',
+        'creditor_label' => 'Identificativo del creditore',
         'outro' => 'Non devi fare nulla.',
         'cta' => 'Vedi i tuoi metodi di pagamento',
     ],
 
     'cancellation_received' => [
         'subject' => 'Abbiamo ricevuto la tua disdetta',
+        'heading' => 'La tua disdetta',
         'intro' => 'Ti confermiamo la disdetta che hai dichiarato, con tutto il suo contenuto e la data e l’ora in cui ci è pervenuta.',
         'outro' => 'Conserva questa email. È la prova della tua disdetta e del momento in cui ci è pervenuta.',
         'cta' => 'Vedi la tua disdetta',
@@ -183,6 +197,7 @@ return [
 
     'withdrawal_received' => [
         'subject' => 'Abbiamo ricevuto il tuo recesso',
+        'heading' => 'Il tuo recesso',
         'intro' => 'Ti confermiamo il recesso che hai dichiarato, con tutto il suo contenuto e la data e l’ora in cui ci è pervenuto.',
         'outro' => 'Conserva questa email. È la prova del tuo recesso e del momento in cui ci è pervenuto.',
         'cta' => 'Vedi il tuo recesso',

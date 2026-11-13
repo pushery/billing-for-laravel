@@ -34,6 +34,7 @@ use Pushery\Billing\Catalogs\SingleMerchantCatalog;
 use Pushery\Billing\Console\Commands\AdvanceBuyerProtectionCommand;
 use Pushery\Billing\Console\Commands\AdvanceDunningCommand;
 use Pushery\Billing\Console\Commands\AnnounceLapsedAttestationsCommand;
+use Pushery\Billing\Console\Commands\AnnouncePriceChangesCommand;
 use Pushery\Billing\Console\Commands\AnnounceUpcomingFilingsCommand;
 use Pushery\Billing\Console\Commands\AnnounceVoucherVolumeCommand;
 use Pushery\Billing\Console\Commands\ArrangeAnnualTermsCommand;
@@ -166,6 +167,7 @@ use Pushery\Billing\Contracts\PdfRenderer;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\PlatformFeeResolver;
 use Pushery\Billing\Contracts\PreviewsSwaps;
+use Pushery\Billing\Contracts\PriceChangeNotifier;
 use Pushery\Billing\Contracts\ProductTaxonomy;
 use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\PublishesExchangeRates;
@@ -300,9 +302,11 @@ use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
 use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
 use Pushery\Billing\Preflight\Profiles\GermanSellerStanding;
+use Pushery\Billing\PriceChanges\PriceChanges;
 use Pushery\Billing\Proration\DelegatedProrationStrategy;
 use Pushery\Billing\Resolvers\ColumnTierResolver;
 use Pushery\Billing\Resolvers\ConfigBillingEntityResolver;
+use Pushery\Billing\Resolvers\MeteredCycleAmountResolver;
 use Pushery\Billing\Resolvers\PlanCycleAmountResolver;
 use Pushery\Billing\Resolvers\SubscriptionTierResolver;
 use Pushery\Billing\Support\BalanceRoutedLocalSubscriptionActions;
@@ -424,6 +428,14 @@ final class BillingServiceProvider extends ServiceProvider
         // asked to — a driver that rates remotely keeps doing so, and a local engine binds or names a
         // resolver that rates from the package's own counters.
         $this->app->bind(CycleAmountResolver::class, PlanCycleAmountResolver::class);
+
+        // The resolver that rates a metered line from the package's own counters, with the declared price changes, so a
+        // change of a meter's price holds from the day its announcement named. Bound by name, because the container
+        // fills an optional parameter of an unbound class with its default rather than building the class.
+        $this->app->bind(MeteredCycleAmountResolver::class, fn (Application $app): MeteredCycleAmountResolver => new MeteredCycleAmountResolver(
+            $app->make(MeterCatalog::class),
+            $app->make(PriceChanges::class),
+        ));
 
         // Marketplace: the seller-of-record posture resolver. Bound always (cheap); only the marketplace
         // paths consult it, and the master switch keeps them unreachable when billing.marketplace.enabled is
@@ -778,6 +790,7 @@ final class BillingServiceProvider extends ServiceProvider
         $this->app->bind(SuspensionNotifier::class, LaravelDunningNotifier::class);
         $this->app->bind(MandateNotifier::class, LaravelDunningNotifier::class);
         $this->app->bind(TrialNotifier::class, LaravelDunningNotifier::class);
+        $this->app->bind(PriceChangeNotifier::class, LaravelDunningNotifier::class);
         // The receipt (a payment that did go through) and the cancellation notice with its access-end date
         // — the same default notifier delivers them; an app rebinds either seam on its own.
         $this->app->bind(ReceiptNotifier::class, LaravelDunningNotifier::class);
@@ -1322,6 +1335,7 @@ final class BillingServiceProvider extends ServiceProvider
                 FlushUsageCommand::class,
                 WarnExpiringCardsCommand::class,
                 WarnEndingTrialsCommand::class,
+                AnnouncePriceChangesCommand::class,
                 WarnEndingSubscriptionsCommand::class,
                 RemindAnnualTermsCommand::class,
                 ArrangeAnnualTermsCommand::class,
@@ -1471,6 +1485,9 @@ final class BillingServiceProvider extends ServiceProvider
             // The reminders an annual term is owed: before it ends, before a consumer's first monthly charge, and every six
             // months of the monthly contract it went on as. Daily, after the other reminders.
             $withHeartbeat($schedule->command('billing:annual-terms:remind')->dailyAt('09:20')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:annual-terms:remind');
+            // The declared price changes, announced to every running subscription they reach from their day of announcement.
+            // Silent while none is declared.
+            $withHeartbeat($schedule->command('billing:price-changes:announce')->dailyAt('09:25')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:price-changes:announce');
             // The tax-standing deadline, announced before it bites. Daily and early, because the value of
             // this message is entirely in how much time it leaves: a merchant needs longer to produce a
             // declaration than a checkout takes to fail. It is silent until an operator sets the date.

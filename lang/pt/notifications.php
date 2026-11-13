@@ -7,6 +7,7 @@ return [
     'payment_failed' => [
         'subject' => 'Não foi possível processar o teu pagamento',
         'intro' => 'Não conseguimos processar o teu último pagamento.',
+        'summary' => 'Montante: :amount · Fatura: :invoice',
         'outro' => 'Atualiza os teus dados de pagamento para manteres a tua subscrição ativa.',
         'paused' => 'O teu acesso está em pausa até um pagamento ser processado, e volta assim que isso acontecer.',
         'outro_paused' => 'Atualiza os teus dados de pagamento para o recuperares.',
@@ -16,6 +17,7 @@ return [
     'fallback_method_charged' => [
         'subject' => 'Cobrámos o teu método de pagamento alternativo',
         'intro' => 'Não foi possível cobrar o teu método de pagamento predefinido, por isso cobrámos o teu método alternativo.',
+        'summary' => 'Montante: :amount · Método de pagamento: :method · Referência: :reference',
         'outro' => 'Verifica o teu método de pagamento predefinido. No teu próximo pagamento, voltará a ser tentado primeiro.',
         'cta' => 'Verificar os métodos de pagamento',
     ],
@@ -23,6 +25,7 @@ return [
     'payment_succeeded' => [
         'subject' => 'O teu comprovativo de pagamento',
         'intro' => 'Obrigado — recebemos o teu pagamento.',
+        'summary' => 'Montante: :amount · Referência: :reference',
         'declarations' => 'As tuas declarações antes de a prestação começar:',
         'outro' => 'Tens uma cópia deste comprovativo no teu histórico de faturação.',
         'cta' => 'Ver os recibos',
@@ -31,8 +34,17 @@ return [
     'trial_ending' => [
         'subject' => 'O teu período de teste termina em breve',
         'intro' => 'O teu período de teste gratuito termina a :date.',
+        'first_charge' => 'O teu primeiro débito de :amount é cobrado a :date.',
+        'cancel' => 'Podes cancelar antes na página da subscrição da tua conta.',
         'outro' => 'Adiciona um método de pagamento antes de terminar para que a tua subscrição continue sem interrupções.',
         'cta' => 'Adicionar um método de pagamento',
+    ],
+
+    'price_change' => [
+        'subject' => 'O teu preço vai mudar',
+        'intro' => 'A partir de :date aplica-se um novo preço à tua subscrição.',
+        'cancel' => 'Se não quiseres continuar com o novo preço, podes cancelar a tua subscrição para esse dia na página da subscrição da tua conta.',
+        'cta' => 'Ver a tua subscrição',
     ],
 
     'subscription_canceled' => [
@@ -167,15 +179,17 @@ return [
         'subject' => 'O teu próximo débito direto',
         'intro' => ':payee vai cobrar :amount na tua conta por débito direto SEPA a :date.',
         'recurring' => 'Depois disso, o mesmo valor é cobrado em cada data de vencimento da tua subscrição. Se o valor mudar, serás avisado antes da cobrança.',
-        'account' => 'Conta terminada em :account.',
-        'mandate' => 'Referência do mandato: :reference',
-        'creditor' => 'Identificador do credor: :creditor',
+        'account_label' => 'Conta',
+        'account_value' => 'terminada em :account',
+        'mandate_label' => 'Referência do mandato',
+        'creditor_label' => 'Identificador do credor',
         'outro' => 'Não tens de fazer nada.',
         'cta' => 'Ver os teus métodos de pagamento',
     ],
 
     'cancellation_received' => [
         'subject' => 'Recebemos o teu cancelamento',
+        'heading' => 'O teu cancelamento',
         'intro' => 'Confirmamos o cancelamento que declaraste, com todo o seu conteúdo e a data e hora em que nos chegou.',
         'outro' => 'Guarda este e-mail. É o teu comprovativo do cancelamento e do momento em que nos chegou.',
         'cta' => 'Ver o teu cancelamento',
@@ -183,6 +197,7 @@ return [
 
     'withdrawal_received' => [
         'subject' => 'Recebemos a tua livre resolução',
+        'heading' => 'A tua livre resolução',
         'intro' => 'Confirmamos a livre resolução que declaraste, com todo o seu conteúdo e a data e hora em que nos chegou.',
         'outro' => 'Guarda este e-mail. É o teu comprovativo da livre resolução e do momento em que nos chegou.',
         'cta' => 'Ver a tua livre resolução',

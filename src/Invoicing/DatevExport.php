@@ -367,6 +367,10 @@ final readonly class DatevExport
      *   charge offset      the liability     →  the customer account   the balance paid an open item
      *   offset returned    the customer account → the liability        the cycle was never collected
      *   provider offset    the liability     →  the customer account   the provider spent it on its invoice
+     *   referral reward    the referral account → the liability        the seller owes it for a referral
+     *
+     * The referral account is resolved only for a reward, because it ships unmapped: an installation that
+     * grants none must not be refused over an account it never books.
      *
      * NULL for a proration credit, which is the one movement with no payment and no credit note behind it:
      * what it is in the books is an open question, and a booking would invent a liability nobody owes. The
@@ -400,6 +404,7 @@ final readonly class DatevExport
             CreditReason::AddonReversalUndone => [$transit, $liabilities->number, 'Guthaben-Erstattung-Storno'],
             CreditReason::ChargeOffset, CreditReason::ProviderInvoiceOffset => [$liabilities, $customer->number, 'Guthaben-Einloesung'],
             CreditReason::ChargeOffsetReturned => [$customer, $liabilities->number, 'Guthaben-Rueckgabe'],
+            CreditReason::ReferralReward => [$this->accounts->resolve(DatevTransaction::ReferralRewards), $liabilities->number, 'Empfehlungspraemie'],
             CreditReason::ProrationCredit => null,
         };
 
@@ -513,6 +518,14 @@ final readonly class DatevExport
      */
     private function bookingsFor(InvoiceRecord $invoice): array
     {
+        // The sale of a multi-purpose voucher is no supply, and its document books nothing. The money it took is booked
+        // by the credit it put on the balance, from money transit to the voucher liabilities, and its revenue by the
+        // invoices the balance later pays. Booked here as well, the top-up landed on a revenue account that derives its
+        // tax from the posting, and the same money was taxed again when it was spent.
+        if ($invoice->tax_archetype === TaxArchetype::Voucher) {
+            return [];
+        }
+
         if ($invoice->settlement_document_type instanceof SettlementDocumentType && $invoice->fan_gross_minor !== null) {
             return $this->settlementChain($invoice);
         }

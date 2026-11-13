@@ -7,6 +7,7 @@ return [
     'payment_failed' => [
         'subject' => 'Je betaling kon niet worden verwerkt',
         'intro' => 'We konden je laatste betaling niet verwerken.',
+        'summary' => 'Bedrag: :amount · Factuur: :invoice',
         'outro' => 'Werk je betaalgegevens bij om je abonnement actief te houden.',
         'paused' => 'Je toegang is gepauzeerd tot een betaling slaagt, en komt terug zodra dat gebeurt.',
         'outro_paused' => 'Werk je betaalgegevens bij om hem terug te krijgen.',
@@ -16,6 +17,7 @@ return [
     'fallback_method_charged' => [
         'subject' => 'Je reservebetaalmethode is belast',
         'intro' => 'Je standaardbetaalmethode kon niet worden belast, daarom hebben we je reservebetaalmethode belast.',
+        'summary' => 'Bedrag: :amount · Betaalmethode: :method · Referentie: :reference',
         'outro' => 'Controleer je standaardbetaalmethode. Bij je volgende betaling wordt die weer als eerste geprobeerd.',
         'cta' => 'Betaalmethoden controleren',
     ],
@@ -23,6 +25,7 @@ return [
     'payment_succeeded' => [
         'subject' => 'Je betalingsbewijs',
         'intro' => 'Bedankt — we hebben je betaling ontvangen.',
+        'summary' => 'Bedrag: :amount · Referentie: :reference',
         'declarations' => 'Je verklaringen voordat de levering begon:',
         'outro' => 'Een kopie van dit bewijs vind je in je factuurgeschiedenis.',
         'cta' => 'Bonnen bekijken',
@@ -31,8 +34,17 @@ return [
     'trial_ending' => [
         'subject' => 'Je proefperiode eindigt binnenkort',
         'intro' => 'Je gratis proefperiode eindigt op :date.',
+        'first_charge' => 'Je eerste afschrijving van :amount volgt op :date.',
+        'cancel' => 'Je kunt daarvoor opzeggen op de abonnementspagina van je account.',
         'outro' => 'Voeg vóór het einde een betaalmethode toe zodat je abonnement zonder onderbreking doorloopt.',
         'cta' => 'Betaalmethode toevoegen',
+    ],
+
+    'price_change' => [
+        'subject' => 'Je prijs verandert',
+        'intro' => 'Vanaf :date geldt er een nieuwe prijs voor je abonnement.',
+        'cancel' => 'Wil je niet doorgaan tegen de nieuwe prijs, dan kun je je abonnement tegen die dag opzeggen op de abonnementspagina van je account.',
+        'cta' => 'Bekijk je abonnement',
     ],
 
     'subscription_canceled' => [
@@ -167,15 +179,17 @@ return [
         'subject' => 'Je volgende automatische incasso',
         'intro' => ':payee incasseert op :date :amount van je rekening met een SEPA-incasso.',
         'recurring' => 'Daarna wordt hetzelfde bedrag op elke vervaldatum van je abonnement geïncasseerd. Verandert het bedrag, dan krijg je dat vooraf te horen.',
-        'account' => 'Rekening eindigend op :account.',
-        'mandate' => 'Machtigingskenmerk: :reference',
-        'creditor' => 'Incassant-ID: :creditor',
+        'account_label' => 'Rekening',
+        'account_value' => 'eindigend op :account',
+        'mandate_label' => 'Machtigingskenmerk',
+        'creditor_label' => 'Incassant-ID',
         'outro' => 'Je hoeft niets te doen.',
         'cta' => 'Bekijk je betaalmethoden',
     ],
 
     'cancellation_received' => [
         'subject' => 'We hebben je opzegging ontvangen',
+        'heading' => 'Je opzegging',
         'intro' => 'Hiermee bevestigen we de opzegging die je hebt verklaard, met de volledige inhoud en de datum en het tijdstip waarop die bij ons binnenkwam.',
         'outro' => 'Bewaar deze e-mail. Hiermee kun je je opzegging aantonen en laten zien wanneer die bij ons binnenkwam.',
         'cta' => 'Bekijk je opzegging',
@@ -183,6 +197,7 @@ return [
 
     'withdrawal_received' => [
         'subject' => 'We hebben je herroeping ontvangen',
+        'heading' => 'Je herroeping',
         'intro' => 'Hiermee bevestigen we de herroeping die je hebt verklaard, met de volledige inhoud en de datum en het tijdstip waarop die bij ons binnenkwam.',
         'outro' => 'Bewaar deze e-mail. Hiermee kun je je herroeping aantonen en laten zien wanneer die bij ons binnenkwam.',
         'cta' => 'Bekijk je herroeping',

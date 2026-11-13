@@ -76,11 +76,7 @@ final class DeclarationAwaitingReviewNotification extends BillingNotification
             ? DeclarationStatement::cancellationLines($declaration)
             : DeclarationStatement::withdrawalLines($declaration);
 
-        foreach ($lines as $line) {
-            $mail->line(MarkdownText::interpolate(':label: :value', $line));
-        }
-
-        return $this->withAction($mail, Lang::get('billing::notifications.declaration_awaiting_review.cta'), $this->reviewUrl());
+        return $this->withAction($mail->line(MarkdownText::pairs($lines)), Lang::get('billing::notifications.declaration_awaiting_review.cta'), $this->reviewUrl());
     }
 
     /** @return array<string, string|int> */

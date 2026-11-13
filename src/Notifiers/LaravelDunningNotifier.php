@@ -12,6 +12,7 @@ use Pushery\Billing\Consumer\WithdrawalConsentLedger;
 use Pushery\Billing\Contracts\DunningNotifier;
 use Pushery\Billing\Contracts\MandateNotifier;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
+use Pushery\Billing\Contracts\PriceChangeNotifier;
 use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\SubscriptionEndingNotifier;
 use Pushery\Billing\Contracts\SubscriptionNotifier;
@@ -22,15 +23,19 @@ use Pushery\Billing\Notifications\PaymentActionRequiredNotification;
 use Pushery\Billing\Notifications\PaymentFailedNotification;
 use Pushery\Billing\Notifications\PaymentMethodRemovedNotification;
 use Pushery\Billing\Notifications\PaymentSucceededNotification;
+use Pushery\Billing\Notifications\PriceChangeAnnouncedNotification;
 use Pushery\Billing\Notifications\QuotaWarningNotification;
 use Pushery\Billing\Notifications\SubscriptionActivatedNotification;
 use Pushery\Billing\Notifications\SubscriptionCanceledNotification;
 use Pushery\Billing\Notifications\SubscriptionEndingNotification;
 use Pushery\Billing\Notifications\SuspensionWarningNotification;
 use Pushery\Billing\Notifications\TrialEndingNotification;
+use Pushery\Billing\PriceChanges\PriceChange;
+use Pushery\Billing\Support\FirstChargePreview;
 use Pushery\Billing\Support\OwnersZone;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\UpcomingInvoicePreview;
 
 /**
  * The default notification delivery for the package: the dunning, receipt, suspension, mandate, trial and
@@ -46,7 +51,7 @@ use Pushery\Billing\ValueObjects\Money;
  * subscription, get their moment in the zone the owner reads dates in ({@see OwnerTimezone}), so the day they name
  * is the owner's day.
  */
-final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, PaymentActionNotifier, ReceiptNotifier, SubscriptionEndingNotifier, SubscriptionNotifier, SuspensionNotifier, TrialNotifier, UsageNotifier
+final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, PaymentActionNotifier, PriceChangeNotifier, ReceiptNotifier, SubscriptionEndingNotifier, SubscriptionNotifier, SuspensionNotifier, TrialNotifier, UsageNotifier
 {
     public function paymentFailed(Model $owner, Money $amount, string $invoiceReference): void
     {
@@ -89,9 +94,24 @@ final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, 
         Notification::send($owner, new PaymentMethodRemovedNotification);
     }
 
+    /**
+     * The reminder names the charge that follows the trial where the driver can preview it, and the day it is collected
+     * in the owner's zone, as it names the end of the trial.
+     */
     public function trialEnding(Model $owner, DateTimeInterface $endsAt): void
     {
-        Notification::send($owner, new TrialEndingNotification(OwnersZone::of($owner, $endsAt)));
+        $charge = Container::getInstance()->make(FirstChargePreview::class)->for($owner);
+
+        Notification::send($owner, new TrialEndingNotification(
+            OwnersZone::of($owner, $endsAt),
+            $charge instanceof UpcomingInvoicePreview ? new UpcomingInvoicePreview(OwnersZone::of($owner, $charge->date), $charge->amount) : null,
+        ));
+    }
+
+    public function priceChangeAnnounced(Model $owner, PriceChange $change, DateTimeInterface $effectiveOn): void
+    {
+        // A day, not a moment: it is named as declared, so the owner's zone cannot move it to the evening before.
+        Notification::send($owner, new PriceChangeAnnouncedNotification($change->key, $change->texts(), $effectiveOn));
     }
 
     public function subscriptionCanceled(Model $owner, DateTimeInterface $accessEndsAt): void

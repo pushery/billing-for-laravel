@@ -23,6 +23,7 @@ use Pushery\Billing\Contracts\CollectsDirectDebits;
 use Pushery\Billing\Contracts\PaymentRails;
 use Pushery\Billing\DirectDebit\PreNotifications;
 use Pushery\Billing\Discounts\CycleCouponApplier;
+use Pushery\Billing\Discounts\DiscountAllowances;
 use Pushery\Billing\Dunning\ConfigDunningLadder;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\BillingInterval;
@@ -45,11 +46,13 @@ use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\OrderItem;
 use Pushery\Billing\Models\PaymentMandate;
 use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\PriceChanges\PriceChanges;
 use Pushery\Billing\ValueObjects\ChargeNarrative;
 use Pushery\Billing\ValueObjects\CreditSource;
 use Pushery\Billing\ValueObjects\DriverCapabilities;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\OrderItemDraft;
+use Pushery\Billing\ValueObjects\UpcomingInvoicePreview;
 use Throwable;
 
 /**
@@ -186,6 +189,16 @@ final readonly class LocalBillingEngine implements BillingEngine
          * engine did before the notices existed.
          */
         private ?PreNotifications $notices = null,
+        /**
+         * Takes the owner's discount allowances off a cycle, after its coupon and before tax. Optional for the same
+         * reason as everything above; null bills the cycle as though no allowance had been granted.
+         */
+        private ?DiscountAllowances $allowances = null,
+        /**
+         * The declared price changes, which bill a subscription the new price of its tier from the day its announcement
+         * named. Optional for the same reason as everything above; null bills every cycle at the tier's own price.
+         */
+        private ?PriceChanges $priceChanges = null,
     ) {}
 
     public function tick(?DateTimeInterface $now = null): void
@@ -537,6 +550,47 @@ final readonly class LocalBillingEngine implements BillingEngine
     }
 
     /**
+     * The next charge of this subscription: the day of the run that collects it, and what that run collects before
+     * credit, assembled as the cycle assembles it and written nowhere.
+     *
+     * Mostly that is the run due next ({@see self::previewOfTheDueRun()}). A subscription collected in arrears whose
+     * period is a free trial is the exception: the run at the end of the trial collects nothing, so the first charge is
+     * the run at the end of the period after it, and that period is priced and dated instead.
+     *
+     * Null where nothing is scheduled, where the subscription ends before it is charged again, or where its tier has no
+     * price.
+     */
+    public function previewNextCharge(Subscription $subscription): ?UpcomingInvoicePreview
+    {
+        $due = $subscription->scheduled_processing_at;
+        $periodEnd = $subscription->current_period_end;
+
+        if (! $due instanceof Carbon) {
+            return null;
+        }
+
+        if (! $subscription->collectsInAdvance() && $periodEnd instanceof Carbon && $this->periodWasCoveredByATrial($subscription)) {
+            $endsAt = $subscription->ends_at;
+
+            if ($endsAt instanceof Carbon && $endsAt->lessThanOrEqualTo($periodEnd)) {
+                return null;
+            }
+
+            $next = $this->theNextPeriodOf($subscription, $periodEnd);
+            $charged = $next->scheduled_processing_at;
+            $amount = $this->preview($next);
+
+            return $amount instanceof Money && $charged instanceof Carbon
+                ? new UpcomingInvoicePreview($charged->toDateTimeImmutable(), $amount)
+                : null;
+        }
+
+        $amount = $this->previewOfTheDueRun($subscription);
+
+        return $amount instanceof Money ? new UpcomingInvoicePreview($due->toDateTimeImmutable(), $amount) : null;
+    }
+
+    /**
      * What the run due for this subscription will charge, assembled as the cycle assembles it and written nowhere.
      *
      * For a subscription collected in advance whose due run opens the next period, the next period is priced: the tier
@@ -560,6 +614,15 @@ final readonly class LocalBillingEngine implements BillingEngine
             return null;
         }
 
+        return $this->preview($this->theNextPeriodOf($subscription, $periodEnd));
+    }
+
+    /**
+     * A copy of the subscription as the run at the end of its period leaves it, written nowhere: the next period, at the
+     * tier a plan change scheduled to that end asked for and the interval that tier is sold at.
+     */
+    private function theNextPeriodOf(Subscription $subscription, Carbon $periodEnd): Subscription
+    {
         $next = clone $subscription;
         $swapAt = $subscription->scheduled_swap_at;
         $tier = $subscription->scheduled_tier_key !== null && $swapAt instanceof Carbon && $swapAt->lessThanOrEqualTo($periodEnd)
@@ -571,7 +634,7 @@ final readonly class LocalBillingEngine implements BillingEngine
         $next->forceFill(['billing_interval' => $kept]);
         $next->forceFill($next->nextCycle($interval));
 
-        return $this->preview($next);
+        return $next;
     }
 
     /** What the payment method is charged of this total once the owner's credit, which the cycle spends first, is taken off. */
@@ -1181,7 +1244,41 @@ final readonly class LocalBillingEngine implements BillingEngine
         // reprice it back. Before the discount, because a coupon whose gross has been waived to zero is
         // then refused by the applier's own positive-gross guard — so a customer does not spend one of
         // their discounted cycles on a cycle nobody charged them for.
-        return $this->discounted($subscription, $drafts, $count);
+        //
+        // A discount allowance comes after the coupon, so the coupon takes its share of the full price and the allowance
+        // only what is left, and before tax like the coupon, because it lowers the price of the supply as well.
+        return $this->allowanced($subscription, $this->discounted($subscription, $drafts, $count));
+    }
+
+    /**
+     * The same lines with the owner's discount allowances taken off what they come to.
+     *
+     * Priced the same way for a preview and for the run, and written nowhere: the claim records what the cycle took once
+     * it holds the order ({@see self::claimCycle()}).
+     *
+     * @param  list<OrderItemDraft>  $drafts
+     * @return list<OrderItemDraft>
+     */
+    private function allowanced(Subscription $subscription, array $drafts): array
+    {
+        $owner = $this->ownerOf($subscription);
+
+        if (! $this->allowances instanceof DiscountAllowances || ! $owner instanceof Model) {
+            return $drafts;
+        }
+
+        return $this->allowances->apply($drafts, $owner, $this->orderOfTheCycle($subscription));
+    }
+
+    /** The order already claimed for the cycle the subscription is in, the one a retry reopens, if there is one. */
+    private function orderOfTheCycle(Subscription $subscription): ?int
+    {
+        $order = Order::model()::query()
+            ->where('subscription_id', $subscription->getKey())
+            ->where('period_start', $subscription->current_period_start)
+            ->value('id');
+
+        return is_numeric($order) ? (int) $order : null;
     }
 
     /**
@@ -1413,6 +1510,13 @@ final readonly class LocalBillingEngine implements BillingEngine
                 ->where('period_start', $subscription->current_period_start)
                 ->first();
 
+            // A discount allowance was priced from what was left of it before this transaction. Another run may have
+            // taken some of it since, so the claim stands only if what the lines take is still there, read under a lock
+            // that holds until the uses below are written. Otherwise the next run prices the cycle again.
+            if ($this->allowances instanceof DiscountAllowances && ! $this->allowances->stillCovers($drafts, $existing?->id)) {
+                return null;
+            }
+
             if ($existing instanceof Order) {
                 // A failed order for this cycle is the dunning retry, not a completed attempt: the money
                 // was never collected, so the cycle is reopened rather than left alone. Anything else —
@@ -1456,6 +1560,8 @@ final readonly class LocalBillingEngine implements BillingEngine
                     $existing->items()->create($draft->toAttributes());
                 }
 
+                $this->allowances?->record($existing, $drafts);
+
                 return $existing;
             }
 
@@ -1476,6 +1582,8 @@ final readonly class LocalBillingEngine implements BillingEngine
             foreach ($drafts as $draft) {
                 $order->items()->create($draft->toAttributes());
             }
+
+            $this->allowances?->record($order, $drafts);
 
             unset($moment);
 
@@ -2156,7 +2264,7 @@ final readonly class LocalBillingEngine implements BillingEngine
 
         $own = $this->ownPrice($tier);
 
-        return $own instanceof Money ? PeriodPlan::scaled($own, $interval, $subscription) : null;
+        return $own instanceof Money ? PeriodPlan::scaled($this->changedPrice($subscription, $tier, $own), $interval, $subscription) : null;
     }
 
     /**
@@ -2277,6 +2385,12 @@ final readonly class LocalBillingEngine implements BillingEngine
         }
 
         return $this->twelfthOf($tier);
+    }
+
+    /** The tier's price for the cycle the subscription is in, after a declared price change that holds for it by then. */
+    private function changedPrice(Subscription $subscription, string $tier, Money $own): Money
+    {
+        return $this->priceChanges instanceof PriceChanges ? $this->priceChanges->priceFor($subscription, $tier, $own) : $own;
     }
 
     /** A twelfth of the price of the tier's year, rounded down, or null when nothing prices it. */

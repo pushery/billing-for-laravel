@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\BuyerPartyResolver;
 use Pushery\Billing\Enums\InvoiceStatus;
+use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxExemptionReason;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\Order;
@@ -33,6 +34,13 @@ use Throwable;
  * later price change, a corrected description or a deleted line rewrite a document that was already
  * issued — silently, and for every historical invoice at once. So the lines are frozen into the record's
  * own JSON, and the order can afterwards be whatever it becomes.
+ *
+ * ## The document states the supply, and credit is part of what paid for it
+ *
+ * The order's total is what the provider was asked to collect, lower by whatever credit the cycle spent. The
+ * document states the price of what was supplied: the order's lines without the credit ({@see OrderSupply}), taxed
+ * on that gross. The credit settles part of it, as the provider's payment settles the rest, which is also how a
+ * provider's own invoice states a customer balance.
  *
  * ## One invoice per order, enforced by the database
  *
@@ -132,7 +140,10 @@ final readonly class OrderInvoiceIssuer
 
         $issuedAt = Carbon::now();
         $lateFee = $order->isLateFee();
-        $tax = $lateFee ? null : $this->determined($order);
+        [$tax, $voucher] = $lateFee ? [null, false] : $this->determined($order);
+        // What the order supplied, which is what the document states: its lines without the credit that paid part of
+        // them, the same lines and gross the tax was determined on.
+        $supply = $this->basis->supplyOf($order);
 
         // Filled in two passes rather than created from one spread literal, and the reason is a type
         // rather than a taste: the model's own property list is what makes a create() literal checkable,
@@ -147,7 +158,7 @@ final readonly class OrderInvoiceIssuer
             'provider' => $order->provider,
             'order_id' => $order->getKey(),
             'number' => $this->numbers->next($issuedAt),
-            'total_minor' => $order->total_minor,
+            'total_minor' => $supply->gross->minorUnits,
             // The net, and only where one was established. Null otherwise, for the same reason `tax_minor`
             // is null there: a subtotal equal to the total is not the absence of a claim, it is the claim
             // that the supply was untaxed. That is right under a small-business regime or an exempt supply
@@ -163,14 +174,14 @@ final readonly class OrderInvoiceIssuer
             // with a destination country, and `InvoiceCrossBorderSalesCounter` selects on a non-empty
             // `destination_country`. Both columns are part of the basis block, so a document without a
             // basis is outside both — which is why dropping the net here cannot understate a filed return.
-            'subtotal_minor' => $lateFee ? $order->total_minor : $tax?->net->minorUnits,
+            'subtotal_minor' => $lateFee ? $supply->gross->minorUnits : $tax?->net->minorUnits,
             'currency' => $order->currency,
             'status' => InvoiceStatus::Paid,
             'issued_at' => $issuedAt,
-            'lines' => $this->frozenLines($order, $tax, $lateFee),
+            'lines' => $this->frozenLines($supply->lines, $tax, $lateFee),
         ]);
 
-        $invoice->fill($lateFee ? $this->outsideTheScope() : $this->taxAttributes($tax));
+        $invoice->fill($lateFee ? $this->outsideTheScope() : $this->taxAttributes($tax, $voucher));
         $invoice->fill($this->buyerAttributes($invoice, $tax));
         $invoice->save();
 
@@ -266,17 +277,22 @@ final readonly class OrderInvoiceIssuer
     }
 
     /**
-     * The tax basis for this cycle, or null where none could be established or the attempt failed.
+     * The tax basis for this cycle, or null where none could be established or the attempt failed, and whether the
+     * order sold a multi-purpose voucher, which no tax falls on when it is sold.
      *
      * The catch is deliberate and narrow in its consequence: it costs the tax, never the document. See the
      * class docblock — the money is already collected by the time this runs.
+     *
+     * @return array{?DeterminedOrderTax, bool}
      */
-    private function determined(Order $order): ?DeterminedOrderTax
+    private function determined(Order $order): array
     {
         try {
-            return $this->basis->for($order);
+            $tax = $this->basis->for($order);
+
+            return [$tax, ! $tax instanceof DeterminedOrderTax && $this->basis->sellsAMultiPurposeVoucher($order)];
         } catch (Throwable) {
-            return null;
+            return [null, false];
         }
     }
 
@@ -287,12 +303,16 @@ final readonly class OrderInvoiceIssuer
      * before this seam existed — the model's own defaults decide those columns, and a null spread over them
      * here would be a second place that says what they are.
      *
+     * A document that sold a multi-purpose voucher states no tax either, and freezes the one fact it does
+     * establish: what it sold. The DATEV export reads it to book that money as a liability rather than as revenue
+     * ({@see OrderTaxBasis::sellsAMultiPurposeVoucher()}).
+     *
      * @return array<string, mixed>
      */
-    private function taxAttributes(?DeterminedOrderTax $tax): array
+    private function taxAttributes(?DeterminedOrderTax $tax, bool $voucher): array
     {
         if (! $tax instanceof DeterminedOrderTax) {
-            return [];
+            return $voucher ? ['tax_archetype' => TaxArchetype::Voucher] : [];
         }
 
         $supply = $tax->characteristics;
@@ -334,16 +354,14 @@ final readonly class OrderInvoiceIssuer
      * fee is outside the scope of the tax, so its lines are their totals at 0%. A document with no basis states
      * neither, as it states no net and no tax above them.
      *
+     * The lines are the supply's ({@see OrderSupply}): a credit that paid part of the order is not one of them.
+     * It is a payment, and a line of it would carry a net and a rate the document's own net does not.
+     *
+     * @param  list<OrderItem>  $items
      * @return list<array<string, mixed>>
      */
-    private function frozenLines(Order $order, ?DeterminedOrderTax $tax, bool $lateFee): array
+    private function frozenLines(array $items, ?DeterminedOrderTax $tax, bool $lateFee): array
     {
-        // Typed like any other value, because the type-coverage floor counts it like any other — and here it
-        // is also the only thing saying what is being frozen. A line whose shape nobody states is one somebody
-        // later reads a different column off, and this array is copied onto an issued document that must not
-        // change afterwards.
-        /** @var list<OrderItem> $items */
-        $items = array_values($order->items()->orderBy('id')->get()->all());
         $shares = $tax instanceof DeterminedOrderTax ? $this->taxShares($tax->tax, $items) : [];
         $rate = $tax instanceof DeterminedOrderTax ? $this->lineRate($tax) : 0.0;
 

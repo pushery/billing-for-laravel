@@ -51,6 +51,8 @@ use Pushery\Billing\Contracts\WebhookVerifier;
 use Pushery\Billing\DirectDebit\PreNotifications;
 use Pushery\Billing\Discounts\CouponRedeemer;
 use Pushery\Billing\Discounts\CycleCouponApplier;
+use Pushery\Billing\Discounts\DiscountAllowances;
+use Pushery\Billing\Drivers\Mollie\Sandbox\SandboxMollie;
 use Pushery\Billing\Drivers\NullBillingEngine;
 use Pushery\Billing\Drivers\NullCreditSync;
 use Pushery\Billing\Drivers\NullCustomerRegistry;
@@ -67,6 +69,7 @@ use Pushery\Billing\Invoicing\LocalInvoices;
 use Pushery\Billing\Invoicing\OrderInvoiceIssuer;
 use Pushery\Billing\Invoicing\ProrationCreditCorrectionIssuer;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
+use Pushery\Billing\PriceChanges\PriceChanges;
 use Pushery\Billing\Proration\ArrearsProrationStrategy;
 use Pushery\Billing\Proration\InAdvanceProrationStrategy;
 use Pushery\Billing\Proration\LocalProrationStrategy;
@@ -374,6 +377,8 @@ final class MollieServiceProvider extends ServiceProvider
             $app->make(ProrationCreditCorrectionIssuer::class),
             $app->make(BillingEventLog::class),
             $app->make(PreNotifications::class),
+            $app->make(DiscountAllowances::class),
+            $app->make(PriceChanges::class),
         );
     }
 
@@ -406,6 +411,12 @@ final class MollieServiceProvider extends ServiceProvider
      */
     private function guardCredentials(): void
     {
+        // Before the key, because the sandbox needs none: in production it would grant every payment without a cent
+        // reaching Mollie, which is worse than a missing key, and nothing would ever fail to say so.
+        if (SandboxMollie::enabled() && $this->app->environment('production')) {
+            throw MollieNotConfigured::sandboxInProduction();
+        }
+
         $config = $this->app->make(Repository::class);
         $key = $config->get('billing.mollie.api_key');
 

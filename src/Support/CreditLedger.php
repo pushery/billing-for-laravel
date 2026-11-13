@@ -99,6 +99,32 @@ final class CreditLedger
     }
 
     /**
+     * Credit once for a source and a reason, and answer the new balance, or null when that credit already happened.
+     *
+     * The counterpart of debitOnce(), under the same lock and with the same locking read, for the reason given
+     * there: two calls for one cause that both asked before the lock would both credit.
+     */
+    public function creditOnce(Model $owner, Money $amount, CreditReason $reason, CreditSource $source): ?Money
+    {
+        if (! $amount->isPositive()) {
+            throw new InvalidArgumentException('A credit amount must be positive.');
+        }
+
+        return DB::transaction(function () use ($owner, $amount, $reason, $source): ?Money {
+            $this->lockedBalance($owner, $amount->currency);
+
+            $credited = CreditLedgerEntry::model()::query()
+                ->where('source_type', $source->type)
+                ->where('source_id', $source->id)
+                ->where('reason', $reason)
+                ->lockForUpdate()
+                ->first();
+
+            return $credited instanceof CreditLedgerEntry ? null : $this->credit($owner, $amount, $reason, $source);
+        }, LockedRow::ATTEMPTS);
+    }
+
+    /**
      * Debit at most $ceiling of an owner's balance, and answer what actually moved.
      *
      * The read, the cap and the debit are one movement under the balance row's own lock, and that is the

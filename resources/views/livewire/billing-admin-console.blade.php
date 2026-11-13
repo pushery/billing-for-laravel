@@ -100,7 +100,7 @@
                     {{-- The file is one click away, not withheld: it is the only thing the difference can be
                          traced in. What the click buys is that nobody forwards it without having read this. --}}
                     <button type="button" wire:click="exportDatevAnyway"
-                        class="mt-2 rounded-lg border border-amber-300 px-3 py-1.5 text-sm font-medium hover:bg-amber-100 dark:border-amber-800 dark:hover:bg-amber-900/40">
+                        class="mt-2 rounded-lg bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-800">
                         {{ __('billing::admin.datev.download_anyway') }}
                     </button>
                 </div>

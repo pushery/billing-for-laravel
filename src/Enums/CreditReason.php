@@ -86,12 +86,24 @@ enum CreditReason: string
     case ProviderInvoiceOffset = 'provider_invoice_offset';
 
     /**
+     * A reward the application grants a customer for bringing in another customer.
+     *
+     * Written by ReferralRewards, once per referral. The reward pays for the referral, a service the customer
+     * renders the seller, so it does not reduce the price of anything the seller supplies: the invoice it is
+     * spent on carries its full price and its full tax, and the reward settles part of the amount due, like
+     * any other credit (Abschn. 10.3 Abs. 2 UStAE). A discount on the customer's own purchases is a different
+     * thing in tax terms and is not written with this reason.
+     */
+    case ReferralReward = 'referral_reward';
+
+    /**
      * Whether a movement for this reason has money or an invoice behind it — the ones the books can
      * state today.
      *
-     * Five of the six do. {@see self::ProrationCredit} does not: unused time on a swapped plan
+     * Every reason but one does. {@see self::ProrationCredit} does not: unused time on a swapped plan
      * becomes spendable balance with no payment and no credit note, so booking it as a liability
-     * would create one against nothing.
+     * would create one against nothing. A {@see self::ReferralReward} does, because the seller owes it
+     * for the referral it pays for.
      *
      * It lives on the reason because two places ask it. {@see CreditMovement::booksAgainstMoney()}
      * asks it of a movement about to be booked, and {@see CreditConsumption::unpaidShare()} asks it

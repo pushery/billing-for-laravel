@@ -30,7 +30,6 @@ use Pushery\Billing\Enums\RefundStatus;
 use Pushery\Billing\Exceptions\DirectDebitMandateRefused;
 use Pushery\Billing\Exceptions\MandateNeedsRedirect;
 use Pushery\Billing\Support\CheckoutUrls;
-use Pushery\Billing\Support\SafeExternalUrl;
 use Pushery\Billing\ValueObjects\ChargeNarrative;
 use Pushery\Billing\ValueObjects\ChargeOptions;
 use Pushery\Billing\ValueObjects\ChargeResult;
@@ -202,7 +201,7 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
             throw MandateNeedsRedirect::noCheckoutReturned('Mollie', 'unknown');
         }
 
-        $checkout = SafeExternalUrl::onHosts($payment->getCheckoutUrl(), MollieHostedPages::HOSTS);
+        $checkout = MollieHostedPages::checkout($payment);
 
         if ($checkout === null) {
             throw MandateNeedsRedirect::noCheckoutReturned('Mollie', MollieValue::id($payment->id));
@@ -560,7 +559,7 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
             return new ChargeResult(false, $reference, $amount, $this->reasonFor($payment));
         }
 
-        $checkout = SafeExternalUrl::onHosts($payment->getCheckoutUrl(), MollieHostedPages::HOSTS);
+        $checkout = MollieHostedPages::checkout($payment);
 
         // A checkout URL means the customer still has to act; without one the payment is simply in flight
         // (a bank debit settling over days). Both are "not yet", and neither is a decline — but only one

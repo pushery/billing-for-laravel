@@ -14,7 +14,7 @@ return [
         'name' => 'Naam',
         'email' => 'E-mailadres',
         'contract' => 'Contract',
-        'ends' => 'Het contract moet eindigen',
+        'ends' => 'Gewenst einde van het contract',
         'confirmation_sent_to' => 'Bevestiging verzonden naar',
     ],
     'cancellation' => [

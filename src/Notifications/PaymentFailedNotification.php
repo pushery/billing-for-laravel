@@ -42,7 +42,10 @@ final class PaymentFailedNotification extends BillingNotification
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.payment_failed.subject'))
             ->line(Lang::get('billing::notifications.payment_failed.intro'))
-            ->line(LocalizedMoney::format($this->amount).' · '.$this->invoiceReference);
+            ->line(Lang::get('billing::notifications.payment_failed.summary', [
+                'amount' => LocalizedMoney::format($this->amount),
+                'invoice' => $this->invoiceReference,
+            ]));
 
         if ($paused) {
             $mail->line(Lang::get('billing::notifications.payment_failed.paused'));
