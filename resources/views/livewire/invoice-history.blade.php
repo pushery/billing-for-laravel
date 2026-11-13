@@ -21,12 +21,12 @@
                     <li wire:key="invoice-card-{{ $invoice->id }}" class="flex items-start justify-between gap-3 px-4 py-3 text-sm">
                         <div class="min-w-0 space-y-1">
                             <p class="break-all font-medium">{{ $invoice->number ?? '—' }}</p>
-                            <p class="text-gray-500 dark:text-gray-400">{{ \Pushery\Billing\Support\LocalizedDate::short($invoice->date) }} · {{ \Pushery\Billing\Support\LocalizedMoney::format($invoice->total) }}</p>
+                            <p class="text-gray-500 dark:text-gray-400">{{ \Pushery\Billing\Support\LocalizedDate::medium($invoice->date) }} · {{ \Pushery\Billing\Support\LocalizedMoney::format($invoice->total) }}</p>
                             @include('billing::components.invoice-status', ['status' => $invoice->status])
                         </div>
                         @if ($invoice->isDownloadable())
                             <a href="{{ route('billing.account.invoice-download', $invoice->id) }}"
-                                class="inline-flex shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+                                class="inline-flex shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600">
                                 {{ __('billing::account.invoices.download') }}
                             </a>
                         @endif
@@ -39,7 +39,7 @@
                     <tr>
                         <th class="px-4 py-3 font-medium">{{ __('billing::account.invoices.date') }}</th>
                         <th class="px-4 py-3 font-medium">{{ __('billing::account.invoices.number') }}</th>
-                        <th class="px-4 py-3 font-medium">{{ __('billing::account.invoices.amount') }}</th>
+                        <th class="px-4 py-3 text-right font-medium">{{ __('billing::account.invoices.amount') }}</th>
                         <th class="px-4 py-3 font-medium">{{ __('billing::account.invoices.status') }}</th>
                         <th class="px-4 py-3"></th>
                     </tr>
@@ -47,9 +47,10 @@
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
                     @foreach ($page->rows as $invoice)
                         <tr wire:key="invoice-{{ $invoice->id }}">
-                            <td class="px-4 py-3">{{ \Pushery\Billing\Support\LocalizedDate::short($invoice->date) }}</td>
+                            <td class="whitespace-nowrap px-4 py-3">{{ \Pushery\Billing\Support\LocalizedDate::medium($invoice->date) }}</td>
                             <td class="px-4 py-3">{{ $invoice->number ?? '—' }}</td>
-                            <td class="px-4 py-3">{{ \Pushery\Billing\Support\LocalizedMoney::format($invoice->total) }}</td>
+                            {{-- Flush right in figures of one width, so the amounts line up on their decimals. --}}
+                            <td class="whitespace-nowrap px-4 py-3 text-right tabular-nums">{{ \Pushery\Billing\Support\LocalizedMoney::format($invoice->total) }}</td>
                             <td class="px-4 py-3">
                                 @include('billing::components.invoice-status', ['status' => $invoice->status])
                             </td>
@@ -58,7 +59,7 @@
                                     {{-- A plain href to a dedicated, bookmarkable route — works without JS,
                                          and the route owner-checks the id before streaming anything. --}}
                                     <a href="{{ route('billing.account.invoice-download', $invoice->id) }}"
-                                        class="inline-flex rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+                                        class="inline-flex rounded-lg px-3 py-1.5 text-sm font-medium bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600">
                                         {{ __('billing::account.invoices.download') }}
                                     </a>
                                 @endif
@@ -72,7 +73,7 @@
                 {{-- Widen the read to pull older invoices, up to the provider's cap. --}}
                 <div class="border-t border-gray-200 p-4 text-center dark:border-gray-800">
                     <button type="button" wire:click="loadOlder"
-                        class="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400">
+                        class="rounded-lg px-4 py-2 text-sm font-medium bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600">
                         {{ __('billing::account.invoices.load_older') }}
                     </button>
                 </div>

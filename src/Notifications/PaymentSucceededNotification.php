@@ -41,7 +41,10 @@ final class PaymentSucceededNotification extends BillingNotification
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.payment_succeeded.subject'))
             ->line(Lang::get('billing::notifications.payment_succeeded.intro'))
-            ->line(LocalizedMoney::format($this->amount).' · '.$this->invoiceReference);
+            ->line(Lang::get('billing::notifications.payment_succeeded.summary', [
+                'amount' => LocalizedMoney::format($this->amount),
+                'reference' => $this->invoiceReference,
+            ]));
 
         // The wording, not a link to it. A receipt pointing at "our withdrawal policy" confirms nothing:
         // the linked text changes and the purchase does not, so what would arrive years later is whatever

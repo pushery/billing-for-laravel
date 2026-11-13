@@ -43,12 +43,10 @@ final class WithdrawalReceivedNotification extends BillingNotification
 
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.withdrawal_received.subject'))
+            ->greeting(Lang::get('billing::notifications.withdrawal_received.heading'))
             ->line(Lang::get('billing::notifications.withdrawal_received.intro'))
-            ->line(MarkdownText::text(DeclarationStatement::withdrawalDeclaredThrough()));
-
-        foreach (DeclarationStatement::withdrawalLines($declaration) as $line) {
-            $mail->line(MarkdownText::interpolate(':label: :value', $line));
-        }
+            ->line(MarkdownText::text(DeclarationStatement::withdrawalDeclaredThrough()))
+            ->line(MarkdownText::pairs(DeclarationStatement::withdrawalLines($declaration)));
 
         return $this->withAction(
             $mail->line(Lang::get('billing::notifications.withdrawal_received.outro')),

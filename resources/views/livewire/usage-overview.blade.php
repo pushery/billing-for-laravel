@@ -73,7 +73,7 @@
                             {{ __('billing::account.usage.forecast', [
                                 'rate' => \Pushery\Billing\Support\LocalizedNumber::format($dimension->ratePerDay, $dimension->ratePerDay < 10 ? 1 : 0),
                                 'unit' => $dimension->unit,
-                                'date' => \Pushery\Billing\Support\LocalizedDate::short($dimension->exhaustedAt),
+                                'date' => \Pushery\Billing\Support\LocalizedDate::long($dimension->exhaustedAt),
                             ]) }}
                         </p>
                     @endif
@@ -84,7 +84,7 @@
                     @if ($dimension->isOver() || $dimension->isWarning())
                         @php($remedy = $dimension->policy->overRemedy())
                         <a href="{{ $remedy === 'upgrade' ? route('billing.account.plan') : route('billing.account.plan').'#addons' }}"
-                            class="mt-3 inline-flex rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+                            class="mt-3 inline-flex rounded-lg px-3 py-1.5 text-sm font-medium bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600">
                             {{ $remedy === 'upgrade' ? __('billing::account.usage.cta_upgrade') : __('billing::account.usage.cta_topup') }}
                         </a>
                     @endif

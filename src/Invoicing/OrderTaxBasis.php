@@ -23,7 +23,6 @@ use Pushery\Billing\Tax\SaleTaxDecision;
 use Pushery\Billing\Tax\StandingTaxIdVerification;
 use Pushery\Billing\Tax\SupplyPlaceDecision;
 use Pushery\Billing\Tax\UnionMembership;
-use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\ServicePeriod;
 use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 use Pushery\Billing\ValueObjects\TaxContext;
@@ -162,8 +161,7 @@ final readonly class OrderTaxBasis
             return null;
         }
 
-        if (CreditTopUpVolume::isMoneyCredit($this->addons, $key)
-            && ! VoucherInstrumentType::fromConfigured($this->config->get(VoucherInstrumentType::CONFIG_KEY))->taxedAtIssue()) {
+        if ($this->isMultiPurposeVoucher($key)) {
             return null;
         }
 
@@ -180,10 +178,48 @@ final readonly class OrderTaxBasis
         return $this->determined(
             $order,
             $archetype,
-            new ServicePeriod($day, $day, Money::of($order->total_minor, $order->currency)),
+            new ServicePeriod($day, $day, $this->supplyOf($order)->gross),
             $country,
             $reference,
         );
+    }
+
+    /**
+     * The lines this order's document states and the gross they come to: the order without the credit that paid
+     * part of it ({@see OrderSupply}).
+     *
+     * Public because the issuer states the same lines and the same gross the tax is determined on here. One answer
+     * for both, so the parts of the document add up to what it taxed.
+     */
+    public function supplyOf(Order $order): OrderSupply
+    {
+        return OrderSupply::of($order, VoucherInstrumentType::fromConfigured($this->config->get(VoucherInstrumentType::CONFIG_KEY)));
+    }
+
+    /**
+     * Whether this order sold credit as a multi-purpose voucher: a purchase of an add-on that puts money on the
+     * balance, where top-ups are not taxed when they are bought.
+     *
+     * Its document states no tax ({@see self::forPurchase()}), and it records no supply either. The money it took
+     * is a liability until the balance pays for something, so the document names the voucher it sold, and the
+     * DATEV export books that money from the credit it put on the balance rather than as revenue.
+     */
+    public function sellsAMultiPurposeVoucher(Order $order): bool
+    {
+        if ($order->subscription instanceof Subscription) {
+            return false;
+        }
+
+        $key = $this->addonKeyOf($order);
+
+        return $key !== null && $this->isMultiPurposeVoucher($key);
+    }
+
+    /** Whether the add-on of this key puts money on the balance, where top-ups are not taxed when they are bought. */
+    private function isMultiPurposeVoucher(string $key): bool
+    {
+        return CreditTopUpVolume::isMoneyCredit($this->addons, $key)
+            && ! VoucherInstrumentType::fromConfigured($this->config->get(VoucherInstrumentType::CONFIG_KEY))->taxedAtIssue();
     }
 
     /** The add-on a purchase order sold, read off its add-on line, or null where it has none. */
@@ -227,7 +263,10 @@ final readonly class OrderTaxBasis
      */
     private function determined(Order $order, TaxArchetype $archetype, ServicePeriod $period, string $country, string $reference): DeterminedOrderTax
     {
-        $gross = Money::of($order->total_minor, $order->currency);
+        // The gross of the supply, which the period carries: the order's lines without the credit that paid part of
+        // them. The order's own total is what the provider was asked to collect, and taxing that taxed the supply
+        // only as far as the credit had not paid for it.
+        $gross = $period->amount;
         $buyer = $this->buyerOf($order, $country);
 
         $paidOn = $order->processed_at === null ? null : CarbonImmutable::parse($order->processed_at->toIso8601String());
@@ -323,7 +362,7 @@ final readonly class OrderTaxBasis
             return null; // a cycle that covers no whole day states no period, and inventing one would date a supply
         }
 
-        return new ServicePeriod($from, $to, Money::of($order->total_minor, $order->currency));
+        return new ServicePeriod($from, $to, $this->supplyOf($order)->gross);
     }
 
     /**

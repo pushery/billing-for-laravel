@@ -10,7 +10,9 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\BillingAction;
 use Pushery\Billing\Support\LocalizedDate;
+use Pushery\Billing\Support\LocalizedMoney;
 use Pushery\Billing\Support\TrialCallouts;
+use Pushery\Billing\ValueObjects\UpcomingInvoicePreview;
 
 /**
  * The reminder sent as a free trial nears its end. Localized via the publishable
@@ -18,19 +20,34 @@ use Pushery\Billing\Support\TrialCallouts;
  * application's language (`LocalizedDate::long()`), the database entry carries it as an ISO date, and both
  * read the day in the zone of the moment passed in, so the two never name different days.
  *
+ * Where the charge that follows the trial is known, as `FirstChargePreview` reads it, the mail names its amount and
+ * the day it is collected, and where the customer cancels before then. Without it the mail
+ * names neither, rather than a figure from the catalog that the charge may not have.
+ *
  * Queued after the commit, like every notification the package sends: the run that sends it claims, mails and
  * marks itself handled in one transaction, so a run that rolled back can never have mailed the customer.
  */
 final class TrialEndingNotification extends BillingNotification
 {
-    public function __construct(private readonly DateTimeInterface $trialEndsAt) {}
+    public function __construct(
+        private readonly DateTimeInterface $trialEndsAt,
+        private readonly ?UpcomingInvoicePreview $firstCharge = null,
+    ) {}
 
     public function toMail(object $notifiable): MailMessage
     {
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.trial_ending.subject'))
-            ->line(Lang::get('billing::notifications.trial_ending.intro', ['date' => LocalizedDate::long($this->trialEndsAt)]))
-            ->line(Lang::get('billing::notifications.trial_ending.outro'));
+            ->line(Lang::get('billing::notifications.trial_ending.intro', ['date' => LocalizedDate::long($this->trialEndsAt)]));
+
+        if ($this->firstCharge instanceof UpcomingInvoicePreview) {
+            $mail->line(Lang::get('billing::notifications.trial_ending.first_charge', [
+                'amount' => LocalizedMoney::format($this->firstCharge->amount),
+                'date' => LocalizedDate::long($this->firstCharge->date),
+            ]))->line(Lang::get('billing::notifications.trial_ending.cancel'));
+        }
+
+        $mail->line(Lang::get('billing::notifications.trial_ending.outro'));
 
         // Where the reader is sent depends on what they already have. Somebody with a card on file needs the
         // plan screen — they are choosing whether to continue. Somebody without one needs the screen that
@@ -48,9 +65,16 @@ final class TrialEndingNotification extends BillingNotification
     /** @return array<string, string> */
     public function toArray(object $notifiable): array
     {
-        return [
+        $entry = [
             'type' => 'trial_ending',
             'ends_at' => $this->trialEndsAt->format('Y-m-d'),
         ];
+
+        if ($this->firstCharge instanceof UpcomingInvoicePreview) {
+            $entry['first_charge'] = $this->firstCharge->amount->format();
+            $entry['first_charge_on'] = $this->firstCharge->date->format('Y-m-d');
+        }
+
+        return $entry;
     }
 }

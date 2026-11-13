@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Support;
 
+use Pushery\Billing\Enums\CreditReason;
+use Pushery\Billing\Invoicing\OrderSupply;
 use Pushery\Billing\Models\CreditLedgerEntry;
 use Pushery\Billing\ValueObjects\ConsumedCredit;
 use Pushery\Billing\ValueObjects\CreditSource;
@@ -150,6 +152,28 @@ final readonly class CreditConsumption
 
         foreach ($consumed as $credit) {
             if (! $credit->reason->booksAgainstMoney()) {
+                $minor += $credit->amount->minorUnits;
+            }
+        }
+
+        return Money::of($minor, $currency);
+    }
+
+    /**
+     * How much of one spend came from paid top-ups, a top-up given back after a reversal included.
+     *
+     * The figure that matters where top-ups are single-purpose vouchers, taxed when they were bought: the invoice a
+     * spend paid keeps that share off its price ({@see OrderSupply}), and the books carry it on the top-up's own
+     * invoice rather than as a liability the spend releases.
+     *
+     * @param  list<ConsumedCredit>  $consumed
+     */
+    public static function topUpShare(array $consumed, string $currency): Money
+    {
+        $minor = 0;
+
+        foreach ($consumed as $credit) {
+            if (in_array($credit->reason, [CreditReason::AddonTopup, CreditReason::AddonReversalUndone], true)) {
                 $minor += $credit->amount->minorUnits;
             }
         }

@@ -107,8 +107,9 @@ return [
     'subscription' => [
         'heading' => 'Subscrição',
         'status' => 'Estado',
-        'plan' => 'Plano: :plan',
-        'plan_priced' => 'Plano: :plan, :price / :interval',
+        'plan_label' => 'Plano',
+        'plan' => ':plan',
+        'plan_priced' => ':plan, :price / :interval',
         'next_invoice' => 'Próxima fatura: :amount a :date',
         'access_ends' => 'O teu acesso termina a :date.',
         'access_ended' => 'O teu acesso terminou a :date.',
@@ -252,9 +253,9 @@ return [
         'recovery' => 'Recuperação',
         'danger' => 'Zona de perigo',
         'group' => [
-            'subscription' => 'Assinatura',
+            'subscription' => 'Contrato',
             'billing' => 'Faturação',
-            'usage' => 'Utilização',
+            'usage' => 'Consumo',
             'account' => 'Conta',
         ],
     ],

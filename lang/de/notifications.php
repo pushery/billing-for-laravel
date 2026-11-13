@@ -7,6 +7,7 @@ return [
     'payment_failed' => [
         'subject' => 'Deine Zahlung konnte nicht verarbeitet werden',
         'intro' => 'Wir konnten deine letzte Zahlung nicht verarbeiten.',
+        'summary' => 'Betrag: :amount · Rechnung: :invoice',
         'outro' => 'Bitte aktualisiere deine Zahlungsdaten, damit dein Abo aktiv bleibt.',
         'paused' => 'Dein Zugang ist pausiert, bis eine Zahlung durchgeht, und kommt zurück, sobald das geschieht.',
         'outro_paused' => 'Bitte aktualisiere deine Zahlungsdaten, damit du ihn zurückbekommst.',
@@ -16,6 +17,7 @@ return [
     'fallback_method_charged' => [
         'subject' => 'Deine Ersatz-Zahlungsmethode wurde belastet',
         'intro' => 'Deine Standard-Zahlungsmethode konnte nicht belastet werden, deshalb haben wir stattdessen deine Ersatz-Zahlungsmethode belastet.',
+        'summary' => 'Betrag: :amount · Zahlungsmethode: :method · Referenz: :reference',
         'outro' => 'Bitte prüfe deine Standard-Zahlungsmethode. Bei deiner nächsten Zahlung wird sie wieder zuerst versucht.',
         'cta' => 'Zahlungsmethoden prüfen',
     ],
@@ -23,6 +25,7 @@ return [
     'payment_succeeded' => [
         'subject' => 'Deine Zahlungsbestätigung',
         'intro' => 'Danke – wir haben deine Zahlung erhalten.',
+        'summary' => 'Betrag: :amount · Referenz: :reference',
         'declarations' => 'Deine Erklärungen vor Beginn der Bereitstellung:',
         'outro' => 'Eine Kopie dieser Bestätigung findest du in deinem Rechnungsverlauf.',
         'cta' => 'Belege ansehen',
@@ -31,8 +34,17 @@ return [
     'trial_ending' => [
         'subject' => 'Deine Testphase endet bald',
         'intro' => 'Deine kostenlose Testphase endet am :date.',
+        'first_charge' => 'Die erste Abbuchung über :amount erfolgt am :date.',
+        'cancel' => 'Bis dahin kannst du dein Abo auf der Abo-Seite deines Kontos kündigen.',
         'outro' => 'Hinterlege vorher eine Zahlungsmethode, damit dein Abo nahtlos weiterläuft.',
         'cta' => 'Zahlungsmethode hinterlegen',
+    ],
+
+    'price_change' => [
+        'subject' => 'Dein Preis ändert sich',
+        'intro' => 'Ab dem :date gilt für dein Abo ein neuer Preis.',
+        'cancel' => 'Wenn du zum neuen Preis nicht weitermachen möchtest, kannst du dein Abo zu diesem Tag auf der Abo-Seite deines Kontos kündigen.',
+        'cta' => 'Abo ansehen',
     ],
 
     'subscription_canceled' => [
@@ -167,15 +179,17 @@ return [
         'subject' => 'Deine nächste Lastschrift',
         'intro' => ':payee zieht am :date :amount per SEPA-Lastschrift von deinem Konto ein.',
         'recurring' => 'Danach wird derselbe Betrag zu jedem Fälligkeitstermin deines Abos eingezogen. Ändert sich der Betrag, bekommst du vorher Bescheid.',
-        'account' => 'Konto mit der Endung :account.',
-        'mandate' => 'Mandatsreferenz: :reference',
-        'creditor' => 'Gläubiger-Identifikationsnummer: :creditor',
+        'account_label' => 'Konto',
+        'account_value' => 'mit der Endung :account',
+        'mandate_label' => 'Mandatsreferenz',
+        'creditor_label' => 'Gläubiger-Identifikationsnummer',
         'outro' => 'Du musst nichts weiter tun.',
         'cta' => 'Zahlungsmethoden ansehen',
     ],
 
     'cancellation_received' => [
         'subject' => 'Wir haben deine Kündigung erhalten',
+        'heading' => 'Deine Kündigung',
         'intro' => 'Hiermit bestätigen wir deine Kündigung mit ihrem vollständigen Inhalt und dem Datum und der Uhrzeit, zu der sie bei uns eingegangen ist.',
         'outro' => 'Bewahre diese E-Mail auf: Damit kannst du deine Kündigung und ihren Eingang bei uns belegen.',
         'cta' => 'Kündigung ansehen',
@@ -183,6 +197,7 @@ return [
 
     'withdrawal_received' => [
         'subject' => 'Wir haben deinen Widerruf erhalten',
+        'heading' => 'Dein Widerruf',
         'intro' => 'Hiermit bestätigen wir deinen Widerruf mit seinem vollständigen Inhalt und dem Datum und der Uhrzeit, zu der er bei uns eingegangen ist.',
         'outro' => 'Bewahre diese E-Mail auf: Damit kannst du deinen Widerruf und seinen Eingang bei uns belegen.',
         'cta' => 'Widerruf ansehen',

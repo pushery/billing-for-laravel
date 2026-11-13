@@ -77,6 +77,24 @@ final class MarkdownText
         return new HtmlString(self::neutral($value));
     }
 
+    /**
+     * Labeled values as one paragraph, a pair a line, each label in bold.
+     *
+     * A mail sets each line it is given as a paragraph of its own, and a statement of facts written that way reads
+     * as a column of separate sentences with the space of a paragraph between them. Here the pairs end in a
+     * Markdown hard break, two spaces before the line feed, so they stay one block. Labels and values are set as
+     * {@see self::interpolate()} sets a value: as text.
+     *
+     * @param  list<array{label: string, value: string}>  $pairs
+     */
+    public static function pairs(array $pairs): HtmlString
+    {
+        return new HtmlString(implode("  \n", array_map(
+            static fn (array $pair): string => self::interpolate('**:label:** :value', $pair)->toHtml(),
+            $pairs,
+        )));
+    }
+
     private static function neutral(string $value): string
     {
         // A sequence that is not UTF-8 becomes U+FFFD, as it does under `{{ }}`, because the Markdown parser refuses a

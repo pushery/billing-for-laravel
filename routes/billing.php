@@ -2,8 +2,10 @@
 
 declare(strict_types=1);
 
+use Illuminate\Routing\Middleware\ValidateSignature;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Route;
+use Pushery\Billing\Drivers\Mollie\Sandbox\SandboxCheckout;
 use Pushery\Billing\Webhooks\AccountWebhookReceiver;
 use Pushery\Billing\Webhooks\MarketplaceWebhookReceiver;
 use Pushery\Billing\Webhooks\WebhookReceiver;
@@ -63,4 +65,14 @@ if ($webhookDomain === null || $webhookDomain === '') {
     $webhookRoutes();
 } else {
     Route::domain($webhookDomain)->group($webhookRoutes);
+}
+
+// The checkout of the Mollie sandbox, in place of Mollie's hosted page. Part of the master switch like the screens, so
+// with billing off it does not exist. It answers 404 while the sandbox is off, and its address is signed, so only a link
+// the sandbox handed out completes a payment.
+if (Config::boolean('billing.enabled', true)) {
+    Route::get('billing/mollie/sandbox/{payment}', SandboxCheckout::class)
+        ->middleware(ValidateSignature::class)
+        ->where('payment', 'tr_[A-Za-z0-9]+')
+        ->name('billing.mollie.sandbox.checkout');
 }

@@ -59,7 +59,7 @@
                                 ]) }}
                                 <span class="block text-xs text-gray-500 dark:text-gray-400">{{ $movement->reference }}</span>
                             </span>
-                            <time class="shrink-0 text-xs text-gray-500 dark:text-gray-400">{{ \Pushery\Billing\Support\LocalizedDate::short($movement->occurredOn) }}</time>
+                            <time class="shrink-0 text-xs text-gray-500 dark:text-gray-400">{{ \Pushery\Billing\Support\LocalizedDate::medium($movement->occurredOn) }}</time>
                         </li>
                     @endforeach
                 </ul>
@@ -85,7 +85,7 @@
                                     </span>
                                 @endif
                                 <span>{{ \Pushery\Billing\Support\LocalizedMoney::format($topup->amount) }}</span>
-                                <span class="text-xs">{{ \Pushery\Billing\Support\LocalizedDate::short($topup->purchasedAt) }}</span>
+                                <span class="text-xs">{{ \Pushery\Billing\Support\LocalizedDate::medium($topup->purchasedAt) }}</span>
                             </span>
                         </li>
                     @endforeach

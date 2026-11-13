@@ -112,6 +112,7 @@
         "horstoeko/zugferd": "Required only to embed the EN 16931 CII XML into a ZUGFeRD/Factur-X hybrid PDF/A-3 via Invoicing\\ZugferdPdfInvoice. The CII and XRechnung XML writers need none of it.",
         "livewire/livewire": "Required only for the optional account-hub UI — the nine Livewire screens. The billing core (models, webhooks, invoicing, tax, contracts) needs none of it.",
         "mollie/mollie-api-php": "Required only for the Mollie driver, version 3.13 or 4 — the local billing engine and every other driver need none of it. Deliberately not a hard dependency: an install that never selects billing.default=mollie would otherwise carry an HTTP client it never calls, the same reasoning that keeps horstoeko/zugferd optional.",
+        "psr/http-message": "The PSR-7 request the Mollie sandbox reads. Required only for the Mollie driver: mollie/mollie-api-php brings it along, and so does guzzlehttp/psr7.",
         "pushery/sqlens-for-laravel": "Reads the #[NoSqlOnDriver] attributes on the migrations, which say why a migration runs no SQL on an engine. Without it they are never read."
     },
     "autoload": {

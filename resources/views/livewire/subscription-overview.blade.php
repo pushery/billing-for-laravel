@@ -14,39 +14,44 @@
     @endif
 
     <section class="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <div class="flex items-center gap-3">
-            <span class="text-sm text-gray-500 dark:text-gray-400">{{ __('billing::account.subscription.status') }}</span>
-            <span @class([
-                'inline-flex items-center rounded-full px-2.5 py-0.5 text-sm font-medium',
-                'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200' => $intent === 'success',
-                'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200' => $intent === 'info',
-                'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $intent === 'warning',
-                'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' => $intent === 'danger',
-                'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200' => $intent === 'neutral',
-            ])>
-                {{ __('billing::account.state.'.$state->value) }}
-            </span>
-        </div>
+        {{-- Status and plan as two facts, each its name beside its value, so the name of one is not a word in
+             the sentence of the other. --}}
+        <dl class="grid grid-cols-[auto_1fr] items-center gap-x-4 gap-y-2 text-sm">
+            <dt class="text-gray-500 dark:text-gray-400">{{ __('billing::account.subscription.status') }}</dt>
+            <dd>
+                <span @class([
+                    'inline-flex items-center rounded-full px-2.5 py-0.5 text-sm font-medium',
+                    'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-200' => $intent === 'success',
+                    'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200' => $intent === 'info',
+                    'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200' => $intent === 'warning',
+                    'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200' => $intent === 'danger',
+                    'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200' => $intent === 'neutral',
+                ])>
+                    {{ __('billing::account.state.'.$state->value) }}
+                </span>
+            </dd>
 
-        {{-- The plan the subscription is on, with its price where the catalog declares one. --}}
-        @if ($plan !== null)
-            <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                @if ($plan['price'] !== null)
-                    {{ __('billing::account.subscription.plan_priced', ['plan' => $plan['label'], 'price' => $plan['price'], 'interval' => __('billing::account.interval.'.$plan['interval'])]) }}
-                @else
-                    {{ __('billing::account.subscription.plan', ['plan' => $plan['label']]) }}
-                @endif
-            </p>
-        @endif
+            {{-- The plan the subscription is on, with its price where the catalog declares one. --}}
+            @if ($plan !== null)
+                <dt class="text-gray-500 dark:text-gray-400">{{ __('billing::account.subscription.plan_label') }}</dt>
+                <dd class="text-gray-900 dark:text-gray-100">
+                    @if ($plan['price'] !== null)
+                        {{ __('billing::account.subscription.plan_priced', ['plan' => $plan['label'], 'price' => $plan['price'], 'interval' => __('billing::account.interval.'.$plan['interval'])]) }}
+                    @else
+                        {{ __('billing::account.subscription.plan', ['plan' => $plan['label']]) }}
+                    @endif
+                </dd>
+            @endif
+        </dl>
 
         {{-- When access ends (grace) or has ended, show the date — read from the local column, never a call. --}}
         @if ($endsAt !== null && $state->value === 'grace')
             <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                {{ __('billing::account.subscription.access_ends', ['date' => \Pushery\Billing\Support\LocalizedDate::short($endsAt)]) }}
+                {{ __('billing::account.subscription.access_ends', ['date' => \Pushery\Billing\Support\LocalizedDate::long($endsAt)]) }}
             </p>
         @elseif ($endsAt !== null && $state->value === 'ended')
             <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">
-                {{ __('billing::account.subscription.access_ended', ['date' => \Pushery\Billing\Support\LocalizedDate::short($endsAt)]) }}
+                {{ __('billing::account.subscription.access_ended', ['date' => \Pushery\Billing\Support\LocalizedDate::long($endsAt)]) }}
             </p>
         @endif
 
@@ -54,7 +59,7 @@
             <p class="mt-4 text-sm text-gray-600 dark:text-gray-300">
                 {{ __('billing::account.subscription.next_invoice', [
                     'amount' => \Pushery\Billing\Support\LocalizedMoney::format($preview->amount),
-                    'date' => \Pushery\Billing\Support\LocalizedDate::short($preview->date),
+                    'date' => \Pushery\Billing\Support\LocalizedDate::long($preview->date),
                 ]) }}
             </p>
         @endif
@@ -84,13 +89,18 @@
                 <div class="flex w-full flex-col gap-3">
                     <label class="flex max-w-xs flex-col gap-1 text-sm text-gray-600 dark:text-gray-300">
                         <span>{{ __('billing::account.cancel_survey.prompt') }}</span>
-                        <select id="cancel-reason" wire:model.live="cancelReason"
-                            class="rounded-lg border border-gray-300 bg-white px-3 py-2 text-base sm:text-sm dark:border-gray-700 dark:bg-gray-900">
-                            <option value="">{{ __('billing::account.cancel_survey.no_reason') }}</option>
-                            @foreach (\Pushery\Billing\Enums\CancellationReason::cases() as $reason)
-                                <option value="{{ $reason->value }}">{{ __('billing::account.cancel_survey.reason.'.$reason->value) }}</option>
-                            @endforeach
-                        </select>
+                        {{-- The list draws its arrow itself rather than leaving it to the browser, so the arrow keeps
+                             the distance from the edge the text keeps from the other one, in every engine. --}}
+                        <span class="relative flex">
+                            <select id="cancel-reason" wire:model.live="cancelReason"
+                                class="w-full appearance-none rounded-lg border border-gray-300 bg-white py-2 pl-3 pr-10 text-base sm:text-sm dark:border-gray-700 dark:bg-gray-900">
+                                <option value="">{{ __('billing::account.cancel_survey.no_reason') }}</option>
+                                @foreach (\Pushery\Billing\Enums\CancellationReason::cases() as $reason)
+                                    <option value="{{ $reason->value }}">{{ __('billing::account.cancel_survey.reason.'.$reason->value) }}</option>
+                                @endforeach
+                            </select>
+                            <svg aria-hidden="true" data-billing-select-arrow viewBox="0 0 20 20" fill="currentColor" class="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-gray-500 dark:text-gray-400"><path fill-rule="evenodd" d="M 5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" /></svg>
+                        </span>
                     </label>
 
                     @if ($cancelReason === \Pushery\Billing\Enums\CancellationReason::Other->value)
@@ -108,35 +118,38 @@
                     @error('cancelDetail')
                         <p role="alert" class="text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                     @enderror
-
-                    @if ($confirmingCancel)
-                        {{-- The armed state. Rendered inline rather than as a modal so it needs no JavaScript
-                             and no dialog component: an install that re-skins this hub keeps its own chrome,
-                             and the step still works with scripting off. --}}
-                        <div role="group" aria-labelledby="billing-cancel-confirm" class="self-start rounded-lg border border-gray-300 p-4 dark:border-gray-700">
-                            <p id="billing-cancel-confirm" class="text-sm text-gray-900 dark:text-gray-100">
-                                {{ __('billing::account.subscription.cancel_confirm_question') }}
-                            </p>
-
-                            <div class="mt-3 flex gap-2">
-                                <button type="button" wire:click="cancel" wire:loading.attr="disabled"
-                                    class="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900">
-                                    {{ __('billing::account.subscription.cancel_confirm') }}
-                                </button>
-
-                                <button type="button" wire:click="abortCancel" wire:loading.attr="disabled"
-                                    class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-800">
-                                    {{ __('billing::account.subscription.cancel_abort') }}
-                                </button>
-                            </div>
-                        </div>
-                    @else
-                        <button type="button" wire:click="cancel" wire:loading.attr="disabled"
-                            class="self-start rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50 dark:bg-white dark:text-gray-900">
-                            {{ __('billing::account.subscription.cancel') }}
-                        </button>
-                    @endif
                 </div>
+
+                {{-- Beside the portal link, in the row that holds the screen's actions and wraps them only where
+                     they do not fit, rather than under the survey on a line of its own. Red, as the one action
+                     here that ends something. --}}
+                @if ($confirmingCancel)
+                    {{-- The armed state. Rendered inline rather than as a modal so it needs no JavaScript
+                         and no dialog component: an install that re-skins this hub keeps its own chrome,
+                         and the step still works with scripting off. --}}
+                    <div role="group" aria-labelledby="billing-cancel-confirm" class="rounded-lg border border-gray-300 p-4 dark:border-gray-700">
+                        <p id="billing-cancel-confirm" class="text-sm text-gray-900 dark:text-gray-100">
+                            {{ __('billing::account.subscription.cancel_confirm_question') }}
+                        </p>
+
+                        <div class="mt-3 flex gap-2">
+                            <button type="button" wire:click="cancel" wire:loading.attr="disabled"
+                                class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50 dark:bg-red-600 dark:hover:bg-red-500">
+                                {{ __('billing::account.subscription.cancel_confirm') }}
+                            </button>
+
+                            <button type="button" wire:click="abortCancel" wire:loading.attr="disabled"
+                                class="rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50 bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600">
+                                {{ __('billing::account.subscription.cancel_abort') }}
+                            </button>
+                        </div>
+                    </div>
+                @else
+                    <button type="button" wire:click="cancel" wire:loading.attr="disabled"
+                        class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50 dark:bg-red-600 dark:hover:bg-red-500">
+                        {{ __('billing::account.subscription.cancel') }}
+                    </button>
+                @endif
             @elseif ($state === \Pushery\Billing\Enums\SubscriptionState::Grace && $resumable)
                 <button type="button" wire:click="resume" wire:loading.attr="disabled"
                     class="rounded-lg bg-green-700 px-4 py-2 text-sm font-medium text-white hover:bg-green-800 disabled:opacity-50">
@@ -155,7 +168,7 @@
 
             @if ($supportsHostedPortal && \Illuminate\Support\Facades\Route::has('billing.account.portal'))
                 <a href="{{ route('billing.account.portal') }}"
-                    class="inline-flex self-start rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+                    class="inline-flex self-start rounded-lg px-4 py-2 text-sm font-medium bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600">
                     {{ __('billing::account.subscription.portal') }}
                 </a>
             @endif

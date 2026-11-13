@@ -24,7 +24,7 @@ final class UsagePeriodLabel
         $day = preg_match('/^\d{4}-\d{2}-\d{2}$/', $key) === 1 ? CarbonImmutable::createFromFormat('!Y-m-d', $key, 'UTC') : null;
 
         if ($day instanceof CarbonImmutable) {
-            $label = $translator->get('billing::account.usage_history.period_from', ['date' => (string) LocalizedDate::short($day)]);
+            $label = $translator->get('billing::account.usage_history.period_from', ['date' => (string) LocalizedDate::long($day)]);
 
             return is_string($label) ? $label : $key;
         }

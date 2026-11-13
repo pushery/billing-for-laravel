@@ -10,6 +10,8 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Config;
 use Mollie\Api\Http\LinearRetryStrategy;
 use Mollie\Api\MollieApiClient;
+use Pushery\Billing\Drivers\Mollie\Sandbox\SandboxMollie;
+use Pushery\Billing\Drivers\Mollie\Sandbox\SandboxMollieAdapter;
 use Pushery\Billing\Exceptions\MollieNotConfigured;
 use Pushery\Billing\ValueObjects\PaymentAccount;
 use Throwable;
@@ -27,6 +29,9 @@ use Throwable;
  */
 final readonly class MollieClientFactory
 {
+    /** The test key the sandbox's client is given, in the shape the SDK checks: `test_` and thirty characters. */
+    private const string SANDBOX_KEY = 'test_sandboxsandboxsandboxsandboxsa';
+
     /**
      * @param  class-string|string  $clientClass
      * @param  string  $packageName  Injectable for the same reason as the class above, and only that reason:
@@ -45,6 +50,15 @@ final readonly class MollieClientFactory
     public function make(): MollieApiClient
     {
         $this->requirePackage();
+
+        // The sandbox answers every request itself, so it needs no key, and the one it is given only puts the client
+        // into test mode, which is the mode the sandbox's objects carry.
+        if (SandboxMollie::enabled()) {
+            $client = new MollieApiClient(new SandboxMollieAdapter(SandboxMollie::fromConfig()));
+            $client->setToken(self::SANDBOX_KEY);
+
+            return $this->announced($client);
+        }
 
         $key = Config::get('billing.mollie.api_key');
 

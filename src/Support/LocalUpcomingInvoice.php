@@ -7,15 +7,16 @@ namespace Pushery\Billing\Support;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\UpcomingInvoice;
 use Pushery\Billing\Models\Subscription;
-use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\UpcomingInvoicePreview;
 
 /**
  * The next invoice of a subscription the local engine bills, previewed from that engine.
  *
- * The engine bills in arrears: the order that closes the running period is charged when the period ends. This
- * reads that order before it exists, assembled the way the cycle will assemble it and written nowhere
- * ({@see LocalBillingEngine::preview()}), and dates it at the subscription's next processing moment.
+ * The next invoice is the engine's next charge ({@see LocalBillingEngine::previewNextCharge()}): the day of the
+ * run that collects it and what that run collects, assembled the way the cycle will assemble it and written
+ * nowhere. Collected in arrears, that run closes the running period; collected in advance, it opens the next
+ * one, at the tier a plan change scheduled to its start asked for. A free trial collected in arrears charges
+ * nothing at its end, so there the next invoice is the period after it, dated at that period's end.
  *
  * It reads the owner's own subscription of the default type, the one the subscription screen shows, and only
  * one this engine bills. Null where nothing is upcoming: no such subscription, one with nothing scheduled, or
@@ -38,18 +39,10 @@ final readonly class LocalUpcomingInvoice implements UpcomingInvoice
             ->latest('id')
             ->first();
 
-        $moment = $subscription?->scheduled_processing_at;
-
-        if (! $subscription instanceof Subscription || $moment === null) {
+        if (! $subscription instanceof Subscription) {
             return null;
         }
 
-        $amount = $this->engine->preview($subscription);
-
-        if (! $amount instanceof Money) {
-            return null;
-        }
-
-        return new UpcomingInvoicePreview($moment->toDateTimeImmutable(), $amount);
+        return $this->engine->previewNextCharge($subscription);
     }
 }

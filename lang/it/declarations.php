@@ -14,7 +14,7 @@ return [
         'name' => 'Nome',
         'email' => 'Indirizzo email',
         'contract' => 'Contratto',
-        'ends' => 'Il contratto deve terminare',
+        'ends' => 'Fine richiesta del contratto',
         'confirmation_sent_to' => 'Conferma inviata a',
     ],
     'cancellation' => [

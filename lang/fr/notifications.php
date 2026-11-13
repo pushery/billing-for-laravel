@@ -7,6 +7,7 @@ return [
     'payment_failed' => [
         'subject' => 'Ton paiement n’a pas pu être traité',
         'intro' => 'Nous n’avons pas pu traiter ton dernier paiement.',
+        'summary' => 'Montant : :amount · Facture : :invoice',
         'outro' => 'Mets à jour tes informations de paiement pour garder ton abonnement actif.',
         'paused' => 'Ton accès est suspendu jusqu’à ce qu’un paiement aboutisse, et il revient dès que c’est le cas.',
         'outro_paused' => 'Mets à jour tes informations de paiement pour le récupérer.',
@@ -16,6 +17,7 @@ return [
     'fallback_method_charged' => [
         'subject' => 'Ton moyen de paiement de secours a été débité',
         'intro' => 'Ton moyen de paiement par défaut n’a pas pu être débité, nous avons donc débité ton moyen de secours.',
+        'summary' => 'Montant : :amount · Moyen de paiement : :method · Référence : :reference',
         'outro' => 'Vérifie ton moyen de paiement par défaut. Il sera de nouveau essayé en premier lors de ton prochain paiement.',
         'cta' => 'Vérifier les moyens de paiement',
     ],
@@ -23,6 +25,7 @@ return [
     'payment_succeeded' => [
         'subject' => 'Ton reçu de paiement',
         'intro' => 'Merci — nous avons bien reçu ton paiement.',
+        'summary' => 'Montant : :amount · Référence : :reference',
         'declarations' => 'Tes déclarations avant le début de la fourniture :',
         'outro' => 'Une copie de ce reçu est disponible dans ton historique de facturation.',
         'cta' => 'Voir les reçus',
@@ -31,8 +34,17 @@ return [
     'trial_ending' => [
         'subject' => 'Ton essai se termine bientôt',
         'intro' => 'Ton essai gratuit se termine le :date.',
+        'first_charge' => 'Ton premier prélèvement de :amount a lieu le :date.',
+        'cancel' => 'Tu peux résilier avant sur la page d\'abonnement de ton compte.',
         'outro' => 'Ajoute un moyen de paiement avant la fin pour que ton abonnement continue sans interruption.',
         'cta' => 'Ajouter un moyen de paiement',
+    ],
+
+    'price_change' => [
+        'subject' => 'Ton prix change',
+        'intro' => 'À partir du :date, un nouveau prix s\'applique à ton abonnement.',
+        'cancel' => 'Si tu ne veux pas continuer au nouveau prix, tu peux résilier ton abonnement pour ce jour-là sur la page d\'abonnement de ton compte.',
+        'cta' => 'Voir ton abonnement',
     ],
 
     'subscription_canceled' => [
@@ -167,15 +179,17 @@ return [
         'subject' => 'Ton prochain prélèvement',
         'intro' => ':payee prélèvera :amount sur ton compte par prélèvement SEPA le :date.',
         'recurring' => 'Ensuite, le même montant sera prélevé à chaque échéance de ton abonnement. Si le montant change, tu seras prévenu avant le prélèvement.',
-        'account' => 'Compte se terminant par :account.',
-        'mandate' => 'Référence du mandat : :reference',
-        'creditor' => 'Identifiant créancier : :creditor',
+        'account_label' => 'Compte',
+        'account_value' => 'se terminant par :account',
+        'mandate_label' => 'Référence du mandat',
+        'creditor_label' => 'Identifiant créancier',
         'outro' => 'Tu n\'as rien à faire.',
         'cta' => 'Voir tes moyens de paiement',
     ],
 
     'cancellation_received' => [
         'subject' => 'Nous avons reçu ta résiliation',
+        'heading' => 'Ta résiliation',
         'intro' => 'Nous te confirmons la résiliation que tu as déclarée, avec tout son contenu ainsi que la date et l’heure auxquelles elle nous est parvenue.',
         'outro' => 'Conserve cet e-mail. Il atteste ta résiliation et le moment où elle nous est parvenue.',
         'cta' => 'Voir ta résiliation',
@@ -183,6 +197,7 @@ return [
 
     'withdrawal_received' => [
         'subject' => 'Nous avons reçu ta rétractation',
+        'heading' => 'Ta rétractation',
         'intro' => 'Nous te confirmons la rétractation que tu as déclarée, avec tout son contenu ainsi que la date et l’heure auxquelles elle nous est parvenue.',
         'outro' => 'Conserve cet e-mail. Il atteste ta rétractation et le moment où elle nous est parvenue.',
         'cta' => 'Voir ta rétractation',

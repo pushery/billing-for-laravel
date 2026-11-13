@@ -31,7 +31,11 @@ final class FallbackPaymentMethodChargedNotification extends BillingNotification
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.fallback_method_charged.subject'))
             ->line(Lang::get('billing::notifications.fallback_method_charged.intro'))
-            ->line(LocalizedMoney::format($this->amount).' · '.$this->method->label().' · '.$this->reference)
+            ->line(Lang::get('billing::notifications.fallback_method_charged.summary', [
+                'amount' => LocalizedMoney::format($this->amount),
+                'method' => $this->method->label(),
+                'reference' => $this->reference,
+            ]))
             ->line(Lang::get('billing::notifications.fallback_method_charged.outro'));
 
         return $this->withAction(

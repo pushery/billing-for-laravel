@@ -44,12 +44,10 @@ final class CancellationReceivedNotification extends BillingNotification
 
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.cancellation_received.subject'))
+            ->greeting(Lang::get('billing::notifications.cancellation_received.heading'))
             ->line(Lang::get('billing::notifications.cancellation_received.intro'))
-            ->line(MarkdownText::text(DeclarationStatement::cancellationDeclaredThrough()));
-
-        foreach (DeclarationStatement::cancellationLines($declaration) as $line) {
-            $mail->line(MarkdownText::interpolate(':label: :value', $line));
-        }
+            ->line(MarkdownText::text(DeclarationStatement::cancellationDeclaredThrough()))
+            ->line(MarkdownText::pairs(DeclarationStatement::cancellationLines($declaration)));
 
         return $this->withAction(
             $mail->line(Lang::get('billing::notifications.cancellation_received.outro')),

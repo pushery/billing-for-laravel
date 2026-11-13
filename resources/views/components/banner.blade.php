@@ -4,6 +4,11 @@
         'warning' => 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200',
         default => 'border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200',
     };
+    $action = match ($notice->intent) {
+        'danger' => 'bg-red-600 hover:bg-red-500',
+        'warning' => 'bg-amber-700 hover:bg-amber-800',
+        default => 'bg-blue-600 hover:bg-blue-500',
+    };
 @endphp
 
 <div role="alert" class="flex items-center justify-between gap-4 rounded-xl border px-4 py-3 text-sm {{ $tone }}">
@@ -13,7 +18,7 @@
         <span>{{ __($notice->messageKey) }}</span>
     @endif
     @if ($notice->ctaRoute !== null && $notice->ctaKey !== null && Route::has($notice->ctaRoute))
-        <a href="{{ route($notice->ctaRoute) }}" class="inline-flex shrink-0 rounded-lg border border-current px-3 py-1.5 font-medium hover:bg-black/5 dark:hover:bg-white/10">
+        <a href="{{ route($notice->ctaRoute) }}" class="inline-flex shrink-0 rounded-lg px-3 py-1.5 font-medium text-white {{ $action }}">
             {{ __($notice->ctaKey) }}
         </a>
     @endif

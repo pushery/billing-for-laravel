@@ -123,6 +123,15 @@ enum DatevTransaction: string
     /** Voucher liabilities — no VAT on issue (§3 Abs. 15 UStG). */
     case VoucherLiabilities = 'voucher_liabilities';
 
+    /**
+     * The account a referral reward is booked from, against the voucher liabilities it becomes.
+     *
+     * It ships unmapped. The reward pays for the referrer's referral, and whether that payment carries input
+     * tax depends on the referrer and on their invoice, which only the seller's accountant sees: an expense
+     * account where the referrer charges no tax, a clearing account their invoice settles where they do.
+     */
+    case ReferralRewards = 'referral_rewards';
+
     /** Pass-through items (regime V only) — no VAT (§10 Abs. 1 S. 5 UStG). */
     case TransitItems = 'transit_items';
 

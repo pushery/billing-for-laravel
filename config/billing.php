@@ -194,6 +194,19 @@ return [
                 'retry_delay_ms' => 1000,
             ],
         ],
+
+        // The sandbox: Mollie without Mollie, for a local install, a staging system or a demo. On, the driver's client
+        // answers every request from a store of its own instead of calling Mollie, in the shape Mollie answers in, so
+        // the whole flow runs without an account or a key: a first payment and its mandate, a cycle, a failed payment
+        // and its dunning, an add-on, a refund. A checkout is a page of this application that completes the payment at
+        // once with `sandbox_outcome` (`paid`, `failed`, `canceled` or `expired`) and sends its ping to the webhook
+        // route in the same request; a payment against a mandate gets the outcome as it is created. `sandbox_store`
+        // names the cache store the sandbox keeps its objects in, null for the default store, and it keeps them
+        // without expiry, because a mandate has to last until the cycle that charges it. Payment accounts keep
+        // reaching Mollie. The driver refuses to boot with the sandbox on in production.
+        'sandbox' => EnvSwitch::read(env('BILLING_MOLLIE_SANDBOX'), false),
+        'sandbox_outcome' => env('BILLING_MOLLIE_SANDBOX_OUTCOME', 'paid'),
+        'sandbox_store' => env('BILLING_MOLLIE_SANDBOX_STORE'),
     ],
 
     /*
@@ -676,6 +689,48 @@ return [
     'tiers' => [
         'free' => [
             'label' => 'Free',
+        ],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Price changes
+    |--------------------------------------------------------------------------
+    |
+    | A change of a tier's price, announced to every running subscription before
+    | it applies. Each change names its kind ('plan' for the base price of a
+    | tier, 'metered' for the price per package of its meters), the day it is
+    | announced on, the day it takes effect, the new prices in minor units of
+    | the currency they are priced in, and what changes in the words of the
+    | announcement, English required. A change of kind 'metered' names its
+    | prices by tier and meter: 'prices' => ['pro' => ['emails' => 80]]. A
+    | change that breaks a rule is announced to nobody, and billing:doctor names
+    | every rule it breaks.
+    |
+    | notice_months is the notice each kind needs, in full calendar months: the
+    | month an announcement falls into never counts. A subscription told late
+    | gets the full notice from the day it was told, and one billed yearly keeps
+    | its price to its next renewal. The package bills the new price itself
+    | where Mollie is the driver.
+    |
+    |   'changes' => [
+    |       'pro-2027' => [
+    |           'kind' => 'plan',
+    |           'announce_on' => '2026-12-01',
+    |           'effective_on' => '2027-02-01',
+    |           'prices' => ['pro' => 2400],
+    |           'text' => ['en' => 'Pro costs 24.00 a month.'],
+    |       ],
+    |   ],
+    |
+    */
+
+    'price_changes' => [
+        'changes' => [],
+        'notice_months' => [
+            'plan' => 1,
+            // The price per package of a meter, apart from the base price.
+            'metered' => 1,
         ],
     ],
 
@@ -2035,6 +2090,10 @@ return [
                 'money_transit' => ['account' => '1360', 'automatic' => false],
                 'creator_liabilities' => ['account' => '1705', 'automatic' => false],
                 'voucher_liabilities' => ['account' => '1706', 'automatic' => false],
+                // `referral_rewards`, the account a referral reward is booked from against the voucher
+                // liabilities, ships unmapped in both charts. Whether the reward carries input tax depends on the
+                // referrer and their invoice, which only the accountant sees, so a reward is refused by name
+                // until the operator configures one.
                 'transit_items' => ['account' => '1590', 'automatic' => false],
                 'other_income' => ['account' => '2709', 'automatic' => false],
                 // The realized currency difference between collecting a sale and paying it out. Its own

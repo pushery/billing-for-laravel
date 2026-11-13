@@ -30,7 +30,7 @@
 
                 @if ($canPayNow)
                     <button type="button" wire:click="payOutstanding" wire:loading.attr="disabled" wire:target="payOutstanding"
-                        class="rounded-lg border border-red-600 px-4 py-2 text-sm font-medium text-red-800 hover:bg-red-100 disabled:opacity-50 dark:text-red-200 dark:hover:bg-red-900/40">
+                        class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50">
                         {{ __('billing::account.recovery.pay_now') }}
                     </button>
                 @endif

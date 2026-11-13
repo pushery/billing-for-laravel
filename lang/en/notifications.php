@@ -7,6 +7,7 @@ return [
     'payment_failed' => [
         'subject' => 'Your payment could not be processed',
         'intro' => 'We were unable to process your latest payment.',
+        'summary' => 'Amount: :amount · Invoice: :invoice',
         'outro' => 'Please update your payment details to keep your subscription active.',
         'paused' => 'Your access is paused until a payment goes through, and it comes back as soon as one does.',
         'outro_paused' => 'Please update your payment details to get it back.',
@@ -16,6 +17,7 @@ return [
     'fallback_method_charged' => [
         'subject' => 'Your fallback payment method was charged',
         'intro' => 'Your default payment method could not be charged, so we charged your fallback method instead.',
+        'summary' => 'Amount: :amount · Payment method: :method · Reference: :reference',
         'outro' => 'Please check your default payment method. It is tried first again on your next payment.',
         'cta' => 'Check your payment methods',
     ],
@@ -23,6 +25,7 @@ return [
     'payment_succeeded' => [
         'subject' => 'Your payment receipt',
         'intro' => 'Thank you — your payment was received.',
+        'summary' => 'Amount: :amount · Reference: :reference',
         'declarations' => 'Your declarations before provision began:',
         'outro' => 'A copy of this receipt is available in your billing history.',
         'cta' => 'View your receipts',
@@ -31,8 +34,17 @@ return [
     'trial_ending' => [
         'subject' => 'Your trial is ending soon',
         'intro' => 'Your free trial ends on :date.',
+        'first_charge' => 'Your first charge of :amount is collected on :date.',
+        'cancel' => 'You can cancel before then on the subscription page of your account.',
         'outro' => 'Add a payment method before it ends to keep your subscription without interruption.',
         'cta' => 'Add a payment method',
+    ],
+
+    'price_change' => [
+        'subject' => 'Your price is changing',
+        'intro' => 'A new price applies to your subscription from :date.',
+        'cancel' => 'If you do not want to continue at the new price, you can cancel your subscription to that day on the subscription page of your account.',
+        'cta' => 'View your subscription',
     ],
 
     'subscription_canceled' => [
@@ -167,15 +179,17 @@ return [
         'subject' => 'Your next direct debit',
         'intro' => ':payee will collect :amount from your account by SEPA direct debit on :date.',
         'recurring' => 'After that, the same amount is collected on each due date of your subscription. If the amount changes, you will be told before it is collected.',
-        'account' => 'Account ending in :account.',
-        'mandate' => 'Mandate reference: :reference',
-        'creditor' => 'Creditor identifier: :creditor',
+        'account_label' => 'Account',
+        'account_value' => 'ending in :account',
+        'mandate_label' => 'Mandate reference',
+        'creditor_label' => 'Creditor identifier',
         'outro' => 'There is nothing you need to do.',
         'cta' => 'View your payment methods',
     ],
 
     'cancellation_received' => [
         'subject' => 'We received your cancellation',
+        'heading' => 'Your cancellation',
         'intro' => 'This confirms the cancellation you declared, with its full content and the date and time it reached us.',
         'outro' => 'Keep this email. It is your record of the cancellation and of when it reached us.',
         'cta' => 'Open your cancellation',
@@ -183,6 +197,7 @@ return [
 
     'withdrawal_received' => [
         'subject' => 'We received your withdrawal',
+        'heading' => 'Your withdrawal',
         'intro' => 'This confirms the withdrawal you declared, with its full content and the date and time it reached us.',
         'outro' => 'Keep this email. It is your record of the withdrawal and of when it reached us.',
         'cta' => 'Open your withdrawal',

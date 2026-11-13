@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\LazyCollection;
 use Pushery\Billing\Enums\CreditReason;
+use Pushery\Billing\Enums\VoucherInstrumentType;
 use Pushery\Billing\Marketplace\CollectiveAccountReconciler;
 use Pushery\Billing\Models\CreditLedgerEntry;
 use Pushery\Billing\Models\InvoiceRecord;
@@ -19,6 +20,7 @@ use Pushery\Billing\Models\VoucherMovementRecord;
 use Pushery\Billing\Support\CreditConsumption;
 use Pushery\Billing\ValueObjects\AccountReconciliation;
 use Pushery\Billing\ValueObjects\CreditMovement;
+use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\SubLedgerMovement;
 use Pushery\Billing\ValueObjects\VoucherMovement;
 
@@ -47,6 +49,9 @@ final readonly class DatevPeriodBatch
 {
     /** Documents read per query: a month of invoices, each with its frozen lines and buyer, is never held at once. */
     private const int PAGE = 500;
+
+    /** The movements of a top-up itself, which book nothing where top-ups are single-purpose vouchers. */
+    private const array TOP_UP_MOVEMENTS = [CreditReason::AddonTopup, CreditReason::AddonReversal, CreditReason::AddonReversalUndone];
 
     public function __construct(
         private DatevExport $export,
@@ -225,30 +230,43 @@ final readonly class DatevPeriodBatch
      * A spend of an owner who has since been erased names no owner any more. Its history is read by the key the
      * erasure left on that owner's movements, which keeps them together as one balance.
      *
+     * ## Where top-ups are single-purpose vouchers
+     *
+     * A top-up was then taxed when it was bought, and its money is revenue on its own invoice. Its movements book
+     * nothing here: the top-up, a refund of it and a refund given back, which its credit notes book. The invoice a
+     * spend paid keeps the top-ups' share off its price ({@see OrderSupply}), so an offset books without that share,
+     * and an offset given back after a refused charge books without the share of the spend it gives back.
+     *
      * @param  Collection<int, CreditLedgerEntry>  $entries
      * @return Collection<int, CreditMovement>
      */
     private function splitSpends(Collection $entries): Collection
     {
-        $offsets = $entries->filter(static fn (CreditLedgerEntry $entry): bool => self::isOffset($entry));
+        $singlePurpose = VoucherInstrumentType::fromConfigured($this->config->get(VoucherInstrumentType::CONFIG_KEY))->taxedAtIssue();
 
-        if ($offsets->isEmpty()) {
+        if ($singlePurpose) {
+            $entries = $entries->reject(static fn (CreditLedgerEntry $entry): bool => in_array($entry->reason, self::TOP_UP_MOVEMENTS, true))->values();
+        }
+
+        $replayed = $entries->filter(static fn (CreditLedgerEntry $entry): bool => self::isOffset($entry) || ($singlePurpose && self::isReturn($entry)));
+
+        if ($replayed->isEmpty()) {
             return $entries->map(static fn (CreditLedgerEntry $entry): CreditMovement => $entry->toMovement());
         }
 
-        $owned = $offsets->filter(static fn (CreditLedgerEntry $entry): bool => $entry->erased_owner_key === null);
+        $owned = $replayed->filter(static fn (CreditLedgerEntry $entry): bool => $entry->erased_owner_key === null);
 
         $history = CreditLedgerEntry::model()::query()
             ->where(static fn (Builder $query): Builder => $query
                 ->whereIn('owner_type', $owned->pluck('owner_type')->unique()->values()->all())
                 ->whereIn('owner_id', $owned->pluck('owner_id')->unique()->values()->all()))
-            ->orWhereIn('erased_owner_key', $offsets->pluck('erased_owner_key')->filter()->unique()->values()->all())
+            ->orWhereIn('erased_owner_key', $replayed->pluck('erased_owner_key')->filter()->unique()->values()->all())
             ->orderBy('id')
             ->get()
             ->groupBy(static fn (CreditLedgerEntry $entry): string => self::balanceKey($entry));
 
-        return $entries->map(static function (CreditLedgerEntry $entry) use ($history): CreditMovement {
-            if (! self::isOffset($entry)) {
+        return $entries->map(static function (CreditLedgerEntry $entry) use ($history, $singlePurpose): CreditMovement {
+            if (! self::isOffset($entry) && (! $singlePurpose || ! self::isReturn($entry))) {
                 return $entry->toMovement();
             }
 
@@ -256,13 +274,47 @@ final readonly class DatevPeriodBatch
             // itself in the history — the query was built from these very owners — so a miss cannot happen,
             // and a branch written for it is one no run can enter. This package's coverage floor is where
             // that stops being a philosophical point.
-            $balance = $history->get(self::balanceKey($entry), new Collection);
+            $balance = array_values($history->get(self::balanceKey($entry), new Collection)->all());
 
-            return $entry->toMovement(CreditConsumption::unpaidShare(
-                CreditConsumption::of($entry, array_values($balance->all())),
-                $entry->currency,
-            ));
+            if (self::isReturn($entry)) {
+                return $entry->toMovement()->lessTopUps(self::topUpsReturned($entry, $balance));
+            }
+
+            $consumed = CreditConsumption::of($entry, $balance);
+            $movement = $entry->toMovement(CreditConsumption::unpaidShare($consumed, $entry->currency));
+
+            return $singlePurpose ? $movement->lessTopUps(CreditConsumption::topUpShare($consumed, $entry->currency)) : $movement;
         });
+    }
+
+    /** An offset given back because the charge it paid towards was refused. */
+    private static function isReturn(CreditLedgerEntry $entry): bool
+    {
+        return $entry->reason === CreditReason::ChargeOffsetReturned;
+    }
+
+    /**
+     * What of a returned offset goes back to top-ups: the top-up share of the spend it gives back, never more than it
+     * gives back.
+     *
+     * The spend is the newest offset for the same order before the return. Where there is none, as for an entry an
+     * application wrote itself, nothing of the return is a top-up's.
+     *
+     * @param  list<CreditLedgerEntry>  $balance
+     */
+    private static function topUpsReturned(CreditLedgerEntry $return, array $balance): Money
+    {
+        $spend = null;
+
+        foreach ($balance as $entry) {
+            if ($entry->id < $return->id && self::isOffset($entry) && $entry->source_type === $return->source_type && $entry->source_id === $return->source_id) {
+                $spend = $entry;
+            }
+        }
+
+        $share = $spend instanceof CreditLedgerEntry ? CreditConsumption::topUpShare(CreditConsumption::of($spend, $balance), $return->currency)->minorUnits : 0;
+
+        return Money::of(min($share, $return->amount_minor), $return->currency);
     }
 
     /** A spend of the fungible balance against something already invoiced — the one movement FIFO answers for. */

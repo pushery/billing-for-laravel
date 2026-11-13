@@ -47,6 +47,7 @@ use Pushery\Billing\Contracts\TaxDisclosurePolicy;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Contracts\TrialNotifier;
 use Pushery\Billing\Contracts\UsageNotifier;
+use Pushery\Billing\Drivers\Mollie\Sandbox\SandboxMollie;
 use Pushery\Billing\Drivers\Stripe\StripeMarketplaceWebhookEventMapper;
 use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
 use Pushery\Billing\Drivers\Stripe\StripeWebhookEventMapper;
@@ -55,10 +56,12 @@ use Pushery\Billing\Enums\BuyerAudience;
 use Pushery\Billing\Enums\CustomerAudience;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Enums\TaxArchetype;
+use Pushery\Billing\Enums\VoucherInstrumentType;
 use Pushery\Billing\Enums\WithdrawalType;
 use Pushery\Billing\Exceptions\InvalidBillingConfig;
 use Pushery\Billing\Invoicing\NullBuyerPartyResolver;
 use Pushery\Billing\Invoicing\XRechnungInvoice;
+use Pushery\Billing\Marketplace\CreditTopUpVolume;
 use Pushery\Billing\Marketplace\GermanTaxDisclosurePolicy;
 use Pushery\Billing\Marketplace\UnmovedMerchantShares;
 use Pushery\Billing\Models\ExchangeRateRecord;
@@ -71,6 +74,7 @@ use Pushery\Billing\Preflight\CheckpointRegistry;
 use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
 use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
 use Pushery\Billing\Preflight\Profiles\GermanSellerStanding;
+use Pushery\Billing\PriceChanges\DeclaredPriceChanges;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\BillingSchema;
 use Pushery\Billing\Support\KeyedConfig;
@@ -186,7 +190,7 @@ final class DoctorCommand extends Command
         ConsumerWithdrawalPolicy::class => GermanWithdrawalPolicy::class,
     ];
 
-    public function handle(Repository $config, StripeClient $stripe, AddonCatalog $addons, AddonContentMap $works, DistanceSaleThresholdMonitor $thresholds, UnmovedMerchantShares $unmoved, BillingManager $drivers, BuyerPartyResolver $buyers, WithdrawalGate $withdrawals, WithdrawalTypeResolver $types, IdentifiesBusinessBuyers $businesses, EInvoice $einvoice, TierCatalog $tiers, PlanCatalog $plans): int
+    public function handle(Repository $config, StripeClient $stripe, AddonCatalog $addons, AddonContentMap $works, DistanceSaleThresholdMonitor $thresholds, UnmovedMerchantShares $unmoved, BillingManager $drivers, BuyerPartyResolver $buyers, WithdrawalGate $withdrawals, WithdrawalTypeResolver $types, IdentifiesBusinessBuyers $businesses, EInvoice $einvoice, TierCatalog $tiers, PlanCatalog $plans, DeclaredPriceChanges $priceChanges): int
     {
         if (! (bool) $config->get('billing.enabled', true)) {
             $this->components->info('Billing is disabled; nothing to check.');
@@ -239,6 +243,10 @@ final class DoctorCommand extends Command
         $failing = $this->reportWorksTheProfileDoesNotCover($config, $addons, $works, $withdrawals) || $failing;
 
         $failing = $this->reportAddonsTheCheckoutRefuses($config, $works, $withdrawals, $types) || $failing;
+
+        $failing = $this->reportSinglePurposeTopUpsOnStripe($config, $addons, $works) || $failing;
+
+        $failing = $this->reportPriceChanges($config, $priceChanges) || $failing;
 
         $this->reportBusinessOffersNobodyIsShown($config, $businesses);
         $this->reportAudience($config);
@@ -418,6 +426,18 @@ final class DoctorCommand extends Command
     private function reportCredentialEnvironment(Repository $config): void
     {
         $driver = $config->get('billing.default', 'stripe');
+
+        // The sandbox needs no key and reads none, so the key says nothing about where money goes: nothing reaches Mollie.
+        if ($driver === 'mollie' && SandboxMollie::enabled()) {
+            $outcome = $config->get('billing.mollie.sandbox_outcome', 'paid');
+
+            $this->components->warn(
+                'billing.mollie.sandbox is on: the sandbox answers for Mollie, no payment reaches Mollie, and every payment '
+                .'gets the outcome '.(is_string($outcome) ? $outcome : 'paid').'. Switch it off before this install takes real money.',
+            );
+
+            return;
+        }
 
         [$key, $setting] = $driver === 'mollie'
             ? [$config->get('billing.mollie.api_key'), 'billing.mollie.api_key']
@@ -839,6 +859,78 @@ final class DoctorCommand extends Command
         }
 
         return $refused !== [];
+    }
+
+    /**
+     * Report top-ups that are taxed when they are bought while Stripe bills the invoices their credit pays.
+     *
+     * Under `single_purpose` a top-up is taxed at its purchase. Its credit goes to the customer's balance at Stripe, and
+     * Stripe takes a balance off what an invoice asks for after the invoice's tax, so the invoice the credit pays taxes
+     * the same money a second time. Taking it off before the tax instead is not open to the package: Stripe's automatic
+     * tax accepts no invoice item with a negative amount. Under `multi_purpose`, the default, a top-up is taxed when it
+     * is spent, which is the invoice it pays, so Stripe's order is the right one there.
+     *
+     * Read from `billing.addons`, as the check above reads it.
+     */
+    private function reportSinglePurposeTopUpsOnStripe(Repository $config, AddonCatalog $catalog, AddonContentMap $works): bool
+    {
+        if ($config->get('billing.default', 'stripe') !== 'stripe'
+            || ! VoucherInstrumentType::fromConfigured($config->get(VoucherInstrumentType::CONFIG_KEY))->taxedAtIssue()) {
+            return false;
+        }
+
+        $configured = $config->get('billing.addons', []);
+        $topUps = [];
+
+        foreach (array_keys(is_array($configured) ? $configured : []) as $key) {
+            $key = is_string($key) ? $key : (string) $key;
+
+            if (CreditTopUpVolume::creditsMoney($catalog, $works, $key)) {
+                $topUps[] = $key;
+            }
+        }
+
+        if ($topUps === []) {
+            return false;
+        }
+
+        $this->components->error(
+            VoucherInstrumentType::CONFIG_KEY.' is single_purpose, so a top-up is taxed when it is bought, and Stripe takes '
+            .'its credit off an invoice after the invoice\'s tax, so the invoice it pays is taxed again. Add-ons that credit '
+            .'money: '.implode(', ', $topUps).'. Use multi_purpose with Stripe, the default, under which a top-up is taxed '
+            .'when it is spent.'
+        );
+
+        return true;
+    }
+
+    /**
+     * Report every rule a declared price change breaks, and a change declared where the provider prices its own invoices.
+     *
+     * A change that breaks a rule is announced to nobody, so it is named here before the day it was meant to go out. One
+     * declared under a driver other than Mollie would never be applied: the provider prices those cycles, and the
+     * package announces a change only where it bills the price itself.
+     */
+    private function reportPriceChanges(Repository $config, DeclaredPriceChanges $priceChanges): bool
+    {
+        $failing = false;
+
+        foreach ($priceChanges->refusals() as $problems) {
+            foreach ($problems as $problem) {
+                $this->components->error($problem);
+            }
+
+            $failing = true;
+        }
+
+        if ($priceChanges->all() !== [] && $config->get('billing.default', 'stripe') !== 'mollie') {
+            $this->components->error('billing.price_changes.changes declares a price change, and the active driver prices its own '
+                .'invoices. The package announces and bills a change only for the cycles it bills itself, with Mollie.');
+
+            $failing = true;
+        }
+
+        return $failing;
     }
 
     /**

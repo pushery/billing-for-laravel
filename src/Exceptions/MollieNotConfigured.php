@@ -77,4 +77,23 @@ final class MollieNotConfigured extends RuntimeException
             'install that never selects this driver should not carry an HTTP client it will never call.'
         );
     }
+
+    /** The sandbox is switched on in production, where every payment would be granted without a cent reaching Mollie. */
+    public static function sandboxInProduction(): self
+    {
+        return new self(
+            'billing.mollie.sandbox is on in production. The sandbox answers for Mollie and completes every payment itself, '
+            .'so subscriptions and add-ons would be granted without any money reaching Mollie. Switch it off with '
+            .'BILLING_MOLLIE_SANDBOX=false, and use a `test_` key for a staging system that has to reach Mollie.'
+        );
+    }
+
+    /** The sandbox is told to give its payments an outcome it does not know. */
+    public static function unknownSandboxOutcome(string $outcome): self
+    {
+        return new self(
+            "billing.mollie.sandbox_outcome is `{$outcome}`. The sandbox gives every payment one of the outcomes paid, failed, "
+            .'canceled or expired.'
+        );
+    }
 }

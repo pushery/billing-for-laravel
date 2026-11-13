@@ -12,6 +12,7 @@ use Override;
 use Pushery\Billing\Enums\BillingAction;
 use Pushery\Billing\Support\LocalizedDate;
 use Pushery\Billing\Support\LocalizedMoney;
+use Pushery\Billing\Support\MarkdownText;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -63,16 +64,25 @@ final class DirectDebitAnnouncedNotification extends BillingNotification
             $mail->line(Lang::get('billing::notifications.direct_debit_announced.recurring'));
         }
 
+        // The facts of the debit as one block, a fact a line with its label in bold, rather than a
+        // paragraph each: the account and the mandate where they are known, the creditor always.
+        $facts = [];
+
         if ($this->accountLastFour !== null) {
-            $mail->line(Lang::get('billing::notifications.direct_debit_announced.account', ['account' => $this->accountLastFour]));
+            $facts[] = [
+                'label' => Lang::get('billing::notifications.direct_debit_announced.account_label'),
+                'value' => Lang::get('billing::notifications.direct_debit_announced.account_value', ['account' => $this->accountLastFour]),
+            ];
         }
 
         if ($this->mandateReference !== null) {
-            $mail->line(Lang::get('billing::notifications.direct_debit_announced.mandate', ['reference' => $this->mandateReference]));
+            $facts[] = ['label' => Lang::get('billing::notifications.direct_debit_announced.mandate_label'), 'value' => $this->mandateReference];
         }
 
+        $facts[] = ['label' => Lang::get('billing::notifications.direct_debit_announced.creditor_label'), 'value' => $this->creditorIdentifier];
+
         return $this->withAction(
-            $mail->line(Lang::get('billing::notifications.direct_debit_announced.creditor', ['creditor' => $this->creditorIdentifier]))
+            $mail->line(MarkdownText::pairs($facts))
                 ->line(Lang::get('billing::notifications.direct_debit_announced.outro')),
             Lang::get('billing::notifications.direct_debit_announced.cta'),
             $this->actionFor($notifiable, BillingAction::PaymentMethods),

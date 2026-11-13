@@ -67,6 +67,27 @@ final readonly class CreditMovement
     }
 
     /**
+     * The same movement without the share that top-ups taxed when they were bought paid, or got back.
+     *
+     * Where top-ups are single-purpose vouchers, the money of a top-up was revenue on its own invoice, and the
+     * invoice a spend paid keeps that share off its price. So the share is no liability for the spend to release and
+     * no receivable for it to settle, and the movement books only the rest. It is marked as split either way, so a
+     * movement the share takes down to nothing books no row ({@see self::booksARow()}).
+     */
+    public function lessTopUps(Money $share): self
+    {
+        $minor = $this->amount->minorUnits;
+
+        return new self(
+            $this->reason,
+            Money::of($minor < 0 ? $minor + $share->minorUnits : $minor - $share->minorUnits, $this->amount->currency),
+            $this->reference,
+            $this->occurredOn,
+            $this->unpaidShare ?? Money::of(0, $this->amount->currency),
+        );
+    }
+
+    /**
      * Whether this movement produces a booking row at all.
      *
      * It lives here because two places ask it — the export, to decide whether to emit, and the period

@@ -107,8 +107,9 @@ return [
     'subscription' => [
         'heading' => 'Abonnement',
         'status' => 'Status',
-        'plan' => 'Plan: :plan',
-        'plan_priced' => 'Plan: :plan, :price / :interval',
+        'plan_label' => 'Plan',
+        'plan' => ':plan',
+        'plan_priced' => ':plan, :price / :interval',
         'next_invoice' => 'Volgende factuur: :amount op :date',
         'access_ends' => 'Je toegang eindigt op :date.',
         'access_ended' => 'Je toegang is geëindigd op :date.',
@@ -252,7 +253,7 @@ return [
         'recovery' => 'Herstel',
         'danger' => 'Gevarenzone',
         'group' => [
-            'subscription' => 'Abonnement',
+            'subscription' => 'Contract',
             'billing' => 'Facturering',
             'usage' => 'Gebruik',
             'account' => 'Account',

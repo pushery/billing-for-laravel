@@ -13,7 +13,7 @@
                     {{ __('billing::account.manage.scheduled_swap', ['plan' => $scheduledSwap['tierLabel'], 'date' => $scheduledSwap['date']]) }}
                 </span>
                 <button type="button" wire:click="cancelScheduledSwap" wire:loading.attr="disabled"
-                    class="shrink-0 rounded-md border border-amber-300 px-3 py-1 font-medium text-amber-800 hover:bg-amber-100 disabled:opacity-50 dark:border-amber-800 dark:text-amber-200 dark:hover:bg-amber-900">
+                    class="shrink-0 rounded-md bg-amber-700 px-3 py-1 font-medium text-white hover:bg-amber-800 disabled:opacity-50">
                     {{ __('billing::account.manage.scheduled_swap_cancel') }}
                 </button>
             </div>
@@ -43,7 +43,7 @@
                             <p role="alert" class="font-medium text-red-700 dark:text-red-400">{{ $message }}</p>
                         @enderror
                         <button type="submit" wire:loading.attr="disabled"
-                            class="rounded-md border border-blue-300 px-3 py-1 font-medium hover:bg-blue-100 disabled:opacity-50 dark:border-blue-800 dark:hover:bg-blue-900">
+                            class="rounded-md bg-blue-600 px-3 py-1 font-medium text-white hover:bg-blue-500 disabled:opacity-50">
                             {{ __('billing::account.manage.annual_term.further_year_action') }}
                         </button>
                     </form>
@@ -157,7 +157,7 @@
                     @if ($canSwap)
                         @unless ($paused)
                             <button type="button" wire:click="preview('{{ $option['key'] }}')" wire:loading.attr="disabled"
-                                class="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 sm:flex-none dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800">
+                                class="flex-1 rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50 sm:flex-none bg-gray-200 text-gray-900 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-100 dark:hover:bg-gray-600">
                                 {{ __('billing::account.manage.preview') }}
                             </button>
                             <button type="button" wire:click="swap('{{ $option['key'] }}')" wire:loading.attr="disabled"

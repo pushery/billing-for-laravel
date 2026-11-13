@@ -36,13 +36,14 @@ use Illuminate\Support\Facades\Lang;
  *
  * Hence: the locale is read from the app and handed to Carbon explicitly, on every call.
  *
- * ## Why there are three methods and not one
+ * ## Why there are several methods and not one
  *
- * `short()` is the direct replacement for what the views did: numeric, compact, right inside a table
- * cell. `long()` spells the month out, and exists for one reason — a document that outlives the
- * session it was rendered in. `03/09/2026` is what `es`, `fr`, `it` and `pt` produce, and it is
- * character-for-character what `en` produces for a different day; an invoice read in another country
- * years later has no locale to disambiguate it, and the month name needs none.
+ * `short()` is the direct replacement for what the views did: numeric and compact. `03/09/2026` is what
+ * `es`, `fr`, `it` and `pt` produce, and it is character-for-character what `en` produces for a different
+ * day, so the account screens do not use it. `medium()` abbreviates the month, for a list, and `long()`
+ * spells it out, for a sentence and for a document that outlives the session it was rendered in: an
+ * invoice read in another country years later has no locale to disambiguate it, and the month name needs
+ * none.
  *
  * `shortWithTime()` is `short()` plus the clock, for the admin event log. Without it, converting that
  * column would have dropped the time silently, which is exactly the kind of loss a sweeping replacement
@@ -61,6 +62,12 @@ final class LocalizedDate
     public static function short(?DateTimeInterface $moment): ?string
     {
         return self::render($moment, 'L');
+    }
+
+    /** The month abbreviated: `3. Sep 2026` in German, `Sep 3, 2026` in English. For a list. Null passes through. */
+    public static function medium(?DateTimeInterface $moment): ?string
+    {
+        return self::render($moment, 'll');
     }
 
     /** The month spelled out: `3. September 2026`, `September 3, 2026`. For documents, not for tables. */

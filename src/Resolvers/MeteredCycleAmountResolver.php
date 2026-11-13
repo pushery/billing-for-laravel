@@ -10,6 +10,7 @@ use Pushery\Billing\Exceptions\CurrencyMismatch;
 use Pushery\Billing\Exceptions\CycleAmountUnresolvable;
 use Pushery\Billing\Models\SubscriptionItem;
 use Pushery\Billing\Models\UsageCounter;
+use Pushery\Billing\PriceChanges\PriceChanges;
 use Pushery\Billing\ValueObjects\BillingPeriod;
 use Pushery\Billing\ValueObjects\MeteredComponent;
 use Pushery\Billing\ValueObjects\Money;
@@ -29,7 +30,11 @@ use Pushery\Billing\ValueObjects\Money;
  */
 final readonly class MeteredCycleAmountResolver implements CycleAmountResolver
 {
-    public function __construct(private MeterCatalog $meters) {}
+    /**
+     * @param  PriceChanges|null  $priceChanges  the declared changes of a meter's price. Optional, so a resolver built by hand
+     *                                           keeps working as it did, and rates every cycle at the catalog's price.
+     */
+    public function __construct(private MeterCatalog $meters, private ?PriceChanges $priceChanges = null) {}
 
     public function resolve(SubscriptionItem $item, BillingPeriod $period): Money
     {
@@ -45,6 +50,12 @@ final readonly class MeteredCycleAmountResolver implements CycleAmountResolver
 
         if (! $unitPrice instanceof Money) {
             throw CycleAmountUnresolvable::componentHasNoUnitPrice($item->plan_key);
+        }
+
+        // A declared change of the meter's price holds for a cycle that begins on or after the day the subscription's
+        // announcement named.
+        if ($this->priceChanges instanceof PriceChanges) {
+            $unitPrice = $this->priceChanges->meterPriceFor($subscription, $tierKey, $item->plan_key, $period->start, $unitPrice);
         }
 
         if ($unitPrice->currency !== $item->currency) {
