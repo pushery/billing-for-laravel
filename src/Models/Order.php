@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Casts\UtcDateTime;
+use Pushery\Billing\Contracts\ChargesOnTheMandate;
 use Pushery\Billing\Enums\FallbackAttempt;
 use Pushery\Billing\Enums\OrderItemType;
 use Pushery\Billing\Enums\OrderStatus;
@@ -40,7 +41,7 @@ use Pushery\Billing\ValueObjects\Money;
  * @property ?string $payment_reference
  * @property ?FallbackAttempt $fallback_attempt where the cycle stands with the owner's fallback mandate, null when it never needed it
  * @property ?string $fallback_mandate_reference the fallback mandate the cycle was handed to
- * @property ?string $reference the order's own key, unique where set: a late fee's dunning reference
+ * @property ?string $reference the order's own key, unique where set: a late fee's dunning reference, or a charge on the mandate's
  * @property ?Carbon $created_at
  * @property ?Carbon $updated_at when this row last moved — how a charge that has been in flight too long is spotted
  */
@@ -48,6 +49,18 @@ class Order extends Model
 {
     use Replaceable;
     use StoresMomentsWithTheirOffset;
+
+    /**
+     * The prefix of the reference a charge on the mandate carries, followed by its owner and the application's own
+     * reference ({@see ChargesOnTheMandate}).
+     */
+    public const string CHARGE_ON_THE_MANDATE = 'charge:';
+
+    /**
+     * The prefix of the reference a chargeback collected again carries, followed by its subscription and the
+     * provider's id of the chargeback.
+     */
+    public const string CHARGEBACK = 'chargeback:';
 
     /**
      * How long a claim may sit unanswered before it counts as abandoned.
@@ -124,6 +137,24 @@ class Order extends Model
     }
 
     /**
+     * Whether this order is default interest on a cycle paid late: no subscription behind it, and an interest line in it.
+     *
+     * The engine and the issuer read it as they read {@see self::isLateFee()}: no period is advanced, and no tax is
+     * stated.
+     */
+    public function isLateInterest(): bool
+    {
+        return $this->subscription_id === null
+            && $this->items()->where('type', OrderItemType::LateInterest)->exists();
+    }
+
+    /** Whether this order collects again what a payer took back from a period that is over: a chargeback line in it. */
+    public function isChargeback(): bool
+    {
+        return $this->items()->where('type', OrderItemType::Chargeback)->exists();
+    }
+
+    /**
      * Whether this order charges the rest of a period for a change inside it: a subscription behind it, and a
      * proration line in it.
      *
@@ -134,6 +165,19 @@ class Order extends Model
     {
         return $this->subscription_id !== null
             && $this->items()->where('type', OrderItemType::Proration)->exists();
+    }
+
+    /**
+     * Whether this order is a charge on the mandate: no subscription behind it, and the reference such a charge carries.
+     *
+     * Its lines carry the types the application chose, so the reference is what tells it apart: the engine collects it as
+     * a charge of its own, and the issuer taxes it as what its lines say they supply.
+     */
+    public function isChargeOnTheMandate(): bool
+    {
+        return $this->subscription_id === null
+            && $this->reference !== null
+            && str_starts_with($this->reference, self::CHARGE_ON_THE_MANDATE);
     }
 
     /**

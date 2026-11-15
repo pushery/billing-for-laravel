@@ -9,7 +9,6 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder as QueryBuilder;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\CreatorTaxStatusResolver;
 use Pushery\Billing\Enums\CreatorTaxStatus;
 use Pushery\Billing\Enums\DocumentSeries;
@@ -23,6 +22,7 @@ use Pushery\Billing\Exceptions\SelfBillingAgreementMissing;
 use Pushery\Billing\Exceptions\TaxDisclosureNotPermitted;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\SettlementRestatement;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\OwnerOfRecord;
 use Pushery\Billing\ValueObjects\InboundTaxTreatment;
 use Pushery\Billing\ValueObjects\Money;
@@ -182,7 +182,7 @@ final readonly class SettlementRestater
         }
 
         /** @var array{0: InvoiceRecord, 1: InvoiceRecord} $pair */
-        $pair = DB::transaction(function () use ($order, $original, $creator, $treatment, $rate, $supplyDate, $correctedOn): array {
+        $pair = BillingConnection::connection()->transaction(function () use ($order, $original, $creator, $treatment, $rate, $supplyDate, $correctedOn): array {
             $cancellation = $this->corrections->cancel($original, $correctedOn);
             $replacement = $this->engine->reissue($original, $creator, $treatment, $rate ?? 0, $supplyDate, $correctedOn);
 

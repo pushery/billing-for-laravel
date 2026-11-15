@@ -8,7 +8,6 @@ use Illuminate\Console\Command;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\RetentionClock;
 use Pushery\Billing\Enums\RetentionExecutor;
@@ -16,6 +15,7 @@ use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Exceptions\RetentionHoldUnavailable;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Models\WebhookEffectRun;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\OwnerScopedTables;
 use Pushery\Billing\Support\PaymentsModeSchema;
@@ -77,7 +77,7 @@ final class PruneBillingCommand extends Command
 
         $payloadCutoff = Carbon::now()->subDays($this->days($config, 'webhook_payload_days', 90));
 
-        $payloads = DB::table(OwnerScopedTables::SCRUBBED)
+        $payloads = BillingConnection::connection()->table(OwnerScopedTables::SCRUBBED)
             ->whereNotNull('payload')
             ->where('status', WebhookEventState::Handled->value)
             ->where('created_at', '<=', $payloadCutoff)
@@ -208,7 +208,7 @@ final class PruneBillingCommand extends Command
                 continue;
             }
 
-            $expired = DB::table($rule->object);
+            $expired = BillingConnection::connection()->table($rule->object);
 
             if ($rule->clock === RetentionClock::IssueYearEnd) {
                 // The window counts from the end of the year the record was made in, as it does for the
@@ -361,7 +361,7 @@ final class PruneBillingCommand extends Command
         $cutoff = $this->yearEndCutoff($rule->days)->toDateTimeString();
 
         // Every filing of a period that has no filing left inside the window.
-        $expired = DB::table(self::FILINGS.' as filing')
+        $expired = BillingConnection::connection()->table(self::FILINGS.' as filing')
             ->whereNotExists(static fn (Builder $young): Builder => $young
                 ->selectRaw('1')
                 ->from(self::FILINGS.' as young')
@@ -391,15 +391,15 @@ final class PruneBillingCommand extends Command
             return $leaving;
         }
 
-        DB::transaction(static function () use ($leaving): void {
-            $levels = DB::table(self::FILINGS)
+        BillingConnection::connection()->transaction(static function () use ($leaving): void {
+            $levels = BillingConnection::connection()->table(self::FILINGS)
                 ->whereIn('id', $leaving)
                 ->distinct()
                 ->orderByDesc('correction_sequence')
                 ->pluck('correction_sequence');
 
             foreach ($levels as $level) {
-                DB::table(self::FILINGS)->whereIn('id', $leaving)->where('correction_sequence', $level)->delete();
+                BillingConnection::connection()->table(self::FILINGS)->whereIn('id', $leaving)->where('correction_sequence', $level)->delete();
             }
         });
 
@@ -445,7 +445,7 @@ final class PruneBillingCommand extends Command
             if ($rule->columns === []) {
                 continue;
             }
-            $query = DB::table($rule->object);
+            $query = BillingConnection::connection()->table($rule->object);
 
             $query->where(static function (Builder $inner) use ($rule): void {
                 foreach ($rule->columns as $column) {

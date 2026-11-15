@@ -23,6 +23,7 @@ use Pushery\Billing\Events\MonthlyContinuationReminder;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
+use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -42,7 +43,9 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * Each reminder writes a mark to the audit log naming the subscription and the day it is about, and is not sent again
  * for that day. A further year a customer booked ends on another day, and is reminded of again. A mark is written only
- * when something was sent, so a dry run does not silence the real run behind it.
+ * when something was sent, so a dry run does not silence the real run behind it, and a reminder whose listener throws,
+ * because a mail transport refuses its recipient for instance, keeps no mark either: it is reported and sent again on
+ * the next run, and the reminders after it still go out.
  *
  * Meant to run daily.
  */
@@ -81,10 +84,13 @@ final class RemindAnnualTermsCommand extends Command
 
     private AnnualTerms $terms;
 
+    private SweepAttempts $attempts;
+
     public function handle(CustomerTypes $types, BillingActionUrls $urls, OwnerTimezone $zones, BillingEventLog $log, AnnualTerms $terms): int
     {
         [$this->types, $this->urls, $this->zones, $this->log, $this->terms] = [$types, $urls, $zones, $log, $terms];
         $this->dryRun = $this->option('dry-run') === true;
+        $this->attempts = new SweepAttempts;
         $now = CarbonImmutable::now();
 
         Subscription::model()::query()
@@ -96,13 +102,17 @@ final class RemindAnnualTermsCommand extends Command
             ->chunkById(100, function (Collection $subscriptions) use ($now): void {
                 /** @var Collection<int, Subscription> $subscriptions */
                 foreach ($subscriptions as $subscription) {
-                    $this->remindOfTheEnd($subscription, $now);
+                    $this->attempts->attempt(function () use ($subscription, $now): void {
+                        $this->remindOfTheEnd($subscription, $now);
+                    });
                 }
             });
 
         $this->remindOfContinuations($now);
 
         $this->components->info(($this->dryRun ? 'Would send ' : 'Sent ')."{$this->sent} annual-term reminder(s).");
+
+        $this->attempts->finish();
 
         return self::SUCCESS;
     }
@@ -160,7 +170,9 @@ final class RemindAnnualTermsCommand extends Command
             ->chunkById(100, function (Collection $marks) use ($now): void {
                 /** @var Collection<int, BillingEvent> $marks */
                 foreach ($marks as $mark) {
-                    $this->remindOfContinuation($mark, $now);
+                    $this->attempts->attempt(function () use ($mark, $now): void {
+                        $this->remindOfContinuation($mark, $now);
+                    });
                 }
             });
     }
@@ -224,15 +236,13 @@ final class RemindAnnualTermsCommand extends Command
 
     private function send(string $type, Model $owner, Subscription $subscription, CarbonImmutable $day, object $event): void
     {
-        $this->sent++;
+        if (! $this->dryRun) {
+            Event::dispatch($event);
 
-        if ($this->dryRun) {
-            return;
+            $this->log->record($type, $owner, ['subscription' => $this->keyOf($subscription), 'day' => $day->format('Y-m-d')]);
         }
 
-        Event::dispatch($event);
-
-        $this->log->record($type, $owner, ['subscription' => $this->keyOf($subscription), 'day' => $day->format('Y-m-d')]);
+        $this->sent++;
     }
 
     /** Whether the reminder of this kind was sent already for this subscription and this day. */

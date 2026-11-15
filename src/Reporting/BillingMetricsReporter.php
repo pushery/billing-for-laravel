@@ -82,8 +82,10 @@ final readonly class BillingMetricsReporter
         /** @var array<string, PlanCatalog> $catalogs */
         $catalogs = [];
 
-        // One pass over the active rows serves the count, the breakdown by tier and the MRR sum.
-        $this->scoped($merchant)->where('status', 'active')->cursor()->each(function (Subscription $sub) use (&$mrrMinor, &$activeCount, &$activeByTier, &$catalogs): void {
+        // One pass over the active rows serves the count, the breakdown by tier and the MRR sum. A thousand rows at a
+        // time by key: the database driver buffers the whole result of a cursor, PostgreSQL's outside memory_limit, and
+        // the active rows grow with every customer.
+        $this->scoped($merchant)->where('status', 'active')->lazyById(1000)->each(function (Subscription $sub) use (&$mrrMinor, &$activeCount, &$activeByTier, &$catalogs): void {
             $activeCount++;
 
             if ($sub->tier_key === null) {

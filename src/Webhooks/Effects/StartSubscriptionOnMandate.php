@@ -9,7 +9,6 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Pushery\Billing\Consumer\CustomerTypes;
 use Pushery\Billing\Discounts\CouponCodes;
@@ -22,6 +21,7 @@ use Pushery\Billing\Exceptions\CouponUnavailable;
 use Pushery\Billing\Models\Coupon;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Models\SubscriptionIntent;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\TierInterval;
 use Pushery\Billing\Support\UniqueRow;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -70,7 +70,7 @@ final readonly class StartSubscriptionOnMandate
             return;
         }
 
-        DB::transaction(function () use ($event): void {
+        BillingConnection::connection()->transaction(function () use ($event): void {
             // The conditional update is the claim. Reading first and writing after would let two
             // simultaneous deliveries both pass the read.
             $claimed = SubscriptionIntent::model()::query()

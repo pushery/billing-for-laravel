@@ -12,7 +12,6 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Catalogs\MeterCatalog;
 use Pushery\Billing\Consumer\GermanWithdrawalPolicy;
 use Pushery\Billing\Consumer\WithdrawalGate;
@@ -32,6 +31,7 @@ use Pushery\Billing\Contracts\IdentifiesBusinessBuyers;
 use Pushery\Billing\Contracts\JurisdictionProfile;
 use Pushery\Billing\Contracts\MandateNotifier;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
+use Pushery\Billing\Contracts\PaymentMethodNotifier;
 use Pushery\Billing\Contracts\PlanCatalog;
 use Pushery\Billing\Contracts\ProductTaxonomy;
 use Pushery\Billing\Contracts\ReceiptNotifier;
@@ -75,6 +75,7 @@ use Pushery\Billing\Preflight\Profiles\GermanProductTaxonomy;
 use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
 use Pushery\Billing\Preflight\Profiles\GermanSellerStanding;
 use Pushery\Billing\PriceChanges\DeclaredPriceChanges;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\BillingSchema;
 use Pushery\Billing\Support\KeyedConfig;
@@ -165,6 +166,7 @@ final class DoctorCommand extends Command
         DunningNotifier::class,
         MandateNotifier::class,
         PaymentActionNotifier::class,
+        PaymentMethodNotifier::class,
         ReceiptNotifier::class,
         SubscriptionEndingNotifier::class,
         SubscriptionNotifier::class,
@@ -1188,7 +1190,7 @@ final class DoctorCommand extends Command
         $missing = [];
 
         if ($paymentsOnly) {
-            $missing = array_values(array_filter(PaymentsModeSchema::TABLES, static fn (string $table): bool => ! TableLookup::exists($table)));
+            $missing = array_values(array_filter(PaymentsModeSchema::TABLES, static fn (string $table): bool => ! TableLookup::exists($table, BillingConnection::name())));
         } else {
             foreach ([Order::resolve(), MerchantCharge::resolve(), ExchangeRateRecord::resolve(), Subscription::resolve()] as $model) {
                 if (! TableLookup::exists($model->getTable(), $model->getConnectionName())) {
@@ -1250,11 +1252,11 @@ final class DoctorCommand extends Command
     {
         $configured = BillingSchema::hostKeyType();
 
-        if (! TableLookup::exists('billing_subscriptions')) {
+        if (! TableLookup::exists('billing_subscriptions', BillingConnection::name())) {
             return false;
         }
 
-        $actual = strtolower(Schema::getColumnType(TableLookup::qualified('billing_subscriptions'), 'owner_id'));
+        $actual = strtolower(BillingConnection::connection()->getSchemaBuilder()->getColumnType(TableLookup::qualified('billing_subscriptions', BillingConnection::name()), 'owner_id'));
         $isInteger = str_contains($actual, 'int');
 
         if (($configured === 'int') === $isInteger) {
@@ -1284,7 +1286,7 @@ final class DoctorCommand extends Command
      */
     private function reportSessionTimeZone(): bool
     {
-        $connection = Schema::getConnection();
+        $connection = BillingConnection::connection();
 
         if ($connection->getDriverName() !== 'pgsql') {
             return false;
@@ -1437,7 +1439,8 @@ final class DoctorCommand extends Command
             .' days. A charge that long in flight has almost certainly been settled or refused at the '
             .'provider without this application hearing about it — a lost delivery, a failed signature, or '
             .'an effect job that ran out of retries. Do NOT simply charge again: look the payment up at the '
-            .'provider first, because the money may already have moved.'
+            .'provider first, because the money may already have moved. Where the package bills the cycles itself, '
+            .'`php artisan billing:cycles:reconcile` reads each such payment back and records where it stands.'
         );
 
         return true;

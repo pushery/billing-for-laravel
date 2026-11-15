@@ -8,9 +8,9 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Pushery\Billing\Models\MerchantBalance;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\LockedRow;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -162,7 +162,7 @@ final readonly class MerchantSubLedger
             throw new InvalidArgumentException('A settlement cannot be negative.');
         }
 
-        return DB::transaction(function () use ($merchant, $gross): array {
+        return BillingConnection::connection()->transaction(function () use ($merchant, $gross): array {
             $before = $this->lockedBalance($merchant, $gross->currency);
 
             // Nothing owed: the settlement passes through untouched and no row is written. An offset of zero
@@ -187,7 +187,7 @@ final readonly class MerchantSubLedger
     /** Adjust the balance by a signed amount under a row lock. */
     private function apply(Model $merchant, Money $amount): Money
     {
-        return DB::transaction(function () use ($merchant, $amount): Money {
+        return BillingConnection::connection()->transaction(function () use ($merchant, $amount): Money {
             $balance = $this->lockedBalance($merchant, $amount->currency);
 
             return $this->write($merchant, $balance->plus($amount));

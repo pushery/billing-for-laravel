@@ -66,6 +66,7 @@ use Pushery\Billing\Console\Commands\ProbeRatesCommand;
 use Pushery\Billing\Console\Commands\PruneBillingCommand;
 use Pushery\Billing\Console\Commands\RecapitulativeStatementExportCommand;
 use Pushery\Billing\Console\Commands\ReconcileAccountPaymentsCommand;
+use Pushery\Billing\Console\Commands\ReconcileCyclePaymentsCommand;
 use Pushery\Billing\Console\Commands\ReconcileMerchantJournalCommand;
 use Pushery\Billing\Console\Commands\ReconcileMoneyBackCommand;
 use Pushery\Billing\Console\Commands\ReconcileTaxStatusCommand;
@@ -82,6 +83,7 @@ use Pushery\Billing\Console\Commands\ReportingRunCommand;
 use Pushery\Billing\Console\Commands\RestateSettlementsCommand;
 use Pushery\Billing\Console\Commands\RetryMerchantTransfersCommand;
 use Pushery\Billing\Console\Commands\SyncSubscriptionsCommand;
+use Pushery\Billing\Console\Commands\TaxRateCorrectionsCommand;
 use Pushery\Billing\Console\Commands\TaxReturnExportCommand;
 use Pushery\Billing\Console\Commands\WarnEndingSubscriptionsCommand;
 use Pushery\Billing\Console\Commands\WarnEndingTrialsCommand;
@@ -107,6 +109,7 @@ use Pushery\Billing\Contracts\ArrearsClock;
 use Pushery\Billing\Contracts\ArrearsRoster;
 use Pushery\Billing\Contracts\AttachesToContractConfirmation;
 use Pushery\Billing\Contracts\BalanceSubscriptionTerms;
+use Pushery\Billing\Contracts\BaseInterestRates;
 use Pushery\Billing\Contracts\BillingActionUrls;
 use Pushery\Billing\Contracts\BillingEntityResolver;
 use Pushery\Billing\Contracts\BundleContents;
@@ -162,6 +165,7 @@ use Pushery\Billing\Contracts\OwnerTimezone;
 use Pushery\Billing\Contracts\PausesSubscriptions;
 use Pushery\Billing\Contracts\PaymentAccounts;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
+use Pushery\Billing\Contracts\PaymentMethodNotifier;
 use Pushery\Billing\Contracts\PaysOutstandingInvoices;
 use Pushery\Billing\Contracts\PdfRenderer;
 use Pushery\Billing\Contracts\PlanCatalog;
@@ -216,6 +220,7 @@ use Pushery\Billing\Drivers\NullSubscriptionActions;
 use Pushery\Billing\Drivers\NullUpcomingInvoice;
 use Pushery\Billing\Drivers\Shopify\ShopifyServiceProvider;
 use Pushery\Billing\Drivers\Stripe\StripeServiceProvider;
+use Pushery\Billing\Dunning\ConfiguredBaseInterestRates;
 use Pushery\Billing\Dunning\LadderSuspension;
 use Pushery\Billing\Dunning\LocalArrearsClock;
 use Pushery\Billing\Dunning\LocalArrearsRoster;
@@ -316,6 +321,7 @@ use Pushery\Billing\Support\BillingConfigValidator;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\ConfigOrderButtonText;
 use Pushery\Billing\Support\CustodyGuard;
+use Pushery\Billing\Support\CyclePaymentReconciler;
 use Pushery\Billing\Support\DeclaredBusinessBuyers;
 use Pushery\Billing\Support\GoLivePreflightGuard;
 use Pushery\Billing\Support\LanguageFallbackLoader;
@@ -790,6 +796,8 @@ final class BillingServiceProvider extends ServiceProvider
         $this->app->bind(SuspensionNotifier::class, LaravelDunningNotifier::class);
         $this->app->bind(MandateNotifier::class, LaravelDunningNotifier::class);
         $this->app->bind(TrialNotifier::class, LaravelDunningNotifier::class);
+        // The warning before a card expires, a seam of its own like the others, so an application routes it too.
+        $this->app->bind(PaymentMethodNotifier::class, LaravelDunningNotifier::class);
         $this->app->bind(PriceChangeNotifier::class, LaravelDunningNotifier::class);
         // The receipt (a payment that did go through) and the cancellation notice with its access-end date
         // — the same default notifier delivers them; an app rebinds either seam on its own.
@@ -810,6 +818,9 @@ final class BillingServiceProvider extends ServiceProvider
         // Which owners buy as a business: every owner where `billing.audience` is `business_only`, otherwise the ones that
         // declared themselves one at checkout. An offer only businesses may buy is shown to nobody else, never to everyone.
         $this->app->bind(IdentifiesBusinessBuyers::class, DeclaredBusinessBuyers::class);
+        // The base rate default interest is charged above: the dated list in `billing.dunning_interest.base_rates`,
+        // until the application binds a source of its own.
+        $this->app->bind(BaseInterestRates::class, ConfiguredBaseInterestRates::class);
         // What the confirmation of a contract carries beside its text: nothing, until the application binds the
         // documents of its own, its terms in the version accepted for instance.
         $this->app->bind(AttachesToContractConfirmation::class, NoConfirmationDocuments::class);
@@ -1375,6 +1386,8 @@ final class BillingServiceProvider extends ServiceProvider
                 ReconcileUsageCommand::class,
                 ReconcileMoneyBackCommand::class,
                 ReconcileAccountPaymentsCommand::class,
+                ReconcileCyclePaymentsCommand::class,
+                TaxRateCorrectionsCommand::class,
                 DatevExportCommand::class,
                 CancelSubscriptionCommand::class,
                 GrantTierCommand::class,
@@ -1471,7 +1484,16 @@ final class BillingServiceProvider extends ServiceProvider
             // prints to say it ran and found nothing reaches nobody there; the heartbeat is the signal a monitor
             // outside the process can watch for, and its absence is the one that matters.
             $withHeartbeat($schedule->command('billing:run')->hourly()->withoutOverlapping(self::LOCK_HOURLY)->onOneServer(), 'billing:run');
-            $withHeartbeat($schedule->command('billing:usage:flush')->everyMinute()->withoutOverlapping(self::LOCK_MINUTELY)->onOneServer(), 'billing:usage:flush');
+            // The payments of the cycles in collection whose webhook did not arrive, read back at the half hour. Planned only
+            // where the driver binds the reader, which is where the package's own engine holds a cycle open for its payment.
+            if ($container->bound(CyclePaymentReconciler::class)) {
+                $withHeartbeat($schedule->command('billing:cycles:reconcile')->hourlyAt(30)->withoutOverlapping(self::LOCK_HOURLY)->onOneServer(), 'billing:cycles:reconcile');
+            }
+            // Planned only where a tier meters something: without a metered component on any tier there is no
+            // usage to report and no allowance a hold defends, and a run every minute would read empty tables.
+            if ($container->make(MeterCatalog::class)->meterKeys() !== []) {
+                $withHeartbeat($schedule->command('billing:usage:flush')->everyMinute()->withoutOverlapping(self::LOCK_MINUTELY)->onOneServer(), 'billing:usage:flush');
+            }
             // A daily proactive nudge before a card expires — the biggest preventable cause of churn.
             $withHeartbeat($schedule->command('billing:cards:warn')->dailyAt('09:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:cards:warn');
             // The same nudge for the trial that has no provider to send one. A subscription trial ends with a
@@ -1516,17 +1538,21 @@ final class BillingServiceProvider extends ServiceProvider
                 $withHeartbeat($schedule->command('billing:money-back:reconcile')->dailyAt('04:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:money-back:reconcile');
             }
             self::scheduleAccountReconcile($schedule, $container, $withHeartbeat);
-            // The notice before the hold below: when an attestation's renewal falls due at the year boundary,
-            // and again shortly before it runs out. Safe unconditionally: with nothing due it touches nothing
-            // and exits zero.
-            $withHeartbeat($schedule->command('billing:tax-holds:remind')->dailyAt('05:55')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:tax-holds:remind');
-            // The one hold nothing else can notice. A merchant whose attestation expires is stopped from
-            // selling and from being paid without a row changing anywhere — the date simply passed. Without
-            // this sweep they find out by trying to sell. Early, so the notice lands before their day does.
-            $withHeartbeat($schedule->command('billing:tax-holds:announce')->dailyAt('06:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:tax-holds:announce');
-            // The settlements a corrected creator standing has made wrong, issued again. Safe to schedule
-            // unconditionally: with nothing queued it touches nothing and exits zero.
-            $withHeartbeat($schedule->command('billing:settlements:restate')->dailyAt('06:05')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:settlements:restate');
+            // The sweeps of a marketplace's sellers, planned only where the marketplace is switched on, like the
+            // escalation and the voucher levels below: a single-seller install has no sellers, no attestations,
+            // no creator standing and no buyer-protection hold, and `schedule:list` shows what runs for it.
+            $marketplace = (bool) $scheduleConfig->get('billing.marketplace.enabled', false);
+            if ($marketplace) {
+                // The notice before the hold below: when an attestation's renewal falls due at the year boundary,
+                // and again shortly before it runs out.
+                $withHeartbeat($schedule->command('billing:tax-holds:remind')->dailyAt('05:55')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:tax-holds:remind');
+                // The one hold nothing else can notice. A merchant whose attestation expires is stopped from
+                // selling and from being paid without a row changing anywhere — the date simply passed. Without
+                // this sweep they find out by trying to sell. Early, so the notice lands before their day does.
+                $withHeartbeat($schedule->command('billing:tax-holds:announce')->dailyAt('06:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:tax-holds:announce');
+                // The settlements a corrected creator standing has made wrong, issued again.
+                $withHeartbeat($schedule->command('billing:settlements:restate')->dailyAt('06:05')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:settlements:restate');
+            }
             // Sellers whose record is incomplete: one step of the escalation a day, then the release of what
             // may move again. Gated at registration like the voucher entry below, because a single-seller
             // install has no sellers, and an entry that always no-ops is not what `schedule:list` should show.
@@ -1550,7 +1576,9 @@ final class BillingServiceProvider extends ServiceProvider
             // unrun, a creator who has outgrown their relief keeps issuing tax-free documents, which is
             // knowingly wrong from the breaking sale onward. Just after the announcement, so a standing
             // written here is in place before the next day's selling rather than mid-morning.
-            $withHeartbeat($schedule->command('billing:tax-status:reconcile')->dailyAt('06:15')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:tax-status:reconcile');
+            if ($marketplace) {
+                $withHeartbeat($schedule->command('billing:tax-status:reconcile')->dailyAt('06:15')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:tax-status:reconcile');
+            }
             // The central bank publishes its daily reference rates around 16:00 CET, so the run follows at
             // 17:30 on Frankfurt's clock rather than the application's: in a timezone far enough east, 17:30
             // local comes before the publication, finds no rate for the day, and the day waits for the next
@@ -1564,9 +1592,11 @@ final class BillingServiceProvider extends ServiceProvider
             // money arrives, so nothing looks broken, and only the promise behind it was empty. The command
             // said "Meant to run daily" in its own docblock while nothing ran it.
             //
-            // Safe to schedule unconditionally: with no holds it moves nothing and exits zero, so an install
-            // that never enables buyer protection pays one empty query a day.
-            $withHeartbeat($schedule->command('billing:protection:advance')->dailyAt('05:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:protection:advance');
+            // On the marketplace switch, not on the protection's own: a marketplace that switches the protection
+            // off still advances the holds it already took.
+            if ($marketplace) {
+                $withHeartbeat($schedule->command('billing:protection:advance')->dailyAt('05:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:protection:advance');
+            }
         });
     }
 

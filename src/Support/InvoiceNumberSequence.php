@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Pushery\Billing\Support;
 
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Marketplace\DocumentNumberAllocator;
 use Pushery\Billing\Models\NumberSequence;
 
@@ -34,7 +33,7 @@ final class InvoiceNumberSequence
 {
     public function next(string $scope): int
     {
-        return DB::transaction(function () use ($scope): int {
+        return BillingConnection::connection()->transaction(function () use ($scope): int {
             $row = NumberSequence::model()::query()->where('scope', $scope);
 
             $sequence = LockedRow::take($row, [

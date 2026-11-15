@@ -8,8 +8,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use InvalidArgumentException;
 use Pushery\Billing\Casts\UtcDateTime;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -113,7 +111,7 @@ final readonly class BillingDataExport
 
         // The audit ledger keys on subject/actor, not owner — but a subject-access request covers the
         // owner's billing history all the same, so include the rows where they are the subject or the actor.
-        $export['billing_events'] = array_values(DB::table('billing_events')
+        $export['billing_events'] = array_values(BillingConnection::connection()->table('billing_events')
             ->where(fn (Builder $q): Builder => $q
                 ->where('subject_type', $owner->getMorphClass())->where('subject_id', $owner->getKey()))
             ->orWhere(fn (Builder $q): Builder => $q
@@ -171,12 +169,9 @@ final readonly class BillingDataExport
         foreach ($export as $table => $rows) {
             $zones = [];
 
-            foreach (Schema::getColumns(TableLookup::qualified($table)) as $column) {
-                $name = is_array($column) ? ($column['name'] ?? null) : null;
-                $type = is_array($column) ? ($column['type_name'] ?? null) : null;
-
-                if (is_string($name) && in_array($type, ['timestamp', 'timestamptz', 'datetime'], true)) {
-                    $zones[$name] = in_array($name, $utc[$table] ?? [], true) ? 'UTC' : null;
+            foreach (BillingConnection::connection()->getSchemaBuilder()->getColumns(TableLookup::qualified($table, BillingConnection::name())) as $column) {
+                if (in_array($column['type_name'], ['timestamp', 'timestamptz', 'datetime'], true)) {
+                    $zones[$column['name']] = in_array($column['name'], $utc[$table] ?? [], true) ? 'UTC' : null;
                 }
             }
 
@@ -309,7 +304,7 @@ final readonly class BillingDataExport
             return [];
         }
 
-        return array_values(DB::table('billing_access_grants')
+        return array_values(BillingConnection::connection()->table('billing_access_grants')
             ->where('purchaser_type', $owner->getMorphClass())
             ->where('purchaser_id', $key)
             ->whereNot(fn (Builder $q): Builder => $q
@@ -348,12 +343,12 @@ final readonly class BillingDataExport
         $email = $owner->getAttribute('email');
         $address = is_string($email) ? mb_strtolower(trim($email)) : '';
 
-        $subscriptions = DB::table('billing_subscriptions')
+        $subscriptions = BillingConnection::connection()->table('billing_subscriptions')
             ->where($axis->typeColumn, $owner->getMorphClass())
             ->where($axis->idColumn, $key)
             ->select('id');
 
-        return array_values(DB::table($table)
+        return array_values(BillingConnection::connection()->table($table)
             ->whereNotIn('id', array_column($found, 'id'))
             ->where(fn (Builder $q): Builder => $q
                 ->whereIn('subscription_id', $subscriptions)
@@ -379,7 +374,7 @@ final readonly class BillingDataExport
             return [];
         }
 
-        return array_values(DB::table('billing_coupons')
+        return array_values(BillingConnection::connection()->table('billing_coupons')
             ->where('merchant_uid', MerchantScope::forMerchant($owner)->uid())
             ->get()
             ->map(fn (object $row): array => (array) $row)

@@ -62,6 +62,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * @property ?string $provider_coupon_id
  * @property bool $active
  * @property array<string, int>|null $trial_days
+ * @property array<array-key, mixed>|null $plan_keys the plans whose lines the coupon discounts, null for every line
  */
 class Coupon extends Model
 {
@@ -73,7 +74,7 @@ class Coupon extends Model
     /** @var list<string> */
     protected $fillable = [
         'code', 'merchant_uid', 'type', 'value', 'currency', 'duration', 'duration_in_cycles',
-        'max_redemptions', 'redeemed_count', 'expires_at', 'provider_coupon_id', 'active', 'trial_days',
+        'max_redemptions', 'redeemed_count', 'expires_at', 'provider_coupon_id', 'active', 'trial_days', 'plan_keys',
     ];
 
     /**
@@ -104,6 +105,7 @@ class Coupon extends Model
         'expires_at' => UtcDateTime::class,
         'active' => 'boolean',
         'trial_days' => 'array',
+        'plan_keys' => 'array',
     ];
 
     /**
@@ -115,6 +117,27 @@ class Coupon extends Model
         $days = $this->trial_days[$planKey] ?? $this->trial_days['*'] ?? null;
 
         return is_int($days) && $days >= 1 ? $days : null;
+    }
+
+    /**
+     * The plans whose lines this coupon discounts, or null where it discounts every line of the cycle.
+     *
+     * Null and an empty list both name no plan, and so restrict nothing. An entry that is not a plan key is skipped, as
+     * the column holds whatever the application wrote into it.
+     *
+     * @return non-empty-list<string>|null
+     */
+    public function planKeys(): ?array
+    {
+        $keys = [];
+
+        foreach ($this->plan_keys ?? [] as $key) {
+            if (is_string($key) && $key !== '') {
+                $keys[] = $key;
+            }
+        }
+
+        return $keys === [] ? null : $keys;
     }
 
     /** @return HasMany<CouponRedemption, $this> */

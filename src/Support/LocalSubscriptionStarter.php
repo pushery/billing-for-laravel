@@ -16,6 +16,7 @@ use Pushery\Billing\Consumer\CustomerTypes;
 use Pushery\Billing\Contracts\EnsuresProviderCustomer;
 use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
 use Pushery\Billing\Contracts\PlanCatalog;
+use Pushery\Billing\Contracts\StartsOverAMandate;
 use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\TierCatalog;
 use Pushery\Billing\Discounts\CouponCodes;
@@ -27,6 +28,8 @@ use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Exceptions\CouponUnavailable;
 use Pushery\Billing\Exceptions\SubscriptionNotPermitted;
 use Pushery\Billing\Models\Coupon;
+use Pushery\Billing\Models\CouponRedemption;
+use Pushery\Billing\Models\PaymentMandate;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Models\SubscriptionIntent;
 use Pushery\Billing\Trials\TrialMode;
@@ -54,6 +57,9 @@ use RuntimeException;
  *
  * Everything else **redirects**, and this is the shape the whole design is built around.
  *
+ * Unless the application says the customer chose a mandate they have already given: `startOverTheMandate()` writes the
+ * row at once, in the subscription trial or active, and the engine charges that mandate at the first run.
+ *
  * ## Nothing is written until the mandate arrives, and that is the point
  *
  * The obvious design writes the subscription first, in a pending state, and rolls it back when the
@@ -71,7 +77,7 @@ use RuntimeException;
  * rather than defaulted, because it arrives from a browser and a default would let whoever sent it decide
  * what a subscription costs.
  */
-final readonly class LocalSubscriptionStarter implements StartsSubscriptions
+final readonly class LocalSubscriptionStarter implements StartsOverAMandate, StartsSubscriptions
 {
     public function __construct(
         private string $provider,
@@ -88,44 +94,8 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
 
     public function start(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?BillingInterval $interval = null): SubscriptionStart
     {
-        // The local engine bills a tier at its default interval; it keeps no interval on the subscription to bill another.
-        if ($interval instanceof BillingInterval && $interval !== $this->plans->planFor($tierKey)?->interval) {
-            throw new InvalidArgumentException("The local billing engine bills tier '{$tierKey}' at its default interval, not at {$interval->value}.");
-        }
-
-        // The key has to be a key of the tier map, not a path into it. The catalog resolves
-        // `billing.tiers.{$key}` through dot notation, so `pro.price_display` reaches a node that is an
-        // array — and `find()` therefore says yes to a tier that does not exist. The subscription is then
-        // written against it: Active in every report, never billable, sitting permanently due and writing a
-        // warning on each scheduled run.
-        //
-        // Checked against the catalog's own key set rather than by rejecting dots, because the rule is not
-        // "no dots" — it is "one of the keys this install actually sells", and the browser is what supplies
-        // the value.
-        // One check, not two. `find()` was asked first and its null was treated as the refusal — which is
-        // wrong twice over: it resolves `billing.tiers.{$key}` through dot notation, so `pro.price_display`
-        // reaches a node that happens to be an array and passes, and it is redundant once the key set is
-        // consulted, because both read the same configuration. A guard no run can enter is a guard nobody
-        // can trust, and the coverage floor is what says so.
-        // First, because everything after it reads the key. Left where it naturally belongs — beside the
-        // write that uses it — the guard could never fire: `alreadySubscribed()` passes the key straight
-        // into a WHERE, so an exotic one dies inside the query builder several steps earlier, with a
-        // message about SQL rather than about the billable. Hoisted, it is both reachable and useful.
-        $ownerKey = $this->ownerKey($billable);
+        $ownerKey = $this->admit($billable, $tierKey, $interval);
         $couponCode = $this->normalizeCode($couponCode);
-
-        if (! array_key_exists($tierKey, $this->tiers->all())) {
-            throw SubscriptionNotPermitted::unknownTier($tierKey);
-        }
-
-        if ($this->tiers->isUntouchable($tierKey)) {
-            throw SubscriptionNotPermitted::untouchableTier($tierKey);
-        }
-
-        if ($this->alreadySubscribed($billable)) {
-            throw SubscriptionNotPermitted::alreadySubscribed($billable->getMorphClass().'#'.$ownerKey);
-        }
-
         $now = CarbonImmutable::now();
 
         // A generic trial is checked first because it is the only shape that is not a subscription. Asking
@@ -158,64 +128,22 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
             // would find out when access did not arrive.
         }
 
-        // Once per owner, the same rule the generic trial states a few lines above — and it was missing
-        // here, on the shape that costs money. `subscriptionTrialEnabled()` and `endsAt()` are computed
-        // from config and know nothing about history, so every call handed out a fresh trial. Nothing
-        // refused a second one: `alreadySubscribed()` deliberately lets an owner whose row is `ended` or
-        // `incomplete_expired` come back, and both are one button away — `cancelNow()` writes `ended`
-        // immediately, and a lapsed card-less trial now writes `incomplete_expired`. So: take the free
-        // trial, cancel, subscribe again, take it again, as often as you like, never paying.
-        //
-        // Read from the subscription row rather than a counter, because there is exactly one row per
-        // (owner, type, merchant_uid) — every writer here upserts on that key — and its `trial_ends_at`
-        // survives the row being reused. A trial that was had is a trial that shows.
-        $trialEndsAt = $this->policy->subscriptionTrialEnabled($tierKey) && ! Subscription::ownerHasHadATrial($billable)
-            ? $this->policy->endsAt($now, $tierKey)
-            : null;
+        $trialEndsAt = $this->subscriptionTrialEnd($billable, $tierKey, $now);
 
         if (! $this->policy->requiresPaymentMethod($tierKey)) {
             // One transaction for the code and the row, so a code redeemed for days of trial is never left without
-            // the subscription it gave them to. A code that gives the tier days counts them from now and is spent
-            // only when it lengthens the trial the policy gives; it is redeemed here, under the coupon's row lock
-            // (see TrialCodes). A subscription that needs a mandate takes the code when the mandate settles.
+            // the subscription it gave them to. A subscription that needs a mandate takes the code when the mandate
+            // settles.
             $couponModel = Coupon::model();
             $started = new $couponModel()->getConnection()->transaction(function () use ($billable, $ownerKey, $tierKey, $couponCode, $trialEndsAt, $now, $declarationReference): ?SubscriptionStart {
-                $codes = new TrialCodes($this->coupons);
-                $days = $codes->daysFor($couponCode, $tierKey);
-                $endsAt = $trialEndsAt;
-                $granted = null;
+                [$endsAt, $granted] = $this->trialWithTheCode($billable, $couponCode, $tierKey, $trialEndsAt, $now);
 
-                if ($days !== null && (! $endsAt instanceof DateTimeImmutable || $now->addDays($days) > $endsAt)) {
-                    $granted = $codes->redeemFor($billable, $couponCode, $tierKey);
-                    $codeEndsAt = $granted === null ? null : $now->addDays($granted['days']);
-                    $endsAt = $codeEndsAt instanceof CarbonImmutable && (! $endsAt instanceof DateTimeImmutable || $codeEndsAt > $endsAt) ? $codeEndsAt : $endsAt;
-                }
-
-                if (! $endsAt instanceof DateTimeImmutable) {
+                // Without a trial this shape has nothing to write: the customer is sent for a mandate below.
+                if (! $endsAt instanceof CarbonImmutable) {
                     return null;
                 }
 
-                $subscription = $this->writeSubscription(
-                    $billable,
-                    $ownerKey,
-                    $tierKey,
-                    CarbonImmutable::createFromInterface($endsAt),
-                    $now,
-                    $declarationReference,
-                );
-
-                if ($granted !== null) {
-                    $granted['redemption']->forceFill(['subscription_id' => $subscription->id])->save();
-
-                    return new SubscriptionStart(SubscriptionState::Trialing);
-                }
-
-                // This shape has its subscription now, so the coupon is spent now. The redirect shape cannot do
-                // the same -- see `redeemFor()` for why spending one before the mandate lands would cost the
-                // customer their single use on a checkout they may abandon.
-                $this->redeemFor($billable, $couponCode, $subscription->id);
-
-                return new SubscriptionStart(SubscriptionState::Trialing);
+                return $this->startHere($billable, $ownerKey, $tierKey, $couponCode, $endsAt, $granted, $now, $declarationReference);
             });
 
             if ($started instanceof SubscriptionStart) {
@@ -282,6 +210,151 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
     public function honorsCoupon(string $code): bool
     {
         return $this->honorableCoupon($this->normalizeCode($code)) instanceof Coupon;
+    }
+
+    /**
+     * Start the subscription on the owner's default mandate, written at once and charged to that mandate by the engine.
+     *
+     * The mandate is asked for before anything is written, and its absence is a refusal rather than a redirect: the
+     * application called this because the customer chose the mandate they gave, and sending them to the provider would
+     * ask for one they believe they gave already. A trial is the subscription trial the policy gives, once per owner; a
+     * generic trial stands on the owner rather than on a subscription, and only `start()` grants it.
+     */
+    public function startOverTheMandate(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?BillingInterval $interval = null): SubscriptionStart
+    {
+        $ownerKey = $this->admit($billable, $tierKey, $interval);
+
+        if (! PaymentMandate::defaultFor($billable->getMorphClass(), $ownerKey, $this->provider) instanceof PaymentMandate) {
+            throw SubscriptionNotPermitted::noMandate($billable->getMorphClass().'#'.$ownerKey, $this->provider);
+        }
+
+        $couponCode = $this->normalizeCode($couponCode);
+        $now = CarbonImmutable::now();
+        $trialEndsAt = $this->subscriptionTrialEnd($billable, $tierKey, $now);
+        $couponModel = Coupon::model();
+
+        return new $couponModel()->getConnection()->transaction(function () use ($billable, $ownerKey, $tierKey, $couponCode, $trialEndsAt, $now, $declarationReference): SubscriptionStart {
+            [$endsAt, $granted] = $this->trialWithTheCode($billable, $couponCode, $tierKey, $trialEndsAt, $now);
+
+            return $this->startHere($billable, $ownerKey, $tierKey, $couponCode, $endsAt, $granted, $now, $declarationReference);
+        });
+    }
+
+    /**
+     * Refuse what no start may begin, before anything is written or sent, and return the owner's key.
+     *
+     * The local engine bills a tier at its default interval; it keeps no interval on the subscription to bill another.
+     */
+    private function admit(Model $billable, string $tierKey, ?BillingInterval $interval): int|string
+    {
+        if ($interval instanceof BillingInterval && $interval !== $this->plans->planFor($tierKey)?->interval) {
+            throw new InvalidArgumentException("The local billing engine bills tier '{$tierKey}' at its default interval, not at {$interval->value}.");
+        }
+
+        // The key has to be a key of the tier map, not a path into it. The catalog resolves
+        // `billing.tiers.{$key}` through dot notation, so `pro.price_display` reaches a node that is an
+        // array — and `find()` therefore says yes to a tier that does not exist. The subscription is then
+        // written against it: Active in every report, never billable, sitting permanently due and writing a
+        // warning on each scheduled run.
+        //
+        // Checked against the catalog's own key set rather than by rejecting dots, because the rule is not
+        // "no dots" — it is "one of the keys this install actually sells", and the browser is what supplies
+        // the value.
+        // One check, not two. `find()` was asked first and its null was treated as the refusal — which is
+        // wrong twice over: it resolves `billing.tiers.{$key}` through dot notation, so `pro.price_display`
+        // reaches a node that happens to be an array and passes, and it is redundant once the key set is
+        // consulted, because both read the same configuration. A guard no run can enter is a guard nobody
+        // can trust, and the coverage floor is what says so.
+        // First, because everything after it reads the key. Left where it naturally belongs — beside the
+        // write that uses it — the guard could never fire: `alreadySubscribed()` passes the key straight
+        // into a WHERE, so an exotic one dies inside the query builder several steps earlier, with a
+        // message about SQL rather than about the billable. Hoisted, it is both reachable and useful.
+        $ownerKey = $this->ownerKey($billable);
+
+        if (! array_key_exists($tierKey, $this->tiers->all())) {
+            throw SubscriptionNotPermitted::unknownTier($tierKey);
+        }
+
+        if ($this->tiers->isUntouchable($tierKey)) {
+            throw SubscriptionNotPermitted::untouchableTier($tierKey);
+        }
+
+        if ($this->alreadySubscribed($billable)) {
+            throw SubscriptionNotPermitted::alreadySubscribed($billable->getMorphClass().'#'.$ownerKey);
+        }
+
+        return $ownerKey;
+    }
+
+    /**
+     * The end of the subscription trial this owner gets on this tier, or null where they get none.
+     *
+     * Once per owner, the same rule `start()` states for the generic trial — and it was missing on the shape that
+     * costs money. `subscriptionTrialEnabled()` and `endsAt()` are computed from config and know nothing about
+     * history, so every call handed out a fresh trial. Nothing refused a second one: `alreadySubscribed()`
+     * deliberately lets an owner whose row is `ended` or `incomplete_expired` come back, and both are one button
+     * away — `cancelNow()` writes `ended` immediately, and a lapsed card-less trial now writes `incomplete_expired`.
+     * So: take the free trial, cancel, subscribe again, take it again, as often as you like, never paying.
+     *
+     * Read from the subscription row rather than a counter, because there is exactly one row per (owner, type,
+     * merchant_uid) — every writer here upserts on that key — and its `trial_ends_at` survives the row being reused.
+     * A trial that was had is a trial that shows.
+     */
+    private function subscriptionTrialEnd(Model $billable, string $tierKey, CarbonImmutable $now): ?DateTimeImmutable
+    {
+        return $this->policy->subscriptionTrialEnabled($tierKey) && ! Subscription::ownerHasHadATrial($billable)
+            ? $this->policy->endsAt($now, $tierKey)
+            : null;
+    }
+
+    /**
+     * The trial a subscription written here runs, lengthened by a code that gives the tier more days, with the
+     * redemption that gave them. Called inside the transaction that writes the row.
+     *
+     * A code that gives the tier days counts them from now and is spent only when it lengthens the trial the policy
+     * gives; it is redeemed here, under the coupon's row lock (see TrialCodes).
+     *
+     * @return array{?CarbonImmutable, array{days: int, redemption: CouponRedemption}|null}
+     */
+    private function trialWithTheCode(Model $billable, ?string $couponCode, string $tierKey, ?DateTimeImmutable $trialEndsAt, CarbonImmutable $now): array
+    {
+        $codes = new TrialCodes($this->coupons);
+        $days = $codes->daysFor($couponCode, $tierKey);
+        $endsAt = $trialEndsAt instanceof DateTimeImmutable ? CarbonImmutable::createFromInterface($trialEndsAt) : null;
+        $granted = null;
+
+        if ($days !== null && (! $endsAt instanceof CarbonImmutable || $now->addDays($days) > $endsAt)) {
+            $granted = $codes->redeemFor($billable, $couponCode, $tierKey);
+            $codeEndsAt = $granted === null ? null : $now->addDays($granted['days']);
+            $endsAt = $codeEndsAt instanceof CarbonImmutable && (! $endsAt instanceof CarbonImmutable || $codeEndsAt > $endsAt) ? $codeEndsAt : $endsAt;
+        }
+
+        return [$endsAt, $granted];
+    }
+
+    /**
+     * Write the subscription and spend the code on it: the redemption that gave its trial days, or the coupon the code
+     * names, which a customer who subscribes here gets at once.
+     *
+     * @param  array{days: int, redemption: CouponRedemption}|null  $granted
+     */
+    private function startHere(Model $billable, int|string $ownerKey, string $tierKey, ?string $couponCode, ?CarbonImmutable $trialEndsAt, ?array $granted, CarbonImmutable $now, ?string $declarationReference): SubscriptionStart
+    {
+        $subscription = $this->writeSubscription($billable, $ownerKey, $tierKey, $trialEndsAt, $now, $declarationReference);
+        $started = new SubscriptionStart($trialEndsAt instanceof CarbonImmutable ? SubscriptionState::Trialing : SubscriptionState::Active);
+
+        if ($granted !== null) {
+            $granted['redemption']->forceFill(['subscription_id' => $subscription->id])->save();
+
+            return $started;
+        }
+
+        // This shape has its subscription now, so the coupon is spent now. The redirect shape cannot do the same --
+        // see `redeemFor()` for why spending one before the mandate lands would cost the customer their single use
+        // on a checkout they may abandon.
+        $this->redeemFor($billable, $couponCode, $subscription->id);
+
+        return $started;
     }
 
     /** Trimmed of whitespace, invisible characters included, and an empty field is the same as no field. */
@@ -438,10 +511,16 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
         Model $billable,
         int|string $ownerKey,
         string $tierKey,
-        CarbonImmutable $trialEndsAt,
+        ?CarbonImmutable $trialEndsAt,
         CarbonImmutable $now,
         ?string $declarationReference,
     ): Subscription {
+        // Without a trial the period starts now, as the mandate webhook starts it, and the timing decides the first run:
+        // collected in advance, the next run charges the period the customer has from this moment; in arrears, its end.
+        $timing = CollectionTiming::fromConfigured($this->config->get(CollectionTiming::CONFIG_KEY));
+        $periodEnd = $trialEndsAt ?? CarbonImmutable::createFromInterface(new TierInterval($this->config)->for($tierKey)->advance($now));
+        $firstRun = $timing === CollectionTiming::InAdvance && ! $trialEndsAt instanceof CarbonImmutable ? $now : $periodEnd;
+
         // updateOrCreate on the UNIQUE KEY, for the same reason the webhook path does it: a subscription is
         // unique on (owner, type, merchant_uid), and an ended row still holds that slot. This method is
         // reached only after `alreadySubscribed()` deliberately let such an owner through, so a plain
@@ -457,9 +536,11 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
             ],
             [
                 'provider' => $this->provider,
-                'status' => SubscriptionState::Trialing->value,
+                'status' => ($trialEndsAt instanceof CarbonImmutable ? SubscriptionState::Trialing : SubscriptionState::Active)->value,
                 'tier_key' => $tierKey,
-                'trial_ends_at' => $trialEndsAt,
+                // Kept where this subscription has no trial of its own: `ownerHasHadATrial()` reads it from the row a
+                // returning customer reuses, and a null would hand them a fresh trial the next time.
+                'trial_ends_at' => $trialEndsAt ?? $this->pastTrialEnd($billable),
                 // Whether the customer buys as a consumer or as a business, frozen as the subscription begins, and the
                 // moment it began under terms that name the monthly price a year goes on at.
                 'customer_type' => Container::getInstance()->make(CustomerTypes::class)->of($billable),
@@ -467,13 +548,13 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
                 // A new contract, whatever the row held before: its withdrawal window opens now.
                 'started_at' => $now,
                 'current_period_start' => $now,
-                'current_period_end' => $trialEndsAt,
+                'current_period_end' => $periodEnd,
                 // The first cycle runs when the trial ends, not before. A trial that scheduled processing
                 // at its start would bill on day one, which is the one thing a trial promises it will not do.
-                'scheduled_processing_at' => $trialEndsAt,
+                'scheduled_processing_at' => $firstRun,
                 // The timing configured now, recorded for the life of this subscription. Collected in advance, the run
                 // at the trial's end charges the first paid period; in arrears, it closes the free one.
-                'collection_timing' => CollectionTiming::fromConfigured($this->config->get(CollectionTiming::CONFIG_KEY)),
+                'collection_timing' => $timing,
                 // The previous life, cleared. A returning customer whose `ends_at` survived would be
                 // trialing and ending at once, and the presenter reads that as a grace period.
                 'ends_at' => null,
@@ -494,6 +575,12 @@ final readonly class LocalSubscriptionStarter implements StartsSubscriptions
                 'declaration_reference' => $declarationReference,
             ],
         );
+    }
+
+    /** The end of the trial the owner's row already records, or null where the owner has had none. */
+    private function pastTrialEnd(Model $billable): ?CarbonInterface
+    {
+        return Subscription::model()::query()->forOwner($billable)->ofDefaultType()->forMerchant(null)->first()?->trial_ends_at;
     }
 
     /**

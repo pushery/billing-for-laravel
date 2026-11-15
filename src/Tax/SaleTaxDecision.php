@@ -160,11 +160,14 @@ final readonly class SaleTaxDecision
         //
         // Absent a period there is nothing to place — a one-off is taxed when it happens — and the context
         // then carries null, which takes the undated answer rather than inventing today.
+        //
+        // The rate is read on the day the tax point names for it: the tax point itself, or, in a country that binds the
+        // rate to the moment a supply is carried out, the period's last day (see TaxPoint::ratesAtExecution()).
         $taxPoint = $period instanceof ServicePeriod
-            ? $this->taxPoint->decideFor($period, $paidOn ?? $period->from)
+            ? $this->taxPoint->decideFor($period, $paidOn ?? $period->from, $context->countryCode)
             : null;
 
-        $taxed = $context->at($taxPoint?->on);
+        $taxed = $context->at($taxPoint->rateOn ?? $taxPoint?->on);
         $tax = $this->calculator->calculate($net, $taxed);
 
         return new SaleTaxFacts(

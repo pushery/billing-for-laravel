@@ -11,6 +11,7 @@ use Mollie\Api\Exceptions\RequestException;
 use Mollie\Api\Http\Requests\GetMandateRequest;
 use Mollie\Api\Http\Requests\GetPaymentRequest;
 use Mollie\Api\MollieApiClient;
+use Mollie\Api\Resources\Chargeback;
 use Mollie\Api\Resources\Mandate;
 use Mollie\Api\Resources\Payment;
 use Mollie\Api\Types\MandateMethod;
@@ -23,6 +24,7 @@ use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\Events\InPersonSaleCanceled;
 use Pushery\Billing\Events\InPersonSalePaid;
 use Pushery\Billing\Events\MandateEstablished;
+use Pushery\Billing\Events\MandateRevoked;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\ValueObjects\Money;
@@ -45,6 +47,14 @@ use Throwable;
  */
 final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEventMapper
 {
+    /**
+     * The SEPA return codes after which a mandate is not drawn on again: no or no valid mandate (MD01, MD02), the payer
+     * asked for the money back (MD06), the payer died (MD07), the account is wrong, closed or blocked (AC01, AC04,
+     * AC06), the account takes no direct debit (AG01), the payer refused the debit (MS02), or the payer's bank blocks
+     * this creditor (SL01). A code such as AM04, too little money on the account, says nothing about the mandate.
+     */
+    private const array MANDATE_RETURNS = ['MD01', 'MD02', 'MD06', 'MD07', 'AC01', 'AC04', 'AC06', 'AG01', 'MS02', 'SL01'];
+
     /** The mandate method of a card, whose details name the card's expiry. */
     private const string CARD_MANDATE = 'creditcard';
 
@@ -132,7 +142,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
         return is_string($id) && trim($id) !== '' ? trim($id) : null;
     }
 
-    /** @return iterable<AddonPurchased|AddonRefunded|ChargebackReceived|InPersonSaleCanceled|InPersonSalePaid|MandateEstablished|PaymentFailed|PaymentSucceeded> */
+    /** @return iterable<AddonPurchased|AddonRefunded|ChargebackReceived|InPersonSaleCanceled|InPersonSalePaid|MandateEstablished|MandateRevoked|PaymentFailed|PaymentSucceeded> */
     public function map(Request $request): iterable
     {
         // Answered before the id is looked at, because the id cannot answer it. A next-generation delivery
@@ -181,11 +191,17 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
 
             yield from MollieChargebackEvents::from($chargebacks, $customer, MollieValue::id($payment->id));
 
+            yield from $this->mandateEndedByChargebacks($chargebacks, $payment, $customer);
+
             return;
         }
 
         if ($payment->isFailed() || $payment->isCanceled() || $payment->isExpired()) {
-            yield new PaymentFailed($customer, $amount, MollieValue::id($payment->id));
+            $reason = $this->bankReasonOf($payment);
+
+            yield new PaymentFailed($customer, $amount, MollieValue::id($payment->id), $reason);
+
+            yield from $this->mandateEndedBy($reason, $payment, $customer);
 
             return;
         }
@@ -524,6 +540,53 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
             // amount afterwards is told apart from a redelivery by which chargebacks stand.
             standingChargebacks: MollieChargebackEvents::standingIds($chargebacks),
         );
+    }
+
+    /**
+     * The code the payer's bank gave for a returned direct debit, or null where the payment names none.
+     */
+    private function bankReasonOf(Payment $payment): ?string
+    {
+        $details = $payment->details;
+        $code = is_object($details) && isset($details->bankReasonCode) ? $details->bankReasonCode : null;
+
+        return is_string($code) && trim($code) !== '' ? strtoupper(trim($code)) : null;
+    }
+
+    /**
+     * The mandate of the payment as revoked, where the bank returned it for a reason that ends the mandate.
+     *
+     * @return iterable<MandateRevoked>
+     */
+    private function mandateEndedBy(?string $reason, Payment $payment, string $customer): iterable
+    {
+        $mandate = $payment->mandateId;
+
+        if ($reason !== null && in_array($reason, self::MANDATE_RETURNS, true) && is_string($mandate) && $mandate !== '') {
+            yield new MandateRevoked($customer, $mandate);
+        }
+    }
+
+    /**
+     * The mandate of a paid payment as revoked, where a chargeback still standing returned it for a reason that ends
+     * the mandate: a payer who asked for the money back (MD06) is not drawn on again either.
+     *
+     * @param  iterable<mixed>  $chargebacks
+     * @return iterable<MandateRevoked>
+     */
+    private function mandateEndedByChargebacks(iterable $chargebacks, Payment $payment, string $customer): iterable
+    {
+        foreach ($chargebacks as $chargeback) {
+            $reason = $chargeback instanceof Chargeback && $chargeback->reversedAt === null && is_object($chargeback->reason)
+                ? ($chargeback->reason->code ?? null)
+                : null;
+
+            if (is_string($reason) && trim($reason) !== '') {
+                yield from $this->mandateEndedBy(strtoupper(trim($reason)), $payment, $customer);
+
+                return;
+            }
+        }
     }
 
     /**

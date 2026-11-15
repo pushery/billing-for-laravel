@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Contracts\ArrearsRoster;
 use Pushery\Billing\Events\PaymentReminderDue;
 use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\Support\SweepAttempts;
 
 /**
  * The daily reminder inside the cure window: one message per day, per subscription in arrears.
@@ -75,18 +76,25 @@ final readonly class PaymentReminderSweep
         $cutoff = $this->window->cutoff($now);
 
         $sent = 0;
+        $attempts = new SweepAttempts;
 
         foreach ($this->roster->inArrearsSince($cutoff, $today) as $entry) {
-            $this->events->dispatch(new PaymentReminderDue(
-                $entry,
-                $this->daysLeft($entry->since, $now, $window),
-                $entry->subscription instanceof Subscription ? $entry->subscription : null,
-            ));
+            $reminded = $attempts->attempt(function () use ($entry, $now, $window, $today): void {
+                $this->events->dispatch(new PaymentReminderDue(
+                    $entry,
+                    $this->daysLeft($entry->since, $now, $window),
+                    $entry->subscription instanceof Subscription ? $entry->subscription : null,
+                ));
 
-            $this->roster->markReminded($entry, $today);
+                $this->roster->markReminded($entry, $today);
+            });
 
-            $sent++;
+            if ($reminded) {
+                $sent++;
+            }
         }
+
+        $attempts->finish();
 
         return $sent;
     }

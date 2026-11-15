@@ -8,7 +8,6 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Pushery\Billing\Consumer\CustomerTypes;
 use Pushery\Billing\Contracts\CustomerDirectory;
@@ -19,6 +18,7 @@ use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Events\AccountBillingUpdated;
 use Pushery\Billing\Events\SubscriptionStateChanged;
 use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\UntouchableTiers;
 use Pushery\Billing\ValueObjects\MerchantScope;
@@ -52,7 +52,7 @@ final readonly class SyncPlanFromSubscription
 
     public function __invoke(SubscriptionStateChanged $event): void
     {
-        $moved = DB::transaction(function () use ($event): ?Model {
+        $moved = BillingConnection::connection()->transaction(function () use ($event): ?Model {
             $owner = $this->resolveOwner($event);
 
             if (! $owner instanceof Model) {
@@ -89,7 +89,7 @@ final readonly class SyncPlanFromSubscription
      */
     public function applyTo(Model $owner, SubscriptionStateChanged $event): void
     {
-        $this->announce(DB::transaction(
+        $this->announce(BillingConnection::connection()->transaction(
             fn (): ?Model => $this->applyLocked($owner, $event) ? $owner : null,
         ));
     }

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Pushery\Billing\Drivers\Mollie;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Mollie\Api\MollieApiClient;
 use Pushery\Billing\Contracts\AddonCatalog;
@@ -19,6 +18,7 @@ use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\OrderItem;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\Money;
@@ -135,7 +135,7 @@ final readonly class MollieOneTimeCharge implements OneTimeCharge
     /** The order the invoice is raised from, written with its one add-on line before the payment exists. */
     private function openOrder(Model $billable, string $addonKey, Money $price): Order
     {
-        return DB::transaction(function () use ($billable, $addonKey, $price): Order {
+        return BillingConnection::connection()->transaction(function () use ($billable, $addonKey, $price): Order {
             $order = Order::model()::query()->create([
                 'owner_type' => $billable->getMorphClass(),
                 'owner_id' => $billable->getKey(),

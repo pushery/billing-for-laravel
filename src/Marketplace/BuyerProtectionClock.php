@@ -23,6 +23,7 @@ use Pushery\Billing\Exceptions\BuyerProtectionMisconfigured;
 use Pushery\Billing\Models\BuyerProtectionHold;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Support\OwnerOfRecord;
+use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\TransferResult;
@@ -227,18 +228,25 @@ final readonly class BuyerProtectionClock
     public function advance(CarbonInterface $now): array
     {
         $moved = [];
+        $attempts = new SweepAttempts;
 
         foreach ($this->dueForAutoRelease($now) as $hold) {
-            $moved[] = $this->settleAsRelease($hold);
+            $attempts->attempt(function () use ($hold, &$moved): void {
+                $moved[] = $this->settleAsRelease($hold);
+            });
         }
 
         foreach ($this->dueForDecision($now) as $hold) {
             // A disputed hold is not auto-released — nobody here knows who is right. It becomes a hold that
             // says so, which is a state somebody can act on rather than a silent decision nobody made.
-            $moved[] = $hold->state === BuyerProtectionState::Disputed
-                ? $this->markResolutionRequired($hold)
-                : $this->settleAsRelease($hold);
+            $attempts->attempt(function () use ($hold, &$moved): void {
+                $moved[] = $hold->state === BuyerProtectionState::Disputed
+                    ? $this->markResolutionRequired($hold)
+                    : $this->settleAsRelease($hold);
+            });
         }
+
+        $attempts->finish();
 
         // A hold somebody decided while the sweep was on its way is not one the sweep moved.
         return array_values(array_filter($moved, static fn (?BuyerProtectionHold $hold): bool => $hold instanceof BuyerProtectionHold));

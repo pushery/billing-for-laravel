@@ -23,6 +23,9 @@ use RuntimeException;
  * And a billable that already has a live subscription must not start a second: two subscriptions on one
  * owner both bill, both grant access, and only one of them is the one anybody looks at.
  *
+ * A start on the owner's own mandate that finds none is refused rather than turned into a redirect: the application
+ * asked for it because the customer chose a mandate they gave, and a checkout would ask them for one again.
+ *
  * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping
  * a fragment measures where the line was wrapped, not what a test asserts. The values themselves are
  * held by a dedicated guard that varies every parameter individually.
@@ -65,6 +68,14 @@ final class SubscriptionNotPermitted extends RuntimeException
             .'says where they come back to. Set billing.subscribe_return_url (or billing.checkout.success_url). '
             .'It is refused rather than guessed: a guessed return lands somebody on an error page after a '
             .'real payment, holding a mandate nothing told them about.'
+        );
+    }
+
+    public static function noMandate(string $owner, string $provider): self
+    {
+        return new self(
+            'Owner '.$owner.' holds no mandate at '.$provider.' that the billing engine can charge, so there is nothing to '
+            .'start the subscription on. start() sends the customer to the provider to give one.'
         );
     }
 

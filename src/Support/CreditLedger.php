@@ -6,7 +6,6 @@ namespace Pushery\Billing\Support;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Pushery\Billing\Enums\CreditReason;
 use Pushery\Billing\Models\CreditBalance;
@@ -84,7 +83,7 @@ final class CreditLedger
             throw new InvalidArgumentException('A debit amount must be positive.');
         }
 
-        return DB::transaction(function () use ($owner, $amount, $reason, $source): ?Money {
+        return BillingConnection::connection()->transaction(function () use ($owner, $amount, $reason, $source): ?Money {
             $this->lockedBalance($owner, $amount->currency);
 
             $debited = CreditLedgerEntry::model()::query()
@@ -110,7 +109,7 @@ final class CreditLedger
             throw new InvalidArgumentException('A credit amount must be positive.');
         }
 
-        return DB::transaction(function () use ($owner, $amount, $reason, $source): ?Money {
+        return BillingConnection::connection()->transaction(function () use ($owner, $amount, $reason, $source): ?Money {
             $this->lockedBalance($owner, $amount->currency);
 
             $credited = CreditLedgerEntry::model()::query()
@@ -145,7 +144,7 @@ final class CreditLedger
             return Money::of(0, $ceiling->currency);
         }
 
-        return DB::transaction(function () use ($owner, $ceiling, $reason, $source): Money {
+        return BillingConnection::connection()->transaction(function () use ($owner, $ceiling, $reason, $source): Money {
             $available = $this->lockedBalance($owner, $ceiling->currency)->balance_minor;
 
             $spend = min($available, $ceiling->minorUnits);
@@ -168,7 +167,7 @@ final class CreditLedger
      */
     public function credit(Model $owner, Money $amount, CreditReason $reason, ?CreditSource $source = null): Money
     {
-        return DB::transaction(function () use ($owner, $amount, $reason, $source): Money {
+        return BillingConnection::connection()->transaction(function () use ($owner, $amount, $reason, $source): Money {
             $balance = $this->lockedBalance($owner, $amount->currency);
 
             $updated = $balance->balance_minor + $amount->minorUnits;

@@ -34,6 +34,12 @@ final readonly class OrderItemPreprocessorChain
         private Repository $config,
     ) {}
 
+    /** Whether no step is configured, so the chain hands every draft back as it came. */
+    public function isEmpty(): bool
+    {
+        return $this->steps() === [];
+    }
+
     /**
      * @param  list<OrderItemDraft>  $drafts
      * @return list<OrderItemDraft>

@@ -7,7 +7,6 @@ namespace Pushery\Billing\Support;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Models\AddonPurchase;
 use Pushery\Billing\ValueObjects\AddonReversal;
 use Pushery\Billing\ValueObjects\Money;
@@ -65,7 +64,7 @@ final class AddonPurchases
      */
     public function reverse(string $paymentReference, Money $reversedTotal, ?string $reason = null): ?AddonReversal
     {
-        return DB::transaction(function () use ($paymentReference, $reversedTotal, $reason): ?AddonReversal {
+        return BillingConnection::connection()->transaction(function () use ($paymentReference, $reversedTotal, $reason): ?AddonReversal {
             $purchase = AddonPurchase::model()::query()
                 ->where('payment_reference', $paymentReference)
                 ->lockForUpdate()
@@ -132,7 +131,7 @@ final class AddonPurchases
      */
     public function restore(string $paymentReference, Money $standingReversed): ?AddonReversal
     {
-        return DB::transaction(function () use ($paymentReference, $standingReversed): ?AddonReversal {
+        return BillingConnection::connection()->transaction(function () use ($paymentReference, $standingReversed): ?AddonReversal {
             $purchase = AddonPurchase::model()::query()
                 ->where('payment_reference', $paymentReference)
                 ->lockForUpdate()

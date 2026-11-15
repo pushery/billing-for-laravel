@@ -1037,6 +1037,37 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Default interest
+    |--------------------------------------------------------------------------
+    |
+    | Interest on a cycle paid late, opened as an order of its own once the
+    | cycle is paid and collected right after it. Off while `after_days` is
+    | null. Once set, a cycle earns interest from the day after that many days
+    | have passed since it fell due, which is when it was first charged, until
+    | the day its payment is recorded, both counted. Each day earns at the base
+    | rate that held on it plus the surcharge for the owner's kind, a business
+    | or a consumer, in percentage points, and is a 365th of its year, or a
+    | 366th in a leap year. Like a late fee, the interest is compensation and
+    | its document is outside the scope of VAT.
+    |
+    | German law as the example: § 288 BGB adds 9 points between businesses and
+    | 5 points for a consumer, from the 31st day after the payment fell due
+    | (`after_days` 30). The base rate of § 247 BGB moves on 1 January and
+    | 1 July, and the application keeps `base_rates` current: `Y-m-d` mapped to
+    | the rate in percent, each holding from its date until the next one. A day
+    | before the first date earns nothing. An application that takes the rate
+    | from elsewhere binds Pushery\Billing\Contracts\BaseInterestRates.
+    |
+    */
+
+    'dunning_interest' => [
+        'after_days' => null,
+        'surcharge' => ['business' => 9, 'consumer' => 5],
+        'base_rates' => [],
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Cure window
     |--------------------------------------------------------------------------
     |
@@ -1957,6 +1988,13 @@ return [
     // document number's year is frozen the moment it is drawn. Changing it after documents exist does not
     // adjust them.
     'tax_point_on_receipt' => EnvSwitch::read(env('BILLING_TAX_POINT_ON_RECEIPT'), false),
+
+    // The countries that tax a supply at the rate in force when it is carried out rather than on its tax point. A
+    // period is carried out on its last day, so there a period that spans a change of rate carries the rate of its last
+    // day, while its tax still arises on the tax point. Germany does (§ 27 Abs. 1 UStG), and so do Austria and Romania.
+    // It matters only where `tax_matrix.history` dates the rates; `billing:tax-rates:corrections` names the periods a
+    // rate learned after they were invoiced changes.
+    'tax_rate_at_execution' => ['DE', 'AT', 'RO'],
 
     // Whether `billing:rates:probe` may reach the public source that publishes VAT rates.
     //
@@ -3112,6 +3150,23 @@ return [
     'models' => [
         // \Pushery\Billing\Models\Subscription::class => \App\Models\Subscription::class,
         // \Pushery\Billing\Models\Order::class => \App\Models\Order::class,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | The connection the package's tables live on
+    |--------------------------------------------------------------------------
+    |
+    | Null keeps every table of the package on the default connection. A host that keeps a
+    | database per tenant switches the default connection once a tenant is initialized, while
+    | these tables stay in the central database: name the central connection here, and every
+    | model, query, transaction and schema lookup of the package runs on it, inside a tenant as
+    | well. Run the package's migrations on the same connection.
+    |
+    */
+
+    'database' => [
+        'connection' => env('BILLING_DB_CONNECTION'),
     ],
 
 ];

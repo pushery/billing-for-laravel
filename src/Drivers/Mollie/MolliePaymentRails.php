@@ -24,6 +24,7 @@ use Mollie\Api\Types\MandateMethod;
 use Pushery\Billing\Contracts\CancelsPayments;
 use Pushery\Billing\Contracts\CollectsDirectDebits;
 use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
+use Pushery\Billing\Contracts\EstablishesMandateWithMethods;
 use Pushery\Billing\Contracts\PaymentRails;
 use Pushery\Billing\Contracts\ReadsRefunds;
 use Pushery\Billing\Enums\RefundStatus;
@@ -70,8 +71,11 @@ use UnexpectedValueException;
  * `paid` is success; `failed`, `canceled` and `expired` are declines; everything else is `pending`, which
  * the engine reads as "not yet" rather than as "no".
  */
-final readonly class MolliePaymentRails implements CancelsPayments, CollectsDirectDebits, EstablishesMandateByRedirect, PaymentRails, ReadsRefunds
+final readonly class MolliePaymentRails implements CancelsPayments, CollectsDirectDebits, EstablishesMandateByRedirect, EstablishesMandateWithMethods, PaymentRails, ReadsRefunds
 {
+    /** The methods for which Mollie takes a first payment of 0.00, from its guide to recurring payments. */
+    private const array ZERO_AMOUNT_METHODS = ['creditcard', 'paypal', 'bacs'];
+
     /**
      * Mollie's `description` carries 255 characters at most, and less for some payment methods.
      *
@@ -185,11 +189,50 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
      */
     public function beginMandate(string $customerReference, Money $verification, string $returnUrl): MandateHandshake
     {
+        return $this->firstPayment($customerReference, $verification, $returnUrl, null);
+    }
+
+    /**
+     * Begin establishing a mandate through the payment methods given, which Mollie's checkout then offers alone.
+     *
+     * Zero is taken only where every method named takes a first payment without a charge, which Mollie documents
+     * for credit card and PayPal, and requires for Bacs; any other method needs a real charge, and is refused here
+     * rather than by Mollie once the customer is on its checkout.
+     *
+     * @param  list<string>  $methods
+     */
+    public function beginMandateWith(string $customerReference, Money $verification, string $returnUrl, array $methods): MandateHandshake
+    {
+        if ($methods === []) {
+            throw new InvalidArgumentException('Name at least one payment method to begin a mandate with, or call beginMandate() for the checkout to offer them all.');
+        }
+
+        $charged = array_values(array_diff($methods, self::ZERO_AMOUNT_METHODS));
+
+        if ($verification->isZero() && $charged !== []) {
+            throw new InvalidArgumentException(sprintf(
+                'Mollie takes a first payment of 0.00 only for %s, so a mandate through %s needs a real charge.',
+                implode(', ', self::ZERO_AMOUNT_METHODS),
+                implode(', ', $charged),
+            ));
+        }
+
+        return $this->firstPayment($customerReference, $verification, $returnUrl, $methods);
+    }
+
+    /**
+     * The `first` payment that establishes a mandate once the customer completes it.
+     *
+     * @param  list<string>|null  $methods  the methods the checkout offers, or null for all the profile has
+     */
+    private function firstPayment(string $customerReference, Money $verification, string $returnUrl, ?array $methods): MandateHandshake
+    {
         $payment = MollieValue::narrow($this->client->send(new CreatePaymentRequest(
             description: 'Mandate verification',
             amount: MollieAmount::toMollie($verification),
             redirectUrl: $returnUrl,
             webhookUrl: $this->webhookUrl,
+            method: $methods,
             sequenceType: MollieValue::SEQUENCE_FIRST,
             customerId: $customerReference,
             profileId: $this->profileId,

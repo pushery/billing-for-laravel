@@ -72,7 +72,10 @@ final class SmeOnTheWebExemptionValidator implements SmallBusinessExemptionValid
         }
 
         try {
+            // No redirect is followed: the verdict comes from the Commission's service alone, and a 3xx has no
+            // body that reads as an answer, so it counts as none.
             $response = Http::timeout(5)
+                ->withoutRedirecting()
                 ->withHeaders(['SOAPAction' => '""'])
                 ->withBody($this->envelope($number, $state), 'text/xml; charset=utf-8')
                 ->post(self::ENDPOINT);

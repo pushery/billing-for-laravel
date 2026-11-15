@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Pushery\Billing\Webhooks\Effects;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Events\MandateEstablished;
 use Pushery\Billing\Models\PaymentMandate;
 use Pushery\Billing\Models\PaymentMandateAnchor;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\LockedRow;
 use Pushery\Billing\Support\UniqueRow;
 
@@ -51,7 +51,7 @@ final readonly class StoreMandate
             return;
         }
 
-        DB::transaction(function () use ($owner, $event): void {
+        BillingConnection::connection()->transaction(function () use ($owner, $event): void {
             LockedRow::take(
                 PaymentMandateAnchor::model()::query()
                     ->where('owner_type', $owner->getMorphClass())

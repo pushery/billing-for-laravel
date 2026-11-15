@@ -46,7 +46,7 @@ final readonly class OrderItemDraft
         return $this->unitPriceMinor * $this->quantity;
     }
 
-    /** @return array<string, mixed> */
+    /** @return array{description: string, unit_price_minor: int, quantity: int, total_minor: int, currency: string, type: OrderItemType, metadata: array<string, mixed>} */
     public function toAttributes(): array
     {
         return [

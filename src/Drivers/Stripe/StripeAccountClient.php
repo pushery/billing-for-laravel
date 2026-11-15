@@ -9,6 +9,9 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Config;
 use InvalidArgumentException;
 use Pushery\Billing\ValueObjects\PaymentAccount;
+use Stripe\ApiRequestor;
+use Stripe\HttpClient\CurlClient;
+use Stripe\Stripe;
 
 /**
  * The Stripe client of one payment account, built from the account's secret or restricted key.
@@ -45,6 +48,29 @@ final class StripeAccountClient
         }
 
         return new TimedStripeClient($config, $http['timeout'], $http['connect_timeout']);
+    }
+
+    /**
+     * The longest one call of an account's client can take, in whole seconds, its retries and the pauses before them
+     * included.
+     *
+     * For a caller that holds a lock across calls to an account's client, which must not expire while a call under it
+     * may still run. Each attempt counts at its full timeout, which covers the connection as well, and each retry with
+     * the longest pause the SDK waits before one. The numbers are read from `billing.stripe.account_http` as `for()`
+     * reads them, with the same `$servingRequest`. Where the timeout is no usable number, the process's HTTP client
+     * answers, 80 seconds unless the application set another; where the retries name no number, the SDK's own setting. An HTTP
+     * client of another kind is read as the SDK's default.
+     */
+    public static function longestCall(?bool $servingRequest = null): int
+    {
+        $http = self::accountHttp($servingRequest ?? self::insideAWebRequest());
+        $process = ApiRequestor::httpClient();
+        $processTimeout = $process instanceof CurlClient ? $process->getTimeout() : null;
+        $timeout = $http['timeout'] ?? (is_numeric($processTimeout) ? (int) $processTimeout : CurlClient::DEFAULT_TIMEOUT);
+        $retries = $http['retries'] ?? Stripe::getMaxNetworkRetries();
+        $pause = (int) ceil(max(Stripe::getInitialNetworkRetryDelay(), Stripe::getMaxNetworkRetryDelay()));
+
+        return ($retries + 1) * $timeout + $retries * $pause;
     }
 
     /**

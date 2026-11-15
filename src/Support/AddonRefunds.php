@@ -7,7 +7,6 @@ namespace Pushery\Billing\Support;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Bus;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\AddonContentMap;
 use Pushery\Billing\Enums\AuditSource;
@@ -73,7 +72,7 @@ final readonly class AddonRefunds
      */
     public function reverse(string $paymentReference, Money $cumulativeReversed, ?string $reason = null, AuditSource $source = AuditSource::Webhook, ?Model $actor = null): ?AddonReversal
     {
-        $reversal = DB::transaction(function () use ($paymentReference, $cumulativeReversed, $reason, $source, $actor): ?AddonReversal {
+        $reversal = BillingConnection::connection()->transaction(function () use ($paymentReference, $cumulativeReversed, $reason, $source, $actor): ?AddonReversal {
             $reversal = $this->purchases->reverse($paymentReference, $cumulativeReversed, $reason);
 
             if (! $reversal instanceof AddonReversal) {
@@ -171,7 +170,7 @@ final readonly class AddonRefunds
      */
     public function restore(string $paymentReference, Money $standingReversed, ?string $dispute = null, AuditSource $source = AuditSource::Webhook): ?AddonReversal
     {
-        $restored = DB::transaction(function () use ($paymentReference, $standingReversed, $dispute, $source): ?AddonReversal {
+        $restored = BillingConnection::connection()->transaction(function () use ($paymentReference, $standingReversed, $dispute, $source): ?AddonReversal {
             $restored = $this->purchases->restore($paymentReference, $standingReversed);
 
             if (! $restored instanceof AddonReversal) {

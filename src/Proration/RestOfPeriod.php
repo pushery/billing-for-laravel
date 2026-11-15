@@ -11,6 +11,7 @@ use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\CreditReason;
 use Pushery\Billing\Enums\OrderItemType;
 use Pushery\Billing\Enums\OrderStatus;
+use Pushery\Billing\Models\CreditLedgerEntry;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\Subscription;
@@ -34,6 +35,16 @@ use Pushery\Billing\ValueObjects\Plan;
  *
  * Only a period that was paid is squared. A free trial charges nothing for its days, so a change inside it changes
  * nothing that was paid; a period whose payment failed is collected again at the terms in force by then.
+ *
+ * Where the cycle prices a tier itself, through the subscription's own lines and their resolvers or through a
+ * configured step, the catalog price is not what anybody pays: the tier in force is valued at what the period's own
+ * order charged for its subscription and usage lines, and the tier changed to at what the next cycle charges for them
+ * ({@see LocalBillingEngine::tierCharge()}).
+ *
+ * The credit for a cheaper tier gives back what the period's payments hold for the time left, counting the period's
+ * own order and every charge for the rest of it a dearer tier made since, each over its own span, less what earlier
+ * changes credited from it already. Each payment is a source of its own share, so the correction a credit needs when
+ * it is spent belongs to the invoice that charged it, at that invoice's rate.
  */
 final readonly class RestOfPeriod
 {
@@ -56,8 +67,21 @@ final readonly class RestOfPeriod
             return null;
         }
 
-        if ($from->amount->currency !== $to->amount->currency || ! $this->paidOrderOf($subscription) instanceof Order) {
+        $paid = $this->paidOrderOf($subscription);
+
+        if ($from->amount->currency !== $to->amount->currency || ! $paid instanceof Order) {
             return Money::zero($to->amount->currency);
+        }
+
+        $charged = $this->engine->tierCharge($subscription, $to->key, $to->amount);
+
+        // The cycle prices the tier itself, so seats are in the lines already, and the tier in force is worth what its
+        // payment charged for the period.
+        if ($charged instanceof Money) {
+            $perSecond = $charged->minorUnits / $this->intervalSeconds($subscription, $to->interval)
+                - $this->recurringChargeOf($paid) / max(1, $this->periodSeconds($subscription));
+
+            return Money::of((int) round($remaining * $perSecond), $to->amount->currency);
         }
 
         $perSecond = $to->amount->minorUnits / $this->intervalSeconds($subscription, $to->interval)
@@ -91,9 +115,10 @@ final readonly class RestOfPeriod
     /**
      * Square a difference: charge a positive one for the rest of the period, credit a negative one to the owner.
      *
-     * The credit gives back no more than the period's payment holds for the time left, so a period a coupon made
-     * cheaper is never credited at the full price. It names the invoice of that payment as its source, where one was
-     * raised: the correction it eventually needs belongs to that invoice.
+     * The credit gives back no more than the period's payments hold for the time left, so a period a coupon made
+     * cheaper is never credited at the full price, and two changes never give back more than was paid. It is shared
+     * among the payments by what each holds, and each share names the invoice of its payment as its source, where one
+     * was raised: the correction it eventually needs belongs to that invoice.
      */
     public function square(Model $owner, Subscription $subscription, Money $difference, string $description, CarbonInterface $at): void
     {
@@ -103,45 +128,100 @@ final readonly class RestOfPeriod
             return;
         }
 
-        $paid = $this->paidOrderOf($subscription);
-        $remaining = $this->secondsRemaining($subscription, $at);
+        $end = $subscription->current_period_end;
 
-        if (! $difference->isNegative() || ! $paid instanceof Order || $remaining === null) {
+        if (! $difference->isNegative() || $this->secondsRemaining($subscription, $at) === null || ! $end instanceof Carbon) {
             return;
         }
 
-        $credit = min(abs($difference->minorUnits), $this->unusedShareOf($paid, $remaining, $subscription));
+        $shares = $this->unusedShares($subscription, $end, $at);
+        $held = array_sum(array_column($shares, 1));
+        $credit = min(abs($difference->minorUnits), $held);
 
         if ($credit < 1) {
             return;
         }
 
-        $invoice = InvoiceRecord::model()::query()->where('order_id', $paid->getKey())->first();
+        $left = $credit;
 
-        $this->credit->credit(
-            $owner,
-            Money::of($credit, $difference->currency),
-            CreditReason::ProrationCredit,
-            CreditSource::for($invoice instanceof InvoiceRecord ? $invoice : $paid),
-        );
+        foreach ($shares as $index => [$source, $share]) {
+            // Shared by what each payment holds, the last one taking what rounding left, so the parts add up to the credit.
+            $part = $index === array_key_last($shares) ? $left : intdiv($credit * $share, $held);
+            $left -= $part;
+
+            if ($part > 0) {
+                $this->credit->credit($owner, Money::of($part, $difference->currency), CreditReason::ProrationCredit, CreditSource::for($source));
+            }
+        }
     }
 
     /**
-     * The part of the period's payment that buys the time left, in minor units: what the order took before any credit
-     * paid part of it, shared by time over the period.
+     * What each payment of the period holds for the time left, with the record a credit from it names, in minor units.
+     *
+     * The period's own order and every charge for the rest of it count, each over its own span from its start to the
+     * period's end, and each less what earlier changes credited from it already. A payment that holds nothing more is
+     * left out.
+     *
+     * @return list<array{Model, int}>
      */
-    private function unusedShareOf(Order $paid, int $remaining, Subscription $subscription): int
+    private function unusedShares(Subscription $subscription, Carbon $end, CarbonInterface $at): array
     {
-        // The credit line is negative, so taking it off the total adds back what the credit paid.
-        $gross = $paid->total_minor;
+        $paid = Order::model()::query()
+            ->where('subscription_id', $subscription->getKey())
+            ->where('status', OrderStatus::Paid)
+            ->where('period_start', '>=', $subscription->current_period_start)
+            ->where('period_start', '<', $end)
+            ->orderBy('period_start')
+            ->orderBy('id')
+            ->get();
 
-        foreach ($paid->items()->where('type', OrderItemType::Credit)->get() as $line) {
+        $shares = [];
+
+        foreach ($paid as $order) {
+            $since = $order->period_start;
+            $span = $since instanceof Carbon ? $end->getTimestamp() - $since->getTimestamp() : 0;
+            $remaining = max(0, min($span, $end->getTimestamp() - $at->getTimestamp()));
+            $invoice = InvoiceRecord::model()::query()->where('order_id', $order->getKey())->first();
+            $source = $invoice instanceof InvoiceRecord ? $invoice : $order;
+            $share = $span < 1 ? 0 : (int) round($this->grossOf($order) * $remaining / $span) - $this->creditedFrom($source);
+
+            if ($share > 0) {
+                $shares[] = [$source, $share];
+            }
+        }
+
+        return $shares;
+    }
+
+    /** What an order took before any credit paid part of it: the credit line is negative, so taking it off adds it back. */
+    private function grossOf(Order $order): int
+    {
+        $gross = $order->total_minor;
+
+        foreach ($order->items()->where('type', OrderItemType::Credit)->get() as $line) {
             $gross -= $line->total_minor;
         }
 
-        $period = $this->periodSeconds($subscription);
+        return $gross;
+    }
 
-        return $period < 1 ? 0 : (int) round($gross * $remaining / $period);
+    /** What changes of tier or seats credited from a payment already, in minor units. */
+    private function creditedFrom(Model $record): int
+    {
+        $source = CreditSource::for($record);
+
+        return (int) CreditLedgerEntry::model()::query()
+            ->where('reason', CreditReason::ProrationCredit)
+            ->where('source_type', $source->type)
+            ->where('source_id', $source->id)
+            ->where('amount_minor', '>', 0)
+            ->sum('amount_minor');
+    }
+
+    /** What an order charged for the subscription and usage lines of its period, in minor units. */
+    private function recurringChargeOf(Order $order): int
+    {
+        return (int) $order->items()->whereIn('type', [OrderItemType::Subscription, OrderItemType::Usage])->sum('total_minor');
     }
 
     /** The order that paid the period the subscription is in, or null where none was paid. */

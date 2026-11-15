@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Enums;
 
-use Illuminate\Support\Facades\URL;
+use Illuminate\Container\Container;
+use Illuminate\Contracts\Routing\UrlGenerator;
 
 /**
  * The account hub's client scripts, each served as a file of the application's own origin by
@@ -141,6 +142,6 @@ enum AccountScript: string
     /** The address the markup loads the script from, with its version. */
     public function url(): string
     {
-        return URL::route('billing.account.script', ['script' => $this->value, 'v' => $this->version()]);
+        return Container::getInstance()->make(UrlGenerator::class)->route('billing.account.script', ['script' => $this->value, 'v' => $this->version()]);
     }
 }

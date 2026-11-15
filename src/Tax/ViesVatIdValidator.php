@@ -65,12 +65,13 @@ final class ViesVatIdValidator implements ChecksVatIds, VatIdValidator
 
         try {
             $response = $requester === null
-                ? Http::timeout(5)->get($url)
-                : Http::timeout(5)->get($url, ['requesterMemberStateCode' => $requester[0], 'requesterNumber' => $requester[1]]);
+                ? Http::timeout(5)->withoutRedirecting()->get($url)
+                : Http::timeout(5)->withoutRedirecting()->get($url, ['requesterMemberStateCode' => $requester[0], 'requesterNumber' => $requester[1]]);
         } catch (Throwable) {
             return new VatIdCheck(VatIdValidation::Unavailable);
         }
 
+        // No redirect was followed above, so a 3xx is no success either: the verdict comes from VIES alone.
         if (! $response->successful()) {
             return new VatIdCheck(VatIdValidation::Unavailable);
         }

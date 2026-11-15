@@ -12,6 +12,7 @@ use Pushery\Billing\Consumer\WithdrawalConsentLedger;
 use Pushery\Billing\Contracts\DunningNotifier;
 use Pushery\Billing\Contracts\MandateNotifier;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
+use Pushery\Billing\Contracts\PaymentMethodNotifier;
 use Pushery\Billing\Contracts\PriceChangeNotifier;
 use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\SubscriptionEndingNotifier;
@@ -19,6 +20,7 @@ use Pushery\Billing\Contracts\SubscriptionNotifier;
 use Pushery\Billing\Contracts\SuspensionNotifier;
 use Pushery\Billing\Contracts\TrialNotifier;
 use Pushery\Billing\Contracts\UsageNotifier;
+use Pushery\Billing\Notifications\CardExpiringNotification;
 use Pushery\Billing\Notifications\PaymentActionRequiredNotification;
 use Pushery\Billing\Notifications\PaymentFailedNotification;
 use Pushery\Billing\Notifications\PaymentMethodRemovedNotification;
@@ -35,6 +37,7 @@ use Pushery\Billing\Support\FirstChargePreview;
 use Pushery\Billing\Support\OwnersZone;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
+use Pushery\Billing\ValueObjects\PaymentMethod;
 use Pushery\Billing\ValueObjects\UpcomingInvoicePreview;
 
 /**
@@ -51,7 +54,7 @@ use Pushery\Billing\ValueObjects\UpcomingInvoicePreview;
  * subscription, get their moment in the zone the owner reads dates in ({@see OwnerTimezone}), so the day they name
  * is the owner's day.
  */
-final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, PaymentActionNotifier, PriceChangeNotifier, ReceiptNotifier, SubscriptionEndingNotifier, SubscriptionNotifier, SuspensionNotifier, TrialNotifier, UsageNotifier
+final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, PaymentActionNotifier, PaymentMethodNotifier, PriceChangeNotifier, ReceiptNotifier, SubscriptionEndingNotifier, SubscriptionNotifier, SuspensionNotifier, TrialNotifier, UsageNotifier
 {
     public function paymentFailed(Model $owner, Money $amount, string $invoiceReference): void
     {
@@ -92,6 +95,11 @@ final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, 
     public function mandateRevoked(Model $owner, string $mandateReference): void
     {
         Notification::send($owner, new PaymentMethodRemovedNotification);
+    }
+
+    public function cardExpiring(Model $owner, PaymentMethod $method): void
+    {
+        Notification::send($owner, new CardExpiringNotification($method));
     }
 
     /**

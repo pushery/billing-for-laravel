@@ -38,6 +38,14 @@ enum OrderItemType: string
     case LateFee = 'late_fee';
 
     /**
+     * Default interest on a cycle paid late, for the days from a day of the dunning ladder until the payment.
+     *
+     * Like a late fee it is compensation for the delay and buys nothing: it stands in an order of its own, and its
+     * document is outside the scope of VAT.
+     */
+    case LateInterest = 'late_interest';
+
+    /**
      * What a change inside a period collected in advance adds to that period: a dearer tier or more seats, from the
      * change to the period's end.
      *
@@ -45,4 +53,13 @@ enum OrderItemType: string
      * period began. It is the price of the supply for those days and taxed as the period is.
      */
     case Proration = 'proration';
+
+    /**
+     * What a payer took back from a period that is over, collected again.
+     *
+     * It stands in an order of its own, because the period's order belongs to a period the subscription has left. It is
+     * no new supply: the claim the period's invoice documents still stands, and this collects it. So the order raises
+     * no document of its own.
+     */
+    case Chargeback = 'chargeback';
 }

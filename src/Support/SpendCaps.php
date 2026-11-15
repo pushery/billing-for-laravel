@@ -9,7 +9,6 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use InvalidArgumentException;
 use Pushery\Billing\Catalogs\MeterCatalog;
@@ -82,7 +81,7 @@ final readonly class SpendCaps
 
         $after = $cap ?? $this->defaultCap();
 
-        $before = DB::transaction(function () use ($owner, $cap, $after): Money {
+        $before = BillingConnection::connection()->transaction(function () use ($owner, $cap, $after): Money {
             $row = $this->lockedRow($owner);
             $before = $this->capFrom($row);
             // A stop announced under the old cap says nothing about a higher one, or about one in another currency.
@@ -129,7 +128,7 @@ final readonly class SpendCaps
             return $reserve();
         }
 
-        $admitted = DB::transaction(function () use ($owner, $component, $period, $quantity, $reserve): UsageHold|SpendCapCheck|null {
+        $admitted = BillingConnection::connection()->transaction(function () use ($owner, $component, $period, $quantity, $reserve): UsageHold|SpendCapCheck|null {
             $check = $this->measure($owner, $component, $quantity, $period, $this->lockedRow($owner));
 
             return $check->admits() ? $reserve() : $check;

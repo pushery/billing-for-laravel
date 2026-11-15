@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Pushery\Billing\Webhooks\Effects;
 
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\DedupesOnReference;
 use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Events\AddonRefunded;
@@ -14,6 +13,7 @@ use Pushery\Billing\Invoicing\CorrectionTax;
 use Pushery\Billing\Invoicing\CreditNoteNumber;
 use Pushery\Billing\Invoicing\LocalInvoiceCredit;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\Support\BillingConnection;
 use RuntimeException;
 
 /**
@@ -82,7 +82,7 @@ final readonly class IssueLocalCreditNote implements DedupesOnReference
         // `HandleWebhookEffect` already runs every effect inside a transaction, and nested this is a
         // savepoint — the OUTER transaction then owns the lock and releases it when the note commits, which
         // is exactly what is wanted. Written here so it holds when the effect is invoked directly too.
-        DB::transaction(function () use ($event, $invoice): void {
+        BillingConnection::connection()->transaction(function () use ($event, $invoice): void {
             InvoiceRecord::model()::query()->whereKey($invoice->getKey())->lockForUpdate()->first();
 
             $this->issueAgainst($event, $invoice);

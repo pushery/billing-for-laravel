@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Events\CreatorReattestationDue;
 use Pushery\Billing\Models\CreatorTaxStatusRecord;
+use Pushery\Billing\Support\SweepAttempts;
 
 /**
  * Tells a creator that their tax declaration is due for renewal, before it runs out.
@@ -48,6 +49,7 @@ final readonly class ReattestationReminderSweep
         // In UTC, the zone the attestation columns hold: a binding is written in its own zone (see UtcDateTime).
         $at = Carbon::instance($now)->utc();
         $sent = 0;
+        $attempts = new SweepAttempts;
 
         // The bounds of the two reminders below, as instants: the renewal is due once the year its expiry falls
         // in has begun, and the last reminder once the expiry is within the reminder window.
@@ -84,22 +86,29 @@ final readonly class ReattestationReminderSweep
 
             $merchant = $record->merchant;
 
-            if ($merchant !== null) {
-                $this->events->dispatch(new CreatorReattestationDue($merchant, $holdFrom, lastReminder: $expiring));
+            $reminded = $attempts->attempt(function () use ($record, $merchant, $holdFrom, $expiring, $at): void {
+                if ($merchant !== null) {
+                    $this->events->dispatch(new CreatorReattestationDue($merchant, $holdFrom, lastReminder: $expiring));
+                }
+
+                // Marked after dispatching, as the hold announcement is: a crash between the two repeats one
+                // reminder, the other order would lose it. A last reminder also stands in for a notice of the
+                // due date that has not gone out yet, which would say the same thing a day later.
+                $markers = ['reattestation_due_announced_at' => $record->reattestation_due_announced_at ?? $at];
+
+                if ($expiring) {
+                    $markers['expiry_reminded_at'] = $at;
+                }
+
+                $record->forceFill($markers)->save();
+            });
+
+            if ($reminded && $merchant !== null) {
                 $sent++;
             }
-
-            // Marked after dispatching, as the hold announcement is: a crash between the two repeats one
-            // reminder, the other order would lose it. A last reminder also stands in for a notice of the
-            // due date that has not gone out yet, which would say the same thing a day later.
-            $markers = ['reattestation_due_announced_at' => $record->reattestation_due_announced_at ?? $at];
-
-            if ($expiring) {
-                $markers['expiry_reminded_at'] = $at;
-            }
-
-            $record->forceFill($markers)->save();
         }
+
+        $attempts->finish();
 
         return $sent;
     }

@@ -6,7 +6,6 @@ namespace Pushery\Billing\Support;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Models\PrepaidUnits;
 
 /**
@@ -53,7 +52,7 @@ final readonly class PrepaidLedger
             return $this->balance($owner, $meterKey);
         }
 
-        return DB::transaction(function () use ($owner, $meterKey, $units): int {
+        return BillingConnection::connection()->transaction(function () use ($owner, $meterKey, $units): int {
             $row = $this->locked($owner->getMorphClass(), $owner->getKey(), $meterKey);
             $repaid = min($units, max(0, $row->debt));
 
@@ -79,7 +78,7 @@ final readonly class PrepaidLedger
             return 0;
         }
 
-        return DB::transaction(function () use ($owner, $meterKey, $units): int {
+        return BillingConnection::connection()->transaction(function () use ($owner, $meterKey, $units): int {
             $row = $this->locked($owner->getMorphClass(), $owner->getKey(), $meterKey);
             $repaid = min($units, max(0, $row->debt));
 
@@ -104,7 +103,7 @@ final readonly class PrepaidLedger
             return 0;
         }
 
-        return DB::transaction(function () use ($owner, $meterKey, $units): int {
+        return BillingConnection::connection()->transaction(function () use ($owner, $meterKey, $units): int {
             $row = $this->locked($owner->getMorphClass(), $owner->getKey(), $meterKey);
 
             $taken = min($units, max(0, $row->balance));
@@ -129,7 +128,7 @@ final readonly class PrepaidLedger
             return $this->balance($owner, $meterKey);
         }
 
-        return DB::transaction(function () use ($owner, $meterKey, $units): int {
+        return BillingConnection::connection()->transaction(function () use ($owner, $meterKey, $units): int {
             $row = $this->locked($owner->getMorphClass(), $owner->getKey(), $meterKey);
             $repaid = min($units, max(0, $row->debt));
 

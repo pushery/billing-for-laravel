@@ -7,7 +7,6 @@ namespace Pushery\Billing\Drivers\Mollie;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use LogicException;
 use Mollie\Api\Exceptions\RequestException;
@@ -18,6 +17,7 @@ use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Exceptions\MandateNeedsRedirect;
 use Pushery\Billing\Models\PaymentMandate;
 use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\ValueObjects\ClientIntent;
 use Pushery\Billing\ValueObjects\PaymentMethod;
 use RuntimeException;
@@ -168,7 +168,7 @@ final readonly class MolliePaymentMethods implements KeepsAFallbackMethod, Payme
     {
         $mandate = $this->ownedBy($billable, $methodId);
 
-        DB::transaction(function () use ($billable, $mandate): void {
+        BillingConnection::connection()->transaction(function () use ($billable, $mandate): void {
             $remaining = $this->chargeable($billable)
                 ->whereKeyNot($mandate->getKey())
                 ->orderByDesc('is_default')

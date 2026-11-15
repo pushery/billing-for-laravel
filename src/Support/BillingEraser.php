@@ -6,7 +6,6 @@ namespace Pushery\Billing\Support;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\CustomerRegistry;
@@ -115,7 +114,7 @@ final readonly class BillingEraser
 
         $credit = $this->outstandingCredit($owner);
 
-        return DB::transaction(function () use ($owner, $credit): ErasureReport {
+        return BillingConnection::connection()->transaction(function () use ($owner, $credit): ErasureReport {
             $now = Carbon::now();
             $purged = [];
             $retained = [];
@@ -209,7 +208,7 @@ final readonly class BillingEraser
     public function erasePayments(string $provider, string $account, array $payments): ErasureReport
     {
         $table = OwnerScopedTables::SCRUBBED;
-        $scrubbed = DB::transaction(fn (): int => $this->records->scrubRows(
+        $scrubbed = BillingConnection::connection()->transaction(fn (): int => $this->records->scrubRows(
             OwnerScopedTables::ownerAxis(),
             $table,
             $this->payments->of($provider, $account, $payments),
@@ -232,11 +231,11 @@ final readonly class BillingEraser
      */
     public function eraseAccount(string $provider, string $account): ErasureReport
     {
-        return DB::transaction(function () use ($provider, $account): ErasureReport {
+        return BillingConnection::connection()->transaction(function () use ($provider, $account): ErasureReport {
             $deliveries = $this->payments->ofAccount($provider, $account);
 
             // The runs go first, while the deliveries they point at are still there to find them by.
-            $runs = DB::table('billing_webhook_effect_runs')->whereIn('delivery_id', (clone $deliveries)->select('id'))->delete();
+            $runs = BillingConnection::connection()->table('billing_webhook_effect_runs')->whereIn('delivery_id', (clone $deliveries)->select('id'))->delete();
 
             return new ErasureReport(array_filter([
                 'billing_webhook_effect_runs' => $runs,
@@ -253,7 +252,7 @@ final readonly class BillingEraser
     private function scrubDeliveries(Model $owner): ErasureReport
     {
         $axis = PaymentsModeSchema::ownerAxis();
-        $scrubbed = DB::transaction(fn (): array => $this->records->scrub($axis, $owner));
+        $scrubbed = BillingConnection::connection()->transaction(fn (): array => $this->records->scrub($axis, $owner));
 
         return new ErasureReport($scrubbed, [], axes: [$axis->name => ['purged' => $scrubbed, 'retained' => []]]);
     }
@@ -268,9 +267,9 @@ final readonly class BillingEraser
      */
     private function purgeCouponsIssuedBy(Model $owner): array
     {
-        $coupons = DB::table('billing_coupons')->where('merchant_uid', MerchantScope::forMerchant($owner)->uid());
+        $coupons = BillingConnection::connection()->table('billing_coupons')->where('merchant_uid', MerchantScope::forMerchant($owner)->uid());
 
-        $redemptions = DB::table('billing_coupon_redemptions')->whereIn('coupon_id', (clone $coupons)->select('id'))->delete();
+        $redemptions = BillingConnection::connection()->table('billing_coupon_redemptions')->whereIn('coupon_id', (clone $coupons)->select('id'))->delete();
 
         return array_filter(['billing_coupon_redemptions' => $redemptions, 'billing_coupons' => $coupons->delete()]);
     }
@@ -287,7 +286,7 @@ final readonly class BillingEraser
      */
     private function unlinkGiftsBoughtBy(Model $owner): array
     {
-        $unlinked = DB::table('billing_access_grants')
+        $unlinked = BillingConnection::connection()->table('billing_access_grants')
             ->where('purchaser_type', $owner->getMorphClass())
             ->where('purchaser_id', $owner->getKey())
             ->update(['purchaser_type' => null, 'purchaser_id' => null]);

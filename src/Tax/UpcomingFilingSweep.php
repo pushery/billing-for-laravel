@@ -10,6 +10,7 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Pushery\Billing\Enums\FilingObligation;
 use Pushery\Billing\Events\FilingObligationApproaching;
 use Pushery\Billing\Models\FilingReminder;
+use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\ValueObjects\ReportingPeriod;
 
 /**
@@ -53,6 +54,7 @@ final readonly class UpcomingFilingSweep
     {
         $announced = 0;
         $today = $now->startOfDay();
+        $attempts = new SweepAttempts;
 
         for ($offset = 0; $offset <= $this->noticeDays(); $offset++) {
             $day = $today->addDays($offset);
@@ -62,27 +64,33 @@ final readonly class UpcomingFilingSweep
                     continue;
                 }
 
-                $this->events->dispatch(new FilingObligationApproaching(
-                    obligation: $obligation['obligation'],
-                    dueOn: $obligation['due_on'],
-                    period: $obligation['period'] instanceof ReportingPeriod ? $obligation['period'] : null,
-                    // Whole days, from the start of today: a warning that said "0.6 days" would be answering
-                    // a question nobody asked, and the recipient phrases its own urgency from this.
-                    daysRemaining: $offset,
-                ));
+                $told = $attempts->attempt(function () use ($obligation, $offset, $now): void {
+                    $this->events->dispatch(new FilingObligationApproaching(
+                        obligation: $obligation['obligation'],
+                        dueOn: $obligation['due_on'],
+                        period: $obligation['period'] instanceof ReportingPeriod ? $obligation['period'] : null,
+                        // Whole days, from the start of today: a warning that said "0.6 days" would be answering
+                        // a question nobody asked, and the recipient phrases its own urgency from this.
+                        daysRemaining: $offset,
+                    ));
 
-                // Marked after dispatching. A crash between the two announces once more, which somebody can
-                // live with; the other order loses the announcement, which is what this class exists to
-                // prevent.
-                FilingReminder::model()::query()->create([
-                    'obligation' => $obligation['obligation'],
-                    'due_on' => $obligation['due_on']->toDateString(),
-                    'announced_at' => $now,
-                ]);
+                    // Marked after dispatching. A crash between the two announces once more, which somebody can
+                    // live with; the other order loses the announcement, which is what this class exists to
+                    // prevent.
+                    FilingReminder::model()::query()->create([
+                        'obligation' => $obligation['obligation'],
+                        'due_on' => $obligation['due_on']->toDateString(),
+                        'announced_at' => $now,
+                    ]);
+                });
 
-                $announced++;
+                if ($told) {
+                    $announced++;
+                }
             }
         }
+
+        $attempts->finish();
 
         return $announced;
     }

@@ -6,13 +6,13 @@ namespace Pushery\Billing\Dunning;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\LateFees;
 use Pushery\Billing\Enums\OrderItemType;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\OrderItem;
 use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\LocalBillingEngine;
 use Pushery\Billing\ValueObjects\Money;
 
@@ -48,7 +48,7 @@ final readonly class LocalLateFees implements LateFees
         }
 
         try {
-            DB::transaction(function () use ($owner, $fee, $reference, $description): void {
+            BillingConnection::connection()->transaction(function () use ($owner, $fee, $reference, $description): void {
                 $order = Order::model()::query()->create([
                     'owner_type' => $owner->getMorphClass(),
                     'owner_id' => $owner->getKey(),
