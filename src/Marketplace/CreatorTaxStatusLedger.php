@@ -9,7 +9,6 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\CreatorTaxStatusResolver;
 use Pushery\Billing\Enums\CreatorTaxStatus;
 use Pushery\Billing\Enums\CreatorTaxStatusSource;
@@ -17,6 +16,7 @@ use Pushery\Billing\Events\CreatorPlacedOnTaxHold;
 use Pushery\Billing\Events\CreatorTaxStatusChanged;
 use Pushery\Billing\Models\CreatorTaxStatusAnchor;
 use Pushery\Billing\Models\CreatorTaxStatusRecord;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\LockedRow;
 
 /**
@@ -96,7 +96,7 @@ final readonly class CreatorTaxStatusLedger implements CreatorTaxStatusResolver
     ): CreatorTaxStatusRecord {
         $from = Carbon::instance($effectiveFrom);
 
-        [$record, $previous] = DB::transaction(function () use ($merchant, $status, $effectiveFrom, $from, $source, $evidenceRef, $attestedUntil, $businessFoundedYear): array {
+        [$record, $previous] = BillingConnection::connection()->transaction(function () use ($merchant, $status, $effectiveFrom, $from, $source, $evidenceRef, $attestedUntil, $businessFoundedYear): array {
             $this->lockAnchorOf($merchant);
 
             $previous = $this->statusAt($merchant, $effectiveFrom);

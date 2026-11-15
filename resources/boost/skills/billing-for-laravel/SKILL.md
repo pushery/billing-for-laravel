@@ -82,6 +82,7 @@ the command reference at <https://docs.pushery.com/billing-for-laravel/reference
 | --- | --- |
 | `billing:usage:flush` | Every minute: hands back expired usage holds and reports recorded usage to the provider that bills it |
 | `billing:run` | Hourly: advances the recurring cycle (a no-op under Stripe, which drives its own) |
+| `billing:cycles:reconcile` | Hourly at the half hour, where the package bills the cycles itself (Mollie): reads back the payment of each cycle that has waited in collection for longer than `--hours` (3 by default) and records where it stands, as its webhook would |
 | `billing:dunning:advance` | Daily: walks the dunning ladder, with escalating warnings and late fees |
 | `billing:dunning:remind` | Daily: reminds marketplace subscriptions in arrears that are still inside the cure window |
 | `billing:dunning:expire` | Daily: expires marketplace subscriptions whose cure window ran out, with one final notice |
@@ -117,6 +118,7 @@ the command reference at <https://docs.pushery.com/billing-for-laravel/reference
 | `billing:markets:record` | Writes down which markets changed standing, and by whom |
 | `billing:rates:probe` | Asks the source whether the shipped VAT rates still match (off unless enabled) |
 | `billing:tax-rates:check` | Asks the source what the rates should be and writes a proposal (off unless enabled) |
+| `billing:tax-rates:corrections` | Names every invoiced period a dated rate taxes differently on its last day, in a country that binds the rate to the supply, for the correction in the return of that day (`--since=YYYY-MM-DD`) |
 | `billing:tax-holds:remind` | Daily: reminds the creators whose tax attestation is due for renewal |
 | `billing:tax-holds:announce` | Daily: tells the merchants whose tax attestation just expired |
 | `billing:tax-holds:warn` | Daily: tells the merchants who never declared that the deadline is coming |

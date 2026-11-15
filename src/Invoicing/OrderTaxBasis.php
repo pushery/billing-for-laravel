@@ -15,6 +15,7 @@ use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\VoucherInstrumentType;
 use Pushery\Billing\Marketplace\CreditTopUpVolume;
 use Pushery\Billing\Models\Order;
+use Pushery\Billing\Models\OrderItem;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Models\TaxIdVerification;
 use Pushery\Billing\Tax\DistanceSaleThresholdMonitor;
@@ -121,12 +122,13 @@ final readonly class OrderTaxBasis
         $subscription = $order->subscription;
 
         if (! $subscription instanceof Subscription) {
-            return $this->forPurchase($order);
+            return $order->isChargeOnTheMandate() ? $this->forChargeOnTheMandate($order) : $this->forPurchase($order);
         }
 
         $archetype = $this->archetypeOf($subscription);
         $period = $this->periodOf($order);
-        $reference = self::placeReferenceFor($subscription);
+        // The place in force on the first day of the period: the one recorded at signup, or a move recorded since.
+        $reference = $period instanceof ServicePeriod ? $this->evidence->referenceAt(self::placeReferenceFor($subscription), $period->from) : self::placeReferenceFor($subscription);
         $country = $this->places->countryFor($reference);
 
         if (! $archetype instanceof TaxArchetype || ! $period instanceof ServicePeriod || $country === null) {
@@ -167,6 +169,7 @@ final readonly class OrderTaxBasis
 
         $archetype = $this->addons->archetypeFor($key);
         $reference = $this->placedReferenceOf($order);
+        $reference = $reference === null ? null : $this->evidence->referenceAt($reference, CarbonImmutable::parse($processed->toDateString()));
         $country = $reference === null ? null : $this->places->countryFor($reference);
 
         if (! $archetype instanceof TaxArchetype || $reference === null || $country === null) {
@@ -182,6 +185,46 @@ final readonly class OrderTaxBasis
             $country,
             $reference,
         );
+    }
+
+    /**
+     * The tax of a charge on the mandate, or null where its basis is not establishable.
+     *
+     * Its lines say what they supply, as the application named it when it charged them, and the place is the one recorded
+     * for the buyer's own subscription, as for a purchase. The supply is the period the charge names, or the day the
+     * payment was confirmed where it names none. Any of the three missing refuses, as for a purchase.
+     */
+    private function forChargeOnTheMandate(Order $order): ?DeterminedOrderTax
+    {
+        $archetype = $this->suppliedBy($order);
+        $period = $this->periodOf($order) ?? $this->dayPaid($order);
+        $reference = $this->placedReferenceOf($order);
+        $reference = $reference === null || ! $period instanceof ServicePeriod ? $reference : $this->evidence->referenceAt($reference, $period->from);
+        $country = $reference === null ? null : $this->places->countryFor($reference);
+
+        if (! $archetype instanceof TaxArchetype || $reference === null || $country === null || ! $period instanceof ServicePeriod) {
+            return null;
+        }
+
+        return $this->determined($order, $archetype, $period, $country, $reference);
+    }
+
+    /** What the lines of a charge on the mandate supply, as its first line keeps it. */
+    private function suppliedBy(Order $order): ?TaxArchetype
+    {
+        $line = $order->items()->where('type', '!=', OrderItemType::Credit)->orderBy('id')->first();
+        $value = $line?->metadata[OrderItem::TAX_ARCHETYPE] ?? null;
+
+        return is_string($value) ? TaxArchetype::tryFrom($value) : null;
+    }
+
+    /** The day the payment of an order was confirmed, as a supply on that one day, or null before it was. */
+    private function dayPaid(Order $order): ?ServicePeriod
+    {
+        $processed = $order->processed_at;
+        $day = $processed === null ? null : CarbonImmutable::parse($processed->toDateString());
+
+        return $day instanceof CarbonImmutable ? new ServicePeriod($day, $day, $this->supplyOf($order)->gross) : null;
     }
 
     /**

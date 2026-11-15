@@ -139,7 +139,8 @@ final readonly class OrderInvoiceIssuer
         }
 
         $issuedAt = Carbon::now();
-        $lateFee = $order->isLateFee();
+        // Interest for a delay is compensation as a late fee is, and its document is outside the scope of VAT too.
+        $lateFee = $order->isLateFee() || $order->isLateInterest();
         [$tax, $voucher] = $lateFee ? [null, false] : $this->determined($order);
         // What the order supplied, which is what the document states: its lines without the credit that paid part of
         // them, the same lines and gross the tax was determined on.

@@ -39,6 +39,13 @@ use Pushery\Billing\ValueObjects\OrderItemDraft;
  * happens before the order is claimed and a claim can lose: to a concurrent run, or to an order that
  * already exists. Counting attempts instead of cycles would burn a customer's remaining months on a run
  * that billed nothing.
+ *
+ * ## A coupon for some plans only
+ *
+ * A coupon that names plans takes its share from their lines alone: a percentage of their gross, and a fixed amount
+ * up to it. A line priced from a subscription item belongs to the `plan_key` its metadata carries, and the plan line
+ * of a subscription billed by its tier to the tier. The discount line names the plans, so a document can tell which
+ * lines it reduced.
  */
 final readonly class CycleCouponApplier
 {
@@ -90,13 +97,24 @@ final readonly class CycleCouponApplier
             return $drafts;
         }
 
-        $discount = $this->discountFrom($coupon, $gross);
+        $plans = $coupon->planKeys();
+        $base = $plans === null ? $gross : $this->grossOf(array_values(array_filter(
+            $drafts,
+            fn (OrderItemDraft $draft): bool => in_array($this->planOf($draft, $subscription), $plans, true),
+        )));
+
+        // A coupon for plans the cycle carries no line of has nothing to take its share from.
+        if (! $base instanceof Money || ! $base->isPositive()) {
+            return $drafts;
+        }
+
+        $discount = $this->discountFrom($coupon, $base);
 
         if (! $discount instanceof Discount) {
             return $drafts;
         }
 
-        $reduction = $gross->minus($discount->applyTo($gross));
+        $reduction = $base->minus($discount->applyTo($base));
 
         // Not a rounding guard: any percentage of a positive gross takes at least one minor unit off, and a fixed
         // coupon of zero describes no discount and stops in discountFrom(). It is reached by a fixed coupon
@@ -114,12 +132,32 @@ final readonly class CycleCouponApplier
             "Discount ({$coupon->code})",
             -$reduction->minorUnits,
             1,
-            $gross->currency,
+            $base->currency,
             OrderItemType::Discount,
-            ['coupon' => $coupon->code, 'duration' => $coupon->duration, 'period' => $period],
+            [
+                'coupon' => $coupon->code,
+                'duration' => $coupon->duration,
+                'period' => $period,
+                ...($plans === null ? [] : ['plan_keys' => $plans]),
+            ],
         );
 
         return $drafts;
+    }
+
+    /**
+     * The plan a line bills: the key its metadata names, as the lines of a subscription's items carry it, or the tier
+     * for the plan line a subscription without items is billed by.
+     */
+    private function planOf(OrderItemDraft $draft, Subscription $subscription): ?string
+    {
+        $key = $draft->metadata['plan_key'] ?? null;
+
+        if (is_string($key)) {
+            return $key;
+        }
+
+        return $draft->type === OrderItemType::Subscription ? $subscription->tier_key : null;
     }
 
     /**

@@ -7,7 +7,6 @@ namespace Pushery\Billing\Support;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Pushery\Billing\Contracts\NamesThePayment;
 use Pushery\Billing\Contracts\PaymentAccounts;
@@ -73,7 +72,7 @@ final readonly class PaymentDeliveries
     {
         $this->assertAccount($account);
 
-        return DB::table(self::TABLE)->where('provider', $provider)->where('account_reference', $account);
+        return BillingConnection::connection()->table(self::TABLE)->where('provider', $provider)->where('account_reference', $account);
     }
 
     /**

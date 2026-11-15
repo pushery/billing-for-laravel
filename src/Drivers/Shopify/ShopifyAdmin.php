@@ -56,7 +56,10 @@ final readonly class ShopifyAdmin
         }
 
         try {
+            // No redirect is followed: Guzzle drops only Authorization and Cookie when a redirect leaves the host,
+            // so the shop's token in its own header would go along, and a 307 or 308 keeps the query as well.
             $response = Http::acceptJson()
+                ->withoutRedirecting()
                 ->withHeaders(['X-Shopify-Access-Token' => $this->tokens()->for($shop)])
                 ->timeout(self::TIMEOUT)
                 ->post($this->endpoint($shop), [

@@ -6,7 +6,6 @@ namespace Pushery\Billing\Support;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Enums\WebhookEventState;
 use Pushery\Billing\Models\WebhookEffectRun;
 use Pushery\Billing\Webhooks\RepeatableEffect;
@@ -106,7 +105,7 @@ final class WebhookEffectLedger
     {
         $error = RedactedError::fit($error);
 
-        DB::transaction(function () use ($provider, $reference, $effect, $error, $deliveryId): void {
+        BillingConnection::connection()->transaction(function () use ($provider, $reference, $effect, $error, $deliveryId): void {
             $run = LockedRow::take($this->runOf($provider, $reference, $effect), [
                 'provider' => $provider,
                 'reference' => $reference,

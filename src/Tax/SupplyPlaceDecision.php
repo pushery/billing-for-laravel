@@ -6,10 +6,12 @@ namespace Pushery\Billing\Tax;
 
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
+use InvalidArgumentException;
 use Pushery\Billing\Contracts\CountryEvidencePolicy;
 use Pushery\Billing\Enums\PlaceOfSupplyRule;
 use Pushery\Billing\Models\PlaceEvidence;
 use Pushery\Billing\ValueObjects\CountrySignals;
+use RuntimeException;
 
 /**
  * The one place a sale's country is decided, recorded, and answered from afterwards.
@@ -63,6 +65,32 @@ final readonly class SupplyPlaceDecision
             // buyer whose country is perfectly well established.
             'rule' => $this->thresholds->rule((int) $soldAt->format('Y'), $currency),
         ];
+    }
+
+    /**
+     * Record that the customer of a sale is established somewhere else from a day on, and return the country.
+     *
+     * The place of a service to a business is where the recipient has its seat when the service is supplied (Art. 44 VAT
+     * Directive), and the place of an electronic service to a consumer is where the consumer lives then (Art. 58), so a
+     * customer who moves takes every later cycle with them, and every earlier cycle stays where it was. The move is
+     * settled from signals exactly as the sale was, and recorded as a dated record of its own beside the sale's; a cycle
+     * reads the one in force on the first day of its period.
+     *
+     * @throws InvalidArgumentException when the sale has no recorded place to move from
+     * @throws RuntimeException when the signals do not settle on a country
+     */
+    public function relocate(
+        CountrySignals $signals,
+        string $reference,
+        CarbonInterface $from,
+        CarbonInterface $resolvedAt,
+        ?Model $owner = null,
+    ): string {
+        if (! $this->isEstablished($reference)) {
+            throw new InvalidArgumentException("The sale `{$reference}` has no recorded place, so there is nothing to move: record its place first.");
+        }
+
+        return $this->store->record($this->evidence->resolve($signals), PlaceEvidenceStore::datedReference($reference, $from), $resolvedAt, $owner)->resolved_country;
     }
 
     /**

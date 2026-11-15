@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Preflight\Checkpoints;
 
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\GoLiveCheckpoint;
 use Pushery\Billing\Contracts\ReadsStoredState;
 use Pushery\Billing\Enums\GoLiveStep;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\ValueObjects\CheckpointOutcome;
 
 /**
@@ -94,7 +94,7 @@ final readonly class DuplicateBuyerReceiptCheckpoint implements GoLiveCheckpoint
 
     public function evaluate(): CheckpointOutcome
     {
-        $offenders = DB::table('billing_invoices')
+        $offenders = BillingConnection::connection()->table('billing_invoices')
             ->select('settled_charge_reference', 'document_series')
             ->selectRaw('COUNT(*) as total')
             ->whereNotNull('settled_charge_reference')

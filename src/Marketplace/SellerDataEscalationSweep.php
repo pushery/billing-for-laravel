@@ -20,6 +20,7 @@ use Pushery\Billing\Events\SellerDataMeasureChanged;
 use Pushery\Billing\Events\SellerDataReminderDue;
 use Pushery\Billing\Models\MerchantAccount;
 use Pushery\Billing\Models\SellerDataEscalationEpisode;
+use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\ValueObjects\SellerRecordGaps;
 
 /**
@@ -68,6 +69,8 @@ final readonly class SellerDataEscalationSweep
             ->where('status', '!=', MerchantStatus::Terminated->value)
             ->lazyById();
 
+        $attempts = new SweepAttempts;
+
         foreach ($accounts as $account) {
             $merchant = $this->merchantOf($account);
             $gaps = $merchant instanceof Model ? $this->assessment->of($merchant, $now) : null;
@@ -77,12 +80,18 @@ final readonly class SellerDataEscalationSweep
             }
 
             $outcome['assessed']++;
-            $step = $this->step($account, $merchant, $gaps, $now);
+            $step = null;
+
+            $attempts->attempt(function () use ($account, $merchant, $gaps, $now, &$step): void {
+                $step = $this->step($account, $merchant, $gaps, $now);
+            });
 
             if ($step !== null) {
                 $outcome[$step]++;
             }
         }
+
+        $attempts->finish();
 
         return $outcome;
     }

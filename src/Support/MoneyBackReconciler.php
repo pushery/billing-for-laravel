@@ -45,6 +45,7 @@ final readonly class MoneyBackReconciler
     public function reconcile(CarbonImmutable $refundsSince, CarbonImmutable $chargebacksSince): array
     {
         $dispatched = [];
+        $attempts = new SweepAttempts;
 
         foreach ($this->provider->outcomesSince($refundsSince, $chargebacksSince) as $outcome) {
             $delivery = $this->deliveries->record($this->driver, $this->keyOf($outcome), $this->typeOf($outcome), $this->factsOf($outcome));
@@ -53,22 +54,28 @@ final readonly class MoneyBackReconciler
                 continue;
             }
 
-            $this->attribute($delivery, $outcome->customerReference);
-            $this->registry->dispatch($outcome, $delivery);
-            $this->deliveries->markHandled($delivery);
+            $handled = $attempts->attempt(function () use ($delivery, $outcome): void {
+                $this->attribute($delivery, $outcome->customerReference);
+                $this->registry->dispatch($outcome, $delivery);
+                $this->deliveries->markHandled($delivery);
 
-            // Logged as well as dispatched: an application that listens for nothing still finds the customer who is
-            // owed money in its log.
-            if ($outcome instanceof RefundFailed) {
-                Log::warning('billing: a refund will not reach the customer, the provider reports it '.$outcome->failure->value, [
-                    'refund' => $outcome->refundReference,
-                    'payment' => $outcome->paymentReference,
-                    'amount' => $outcome->amount->toDecimal().' '.$outcome->amount->currency,
-                ]);
+                // Logged as well as dispatched: an application that listens for nothing still finds the customer who
+                // is owed money in its log.
+                if ($outcome instanceof RefundFailed) {
+                    Log::warning('billing: a refund will not reach the customer, the provider reports it '.$outcome->failure->value, [
+                        'refund' => $outcome->refundReference,
+                        'payment' => $outcome->paymentReference,
+                        'amount' => $outcome->amount->toDecimal().' '.$outcome->amount->currency,
+                    ]);
+                }
+            });
+
+            if ($handled) {
+                $dispatched[] = $outcome;
             }
-
-            $dispatched[] = $outcome;
         }
+
+        $attempts->finish();
 
         return $dispatched;
     }

@@ -16,6 +16,7 @@ use Pushery\Billing\Contracts\AttachesVerifiedVatIds;
 use Pushery\Billing\Contracts\BillingDriver;
 use Pushery\Billing\Contracts\CanTransactMoney;
 use Pushery\Billing\Contracts\CardPresentPayments;
+use Pushery\Billing\Contracts\ChargesOnTheMandate;
 use Pushery\Billing\Contracts\CollectsDirectDebits;
 use Pushery\Billing\Contracts\CreditSync;
 use Pushery\Billing\Contracts\CustomerDirectory;
@@ -23,12 +24,15 @@ use Pushery\Billing\Contracts\CustomerRegistry;
 use Pushery\Billing\Contracts\EnabledPaymentMethods;
 use Pushery\Billing\Contracts\EnsuresProviderCustomer;
 use Pushery\Billing\Contracts\EstablishesMandateByRedirect;
+use Pushery\Billing\Contracts\EstablishesMandateWithMethods;
 use Pushery\Billing\Contracts\HostedPortal;
 use Pushery\Billing\Contracts\Invoices;
 use Pushery\Billing\Contracts\IssuesReaderPairingCodes;
 use Pushery\Billing\Contracts\KeepsAFallbackMethod;
 use Pushery\Billing\Contracts\LateFees;
+use Pushery\Billing\Contracts\MandateNotifier;
 use Pushery\Billing\Contracts\MeterInspector;
+use Pushery\Billing\Contracts\MovesTheTrialEnd;
 use Pushery\Billing\Contracts\OneTimeCharge;
 use Pushery\Billing\Contracts\PairsReadersByTheirCode;
 use Pushery\Billing\Contracts\PaymentCsp;
@@ -40,6 +44,7 @@ use Pushery\Billing\Contracts\ProrationStrategy;
 use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
 use Pushery\Billing\Contracts\ReportsMoneyBackOutcomes;
 use Pushery\Billing\Contracts\SeatBilling;
+use Pushery\Billing\Contracts\StartsOverAMandate;
 use Pushery\Billing\Contracts\StartsSubscriptions;
 use Pushery\Billing\Contracts\SubmitsDisputeEvidence;
 use Pushery\Billing\Contracts\SubscriptionActions;
@@ -60,8 +65,11 @@ use Pushery\Billing\Drivers\NullHostedPortal;
 use Pushery\Billing\Drivers\NullMeterInspector;
 use Pushery\Billing\Drivers\Stripe\StripeCustomerDirectory;
 use Pushery\Billing\Dunning\ConfigDunningLadder;
+use Pushery\Billing\Dunning\DefaultInterest;
 use Pushery\Billing\Dunning\LocalLateFees;
+use Pushery\Billing\Events\ChargebackReceived;
 use Pushery\Billing\Events\MandateEstablished;
+use Pushery\Billing\Events\MandateRevoked;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Exceptions\MollieNotConfigured;
@@ -79,15 +87,18 @@ use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\CheckoutUrls;
 use Pushery\Billing\Support\CreditLedger;
 use Pushery\Billing\Support\CycleItemPricer;
+use Pushery\Billing\Support\CyclePaymentReconciler;
 use Pushery\Billing\Support\LocalAnnualTerms;
 use Pushery\Billing\Support\LocalBillingEngine;
 use Pushery\Billing\Support\LocalSeatBilling;
 use Pushery\Billing\Support\LocalSubscriptionActions;
 use Pushery\Billing\Support\LocalSubscriptionPayments;
 use Pushery\Billing\Support\LocalSubscriptionStarter;
+use Pushery\Billing\Support\LocalTrialEnds;
 use Pushery\Billing\Support\LocalUpcomingInvoice;
 use Pushery\Billing\Support\OrderItemPreprocessorChain;
 use Pushery\Billing\Support\RedirectPaymentCsp;
+use Pushery\Billing\Support\WebhookEventLedger;
 use Pushery\Billing\Support\WebhookSecretGuard;
 use Pushery\Billing\Tax\SaleTaxDecision;
 use Pushery\Billing\Trials\TrialPolicy;
@@ -96,6 +107,8 @@ use Pushery\Billing\Usage\NullUsageReporter;
 use Pushery\Billing\ValueObjects\PaymentAccount;
 use Pushery\Billing\Webhooks\AccountWebhooks;
 use Pushery\Billing\Webhooks\Effects\FailCycleOnPayment;
+use Pushery\Billing\Webhooks\Effects\InvalidateRevokedMandate;
+use Pushery\Billing\Webhooks\Effects\ReopenCycleOnChargeback;
 use Pushery\Billing\Webhooks\Effects\SettleCycleOnPayment;
 use Pushery\Billing\Webhooks\Effects\StartSubscriptionOnMandate;
 use Pushery\Billing\Webhooks\WebhookEffectRegistry;
@@ -249,6 +262,9 @@ final class MollieServiceProvider extends ServiceProvider
         // be a line of the cycle: its document is outside the scope of VAT, and that category shares a document
         // with no other.
         $this->app->bind(LateFees::class, static fn (): LateFees => new LocalLateFees('mollie'));
+        // A charge whose lines the application sets is an order of its own as well, collected against the mandate as a
+        // late fee is and documented by the issuer that documents a cycle.
+        $this->app->bind(ChargesOnTheMandate::class, static fn (Container $app): ChargesOnTheMandate => self::engine($app));
         // An add-on is bought on Mollie's hosted checkout, as a `oneoff` payment for the catalog's price. The order it
         // writes is what the invoice is raised from once Mollie confirms the payment, because Mollie issues none.
         $this->app->bind(OneTimeCharge::class, static fn (Container $app): OneTimeCharge => new MollieOneTimeCharge(
@@ -273,6 +289,9 @@ final class MollieServiceProvider extends ServiceProvider
         // being able to establish a mandate by redirect, and a consumer replacing one must not silently
         // replace the other.
         $this->app->bind(EstablishesMandateByRedirect::class, MolliePaymentRails::class);
+        // The same redirect through payment methods the application names, for a checkout it runs itself; a first
+        // payment of 0.00 for a card or PayPal mandate goes this way.
+        $this->app->bind(EstablishesMandateWithMethods::class, MolliePaymentRails::class);
         // The direct debit mandates an account holder gives on the application's own form, and whether a charge against a
         // stored mandate is drawn as a direct debit, which the engine announces first. Bound on its own for the same reason
         // as the redirect half above.
@@ -281,18 +300,11 @@ final class MollieServiceProvider extends ServiceProvider
         // configured customer model on the configured column and is provider-neutral in what it does; it is
         // bound here as well so the local driver does not depend on another driver's provider having run.
         $this->app->bind(CustomerDirectory::class, StripeCustomerDirectory::class);
-        $this->app->bind(StartsSubscriptions::class, static fn (Container $app): LocalSubscriptionStarter => new LocalSubscriptionStarter(
-            'mollie',
-            $app->make(TierCatalog::class),
-            $app->make(PlanCatalog::class),
-            $app->make(TrialPolicy::class),
-            $app->make(Trials::class),
-            $app->make(EnsuresProviderCustomer::class),
-            $app->make(EstablishesMandateByRedirect::class),
-            $app->make(Repository::class),
-            $app->make(CheckoutUrls::class),
-            $app->make(CouponRedeemer::class),
-        ));
+        $this->app->bind(StartsSubscriptions::class, static fn (Container $app): StartsSubscriptions => self::starter($app));
+        // The same starter, on a mandate the owner has already given, for an application whose customer chose that mandate.
+        $this->app->bind(StartsOverAMandate::class, static fn (Container $app): StartsOverAMandate => self::starter($app));
+        // The end of a trial is the first run of the engine here, kept on the subscription, so it moves on the row.
+        $this->app->bind(MovesTheTrialEnd::class, static fn (): MovesTheTrialEnd => new LocalTrialEnds('mollie'));
 
         // The webhook that finishes what the redirect started. Registered here rather than with the shipped
         // default effects because it only means anything for a driver whose mandates arrive this way.
@@ -310,6 +322,16 @@ final class MollieServiceProvider extends ServiceProvider
             $registry->on(MandateEstablished::class, StartSubscriptionOnMandate::class);
             $registry->on(PaymentSucceeded::class, SettleCycleOnPayment::class);
             $registry->on(PaymentFailed::class, FailCycleOnPayment::class);
+            // A payment the payer takes back opens its cycle again: the dunning collects it, or, where its period is
+            // over, a charge of its own does.
+            $registry->on(ChargebackReceived::class, ReopenCycleOnChargeback::class);
+            // A direct debit returned for a reason that ends the mandate takes the mandate out of the table the cycle
+            // charges from, so the dunning does not draw on it again.
+            $this->app->bind(InvalidateRevokedMandate::class, static fn (Container $app): InvalidateRevokedMandate => new InvalidateRevokedMandate('mollie', $app->make(CustomerDirectory::class), $app->make(MandateNotifier::class), $app->make(BillingEventLog::class)));
+            $registry->on(MandateRevoked::class, InvalidateRevokedMandate::class);
+            // The payments of the cycles held open for them are read back where their webhook did not arrive, and the
+            // binding is what plans `billing:cycles:reconcile`.
+            $this->app->bind(CyclePaymentReconciler::class, static fn (Container $app): CyclePaymentReconciler => new CyclePaymentReconciler($app->make(BillingManager::class), $app->make(WebhookEventMapper::class), $app->make(WebhookEventLedger::class), $app->make(WebhookEffectRegistry::class)));
         }
 
         $this->guardCredentials();
@@ -355,6 +377,23 @@ final class MollieServiceProvider extends ServiceProvider
         return is_array($declared) ? $declared : [];
     }
 
+    /** The starter of this driver's subscriptions, built from the container. */
+    private static function starter(Container $app): LocalSubscriptionStarter
+    {
+        return new LocalSubscriptionStarter(
+            'mollie',
+            $app->make(TierCatalog::class),
+            $app->make(PlanCatalog::class),
+            $app->make(TrialPolicy::class),
+            $app->make(Trials::class),
+            $app->make(EnsuresProviderCustomer::class),
+            $app->make(EstablishesMandateByRedirect::class),
+            $app->make(Repository::class),
+            $app->make(CheckoutUrls::class),
+            $app->make(CouponRedeemer::class),
+        );
+    }
+
     /**
      * The local engine this driver bills with, built from the container.
      *
@@ -379,6 +418,7 @@ final class MollieServiceProvider extends ServiceProvider
             $app->make(PreNotifications::class),
             $app->make(DiscountAllowances::class),
             $app->make(PriceChanges::class),
+            $app->make(DefaultInterest::class),
         );
     }
 

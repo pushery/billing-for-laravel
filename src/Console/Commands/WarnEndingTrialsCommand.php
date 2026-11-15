@@ -18,6 +18,8 @@ use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\BillingManager;
+use Pushery\Billing\Support\SweepAttempts;
+use Pushery\Billing\Support\TableLookup;
 use Throwable;
 
 /**
@@ -56,28 +58,61 @@ final class WarnEndingTrialsCommand extends Command
 
     public function handle(Repository $config, TrialNotifier $notifier, BillingEventLog $log): int
     {
-        $model = $config->get('billing.customer.model');
-
-        if (! is_string($model) || ! is_a($model, Model::class, true)) {
-            $this->components->warn('billing.customer.model is not configured; nothing to scan.');
-
-            return self::SUCCESS;
-        }
-
         $days = $this->windowDays($config);
         $dryRun = $this->option('dry-run') === true;
-        $warned = 0;
 
         // From now, not from the start of the day: a trial that already ended is not ending soon, and a
         // reminder about it is a message about something already lost.
         $now = Carbon::now();
+
+        // Each half on its own: a customer model the generic scan cannot read never keeps the subscription
+        // trials, which live on the package's own table, from their reminder.
+        $attempts = new SweepAttempts;
+        $warned = $this->warnGenericTrials($config, $notifier, $log, $attempts, $now, $days, $dryRun);
+        $warned += $this->warnSubscriptionTrials($notifier, $log, $attempts, $now, $days, $dryRun);
+
+        $this->components->info(($dryRun ? 'Would warn ' : 'Warned ')."{$warned} owner(s) about an ending trial.");
+
+        $attempts->finish();
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * The generic trials: the owners whose own `trial_ends_at` ends inside the window. Without a customer model,
+     * or on a customer table without that column, there is no generic trial to scan, and the run says so instead
+     * of failing before the subscription trials are reached. The column is looked up in the table a query on the
+     * customer's connection finds, which on PostgreSQL may sit in another schema of the `search_path` than the first.
+     */
+    private function warnGenericTrials(Repository $config, TrialNotifier $notifier, BillingEventLog $log, SweepAttempts $attempts, Carbon $now, int $days, bool $dryRun): int
+    {
+        $model = $config->get('billing.customer.model');
+
+        if (! is_string($model) || ! is_a($model, Model::class, true)) {
+            $this->components->warn('billing.customer.model is not configured; no generic trial was scanned.');
+
+            return 0;
+        }
+
+        $customer = new $model;
+
+        if (! $customer->getConnection()->getSchemaBuilder()->hasColumn(
+            TableLookup::qualified($customer->getTable(), $customer->getConnectionName()),
+            'trial_ends_at',
+        )) {
+            $this->components->warn("The table {$customer->getTable()} has no trial_ends_at column; no generic trial was scanned.");
+
+            return 0;
+        }
+
+        $warned = 0;
 
         $model::query()
             ->whereNotNull('trial_ends_at')
             ->whereBetween('trial_ends_at', [$now, $now->copy()->addDays($days)])
             ->chunkById(100,
                 /** @param Collection<int, Model> $owners */
-                function (Collection $owners) use ($notifier, $log, $dryRun, &$warned): void {
+                function (Collection $owners) use ($notifier, $log, $attempts, $dryRun, &$warned): void {
                     foreach ($owners as $owner) {
                         // Normalized rather than type-checked, and the difference matters. The consumer owns
                         // this model: a `trial_ends_at` cast is Cashier's convention, not something this
@@ -111,26 +146,28 @@ final class WarnEndingTrialsCommand extends Command
                             continue;
                         }
 
-                        $warned++;
-
                         if ($dryRun) {
+                            $warned++;
+
                             continue;
                         }
 
-                        $notifier->trialEnding($owner, $endsAt);
+                        $sent = $attempts->attempt(static function () use ($notifier, $log, $owner, $endsAt): void {
+                            $notifier->trialEnding($owner, $endsAt);
 
-                        $log->record('trial.ending_notice_sent', $owner, [
-                            'trial' => 'generic',
-                            'trial_ends_at' => $endsAt->format('Y-m-d'),
-                        ]);
+                            $log->record('trial.ending_notice_sent', $owner, [
+                                'trial' => 'generic',
+                                'trial_ends_at' => $endsAt->format('Y-m-d'),
+                            ]);
+                        });
+
+                        if ($sent) {
+                            $warned++;
+                        }
                     }
                 });
 
-        $warned += $this->warnSubscriptionTrials($notifier, $log, $now, $days, $dryRun);
-
-        $this->components->info(($dryRun ? 'Would warn ' : 'Warned ')."{$warned} owner(s) about an ending trial.");
-
-        return self::SUCCESS;
+        return $warned;
     }
 
     /**
@@ -148,6 +185,7 @@ final class WarnEndingTrialsCommand extends Command
     private function warnSubscriptionTrials(
         TrialNotifier $notifier,
         BillingEventLog $log,
+        SweepAttempts $attempts,
         Carbon $now,
         int $days,
         bool $dryRun,
@@ -158,7 +196,7 @@ final class WarnEndingTrialsCommand extends Command
             ->where('status', SubscriptionState::Trialing->value)
             ->whereNotNull('trial_ends_at')
             ->whereBetween('trial_ends_at', [$now, $now->copy()->addDays($days)])
-            ->chunkById(100, function (Collection $subscriptions) use ($notifier, $log, $dryRun, &$warned): void {
+            ->chunkById(100, function (Collection $subscriptions) use ($notifier, $log, $attempts, $dryRun, &$warned): void {
                 /** @var Collection<int, Subscription> $subscriptions */
                 foreach ($subscriptions as $subscription) {
                     if ($this->providerAnnouncesTrialEnd($subscription->provider)) {
@@ -178,22 +216,28 @@ final class WarnEndingTrialsCommand extends Command
                         continue;
                     }
 
-                    $warned++;
-
                     if ($dryRun) {
+                        $warned++;
+
                         continue;
                     }
 
-                    $notifier->trialEnding($owner, $endsAt);
+                    $sent = $attempts->attempt(static function () use ($notifier, $log, $owner, $endsAt): void {
+                        $notifier->trialEnding($owner, $endsAt);
 
-                    // The same event type and the same date format the generic path records, so the two
-                    // dedupe against each other and the provider's own notice does too — it writes this
-                    // record as well. A second type would make three paths that each believe they are the
-                    // only one.
-                    $log->record('trial.ending_notice_sent', $owner, [
-                        'trial' => 'subscription',
-                        'trial_ends_at' => $endsAt->format('Y-m-d'),
-                    ]);
+                        // The same event type and the same date format the generic path records, so the two
+                        // dedupe against each other and the provider's own notice does too — it writes this
+                        // record as well. A second type would make three paths that each believe they are the
+                        // only one.
+                        $log->record('trial.ending_notice_sent', $owner, [
+                            'trial' => 'subscription',
+                            'trial_ends_at' => $endsAt->format('Y-m-d'),
+                        ]);
+                    });
+
+                    if ($sent) {
+                        $warned++;
+                    }
                 }
             });
 

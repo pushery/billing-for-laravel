@@ -73,7 +73,9 @@ final readonly class TedbRateSource
     public static function on(CarbonImmutable $day): self
     {
         try {
+            // No redirect is followed: the rates come from the Commission's service alone, and a 3xx is no success.
             $response = Http::timeout(30)
+                ->withoutRedirecting()
                 ->withHeaders(['Content-Type' => 'text/xml; charset=utf-8', 'SOAPAction' => '"'.self::ACTION.'"'])
                 ->send('POST', self::ENDPOINT, ['body' => self::envelope($day)]);
         } catch (Throwable $e) {

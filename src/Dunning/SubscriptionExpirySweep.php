@@ -9,6 +9,7 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Events\SubscriptionExpired;
 use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\Support\SweepAttempts;
 
 /**
  * The end of the cure window: this one subscription expires, and the customer is told once.
@@ -82,28 +83,35 @@ final readonly class SubscriptionExpirySweep
             ->get();
 
         $expired = 0;
+        $attempts = new SweepAttempts;
 
         foreach ($due as $subscription) {
-            $accessEndsAt = $this->accessEndsAt($subscription, $moment);
+            $ended = $attempts->attempt(function () use ($subscription, $moment): void {
+                $accessEndsAt = $this->accessEndsAt($subscription, $moment);
 
-            // Dispatch first, then write — the same order the reminder uses, and for the same reason: a
-            // crash between the two re-sends the final message, which a recipient survives, where the other
-            // order would expire a subscription in silence and leave the customer to discover it.
-            $this->events->dispatch(new SubscriptionExpired($subscription, $accessEndsAt));
+                // Dispatch first, then write — the same order the reminder uses, and for the same reason: a
+                // crash between the two re-sends the final message, which a recipient survives, where the other
+                // order would expire a subscription in silence and leave the customer to discover it.
+                $this->events->dispatch(new SubscriptionExpired($subscription, $accessEndsAt));
 
-            $subscription->forceFill([
-                'status' => 'ended',
-                'ends_at' => $accessEndsAt,
-                'terminated_at' => $moment,
-                // Dunning is over: its outcome is now recorded in the row itself. Leaving the clock running
-                // would keep both sweeps and the ladder selecting a subscription that no longer exists.
-                'delinquent_since' => null,
-                'dunning_level' => 0,
-                'payment_reminded_on' => null,
-            ])->save();
+                $subscription->forceFill([
+                    'status' => 'ended',
+                    'ends_at' => $accessEndsAt,
+                    'terminated_at' => $moment,
+                    // Dunning is over: its outcome is now recorded in the row itself. Leaving the clock running
+                    // would keep both sweeps and the ladder selecting a subscription that no longer exists.
+                    'delinquent_since' => null,
+                    'dunning_level' => 0,
+                    'payment_reminded_on' => null,
+                ])->save();
+            });
 
-            $expired++;
+            if ($ended) {
+                $expired++;
+            }
         }
+
+        $attempts->finish();
 
         return $expired;
     }

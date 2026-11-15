@@ -11,6 +11,7 @@ use Pushery\Billing\Events\VoucherVolumeThresholdApproaching;
 use Pushery\Billing\Events\VoucherVolumeThresholdBreached;
 use Pushery\Billing\Models\Voucher;
 use Pushery\Billing\Models\VoucherVolumeNotice;
+use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -66,6 +67,7 @@ final readonly class VoucherVolumeSweep
     public function announce(CarbonImmutable $now): int
     {
         $announced = 0;
+        $attempts = new SweepAttempts;
 
         foreach ($this->currencies() as $currency) {
             $level = $this->levelFor($now, $currency);
@@ -76,25 +78,31 @@ final readonly class VoucherVolumeSweep
                 continue;
             }
 
-            $volume = $this->monitor->volume($now, $currency);
-            $threshold = Money::of($this->monitor->thresholdMinor(), $currency);
+            $told = $attempts->attempt(function () use ($now, $currency, $level): void {
+                $volume = $this->monitor->volume($now, $currency);
+                $threshold = Money::of($this->monitor->thresholdMinor(), $currency);
 
-            $this->events->dispatch($level === VoucherVolumeLevel::Breached
-                ? new VoucherVolumeThresholdBreached($volume, $threshold, $now)
-                : new VoucherVolumeThresholdApproaching($volume, $threshold, $now));
+                $this->events->dispatch($level === VoucherVolumeLevel::Breached
+                    ? new VoucherVolumeThresholdBreached($volume, $threshold, $now)
+                    : new VoucherVolumeThresholdApproaching($volume, $threshold, $now));
 
-            // Marked after dispatching. A crash between the two announces once more, which somebody can live
-            // with; the other order loses the announcement, which is what this class exists to prevent.
-            VoucherVolumeNotice::model()::query()->create([
-                'currency' => $currency,
-                'level' => $level,
-                'announced_for_year' => $now->year,
-                'volume_minor' => $volume->minorUnits,
-                'announced_at' => $now,
-            ]);
+                // Marked after dispatching. A crash between the two announces once more, which somebody can live
+                // with; the other order loses the announcement, which is what this class exists to prevent.
+                VoucherVolumeNotice::model()::query()->create([
+                    'currency' => $currency,
+                    'level' => $level,
+                    'announced_for_year' => $now->year,
+                    'volume_minor' => $volume->minorUnits,
+                    'announced_at' => $now,
+                ]);
+            });
 
-            $announced++;
+            if ($told) {
+                $announced++;
+            }
         }
+
+        $attempts->finish();
 
         return $announced;
     }

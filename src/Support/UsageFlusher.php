@@ -10,7 +10,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Psr\Log\LoggerInterface;
 use Pushery\Billing\Contracts\UsageReporter;
@@ -123,7 +122,7 @@ final readonly class UsageFlusher
             ->get();
 
         foreach ($groups as $group) {
-            DB::transaction(function () use ($group, $now): void {
+            BillingConnection::connection()->transaction(function () use ($group, $now): void {
                 $sources = UsageEvent::model()::query()
                     ->where('owner_type', $group->owner_type)
                     ->where('owner_id', $group->owner_id)
@@ -237,7 +236,9 @@ final readonly class UsageFlusher
         try {
             $this->reporter->report($customer, $meter, $billable, $rollup->identifier, $rollup->occurred_at);
         } catch (Throwable $e) {
-            $this->retryOrFail($rollup, $e->getMessage());
+            // The column keeps the failure without its data, the way RedactedError describes one; the log keeps the
+            // provider's whole message for whoever reads it there.
+            $this->retryOrFail($rollup, RedactedError::of($e), $e->getMessage());
 
             return false;
         }
@@ -250,7 +251,7 @@ final readonly class UsageFlusher
     /** Mark a rollup and the events folded into it as reported — the provider has it, or owes nothing for it. */
     private function settleReported(UsageEvent $rollup): void
     {
-        DB::transaction(function () use ($rollup): void {
+        BillingConnection::connection()->transaction(function () use ($rollup): void {
             $rollup->forceFill([
                 'state' => UsageEventState::Reported,
                 'reported_at' => Carbon::now(),
@@ -263,22 +264,24 @@ final readonly class UsageFlusher
         });
     }
 
-    /** Back off and try again, until the budget runs out — at which point it is a loss, not a retry. */
-    private function retryOrFail(UsageEvent $rollup, string $error): void
+    /**
+     * Back off and try again, until the budget runs out — at which point it is a loss, not a retry. `$stored` is the
+     * text for the column, `$logged` the one for the log.
+     */
+    private function retryOrFail(UsageEvent $rollup, string $stored, string $logged): void
     {
         $attempts = $rollup->attempts + 1;
 
         if ($attempts >= $this->maxAttempts()) {
-            $this->fail($rollup, $error, $attempts);
+            $this->fail($rollup, $stored, $attempts, $logged);
 
             return;
         }
 
-        // The provider's message, fitted to its column: a longer one would fail this write, and the usage would
-        // neither retry nor fail. The log below keeps the whole of it.
+        // Fitted to its column: a longer text would fail this write, and the usage would neither retry nor fail.
         $rollup->forceFill([
             'attempts' => $attempts,
-            'last_error' => RedactedError::fit($error),
+            'last_error' => RedactedError::fit($stored),
             'next_attempt_at' => Carbon::now()->addSeconds($this->backoffSeconds() * 2 ** ($attempts - 1)),
         ])->save();
 
@@ -286,13 +289,13 @@ final readonly class UsageFlusher
             'identifier' => $rollup->identifier,
             'meter' => $rollup->meter_key,
             'attempts' => $attempts,
-            'reason' => $error,
+            'reason' => $logged,
         ]);
     }
 
-    private function fail(UsageEvent $rollup, string $error, int $attempts = 0): void
+    private function fail(UsageEvent $rollup, string $error, int $attempts = 0, ?string $logged = null): void
     {
-        DB::transaction(function () use ($rollup, $error, $attempts): void {
+        BillingConnection::connection()->transaction(function () use ($rollup, $error, $attempts): void {
             $rollup->forceFill([
                 'state' => UsageEventState::Failed,
                 'attempts' => max($attempts, $rollup->attempts),
@@ -311,7 +314,7 @@ final readonly class UsageFlusher
             'quantity' => $rollup->quantity,
             'period' => $rollup->period,
             'owner' => $rollup->owner_type.':'.$rollup->owner_id,
-            'reason' => $error,
+            'reason' => $logged ?? $error,
         ]);
     }
 

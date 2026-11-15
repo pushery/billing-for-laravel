@@ -10,10 +10,9 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Notification;
+use Pushery\Billing\Contracts\PaymentMethodNotifier;
 use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Models\BillingEvent;
-use Pushery\Billing\Notifications\CardExpiringNotification;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\ValueObjects\PaymentMethod;
 use Throwable;
@@ -30,7 +29,7 @@ final class WarnExpiringCardsCommand extends Command
 
     protected $description = 'Notify owners whose default card is about to expire.';
 
-    public function handle(Repository $config, PaymentMethods $methods, BillingEventLog $log): int
+    public function handle(Repository $config, PaymentMethods $methods, PaymentMethodNotifier $notifier, BillingEventLog $log): int
     {
         $model = $config->get('billing.customer.model');
 
@@ -48,12 +47,12 @@ final class WarnExpiringCardsCommand extends Command
 
         $model::query()->whereNotNull($column)->chunkById(100,
             /** @param Collection<int, Model> $owners */
-            function (Collection $owners) use ($methods, $log, $days, $dryRun, &$warned, &$failed): void {
+            function (Collection $owners) use ($methods, $notifier, $log, $days, $dryRun, &$warned, &$failed): void {
                 foreach ($owners as $owner) {
                     // One owner the provider cannot answer for, a customer deleted there for instance, must not stop
                     // the warnings for every owner after them. It is reported and asked about again on the next run.
                     try {
-                        $warned += $this->warnIfExpiring($owner, $methods, $log, $days, $dryRun) ? 1 : 0;
+                        $warned += $this->warnIfExpiring($owner, $methods, $notifier, $log, $days, $dryRun) ? 1 : 0;
                     } catch (Throwable $e) {
                         $failed++;
                         Container::getInstance()->make(ExceptionHandler::class)->report($e);
@@ -75,7 +74,7 @@ final class WarnExpiringCardsCommand extends Command
     }
 
     /** Warn one owner whose default card runs out within the window, once per card and expiry; whether a warning went out. */
-    private function warnIfExpiring(Model $owner, PaymentMethods $methods, BillingEventLog $log, int $days, bool $dryRun): bool
+    private function warnIfExpiring(Model $owner, PaymentMethods $methods, PaymentMethodNotifier $notifier, BillingEventLog $log, int $days, bool $dryRun): bool
     {
         $method = $methods->default($owner);
 
@@ -89,7 +88,7 @@ final class WarnExpiringCardsCommand extends Command
             return true;
         }
 
-        Notification::send($owner, new CardExpiringNotification($method));
+        $notifier->cardExpiring($owner, $method);
 
         $log->record('card.expiring_notice_sent', $owner, [
             'method' => $method->id,

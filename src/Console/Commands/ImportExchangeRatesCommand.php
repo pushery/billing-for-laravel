@@ -88,7 +88,9 @@ final class ImportExchangeRatesCommand extends Command
             // settlement documents, where it is the evidence an auditor uses to check a figure against a
             // published table, so a URL or a name written in here would store rates from one publisher under
             // another's name on every installation that files under a different jurisdiction's rule.
-            $response = Http::timeout(30)->get(
+            // No redirect is followed: the rates are stored under the publisher's name as the evidence of a figure,
+            // so they come from the address the publisher names, and a 3xx is no success.
+            $response = Http::timeout(30)->withoutRedirecting()->get(
                 $publisher->seriesUrl($currency, $from->toDateString(), $to->toDateString()),
             );
 

@@ -83,6 +83,39 @@ final readonly class PlaceEvidenceStore
         return is_scalar($key) ? (string) $key : null;
     }
 
+    /**
+     * The reference a move recorded from a day on is kept under: the sale's own, the day behind an `@`.
+     *
+     * A row of its own rather than a change to the row the sale was recorded under, which stays as it was: a cycle
+     * before the move keeps reading where the customer was then.
+     */
+    public static function datedReference(string $reference, CarbonInterface $from): string
+    {
+        return $reference.'@'.$from->toDateString();
+    }
+
+    /**
+     * The reference whose place is in force on a day: the latest move recorded from that day or before, or the sale's
+     * own reference where no move reaches it.
+     */
+    public function referenceAt(string $reference, CarbonInterface $day): string
+    {
+        $prefix = $reference.'@';
+        $answer = $reference;
+        $latest = '';
+
+        // LIKE narrows the read; the prefix is checked again here, because a `%` or `_` in a reference would match more.
+        foreach (PlaceEvidence::model()::query()->where('reference', 'like', $prefix.'%')->pluck('reference') as $candidate) {
+            $from = is_string($candidate) && str_starts_with($candidate, $prefix) ? substr($candidate, strlen($prefix)) : '';
+
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) === 1 && $from <= $day->toDateString() && $from > $latest) {
+                [$answer, $latest] = [(string) $candidate, $from];
+            }
+        }
+
+        return $answer;
+    }
+
     /** The country a sale was taxed in, or null where none was recorded. */
     public function countryFor(string $reference): ?string
     {

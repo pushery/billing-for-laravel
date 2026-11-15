@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models\Concerns;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
+use Pushery\Billing\Support\BillingConnection;
 
 /**
  * The seam through which a host replaces a billing model with its own subclass.
@@ -49,6 +50,19 @@ trait Replaceable
         return is_string($configured) && is_subclass_of($configured, static::class)
             ? $configured
             : static::class;
+    }
+
+    /**
+     * The connection the model reads and writes on: its own where it names one, a host's subclass included, and
+     * otherwise the connection the package's tables live on ({@see BillingConnection}), the default one unless
+     * `billing.database.connection` names another. A connection named by an enum is read as its value, the way
+     * Eloquent reads it.
+     *
+     * @return string|null
+     */
+    public function getConnectionName()
+    {
+        return parent::getConnectionName() ?? BillingConnection::name();
     }
 
     /**

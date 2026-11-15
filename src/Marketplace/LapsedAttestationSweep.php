@@ -9,6 +9,7 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Events\CreatorPlacedOnTaxHold;
 use Pushery\Billing\Models\CreatorTaxStatusRecord;
+use Pushery\Billing\Support\SweepAttempts;
 
 /**
  * Finds the merchants whose attestation has quietly run out, and announces each one exactly once.
@@ -48,6 +49,7 @@ final readonly class LapsedAttestationSweep
         // In UTC, the zone the attestation columns hold: a binding is written in its own zone (see UtcDateTime).
         $at = Carbon::instance($now)->utc();
         $announced = 0;
+        $attempts = new SweepAttempts;
 
         $lapsed = CreatorTaxStatusRecord::model()::query()
             ->whereNotNull('attested_until')
@@ -78,14 +80,20 @@ final readonly class LapsedAttestationSweep
                 continue;
             }
 
-            $this->events->dispatch(new CreatorPlacedOnTaxHold($merchant, 'billing::tax_hold.attestation_lapsed'));
+            $told = $attempts->attempt(function () use ($merchant, $record, $at): void {
+                $this->events->dispatch(new CreatorPlacedOnTaxHold($merchant, 'billing::tax_hold.attestation_lapsed'));
 
-            // Marked after dispatching, not before. A crash between the two re-announces once, which is
-            // recoverable; the other order loses the announcement entirely, which is not.
-            $record->forceFill(['hold_announced_at' => $at])->save();
+                // Marked after dispatching, not before. A crash between the two re-announces once, which is
+                // recoverable; the other order loses the announcement entirely, which is not.
+                $record->forceFill(['hold_announced_at' => $at])->save();
+            });
 
-            $announced++;
+            if ($told) {
+                $announced++;
+            }
         }
+
+        $attempts->finish();
 
         return $announced;
     }

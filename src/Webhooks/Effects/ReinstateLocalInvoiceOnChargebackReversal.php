@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Pushery\Billing\Webhooks\Effects;
 
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Pushery\Billing\Contracts\DedupesOnReference;
 use Pushery\Billing\Enums\InvoiceStatus;
@@ -16,6 +15,7 @@ use Pushery\Billing\Invoicing\InvoiceNumber;
 use Pushery\Billing\Invoicing\LocalInvoiceCredit;
 use Pushery\Billing\Marketplace\FanReceiptIssuer;
 use Pushery\Billing\Models\InvoiceRecord;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\ValueObjects\Money;
 use RuntimeException;
 
@@ -75,7 +75,7 @@ final readonly class ReinstateLocalInvoiceOnChargebackReversal implements Dedupe
         // The lock the credit note takes, on the same row: both read what the invoice stands credited at and write a
         // document that changes it, so a refund and a reversal of one payment take turns. Inside the effect's own
         // transaction this is a savepoint, and the outer transaction holds the lock until the document commits.
-        DB::transaction(function () use ($invoice, $standing): void {
+        BillingConnection::connection()->transaction(function () use ($invoice, $standing): void {
             InvoiceRecord::model()::query()->whereKey($invoice->getKey())->lockForUpdate()->first();
 
             $this->reinstate($invoice, $standing);

@@ -7,7 +7,6 @@ namespace Pushery\Billing\Support;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Pushery\Billing\Enums\ReservationState;
 use Pushery\Billing\Models\PrepaidUnits;
@@ -75,7 +74,7 @@ final class UsageMeter
         int $grace = 0,
         bool $prepaidCounts = true,
     ): ?UsageHold {
-        return DB::transaction(function () use ($owner, $meterKey, $period, $amount, $included, $enforce, $expiresAt, $grace, $prepaidCounts): ?UsageHold {
+        return BillingConnection::connection()->transaction(function () use ($owner, $meterKey, $period, $amount, $included, $enforce, $expiresAt, $grace, $prepaidCounts): ?UsageHold {
             $counter = $this->lockedCounter($owner, $meterKey, $period);
             $prepaid = $this->lockedPrepaid($owner->getMorphClass(), $owner->getKey(), $meterKey);
             $grants = $this->lockedGrants($owner->getMorphClass(), $owner->getKey(), $meterKey);
@@ -167,7 +166,7 @@ final class UsageMeter
      */
     public function record(Model $owner, string $meterKey, string $period, int $amount, ?int $included = null): int
     {
-        return DB::transaction(function () use ($owner, $meterKey, $period, $amount, $included): int {
+        return BillingConnection::connection()->transaction(function () use ($owner, $meterKey, $period, $amount, $included): int {
             $counter = $this->lockedCounter($owner, $meterKey, $period);
             $prepaid = $this->lockedPrepaid($owner->getMorphClass(), $owner->getKey(), $meterKey);
             $grants = $this->lockedGrants($owner->getMorphClass(), $owner->getKey(), $meterKey);
@@ -339,7 +338,7 @@ final class UsageMeter
      */
     private function settleToken(string $token, int $used, ReservationState $state): ?int
     {
-        return DB::transaction(function () use ($token, $used, $state): ?int {
+        return BillingConnection::connection()->transaction(function () use ($token, $used, $state): ?int {
             $reservation = UsageReservation::model()::query()->where('token', $token)->lockForUpdate()->first();
 
             // Not ours to settle: no such hold, or someone settled it first (the sweep reads, then writes,

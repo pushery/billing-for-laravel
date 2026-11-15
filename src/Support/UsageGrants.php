@@ -8,7 +8,6 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Pushery\Billing\Models\UsageGrant;
 
@@ -57,7 +56,7 @@ final readonly class UsageGrants
         }
 
         try {
-            return DB::transaction(function () use ($owner, $meterKey, $units, $expiresAt, $reference): UsageGrant {
+            return BillingConnection::connection()->transaction(function () use ($owner, $meterKey, $units, $expiresAt, $reference): UsageGrant {
                 $repaid = $this->prepaid->repayDebt($owner, $meterKey, $units);
 
                 $grant = UsageGrant::model()::query()->create([
@@ -110,7 +109,7 @@ final readonly class UsageGrants
         $expired = 0;
 
         foreach ($due as $id) {
-            $expired += DB::transaction(function () use ($id, $moment): int {
+            $expired += BillingConnection::connection()->transaction(function () use ($id, $moment): int {
                 $grant = UsageGrant::model()::query()->whereKey($id)->lockForUpdate()->first();
 
                 if (! $grant instanceof UsageGrant || $grant->expired_at !== null) {

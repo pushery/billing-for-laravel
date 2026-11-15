@@ -12,19 +12,22 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use InvalidArgumentException;
 use Pushery\Billing\Consumer\AnnualTerms;
 use Pushery\Billing\Consumer\CustomerTypes;
 use Pushery\Billing\Contracts\BillingEngine;
+use Pushery\Billing\Contracts\ChargesOnTheMandate;
 use Pushery\Billing\Contracts\CollectsDirectDebits;
 use Pushery\Billing\Contracts\PaymentRails;
 use Pushery\Billing\DirectDebit\PreNotifications;
 use Pushery\Billing\Discounts\CycleCouponApplier;
 use Pushery\Billing\Discounts\DiscountAllowances;
 use Pushery\Billing\Dunning\ConfigDunningLadder;
+use Pushery\Billing\Dunning\DefaultInterest;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\CollectionTiming;
@@ -34,6 +37,7 @@ use Pushery\Billing\Enums\FallbackAttempt;
 use Pushery\Billing\Enums\OrderItemType;
 use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Enums\SubscriptionState;
+use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Events\FallbackPaymentMethodCharged;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
@@ -50,6 +54,7 @@ use Pushery\Billing\PriceChanges\PriceChanges;
 use Pushery\Billing\ValueObjects\ChargeNarrative;
 use Pushery\Billing\ValueObjects\CreditSource;
 use Pushery\Billing\ValueObjects\DriverCapabilities;
+use Pushery\Billing\ValueObjects\MandateCharge;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\OrderItemDraft;
 use Pushery\Billing\ValueObjects\UpcomingInvoicePreview;
@@ -108,16 +113,17 @@ use Throwable;
  * lines, and the local invoice raised from a paid order. Both hook onto the order and its items, which
  * this assembles — so they are additions to what it produces rather than changes to how it collects.
  */
-final readonly class LocalBillingEngine implements BillingEngine
+final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMandate
 {
     /** What a collected cycle resets: the dunning level, the clock the dunning run escalates by, and the last reminder's day. */
     private const array ARREARS_CLEARED = ['dunning_level' => 0, 'delinquent_since' => null, 'payment_reminded_on' => null];
 
     /**
-     * The lines of an order this engine charges on its own rather than as a cycle: a late fee, and the rest of a
-     * period charged for a change inside it.
+     * The lines of an order this engine charges on its own rather than as a cycle: a late fee, the rest of a period
+     * charged for a change inside it, and what a payer took back from a period that is over. A charge on the mandate is
+     * known by its reference instead ({@see self::ofTheirOwn()}).
      */
-    private const array CHARGES_OF_THEIR_OWN = [OrderItemType::LateFee, OrderItemType::Proration];
+    private const array CHARGES_OF_THEIR_OWN = [OrderItemType::LateFee, OrderItemType::LateInterest, OrderItemType::Proration, OrderItemType::Chargeback];
 
     public function __construct(
         private string $provider,
@@ -199,6 +205,8 @@ final readonly class LocalBillingEngine implements BillingEngine
          * named. Optional for the same reason as everything above; null bills every cycle at the tier's own price.
          */
         private ?PriceChanges $priceChanges = null,
+        /** Optional for the same reason; null means a cycle paid late owes no default interest. */
+        private ?DefaultInterest $interest = null,
     ) {}
 
     public function tick(?DateTimeInterface $now = null): void
@@ -246,6 +254,10 @@ final readonly class LocalBillingEngine implements BillingEngine
      * Without collecting their last period, and deliberately. That money is late by weeks or months, the
      * customer was never told it would come, and a debit nobody announced is the worse of the two outcomes.
      * Each one is logged, so an operator who wants to bill it can.
+     *
+     * A subscription in arrears whose ladder has run out ends here as well, once a cancellation gave it an end that
+     * has come. No attempt is planned for it any more, so nothing else would ever move it, and it would count as in
+     * arrears for good. Its unpaid period stays unpaid, as the failed order says.
      */
     private function endLapsedCancellations(Carbon $moment): void
     {
@@ -258,13 +270,20 @@ final readonly class LocalBillingEngine implements BillingEngine
                 SubscriptionState::Active->value,
                 SubscriptionState::Grace->value,
                 SubscriptionState::Trialing->value,
+                SubscriptionState::PastDue->value,
             ])
             ->lazyById();
 
         foreach ($lapsed as $subscription) {
+            $inArrears = $subscription->status === SubscriptionState::PastDue->value;
+
             $subscription->update(['status' => SubscriptionState::Ended->value]);
 
-            Log::warning('billing: a canceled subscription had run past its end; ended without collecting its last period', [
+            $message = $inArrears
+                ? 'billing: a canceled subscription in arrears had no attempt left; ended with its period unpaid'
+                : 'billing: a canceled subscription had run past its end; ended without collecting its last period';
+
+            Log::warning($message, [
                 'subscription' => $subscription->getKey(),
                 'provider' => $this->provider,
                 'ends_at' => $subscription->ends_at?->toIso8601String(),
@@ -506,8 +525,8 @@ final readonly class LocalBillingEngine implements BillingEngine
     }
 
     /**
-     * Collect the open charges of their own whose notice allows them today: the rest of a period, a late fee, or a
-     * retry that waited for the day it was announced for.
+     * Collect the open charges of their own whose notice allows them today: the rest of a period, a late fee, a charge
+     * on the mandate, or a retry that waited for the day it was announced for.
      *
      * Only a charge that was announced is collected here. A late fee nobody tried to draw yet keeps waiting for the
      * owner's next paid cycle, as it always has.
@@ -532,11 +551,10 @@ final readonly class LocalBillingEngine implements BillingEngine
             return;
         }
 
-        $charges = Order::model()::query()
+        $charges = $this->ofTheirOwn(Order::model()::query()
             ->whereIn('id', $announced)
             ->where('provider', $this->provider)
-            ->where('status', OrderStatus::Open)
-            ->whereHas('items', static fn (Builder $query): Builder => $query->whereIn('type', self::CHARGES_OF_THEIR_OWN))
+            ->where('status', OrderStatus::Open))
             ->orderBy('id')
             ->get();
 
@@ -704,9 +722,37 @@ final readonly class LocalBillingEngine implements BillingEngine
             ? $this->fallbackHandedTo($subscription, $order)
             : PaymentMandate::defaultFor($subscription->owner_type, $subscription->owner_id, $this->provider);
 
+        // Spent under the balance's own lock, and the charge derived from what actually moved — never from
+        // a figure decided earlier and debited later. A refusal gives it back ({@see self::returnCredit()}),
+        // which is the property that makes spending first safe.
+        //
+        // Spent before the mandate is asked for. A cycle the credit or a discount covers whole charges nothing, so it
+        // needs no mandate, and asking first put a fully prepaid subscriber whose mandate was revoked into dunning.
+        $owner = $this->ownerOf($subscription);
+        $spend = $this->spendCredit($owner, $order, $total);
+        $due = $total->minus($spend);
+
+        // A trial's closing cycle costs nothing, as the days a trial covers carry no plan charge, so a zero due alone does
+        // not end it as paid: without a usable mandate it ends as the card-less trial below, where it would otherwise turn
+        // into an active subscription for nothing.
+        $cardLessTrial = $subscription->status === SubscriptionState::Trialing->value
+            && (! $mandate instanceof PaymentMandate || ! $this->chargeableOffSession($mandate))
+            && $this->neverCollected($subscription);
+
+        if ($due->isZero() && ! $cardLessTrial) {
+            // A zero charge is not a small charge — providers refuse it — and a refusal here would put a
+            // fully prepaid subscriber into dunning for having enough credit. Nothing moved at the
+            // provider, but the credit did pay for the cycle, and it is already spent.
+            $this->recordSuccess($subscription, $order, $total, null);
+
+            return;
+        }
+
         if ($fallback && (! $mandate instanceof PaymentMandate || ! $this->chargeableOffSession($mandate))) {
             // The fallback went away between the refusal and this run, removed or revoked. Nothing is left to try
-            // before dunning, and the default is not charged a second time minutes after it failed.
+            // before dunning, and the default is not charged a second time minutes after it failed. The credit spent
+            // above goes back, as it does on any refusal.
+            $this->returnSpentCreditTo($owner, $order);
             $order->update(['fallback_attempt' => FallbackAttempt::Refused]);
             $this->recordFailure($subscription, $order, $total, 'fallback_unavailable');
 
@@ -714,6 +760,10 @@ final readonly class LocalBillingEngine implements BillingEngine
         }
 
         if (! $mandate instanceof PaymentMandate || ! $this->chargeableOffSession($mandate)) {
+            // Something is left to collect and nothing can collect it, so the credit spent above goes back first:
+            // whatever follows, a retry reassembles the cycle and must find the balance where the customer left it.
+            $this->returnSpentCreditTo($owner, $order);
+
             // Two different people arrive here, and only one of them owes anything.
             //
             // A subscriber whose method was withdrawn or revoked is in arrears, and the ladder a refusal
@@ -763,22 +813,6 @@ final readonly class LocalBillingEngine implements BillingEngine
             }
 
             $this->recordFailure($subscription, $order, $total, 'no_usable_mandate');
-
-            return;
-        }
-
-        // Spent under the balance's own lock, and the charge derived from what actually moved — never from
-        // a figure decided earlier and debited later. A refusal gives it back ({@see self::returnCredit()}),
-        // which is the property that makes spending first safe.
-        $owner = $this->ownerOf($subscription);
-        $spend = $this->spendCredit($owner, $order, $total);
-        $due = $total->minus($spend);
-
-        if ($due->isZero()) {
-            // A zero charge is not a small charge — providers refuse it — and a refusal here would put a
-            // fully prepaid subscriber into dunning for having enough credit. Nothing moved at the
-            // provider, but the credit did pay for the cycle, and it is already spent.
-            $this->recordSuccess($subscription, $order, $total, null);
 
             return;
         }
@@ -952,8 +986,9 @@ final readonly class LocalBillingEngine implements BillingEngine
         $order = $this->cycleInFlight($paymentReference);
 
         if (! $order instanceof Order) {
-            // Not a cycle. A late fee or the rest of a period charged for a change inside it is the other order this
-            // engine charges, and it closes on its own terms: paid and documented, with no period to advance.
+            // Not a cycle. A late fee, the rest of a period charged for a change inside it and a charge on the mandate
+            // are the other orders this engine charges, and they close on their own terms: paid and documented, with no
+            // period to advance.
             $charge = $this->chargeOfItsOwnInFlight($paymentReference);
 
             if ($charge instanceof Order) {
@@ -1031,8 +1066,8 @@ final readonly class LocalBillingEngine implements BillingEngine
 
         if (! $order instanceof Order) {
             // A refused late fee is open again for the next paid cycle, and nobody is dunned for it, as is the rest of
-            // a period whose change already took effect. The reference goes, so the next attempt is a charge of its
-            // own and a claim that dies before it reads as abandoned.
+            // a period whose change already took effect, and a charge on the mandate. The reference goes, so the next
+            // attempt is a charge of its own and a claim that dies before it reads as abandoned.
             $this->chargeOfItsOwnInFlight($paymentReference)?->update(['status' => OrderStatus::Open, 'payment_reference' => null]);
 
             return;
@@ -1062,6 +1097,152 @@ final readonly class LocalBillingEngine implements BillingEngine
         }
 
         $this->recordFailure($subscription, $order, Money::of($order->total_minor, $order->currency), $reason);
+    }
+
+    /**
+     * Open a collected cycle again because its payer took the payment back.
+     *
+     * A direct debit can be taken back for weeks after it settled, and the period it paid is then unpaid while the
+     * subscription reads as paid up. Where the subscription is still in that period and the whole payment came back,
+     * the cycle is failed as a bounced debit fails it, and the dunning collects that same order again; its invoice
+     * stands, and the issuer raises none a second time for an order that has one. Where the period is over, the order
+     * of the next one may be paid already and a retry of the cycle would collect that one instead, so the amount taken
+     * back becomes a charge of its own, collected on the mandate the way a late fee is and announced first where the
+     * mandate is a direct debit. The subscription is in arrears until that charge is paid. The same holds where only
+     * part of the payment came back, because a retry of the cycle would collect all of it.
+     *
+     * The order of a period whose whole payment came back is failed in both cases, because its money is gone. One that
+     * kept part of it stays paid: the charge of its own says what is missing.
+     *
+     * A reference that names no collected cycle of this engine is not an error: a chargeback of an add-on, a purchase
+     * or another install's payment reaches this as well, and leaves every subscription as it is.
+     *
+     * @param  Money  $amount  what the payer took back, which can be less than the payment
+     * @param  string|null  $chargebackReference  the provider's id of the chargeback, which keeps a second one apart
+     */
+    public function chargedBack(string $paymentReference, Money $amount, ?string $chargebackReference = null): void
+    {
+        $order = $this->paidCycle($paymentReference);
+
+        if (! $order instanceof Order || ! $amount->isPositive()) {
+            return;
+        }
+
+        $whole = $amount->currency === $order->currency && $amount->minorUnits >= (int) $order->total_minor;
+        $subscription = Subscription::model()::query()->find($order->subscription_id);
+
+        if (! $subscription instanceof Subscription) {
+            // The subscription is gone, so nobody is dunned. The order says what happened to its money.
+            if ($whole) {
+                $order->update(['status' => OrderStatus::Failed, 'processed_at' => Carbon::now()]);
+            }
+
+            return;
+        }
+
+        $current = $subscription->current_period_start;
+
+        if ($whole && $order->period_start instanceof Carbon && $current instanceof Carbon && $order->period_start->equalTo($current)) {
+            $this->returnSpentCredit($subscription, $order);
+            $this->recordFailure($subscription, $order, $amount, 'charged_back');
+
+            return;
+        }
+
+        $reference = $this->chargebackReferenceOf($subscription).($chargebackReference ?? $paymentReference);
+
+        if (Order::model()::query()->where('provider', $this->provider)->where('reference', $reference)->exists()) {
+            return;
+        }
+
+        $charge = BillingConnection::connection()->transaction(function () use ($subscription, $order, $amount, $whole, $reference): Order {
+            if ($whole) {
+                $order->update(['status' => OrderStatus::Failed, 'processed_at' => Carbon::now()]);
+            }
+
+            $charge = Order::model()::query()->create([
+                'owner_type' => $subscription->owner_type,
+                'owner_id' => $subscription->owner_id,
+                'provider' => $this->provider,
+                'total_minor' => $amount->minorUnits,
+                'currency' => $amount->currency,
+                'status' => OrderStatus::Open,
+                'reference' => $reference,
+            ]);
+
+            $from = $order->period_start?->toDateString() ?? '?';
+            $to = $order->period_end?->toDateString() ?? '?';
+
+            $charge->items()->create(new OrderItemDraft("Payment taken back for the period from {$from} to {$to}", $amount->minorUnits, 1, $amount->currency, OrderItemType::Chargeback)->toAttributes());
+
+            $subscription->update([
+                'status' => SubscriptionState::PastDue->value,
+                'delinquent_since' => $subscription->delinquent_since ?? Carbon::now(),
+            ]);
+
+            return $charge;
+        });
+
+        Log::info('billing: a payer took back the payment of a period that is over, and it is collected again', [
+            'subscription' => $subscription->getKey(),
+            'order' => $order->id,
+            'charge' => $charge->id,
+        ]);
+
+        Event::dispatch(new PaymentFailed((string) $subscription->owner_id, $amount, (string) $charge->id));
+
+        $mandate = PaymentMandate::defaultFor($subscription->owner_type, $subscription->owner_id, $this->provider);
+
+        if ($mandate instanceof PaymentMandate && $this->chargeableOffSession($mandate)) {
+            $this->collectChargeOfItsOwn($charge, $mandate);
+        }
+    }
+
+    /**
+     * End the arrears a collected chargeback opened, where nothing else keeps the subscription in them: no failed cycle
+     * of its current period, and no other chargeback of it still to collect.
+     */
+    private function endTheArrearsOf(Order $chargeback): void
+    {
+        $reference = (string) $chargeback->reference;
+
+        if (! str_starts_with($reference, Order::CHARGEBACK)) {
+            return;
+        }
+
+        $id = strstr(substr($reference, strlen(Order::CHARGEBACK)), ':', true);
+        $subscription = $id === false ? null : Subscription::model()::query()->find($id);
+
+        if (! $subscription instanceof Subscription || $subscription->status !== SubscriptionState::PastDue->value) {
+            return;
+        }
+
+        $owed = Order::model()::query()
+            ->where('subscription_id', $subscription->getKey())
+            ->where('period_start', $subscription->current_period_start)
+            ->where('status', OrderStatus::Failed)
+            ->exists()
+            || Order::model()::query()
+                ->where('provider', $this->provider)
+                ->where('reference', 'like', $this->chargebackReferenceOf($subscription).'%')
+                ->whereIn('status', [OrderStatus::Open, OrderStatus::Processing])
+                ->exists();
+
+        if (! $owed) {
+            $subscription->update(['status' => SubscriptionState::Active->value, ...self::ARREARS_CLEARED]);
+        }
+    }
+
+    /**
+     * The start of the reference every chargeback charge of this subscription carries: the prefix, the subscription's key
+     * and a colon. chargedBack() writes it, and endTheArrearsOf() looks for the other charges of the subscription by it,
+     * so both build it here. The key of a replaceable model is read as the scalar it is.
+     */
+    private function chargebackReferenceOf(Subscription $subscription): string
+    {
+        $key = $subscription->getKey();
+
+        return Order::CHARGEBACK.(is_scalar($key) ? (string) $key : '').':';
     }
 
     /**
@@ -1100,7 +1281,7 @@ final readonly class LocalBillingEngine implements BillingEngine
         // outside a transaction is released the moment its own statement commits, so the row is free again
         // before the credit is returned — the lock would read as protection while protecting nothing, and
         // the window it appears to close is the one where the money is handed back twice.
-        $released = DB::transaction(function () use ($order, $now): bool {
+        $released = BillingConnection::connection()->transaction(function () use ($order, $now): bool {
             // Re-READ under the lock, not re-checked on the instance handed in. This is the only place the
             // decision is made, and it returns money to a balance and reopens a billable cycle: an operator
             // reads a confirmation, thinks, and answers, and in that gap a webhook can land or a second
@@ -1123,11 +1304,11 @@ final readonly class LocalBillingEngine implements BillingEngine
 
             // A late fee goes back to open rather than to failed: failed is where a cycle waits for its retry, and
             // a fee is retried by being open when the next cycle is paid. So is the rest of a period charged for a
-            // change inside it.
+            // change inside it, and a chargeback collected again: as a failed order nothing would ever charge it.
             //
             // An abandoned charge of the fallback is due again as the fallback, so the next tick charges the same mandate
             // under the same key and a payment the dead attempt may have created collapses onto it.
-            $locked->update($locked->isLateFee() || $locked->isProration()
+            $locked->update($locked->isLateFee() || $locked->isLateInterest() || $locked->isProration() || $locked->isChargeback()
                 ? ['status' => OrderStatus::Open]
                 : [
                     'status' => OrderStatus::Failed,
@@ -1174,7 +1355,7 @@ final readonly class LocalBillingEngine implements BillingEngine
         // A second after the period began at the earliest: the period's own order holds its start on the claim key.
         $since = Carbon::instance($from)->max($start->copy()->addSecond());
 
-        $order = DB::transaction(function () use ($subscription, $amount, $description, $since, $end): Order {
+        $order = BillingConnection::connection()->transaction(function () use ($subscription, $amount, $description, $since, $end): Order {
             $order = Order::model()::query()->create([
                 'owner_type' => $subscription->owner_type,
                 'owner_id' => $subscription->owner_id,
@@ -1198,13 +1379,161 @@ final readonly class LocalBillingEngine implements BillingEngine
             return;
         }
 
-        DB::afterCommit(function () use ($subscription, $order): void {
+        BillingConnection::connection()->afterCommit(function () use ($subscription, $order): void {
             $mandate = PaymentMandate::defaultFor($subscription->owner_type, $subscription->owner_id, $this->provider);
 
             if ($mandate instanceof PaymentMandate && $this->chargeableOffSession($mandate)) {
                 $this->collectChargeOfItsOwn($order, $mandate);
             }
         });
+    }
+
+    /**
+     * Charge an owner once for lines the application sets, as an order of its own against their default mandate.
+     *
+     * The order carries the lines as given, the period they supplied where the call names one, and the application's
+     * reference behind the owner's, in the unique column a late fee keeps its dunning reference in, so two owners'
+     * references never meet. The same reference again loses the insert and is answered with the order the first call
+     * wrote, which also decides a race between two calls that both find nothing, as it does for a late fee.
+     *
+     * Collected as the rest of a period is: the owner's credit first, then the default mandate once the order is
+     * committed, announced first where that mandate draws a direct debit. Inside a transaction the charge therefore
+     * waits for the commit, and a rollback leaves nothing charged. A refusal or a missing mandate leaves the order
+     * open, it is collected after the owner's next paid cycle, and nobody is dunned for it.
+     *
+     * Every line keeps what it supplies in its metadata, which is what the document of the order is taxed as.
+     *
+     * @param  list<OrderItemDraft>  $lines
+     */
+    public function chargeOnTheMandate(Model $owner, array $lines, string $reference, TaxArchetype $supplies, ?DateTimeInterface $from = null, ?DateTimeInterface $until = null): MandateCharge
+    {
+        $ownerKey = $owner->getKey();
+
+        if (! is_int($ownerKey) && ! is_string($ownerKey)) {
+            throw new InvalidArgumentException('Charge an owner that has been saved: the order names it by its key.');
+        }
+
+        if ($lines === []) {
+            throw new InvalidArgumentException('Name at least one line to charge.');
+        }
+
+        // Days rather than moments, read as the caller wrote them: a document states the period of a supply in days,
+        // and midnight in the caller's time zone is the evening before in UTC, which would date it a day early.
+        $start = $from instanceof DateTimeInterface ? Carbon::parse($from->format('Y-m-d'), 'UTC') : null;
+        $end = $until instanceof DateTimeInterface ? Carbon::parse($until->format('Y-m-d'), 'UTC') : null;
+
+        if ((! $start instanceof Carbon) !== (! $end instanceof Carbon) || ($start instanceof Carbon && $end instanceof Carbon && $end->lessThanOrEqualTo($start))) {
+            throw new InvalidArgumentException('Name the period a charge supplied by both ends, the end after the start, or by neither.');
+        }
+
+        $currency = $lines[0]->currency;
+        $total = 0;
+
+        foreach ($lines as $line) {
+            if ($line->currency !== $currency) {
+                throw new InvalidArgumentException(sprintf('Every line of a charge is in one currency, and %s is not %s.', $line->currency, $currency));
+            }
+
+            if ($line->type === OrderItemType::Credit) {
+                throw new InvalidArgumentException("A charge spends the owner's credit itself, so none of its lines is a credit line.");
+            }
+
+            $total += $line->totalMinor();
+        }
+
+        // Nothing owed is nothing to charge: no order, and so no document.
+        if ($total <= 0) {
+            return new MandateCharge(null);
+        }
+
+        $ownerType = $owner->getMorphClass();
+        $key = Order::CHARGE_ON_THE_MANDATE.$ownerType.':'.$ownerKey.':'.$reference;
+
+        if (strlen($key) > 255) {
+            throw new InvalidArgumentException(sprintf('A reference takes at most 255 characters together with its owner, and this one takes %d.', strlen($key)));
+        }
+
+        $amount = Money::of($total, $currency);
+
+        try {
+            $order = BillingConnection::connection()->transaction(function () use ($ownerType, $ownerKey, $lines, $supplies, $start, $end, $key, $amount): Order {
+                $order = Order::model()::query()->create([
+                    'owner_type' => $ownerType,
+                    'owner_id' => $ownerKey,
+                    'provider' => $this->provider,
+                    'total_minor' => $amount->minorUnits,
+                    'currency' => $amount->currency,
+                    'status' => OrderStatus::Open,
+                    'period_start' => $start,
+                    'period_end' => $end,
+                    'reference' => $key,
+                ]);
+
+                foreach ($lines as $line) {
+                    $order->items()->create([...$line->toAttributes(), 'metadata' => [...$line->metadata, OrderItem::TAX_ARCHETYPE => $supplies->value]]);
+                }
+
+                return $order;
+            });
+        } catch (UniqueConstraintViolationException) {
+            // The reference was charged before, or by a call that got there first: the order it wrote is the answer.
+            return new MandateCharge(Order::model()::query()->where('reference', $key)->sole());
+        }
+
+        if ($this->spendCredit($owner, $order, $amount)->equals($amount)) {
+            $this->closeChargeOfItsOwn($order, null);
+
+            return new MandateCharge($order);
+        }
+
+        $failure = null;
+
+        BillingConnection::connection()->afterCommit(function () use ($order, &$failure): void {
+            $mandate = PaymentMandate::defaultFor($order->owner_type, $order->owner_id, $this->provider);
+
+            $failure = $mandate instanceof PaymentMandate && $this->chargeableOffSession($mandate)
+                ? $this->collectChargeOfItsOwn($order, $mandate)
+                : 'no_usable_mandate';
+        });
+
+        return new MandateCharge($order, $failure);
+    }
+
+    /**
+     * What a cycle on another tier charges for its recurring lines over one of its periods, or null where the cycle
+     * prices a tier by its plan price alone.
+     *
+     * The subscription is moved to the tier in memory and drafted as its next cycle is: its own lines priced by their
+     * resolvers, which read the tier from it, or else the tier's plan line for its seats, and then the configured steps.
+     * What counts is the subscription and usage lines among them, before any coupon, credit or allowance. Null where the
+     * subscription carries no lines of its own and no step is configured, because the cycle then bills the plan price,
+     * and the catalog already answers for that.
+     *
+     * Read for a change of tier inside a period collected in advance ({@see RestOfPeriod::forTierChange()}).
+     */
+    public function tierCharge(Subscription $subscription, string $tierKey, Money $plan): ?Money
+    {
+        $moved = clone $subscription;
+        $moved->tier_key = $tierKey;
+        $drafts = $this->linesOf($moved);
+        $chain = $this->preprocessors instanceof OrderItemPreprocessorChain && ! $this->preprocessors->isEmpty() ? $this->preprocessors : null;
+
+        if ($drafts === [] && ! $chain instanceof OrderItemPreprocessorChain) {
+            return null;
+        }
+
+        if ($drafts === []) {
+            $drafts = [new OrderItemDraft($tierKey, $plan->minorUnits, $subscription->seat_quantity ?? 1, $plan->currency, OrderItemType::Subscription)];
+        }
+
+        $drafts = $chain instanceof OrderItemPreprocessorChain ? $chain->handle($drafts, $moved) : $drafts;
+        $total = 0;
+
+        foreach ($drafts as $draft) {
+            $total += in_array($draft->type, [OrderItemType::Subscription, OrderItemType::Usage], true) ? $draft->totalMinor() : 0;
+        }
+
+        return Money::of($total, $plan->currency);
     }
 
     /**
@@ -1504,7 +1833,7 @@ final readonly class LocalBillingEngine implements BillingEngine
      */
     private function claimCycle(Subscription $subscription, Money $amount, array $drafts, Carbon $moment): ?Order
     {
-        return DB::transaction(function () use ($subscription, $amount, $drafts, $moment): ?Order {
+        return BillingConnection::connection()->transaction(function () use ($subscription, $amount, $drafts, $moment): ?Order {
             $existing = Order::model()::query()
                 ->where('subscription_id', $subscription->getKey())
                 ->where('period_start', $subscription->current_period_start)
@@ -1650,7 +1979,7 @@ final readonly class LocalBillingEngine implements BillingEngine
             return Money::of(0, $amount->currency);
         }
 
-        return DB::transaction(function () use ($owner, $order, $amount): Money {
+        return BillingConnection::connection()->transaction(function () use ($owner, $order, $amount): Money {
             $spend = $this->credit->spendUpTo($owner, $amount, CreditReason::ChargeOffset, CreditSource::for($order));
 
             if (! $spend->isPositive()) {
@@ -1715,7 +2044,7 @@ final readonly class LocalBillingEngine implements BillingEngine
             return;
         }
 
-        DB::transaction(function () use ($owner, $order, $spend): void {
+        BillingConnection::connection()->transaction(function () use ($owner, $order, $spend): void {
             $this->credit->credit($owner, $spend, CreditReason::ChargeOffsetReturned, CreditSource::for($order));
 
             $order->items()->where('type', OrderItemType::Credit)->delete();
@@ -1746,7 +2075,7 @@ final readonly class LocalBillingEngine implements BillingEngine
     /** The cycle was paid: book it, move the cycle on, and say so. */
     private function recordSuccess(Subscription $subscription, Order $order, Money $amount, ?string $reference): void
     {
-        DB::transaction(function () use ($subscription, $order, $reference): void {
+        BillingConnection::connection()->transaction(function () use ($subscription, $order, $reference): void {
             $order->update([
                 'status' => OrderStatus::Paid,
                 'processed_at' => Carbon::now(),
@@ -1818,7 +2147,7 @@ final readonly class LocalBillingEngine implements BillingEngine
         // back after a fee was charged would put the fee back to open with the money already taken. So all
         // three wait for the commit, and a run that rolls back leaves no document, no announcement and no
         // charge behind it.
-        DB::afterCommit(function () use ($subscription, $order, $amount, $reference): void {
+        BillingConnection::connection()->afterCommit(function () use ($subscription, $order, $amount, $reference): void {
             // Outside the transaction above, and deliberately. The money is collected and the cycle has moved
             // on; raising the document is a separate concern, and rolling those two back together would undo a
             // correct cycle because a piece of paper failed. The issuer swallows its own failure for the same
@@ -1832,14 +2161,41 @@ final readonly class LocalBillingEngine implements BillingEngine
                 $this->reportTheFallback($subscription, $order, $amount);
             }
 
+            // Before the charges of their own are collected, so the interest this cycle owes is among them.
+            $this->openDefaultInterest($subscription, $order, $amount);
+
             // After the cycle, never inside it: the cycle is collected and recorded whatever becomes of a fee.
             $this->collectChargesOfTheirOwn($subscription);
         });
     }
 
     /**
+     * Open the default interest a cycle owes that was paid after the days it may run without, counted from when it
+     * fell due, which is when it was first charged. A failure here costs the interest, never the cycle: the money is
+     * collected and recorded, so it is logged and the cycle stands.
+     */
+    private function openDefaultInterest(Subscription $subscription, Order $order, Money $amount): void
+    {
+        $owner = $this->ownerOf($subscription);
+
+        if (! $this->interest instanceof DefaultInterest || ! $owner instanceof Model || ! $order->created_at instanceof Carbon) {
+            return;
+        }
+
+        try {
+            $this->interest->open($owner, $order, $amount, $order->created_at, Carbon::now(), $this->provider);
+        } catch (Throwable $failure) {
+            Log::error('billing: the default interest of a cycle paid late could not be opened', [
+                'order' => $order->getKey(),
+                'exception' => $failure,
+            ]);
+        }
+    }
+
+    /**
      * Collect the owner's open charges of their own, each as a payment of its own, now that a cycle of theirs has been
-     * paid: the late fees, and the rest of a period whose charge for a change inside it bounced.
+     * paid: the late fees, the rest of a period whose charge for a change inside it bounced, and a charge on the
+     * mandate that was refused or found no mandate.
      *
      * Not before, and that is the whole timing. A fee is opened while the owner is in arrears, which is when their
      * mandate has just been refused; charging it then adds a second refusal to the first. Once a cycle is paid the
@@ -1854,12 +2210,11 @@ final readonly class LocalBillingEngine implements BillingEngine
      */
     private function collectChargesOfTheirOwn(Subscription $subscription): void
     {
-        $charges = Order::model()::query()
+        $charges = $this->ofTheirOwn(Order::model()::query()
             ->where('owner_type', $subscription->owner_type)
             ->where('owner_id', $subscription->owner_id)
             ->where('provider', $this->provider)
-            ->where('status', OrderStatus::Open)
-            ->whereHas('items', static fn (Builder $query): Builder => $query->whereIn('type', self::CHARGES_OF_THEIR_OWN))
+            ->where('status', OrderStatus::Open))
             ->orderBy('id')
             ->get();
 
@@ -1878,11 +2233,14 @@ final readonly class LocalBillingEngine implements BillingEngine
         }
     }
 
-    /** Claim one open charge of its own and charge it, leaving it paid, in flight, or open again. */
-    private function collectChargeOfItsOwn(Order $charge, PaymentMandate $mandate): void
+    /**
+     * Claim one open charge of its own and charge it, leaving it paid, in flight, or open again: the reason it is open
+     * again where the provider refused it, and null otherwise.
+     */
+    private function collectChargeOfItsOwn(Order $charge, PaymentMandate $mandate): ?string
     {
         if (! $this->chargeAnnounced($charge, $mandate)) {
-            return;
+            return null;
         }
 
         $claimed = Order::model()::query()
@@ -1891,7 +2249,7 @@ final readonly class LocalBillingEngine implements BillingEngine
             ->update(['status' => OrderStatus::Processing]);
 
         if ($claimed !== 1) {
-            return;
+            return null;
         }
 
         $charge->refresh();
@@ -1911,32 +2269,35 @@ final readonly class LocalBillingEngine implements BillingEngine
                 'exception' => $failure,
             ]);
 
-            return;
+            return null;
         }
 
         if ($result->successful) {
             $this->closeChargeOfItsOwn($charge, $result->reference);
 
-            return;
+            return null;
         }
 
         // In flight, like a bank debit on a cycle: settled or refused later by the webhook.
         if (! $result->failed()) {
             $charge->update(['payment_reference' => $result->reference]);
 
-            return;
+            return null;
         }
 
         $charge->update(['status' => OrderStatus::Open]);
+
+        return $result->failureReason ?? 'charge_refused';
     }
 
     /**
      * What the charge says it is for: its own line, which names the rung that raised a fee or the change a proration
-     * charges for.
+     * charges for, and the first line of a charge on the mandate.
      */
     private function descriptionOfItsOwn(Order $charge): string
     {
-        $line = $charge->items()->whereIn('type', self::CHARGES_OF_THEIR_OWN)->first();
+        $line = $charge->items()->whereIn('type', self::CHARGES_OF_THEIR_OWN)->first()
+            ?? $charge->items()->where('type', '!=', OrderItemType::Credit)->orderBy('id')->first();
         $description = $line instanceof OrderItem ? trim($line->description) : '';
 
         return $description !== '' ? $description : 'Late fee';
@@ -1944,7 +2305,8 @@ final readonly class LocalBillingEngine implements BillingEngine
 
     /**
      * Book a charge of its own as paid and raise its document: outside the scope of VAT for a late fee, taxed as the
-     * period for the rest of a period.
+     * period for the rest of a period. A chargeback collected again raises none, because it pays the invoice of its
+     * period, and it ends the arrears it opened.
      */
     private function closeChargeOfItsOwn(Order $charge, ?string $reference): void
     {
@@ -1953,6 +2315,12 @@ final readonly class LocalBillingEngine implements BillingEngine
             'processed_at' => Carbon::now(),
             'payment_reference' => $reference,
         ]);
+
+        if ($charge->isChargeback()) {
+            $this->endTheArrearsOf($charge);
+
+            return;
+        }
 
         $this->invoices?->issue($charge->fresh() ?? $charge);
     }
@@ -1963,7 +2331,8 @@ final readonly class LocalBillingEngine implements BillingEngine
      * A cycle names its subscription. Once that row is deleted, the foreign key nulls the column on every
      * engine that enforces it, so a cycle is known by the period it bills as well: a one-time purchase and
      * a late fee carry neither. The rest of a period charged for a change inside it carries both, and is told
-     * apart by its line: settled as a cycle, it would open the next period.
+     * apart by its line: settled as a cycle, it would open the next period. A charge on the mandate may name the
+     * period it supplied, and is told apart by its reference.
      */
     private function cycleInFlight(string $paymentReference): ?Order
     {
@@ -1975,22 +2344,64 @@ final readonly class LocalBillingEngine implements BillingEngine
                 ->whereNotNull('subscription_id')
                 ->orWhereNotNull('period_start'))
             ->whereDoesntHave('items', static fn (Builder $query): Builder => $query->where('type', OrderItemType::Proration))
+            ->where(static fn (Builder $kind): Builder => $kind
+                ->whereNull('reference')
+                ->orWhere('reference', 'not like', Order::CHARGE_ON_THE_MANDATE.'%'))
             ->first();
 
         return $cycle instanceof Order ? $cycle : null;
     }
 
-    /** The late fee or the rest of a period whose charge is in flight under this reference, or null for anything else. */
-    private function chargeOfItsOwnInFlight(string $paymentReference): ?Order
+    /**
+     * The collected cycle whose payment carries this reference, or null for anything else.
+     *
+     * Told apart from the other orders the way {@see self::cycleInFlight()} tells a cycle in flight, only paid.
+     */
+    private function paidCycle(string $paymentReference): ?Order
     {
-        $charge = Order::model()::query()
+        $cycle = Order::model()::query()
             ->where('provider', $this->provider)
             ->where('payment_reference', $paymentReference)
-            ->where('status', OrderStatus::Processing)
-            ->whereHas('items', static fn (Builder $query): Builder => $query->whereIn('type', self::CHARGES_OF_THEIR_OWN))
+            ->where('status', OrderStatus::Paid)
+            ->where(static fn (Builder $named): Builder => $named
+                ->whereNotNull('subscription_id')
+                ->orWhereNotNull('period_start'))
+            ->whereDoesntHave('items', static fn (Builder $query): Builder => $query->whereIn('type', self::CHARGES_OF_THEIR_OWN))
+            ->where(static fn (Builder $kind): Builder => $kind
+                ->whereNull('reference')
+                ->orWhere('reference', 'not like', Order::CHARGE_ON_THE_MANDATE.'%'))
+            ->first();
+
+        return $cycle instanceof Order ? $cycle : null;
+    }
+
+    /** The charge of its own whose payment is in flight under this reference, or null for anything else. */
+    private function chargeOfItsOwnInFlight(string $paymentReference): ?Order
+    {
+        $charge = $this->ofTheirOwn(Order::model()::query()
+            ->where('provider', $this->provider)
+            ->where('payment_reference', $paymentReference)
+            ->where('status', OrderStatus::Processing))
             ->first();
 
         return $charge instanceof Order ? $charge : null;
+    }
+
+    /**
+     * The orders among these that this engine charges on their own rather than as a cycle.
+     *
+     * A late fee and the rest of a period are known by their line, whose type the engine writes. A charge on the
+     * mandate is known by its reference, because its lines carry the types the application chose
+     * ({@see self::chargeOnTheMandate()}).
+     *
+     * @param  Builder<Order>  $orders
+     * @return Builder<Order>
+     */
+    private function ofTheirOwn(Builder $orders): Builder
+    {
+        return $orders->where(static fn (Builder $own): Builder => $own
+            ->whereHas('items', static fn (Builder $query): Builder => $query->whereIn('type', self::CHARGES_OF_THEIR_OWN))
+            ->orWhere('reference', 'like', Order::CHARGE_ON_THE_MANDATE.'%'));
     }
 
     /**
@@ -2017,7 +2428,7 @@ final readonly class LocalBillingEngine implements BillingEngine
             return false;
         }
 
-        DB::transaction(function () use ($subscription, $order, $fallback): void {
+        BillingConnection::connection()->transaction(function () use ($subscription, $order, $fallback): void {
             $order->update([
                 'status' => OrderStatus::Failed,
                 'processed_at' => Carbon::now(),
@@ -2089,7 +2500,7 @@ final readonly class LocalBillingEngine implements BillingEngine
      */
     private function recordFailure(Subscription $subscription, Order $order, Money $amount, string $reason): void
     {
-        DB::transaction(function () use ($subscription, $order): void {
+        BillingConnection::connection()->transaction(function () use ($subscription, $order): void {
             $order->update(['status' => OrderStatus::Failed, 'processed_at' => Carbon::now()]);
 
             $since = $subscription->delinquent_since ?? Carbon::now();

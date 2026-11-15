@@ -15,6 +15,7 @@ use Pushery\Billing\Contracts\SubscriptionEndingNotifier;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
+use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\ValueObjects\MerchantScope;
 
 /**
@@ -51,6 +52,7 @@ final class WarnEndingSubscriptionsCommand extends Command
         $days = $this->windowDays($config);
         $dryRun = $this->option('dry-run') === true;
         $warned = 0;
+        $attempts = new SweepAttempts;
 
         // From now, not from the start of the day: a subscription that already ended is not ending soon, and a
         // reminder about it would offer to keep something already gone.
@@ -60,7 +62,7 @@ final class WarnEndingSubscriptionsCommand extends Command
             ->whereNotNull('ends_at')
             ->whereBetween('ends_at', [$now, $now->copy()->addDays($days)])
             ->with(['owner', 'merchant'])
-            ->chunkById(100, function (Collection $subscriptions) use ($notifier, $log, $merchants, $dryRun, &$warned): void {
+            ->chunkById(100, function (Collection $subscriptions) use ($notifier, $log, $merchants, $attempts, $dryRun, &$warned): void {
                 /** @var Collection<int, Subscription> $subscriptions */
                 foreach ($subscriptions as $subscription) {
                     $endsAt = $subscription->ends_at;
@@ -76,25 +78,33 @@ final class WarnEndingSubscriptionsCommand extends Command
                         continue;
                     }
 
-                    $warned++;
-
                     if ($dryRun) {
+                        $warned++;
+
                         continue;
                     }
 
-                    $merchant = $this->merchantOf($subscription);
+                    $sent = $attempts->attempt(function () use ($notifier, $log, $merchants, $subscription, $owner, $endsAt): void {
+                        $merchant = $this->merchantOf($subscription);
 
-                    $notifier->subscriptionEnding($owner, $endsAt, $merchant, $merchant instanceof MerchantScope ? $this->merchantName($subscription, $merchants) : null);
+                        $notifier->subscriptionEnding($owner, $endsAt, $merchant, $merchant instanceof MerchantScope ? $this->merchantName($subscription, $merchants) : null);
 
-                    $log->record('subscription.ending_notice_sent', $owner, [
-                        'subscription' => $this->subscriptionKey($subscription),
-                        'merchant' => $subscription->merchant_uid,
-                        'ends_at' => $endsAt->format('Y-m-d'),
-                    ]);
+                        $log->record('subscription.ending_notice_sent', $owner, [
+                            'subscription' => $this->subscriptionKey($subscription),
+                            'merchant' => $subscription->merchant_uid,
+                            'ends_at' => $endsAt->format('Y-m-d'),
+                        ]);
+                    });
+
+                    if ($sent) {
+                        $warned++;
+                    }
                 }
             });
 
         $this->components->info(($dryRun ? 'Would remind ' : 'Reminded ')."{$warned} owner(s) of a subscription about to end.");
+
+        $attempts->finish();
 
         return self::SUCCESS;
     }

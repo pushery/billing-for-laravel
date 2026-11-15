@@ -89,7 +89,10 @@ final readonly class LaravelHttpMollieAdapter implements HttpAdapterContract
             // Off on purpose: an error status is an answer from Mollie, and its body is what the SDK
             // builds its exceptions from. Letting Laravel throw here would replace "this field is
             // wrong" with a transport failure carrying none of that.
-            ->withOptions(['http_errors' => false]);
+            ->withOptions(['http_errors' => false])
+            // No redirect is followed: Guzzle keeps the body of a 307 or 308, also to another host. A 3xx reaches the SDK as an
+            // answer outside 2xx, which it turns into an exception like any other.
+            ->withoutRedirecting();
 
         if ($this->timeout !== null) {
             $http->timeout($this->timeout);

@@ -7,6 +7,7 @@ namespace Pushery\Billing\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Pushery\Billing\Enums\OrderItemType;
+use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Models\Concerns\Replaceable;
 use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
 use Pushery\Billing\ValueObjects\Money;
@@ -33,6 +34,9 @@ class OrderItem extends Model
 {
     use Replaceable;
     use StoresMomentsWithTheirOffset;
+
+    /** The key of a line's metadata that names what a charge on the mandate supplies, as a {@see TaxArchetype} value. */
+    public const string TAX_ARCHETYPE = 'tax_archetype';
 
     protected $table = 'billing_order_items';
 

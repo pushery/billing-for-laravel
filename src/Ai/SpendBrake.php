@@ -9,7 +9,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Facades\DB;
+use Pushery\Billing\Support\BillingConnection;
 
 /**
  * The daily caps on what model calls may cost: one per provider, against the margin, and one per owner, against abuse.
@@ -52,7 +52,7 @@ final readonly class SpendBrake
 
         // Two first calls of a day can meet where the day's row is still missing, and MySQL then rolls one of them back
         // as a deadlock; the next attempt finds the row the other one wrote.
-        return DB::transaction(function () use ($provider, $cost, $owner, $day): bool {
+        return BillingConnection::connection()->transaction(function () use ($provider, $cost, $owner, $day): bool {
             $raised = [];
 
             foreach ($this->accounts($provider, $owner) as [$account, $cap, $ownerOf]) {
@@ -89,7 +89,7 @@ final readonly class SpendBrake
 
         $day = CarbonImmutable::now('UTC')->toDateString();
 
-        DB::transaction(function () use ($provider, $cost, $owner, $day): void {
+        BillingConnection::connection()->transaction(function () use ($provider, $cost, $owner, $day): void {
             foreach ($this->accounts($provider, $owner) as [$account, , $ownerOf]) {
                 $this->raise($account, $ownerOf, $day, $cost, null);
             }
@@ -135,7 +135,7 @@ final readonly class SpendBrake
      */
     public function history(?string $provider = null, ?CarbonInterface $from = null): array
     {
-        $query = DB::table(self::TABLE);
+        $query = BillingConnection::connection()->table(self::TABLE);
 
         if ($provider === null) {
             $query->where('account', 'like', 'provider:%');
@@ -154,14 +154,14 @@ final readonly class SpendBrake
      */
     public function ownerHistory(Model $owner, ?CarbonInterface $from = null): array
     {
-        return $this->daysOf(DB::table(self::TABLE)->where('account', $this->ownerAccount($owner)), $from);
+        return $this->daysOf(BillingConnection::connection()->table(self::TABLE)->where('account', $this->ownerAccount($owner)), $from);
     }
 
     /** What a provider's account, or an owner's, has counted on a day in the brake's currency. */
     public function spent(string $provider, ?Model $owner = null, ?CarbonInterface $day = null): AiCost
     {
         $account = $owner instanceof Model ? $this->ownerAccount($owner) : 'provider:'.$provider;
-        $spent = DB::table(self::TABLE)
+        $spent = BillingConnection::connection()->table(self::TABLE)
             ->where('account', $account)
             ->where('day', CarbonImmutable::instance($day ?? CarbonImmutable::now('UTC'))->utc()->toDateString())
             ->where('currency', $this->currency())
@@ -232,7 +232,7 @@ final readonly class SpendBrake
     /** The account's row for the day, written where it is missing, so the raise has a row to take. */
     private function open(string $account, ?Model $owner, string $day, string $currency): void
     {
-        DB::table(self::TABLE)->insertOrIgnore([
+        BillingConnection::connection()->table(self::TABLE)->insertOrIgnore([
             'account' => $account,
             'owner_type' => $owner?->getMorphClass(),
             'owner_id' => $owner?->getKey(),
@@ -275,7 +275,7 @@ final readonly class SpendBrake
 
     private function row(string $account, string $day, string $currency): Builder
     {
-        return DB::table(self::TABLE)->where('account', $account)->where('day', $day)->where('currency', $currency);
+        return BillingConnection::connection()->table(self::TABLE)->where('account', $account)->where('day', $day)->where('currency', $currency);
     }
 
     private function currency(): string

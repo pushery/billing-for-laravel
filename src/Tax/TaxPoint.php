@@ -37,6 +37,14 @@ use Pushery\Billing\ValueObjects\ServicePeriod;
  */
 final readonly class TaxPoint
 {
+    /**
+     * The countries that tax a supply at the rate in force when it is carried out, where `billing.tax_rate_at_execution`
+     * names none: Germany (§ 27 Abs. 1 UStG), Austria and Romania.
+     *
+     * @var list<string>
+     */
+    public const array RATE_AT_EXECUTION = ['DE', 'AT', 'RO'];
+
     public function __construct(private Repository $config) {}
 
     /** Whether this installation's jurisdiction taxes a prepayment when it is received. */
@@ -58,13 +66,33 @@ final readonly class TaxPoint
      * checked afterwards: recomputing it applies today's configuration to a sale made under a different
      * one, so a reviewer who arrives at a different month cannot tell a wrong original from a changed rule.
      */
-    public function decideFor(ServicePeriod $period, CarbonImmutable $paidOn): TaxPointDecision
+    public function decideFor(ServicePeriod $period, CarbonImmutable $paidOn, ?string $taxedIn = null): TaxPointDecision
     {
+        $on = $this->forPeriod($period, $paidOn);
+
         return new TaxPointDecision(
-            on: $this->forPeriod($period, $paidOn),
+            on: $on,
             basis: $this->basis(),
             taxedAhead: $this->taxedAhead($period, $paidOn),
+            rateOn: $this->ratesAtExecution($taxedIn) ? $period->to : $on,
         );
+    }
+
+    /**
+     * Whether the country a supply is taxed in applies the rate in force when the supply is carried out.
+     *
+     * The rate is the one in force on the tax point, as Art. 93 of the VAT Directive has it, but some member states bind
+     * it to the supply. In Germany a new rate applies to every supply carried out from the day it takes effect, even
+     * where the tax on a prepayment arose before (§ 27 Abs. 1 Satz 1 and 2 UStG), and a period is carried out on its
+     * last day (Art. 64 Abs. 1 VAT Directive). So a year paid on its first day at 16 % is taxed at the 19 % of its last
+     * day, and the difference is corrected in the return of that day (§ 27 Abs. 1 Satz 3 UStG).
+     */
+    public function ratesAtExecution(?string $country): bool
+    {
+        $configured = $this->config->get('billing.tax_rate_at_execution', self::RATE_AT_EXECUTION);
+        $countries = is_array($configured) ? array_map(static fn (mixed $code): string => is_string($code) ? strtoupper(trim($code)) : '', $configured) : [];
+
+        return $country !== null && in_array(strtoupper(trim($country)), $countries, true);
     }
 
     /**

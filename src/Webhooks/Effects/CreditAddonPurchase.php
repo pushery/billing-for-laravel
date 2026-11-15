@@ -7,7 +7,6 @@ namespace Pushery\Billing\Webhooks\Effects;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Bus;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\AddonContentMap;
@@ -20,6 +19,7 @@ use Pushery\Billing\Events\AddonPurchased;
 use Pushery\Billing\Jobs\PushCreditToProvider;
 use Pushery\Billing\Marketplace\CreditTopUpVolume;
 use Pushery\Billing\Support\AddonPurchases;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\CreditLedger;
 use Pushery\Billing\Support\LocalizedMoney;
@@ -77,7 +77,7 @@ final readonly class CreditAddonPurchase
         $grant = $this->addons->grantsFor($event->addonKey);
         $credit = ! $grant instanceof UnitGrant && $this->creditsMoney($event->addonKey);
 
-        DB::transaction(function () use ($event, $owner, $grant, $credit): void {
+        BillingConnection::connection()->transaction(function () use ($event, $owner, $grant, $credit): void {
             if (! $this->purchases->recordOnce($owner, $event->reference, $event->addonKey, $event->amount, $event->paymentReference, $event->declarationReference, $credit, $grant)) {
                 return;
             }

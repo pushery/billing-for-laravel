@@ -7,7 +7,6 @@ namespace Pushery\Billing\Livewire;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Lang;
 use Illuminate\Support\Str;
 use Livewire\Attributes\Locked;
@@ -25,6 +24,7 @@ use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Enums\SwapTiming;
 use Pushery\Billing\Exceptions\SwapAwaitsPayment;
 use Pushery\Billing\Models\Subscription;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\BuyerAudiences;
 use Pushery\Billing\Support\CatalogLabel;
@@ -439,7 +439,7 @@ final class ManageSubscription extends AccountScreen
             // Wrapped so a swap that fails leaves nothing behind, neither the proration the driver booked nor
             // the pending downgrade the upgrade would have superseded.
             try {
-                DB::transaction(function () use ($tierKey, $subscription, $interval): void {
+                BillingConnection::connection()->transaction(function () use ($tierKey, $subscription, $interval): void {
                     Container::getInstance()->make(SubscriptionActions::class)->swap($this->owner(), $tierKey, interval: $interval);
 
                     // An immediate upgrade supersedes any pending downgrade — the customer just chose to move up now.

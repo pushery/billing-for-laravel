@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Tax;
 
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Enums\ExchangeRateBasis;
 use Pushery\Billing\Models\ExchangeRateRecord;
+use Pushery\Billing\Support\BillingConnection;
 
 /**
  * Puts published observations into the local store, idempotently.
@@ -61,7 +61,7 @@ final readonly class ExchangeRateImport
         $written = 0;
 
         foreach ($rates as $rate) {
-            $written += DB::transaction(function () use ($rate, $bases, $source): int {
+            $written += BillingConnection::connection()->transaction(function () use ($rate, $bases, $source): int {
                 $this->storeUnder($rate, $bases, $source);
 
                 return count($bases);

@@ -105,6 +105,8 @@ final readonly class StripeInvoices implements InvoicesContract
         // says here, so it throws and reaches the exception handler, as a rate limit above does.
         return new InvoiceDownload(
             filename: ($number ?? $invoiceId).'.pdf',
+            // Redirects are followed on purpose: the request carries no credentials and no body, so a redirect
+            // can take nothing elsewhere, and the address is the link Stripe hands out for the file.
             contents: Http::get($url)->throw()->body(),
         );
     }

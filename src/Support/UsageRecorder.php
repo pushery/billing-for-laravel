@@ -9,7 +9,6 @@ use Closure;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -175,7 +174,7 @@ final readonly class UsageRecorder
         // a retry safe: the provider recognizes it and bills the usage once.
         $identifier = (string) Str::ulid();
 
-        return DB::transaction(function () use ($owner, $meterKey, $providerMeter, $quantity, $sourceKey, $moment, $period, $reportable, $hold, $included, $identifier): bool {
+        return BillingConnection::connection()->transaction(function () use ($owner, $meterKey, $providerMeter, $quantity, $sourceKey, $moment, $period, $reportable, $hold, $included, $identifier): bool {
             $recorded = UsageEvent::model()::query()->insertOrIgnore([
                 'owner_type' => $owner->getMorphClass(),
                 'owner_id' => $owner->getKey(),

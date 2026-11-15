@@ -11,7 +11,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\FindsMovedShare;
 use Pushery\Billing\Contracts\MovesMerchantShare;
 use Pushery\Billing\Enums\ChargeType;
@@ -27,6 +26,7 @@ use Pushery\Billing\Events\MerchantShareNotMoved;
 use Pushery\Billing\Events\MerchantTransferReversed;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\RefundAttempt;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\RedactedError;
 use Pushery\Billing\Support\UniqueRow;
 use Pushery\Billing\ValueObjects\FeeLine;
@@ -470,7 +470,7 @@ final readonly class RoutedChargeLedger
      */
     private function changeWhilePending(MerchantCharge $charge, callable $changes): bool
     {
-        return (bool) DB::transaction(function () use ($charge, $changes): bool {
+        return (bool) BillingConnection::connection()->transaction(function () use ($charge, $changes): bool {
             $locked = MerchantCharge::model()::query()
                 ->whereKey($charge->getKey())
                 ->lockForUpdate()
@@ -517,7 +517,7 @@ final readonly class RoutedChargeLedger
     ): RefundAttempt {
         $fee = $feeRefund ?? new Money(0, $amount->currency);
 
-        return DB::transaction(function () use ($charge, $amount, $transferReversal, $fee, $cause, $disputeFee, $idempotencyKey): RefundAttempt {
+        return BillingConnection::connection()->transaction(function () use ($charge, $amount, $transferReversal, $fee, $cause, $disputeFee, $idempotencyKey): RefundAttempt {
             $attempt = RefundAttempt::model()::query()->create([
                 'provider' => $charge->provider,
                 'charge_reference' => $charge->charge_reference,
@@ -578,7 +578,7 @@ final readonly class RoutedChargeLedger
     public function completeRefund(RefundAttempt $attempt, ?Money $actuallyReversed = null, bool $reversalRequested = true): array
     {
         /** @var array{0: ?MerchantCharge, 1: array{refunded: int, reversed: int, fee: int}, 2: ?int, 3: ?RefundAttempt} $result */
-        $result = DB::transaction(function () use ($attempt, $actuallyReversed): array {
+        $result = BillingConnection::connection()->transaction(function () use ($attempt, $actuallyReversed): array {
             $nothing = ['refunded' => 0, 'reversed' => 0, 'fee' => 0];
 
             $charge = MerchantCharge::model()::query()
@@ -792,7 +792,7 @@ final readonly class RoutedChargeLedger
     public function recordBuyerFeeRefund(MerchantCharge $charge, Money $amount): Money
     {
         /** @var int $applied */
-        $applied = DB::transaction(function () use ($charge, $amount): int {
+        $applied = BillingConnection::connection()->transaction(function () use ($charge, $amount): int {
             $fresh = MerchantCharge::model()::query()
                 ->whereKey($charge->getKey())
                 ->lockForUpdate()

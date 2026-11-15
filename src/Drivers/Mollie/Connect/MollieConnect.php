@@ -127,12 +127,13 @@ final readonly class MollieConnect
     {
         $response = Http::asForm()
             ->withBasicAuth($app->clientId, $app->clientSecret)
+            ->withoutRedirecting()
             ->delete(self::TOKENS_URL, [
                 'token_type_hint' => $isRefreshToken ? 'refresh_token' : 'access_token',
                 'token' => $token,
             ]);
 
-        if ($response->failed()) {
+        if ($response->failed() || $response->redirect()) {
             throw MollieConnectFailed::revocationRefused($app->clientId, $response->status(), $this->errorOf($response));
         }
     }
@@ -261,9 +262,11 @@ final readonly class MollieConnect
      */
     private function tokens(MollieOAuthApp $app, array $form, ?string $currentRefreshToken = null): MollieTokens
     {
-        $response = Http::asForm()->withBasicAuth($app->clientId, $app->clientSecret)->post(self::TOKENS_URL, $form);
+        // No redirect is followed: Guzzle keeps the body of a 307 or 308, also to another host, and the form carries a code or a refresh
+        // token. A 3xx is a refusal like any answer outside 2xx.
+        $response = Http::asForm()->withBasicAuth($app->clientId, $app->clientSecret)->withoutRedirecting()->post(self::TOKENS_URL, $form);
 
-        if ($response->failed()) {
+        if ($response->failed() || $response->redirect()) {
             throw MollieConnectFailed::tokenRefused($app->clientId, $response->status(), $this->errorOf($response));
         }
 

@@ -7,7 +7,6 @@ namespace Pushery\Billing\Support;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Contracts\Filesystem\Factory as FilesystemFactory;
 use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -179,7 +178,7 @@ final class StoredDocumentFiles
         $unshared = [];
 
         foreach ($files as $value => $file) {
-            $named = DB::table($table)->where($column, $value)->whereNotIn('id', $ids)->exists();
+            $named = BillingConnection::connection()->table($table)->where($column, $value)->whereNotIn('id', $ids)->exists();
 
             if (! $named) {
                 $unshared[] = $file;

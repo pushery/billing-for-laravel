@@ -7,6 +7,7 @@ namespace Pushery\Billing\Drivers\Mollie;
 use Composer\InstalledVersions;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\Config;
 use Mollie\Api\Http\LinearRetryStrategy;
 use Mollie\Api\MollieApiClient;
@@ -120,6 +121,33 @@ final readonly class MollieClientFactory
         $client->test($account->testmode);
 
         return $this->announced($client);
+    }
+
+    /**
+     * The longest one call of an account's client can take, in whole seconds, its retries and the pauses before them
+     * included.
+     *
+     * For a caller that holds a lock across calls to an account's client, which must not expire while a call under it
+     * may still run. Each attempt counts at its full timeout, which covers the connection as well, and the pause before
+     * the n-th retry is n steps of the configured delay. The numbers are read from `billing.mollie.account_http` as
+     * `forAccount()` reads them, in the set this factory serves; where the timeout is no usable number, the timeout of
+     * the application's HTTP client answers.
+     */
+    public function longestAccountCall(): int
+    {
+        $http = $this->accountHttp();
+        $retries = $http['retries'];
+        $pausesMs = $http['retry_delay_ms'] * intdiv($retries * ($retries + 1), 2);
+
+        return ($retries + 1) * ($http['timeout'] ?? $this->applicationTimeout()) + (int) ceil($pausesMs / 1000);
+    }
+
+    /** The timeout the application's HTTP client gives a request, in whole seconds, 30 where it names none. */
+    private function applicationTimeout(): int
+    {
+        $timeout = Container::getInstance()->make(HttpFactory::class)->createPendingRequest()->getOptions()['timeout'] ?? null;
+
+        return is_numeric($timeout) && (float) $timeout > 0 ? (int) ceil((float) $timeout) : 30;
     }
 
     /**

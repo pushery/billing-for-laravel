@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace Pushery\Billing\Webhooks\Effects;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Events\InvoiceUpcoming;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\UsageFlusher;
 
 /**
@@ -44,6 +44,6 @@ final readonly class FlushUpcomingUsage
         }
 
         // At once when no transaction is open, which is how the scheduled flush and a direct call reach it.
-        DB::afterCommit(fn (): int => $this->flusher->flushOwner($owner));
+        BillingConnection::connection()->afterCommit(fn (): int => $this->flusher->flushOwner($owner));
     }
 }

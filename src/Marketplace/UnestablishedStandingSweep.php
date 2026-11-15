@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Events\CreatorPlacedOnTaxHold;
 use Pushery\Billing\Models\MerchantCharge;
 use Pushery\Billing\Models\TaxHoldWarning;
+use Pushery\Billing\Support\SweepAttempts;
 
 /**
  * Tells the merchants who have never declared that the deadline is coming — before it arrives.
@@ -78,26 +79,33 @@ final readonly class UnestablishedStandingSweep
         }
 
         $warned = 0;
+        $attempts = new SweepAttempts;
 
         foreach ($this->merchantsAtRisk($deadline) as $merchant) {
             if ($this->alreadyWarned($merchant, $deadline)) {
                 continue;
             }
 
-            $this->events->dispatch(new CreatorPlacedOnTaxHold($merchant, 'billing::tax_hold.deadline_approaching'));
+            $told = $attempts->attempt(function () use ($merchant, $deadline, $now): void {
+                $this->events->dispatch(new CreatorPlacedOnTaxHold($merchant, 'billing::tax_hold.deadline_approaching'));
 
-            // Marked after dispatching, for the same reason the sibling sweep gives: a crash between the
-            // two warns once more, which somebody can live with, while the other order loses the warning
-            // entirely, which is what this class exists to prevent.
-            TaxHoldWarning::model()::query()->create([
-                'merchant_type' => $merchant->getMorphClass(),
-                'merchant_id' => $merchant->getKey(),
-                'deadline' => $deadline->toDateString(),
-                'warned_at' => $now,
-            ]);
+                // Marked after dispatching, for the same reason the sibling sweep gives: a crash between the
+                // two warns once more, which somebody can live with, while the other order loses the warning
+                // entirely, which is what this class exists to prevent.
+                TaxHoldWarning::model()::query()->create([
+                    'merchant_type' => $merchant->getMorphClass(),
+                    'merchant_id' => $merchant->getKey(),
+                    'deadline' => $deadline->toDateString(),
+                    'warned_at' => $now,
+                ]);
+            });
 
-            $warned++;
+            if ($told) {
+                $warned++;
+            }
         }
+
+        $attempts->finish();
 
         return $warned;
     }

@@ -7,7 +7,6 @@ namespace Pushery\Billing\Support;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Exceptions\RetentionHoldUnavailable;
 use Pushery\Billing\ValueObjects\ErasureAxis;
 
@@ -40,7 +39,7 @@ final readonly class SubjectScopedRecords
         $deleted = [];
 
         foreach ($axis->cascaded as $table => $link) {
-            $deleted[$table] = DB::table($table)
+            $deleted[$table] = BillingConnection::connection()->table($table)
                 ->whereIn($link['foreign_key'], $this->scoped($axis, $link['parent'], $subject)->select('id'))
                 ->delete();
         }
@@ -174,7 +173,7 @@ final readonly class SubjectScopedRecords
         // them — they are reached by joining through the parent. They are still this person's data, and the
         // eraser reads the same map, so a child table cannot be covered by one side and forgotten by the other.
         foreach ($axis->cascaded as $table => $link) {
-            $export[$table] = $this->rows(DB::table($table)->whereIn(
+            $export[$table] = $this->rows(BillingConnection::connection()->table($table)->whereIn(
                 $link['foreign_key'],
                 $this->scoped($axis, $link['parent'], $subject)->select('id'),
             ));
@@ -227,7 +226,7 @@ final readonly class SubjectScopedRecords
             // A record with no explicit issue date falls back to when it was created — a null issue date must
             // never read as "infinitely old" and prune early. Written through the builder rather than as a raw
             // COALESCE, so both columns are quoted like any other and no name is spliced into SQL text.
-            $rows = DB::table($table)
+            $rows = BillingConnection::connection()->table($table)
                 ->whereNotNull($axis->erasedAtColumn)
                 ->where(static fn (Builder $dated): Builder => $dated
                     ->where($issueColumn, '<', $before)
@@ -252,7 +251,7 @@ final readonly class SubjectScopedRecords
     /** One table, filtered to the rows this person is on along this axis. */
     private function scoped(ErasureAxis $axis, string $table, Model $subject): Builder
     {
-        return DB::table($table)
+        return BillingConnection::connection()->table($table)
             ->where($axis->typeColumn, $subject->getMorphClass())
             ->where($axis->idColumn, $subject->getKey());
     }

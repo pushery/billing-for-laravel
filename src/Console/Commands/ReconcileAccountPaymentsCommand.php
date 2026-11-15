@@ -13,6 +13,7 @@ use Pushery\Billing\Drivers\Mollie\MollieClientFactory;
 use Pushery\Billing\Drivers\Mollie\MollieMoneyBackOutcomes;
 use Pushery\Billing\Events\RefundFailed;
 use Pushery\Billing\Support\AccountPaymentReconciler;
+use Pushery\Billing\Support\SweepAttempts;
 
 /**
  * Picks up the payments of the Mollie payment accounts that changed where Mollie calls no webhook.
@@ -56,6 +57,7 @@ final class ReconcileAccountPaymentsCommand extends Command
         $clients = $container->make(MollieClientFactory::class);
         $read = 0;
         $recorded = 0;
+        $attempts = new SweepAttempts;
 
         foreach ($accounts->all('mollie') as $account) {
             // The list was asked for Mollie's accounts. One of another provider would build a Mollie client with a
@@ -65,26 +67,33 @@ final class ReconcileAccountPaymentsCommand extends Command
             }
 
             $read++;
-            $payments = [];
-            $outcomes = new MollieMoneyBackOutcomes($clients->forAccount($account));
 
-            foreach ($outcomes->outcomesSince($now->subDays($refundDays), $now->subDays($chargebackDays)) as $outcome) {
-                // The reader yields these two kinds and no other. An outcome that names no payment keys no ping, and
-                // the reconciler records nothing for it.
-                $payments[$outcome instanceof RefundFailed ? $outcome->paymentReference : $outcome->reference] = true;
-            }
+            // An account whose read fails, or whose events a listener throws on, is read again on the next run,
+            // where the ledger skips what was handled, and holds up no other account.
+            $attempts->attempt(function () use ($account, $clients, $reconciler, $now, $refundDays, $chargebackDays, &$recorded): void {
+                $payments = [];
+                $outcomes = new MollieMoneyBackOutcomes($clients->forAccount($account));
 
-            foreach (array_keys($payments) as $payment) {
-                foreach ($reconciler->reconcile($account, (string) $payment) as $change) {
-                    $recorded++;
-                    $this->components->twoColumnDetail($account->key.': '.$change->paymentReference, $change->status->value);
+                foreach ($outcomes->outcomesSince($now->subDays($refundDays), $now->subDays($chargebackDays)) as $outcome) {
+                    // The reader yields these two kinds and no other. An outcome that names no payment keys no ping,
+                    // and the reconciler records nothing for it.
+                    $payments[$outcome instanceof RefundFailed ? $outcome->paymentReference : $outcome->reference] = true;
                 }
-            }
+
+                foreach (array_keys($payments) as $payment) {
+                    foreach ($reconciler->reconcile($account, (string) $payment) as $change) {
+                        $recorded++;
+                        $this->components->twoColumnDetail($account->key.': '.$change->paymentReference, $change->status->value);
+                    }
+                }
+            });
         }
 
         $this->components->info($recorded === 0
             ? "Nothing new across {$read} Mollie account(s), {$refundDays} days of refunds and {$chargebackDays} days of chargebacks."
             : "{$recorded} change(s) recorded and dispatched across {$read} Mollie account(s).");
+
+        $attempts->finish();
 
         return self::SUCCESS;
     }

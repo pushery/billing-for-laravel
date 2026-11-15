@@ -9,9 +9,9 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Config;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Contracts\DedupesOnReference;
 use Pushery\Billing\Events\BillingDomainEvent;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\Concerns\BacksOffBetweenAttempts;
 use Pushery\Billing\Support\RedactedError;
 use Pushery\Billing\Support\WebhookEffectLedger;
@@ -98,7 +98,7 @@ final class HandleWebhookEffect implements ShouldQueueAfterCommit
             : $runs->referenceFor($this->provider, $this->eventId, $this->accountReference, $this->effectClass, $this->deliveryId);
 
         try {
-            DB::transaction(function () use ($runs, $effect, $reference): void {
+            BillingConnection::connection()->transaction(function () use ($runs, $effect, $reference): void {
                 if (! $runs->claim($this->provider, $reference, $this->effectClass, $this->deliveryId)) {
                     return; // another delivery (or an earlier run) already did this effect's work
                 }

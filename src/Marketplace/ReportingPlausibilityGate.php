@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Pushery\Billing\Marketplace;
 
 use Illuminate\Container\Container;
-use Illuminate\Support\Facades\DB;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Exceptions\ReportingNotPlausible;
 use Pushery\Billing\Models\ReportingFindingAcknowledgement;
+use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\ValueObjects\PlausibilityFinding;
 use Pushery\Billing\ValueObjects\SellerPeriodReport;
@@ -158,7 +158,7 @@ final readonly class ReportingPlausibilityGate
 
         $log = Container::getInstance()->make(BillingEventLog::class);
 
-        DB::transaction(static function () use ($acknowledgement, $log, $by, $reason): void {
+        BillingConnection::connection()->transaction(static function () use ($acknowledgement, $log, $by, $reason): void {
             $log->record('reporting.acknowledgement_withdrawn', null, [
                 'period_year' => $acknowledgement->period_year,
                 'currency' => $acknowledgement->currency,

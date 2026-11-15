@@ -8,13 +8,17 @@ use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
+use InvalidArgumentException;
 use Pushery\Billing\Contracts\CollectsDirectDebits;
 use Pushery\Billing\Contracts\EnsuresProviderCustomer;
 use Pushery\Billing\Contracts\SepaMandateWording;
 use Pushery\Billing\Exceptions\DirectDebitMandateRefused;
+use Pushery\Billing\Exceptions\MandateHandOverRefused;
 use Pushery\Billing\Models\MandateConsent;
 use Pushery\Billing\Models\PaymentMandate;
+use Pushery\Billing\Models\PaymentMandateAnchor;
+use Pushery\Billing\Support\BillingConnection;
+use Pushery\Billing\Support\LockedRow;
 use Pushery\Billing\Support\UniqueRow;
 use Pushery\Billing\ValueObjects\DirectDebitConsent;
 use Pushery\Billing\ValueObjects\Iban;
@@ -30,6 +34,9 @@ use Pushery\Billing\ValueObjects\SepaMandateText;
  *
  * A driver offers this by implementing {@see CollectsDirectDebits}; the Mollie driver does. On any other driver
  * `text()` answers null and `give()` refuses.
+ *
+ * {@see self::handOver()} moves a mandate the package stores, of any method, to another owner: a payment method
+ * given with an order, to the account the order creates.
  */
 final readonly class DirectDebitMandates
 {
@@ -97,7 +104,7 @@ final readonly class DirectDebitMandates
         $reference = $rails->giveDirectDebitMandate($customer, $holder, $iban, $text->reference, $signedAt);
         $provider = $this->driver();
 
-        return DB::transaction(function () use ($owner, $consent, $iban, $holder, $text, $rails, $signedAt, $reference, $provider): PaymentMandate {
+        return BillingConnection::connection()->transaction(function () use ($owner, $consent, $iban, $holder, $text, $rails, $signedAt, $reference, $provider): PaymentMandate {
             $mandate = UniqueRow::firstOrCreate(
                 PaymentMandate::model()::query(),
                 ['provider' => $provider, 'mandate_reference' => $reference->id],
@@ -133,7 +140,99 @@ final readonly class DirectDebitMandates
             ]);
 
             return $mandate;
-        });
+        }, LockedRow::ATTEMPTS);
+    }
+
+    /**
+     * Hand a mandate to another owner, who is charged through it from then on, and answer it.
+     *
+     * For a mandate given before the owner it is meant for existed: a payment method given with an order, for the
+     * account the order creates. The mandate becomes the new owner's default at its provider, and the new owner takes
+     * the provider's customer the mandate belongs to into `billing.customer.column`, where a webhook finds its owner.
+     * The old owner gives that customer up once none of its mandates belongs to it any more. The consent and the
+     * notices stay as they are, because both are found by the mandate's reference.
+     *
+     * Under the new owner's anchor for the provider, the lock a stored mandate takes, so a mandate stored for the same
+     * owner meanwhile cannot leave two defaults. Handing a mandate to the owner it has changes nothing.
+     *
+     * @throws MandateHandOverRefused when the new owner has a default mandate at that provider, or belongs to another
+     *                                customer there
+     */
+    public function handOver(PaymentMandate $mandate, Model $to): PaymentMandate
+    {
+        $key = $to->getKey();
+
+        if (! is_int($key) && ! is_string($key)) {
+            throw new InvalidArgumentException('Hand a mandate to an owner that has been saved: the mandate names it by its key.');
+        }
+
+        $type = $to->getMorphClass();
+
+        if ($mandate->owner_type === $type && (string) $mandate->owner_id === (string) $key) {
+            return $mandate;
+        }
+
+        $column = $this->customerColumn();
+        $customer = $mandate->customer_reference;
+        $held = $to->getAttribute($column);
+        $held = is_string($held) ? trim($held) : '';
+
+        if ($customer !== null && $held !== '' && $held !== $customer) {
+            throw MandateHandOverRefused::anotherCustomer($mandate->provider);
+        }
+
+        return BillingConnection::connection()->transaction(function () use ($mandate, $to, $type, $key, $column, $customer, $held): PaymentMandate {
+            LockedRow::take(
+                PaymentMandateAnchor::model()::query()
+                    ->where('owner_type', $type)
+                    ->where('owner_id', $key)
+                    ->where('provider', $mandate->provider),
+                ['owner_type' => $type, 'owner_id' => $key, 'provider' => $mandate->provider],
+            );
+
+            $holdsDefault = PaymentMandate::model()::query()
+                ->where('owner_type', $type)
+                ->where('owner_id', $key)
+                ->where('provider', $mandate->provider)
+                ->where('is_default', true)
+                ->lockForUpdate()
+                ->first() instanceof PaymentMandate;
+
+            if ($holdsDefault) {
+                throw MandateHandOverRefused::holdsADefault($mandate->provider);
+            }
+
+            // Read before the row moves: whether the old owner keeps another mandate of the same customer.
+            $previous = $mandate->owner()->first();
+            $keepsTheCustomer = PaymentMandate::model()::query()
+                ->where('owner_type', $mandate->owner_type)
+                ->where('owner_id', $mandate->owner_id)
+                ->where('provider', $mandate->provider)
+                ->where('customer_reference', $customer)
+                ->whereKeyNot($mandate->getKey())
+                ->exists();
+
+            $mandate->forceFill(['owner_type' => $type, 'owner_id' => $key])->save();
+            $mandate->makeDefault();
+
+            if ($customer !== null && $held === '') {
+                $to->forceFill([$column => $customer])->save();
+            }
+
+            if ($customer !== null && ! $keepsTheCustomer && $previous instanceof Model && $previous->getAttribute($column) === $customer) {
+                $previous->forceFill([$column => null])->save();
+            }
+
+            return $mandate;
+        }, LockedRow::ATTEMPTS);
+    }
+
+    /** The column of the customer model the provider's customer is kept in, which a webhook finds its owner by. */
+    private function customerColumn(): string
+    {
+        $column = $this->config->get('billing.customer.column', 'stripe_id');
+
+        return is_string($column) && $column !== '' ? $column : 'stripe_id';
     }
 
     /** The active driver's rails, where they register direct debit mandates. */
