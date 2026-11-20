@@ -208,8 +208,8 @@ final readonly class StripeSubscriptionActions implements AppliesScheduledSwaps,
             return;
         }
 
-        // An empty `pause_collection` is how the Stripe API clears a pause, and the request StripeSubscriptionActionsTest
-        // asserts. The SDK's generated shape types the field as an object or null and cannot express the empty string.
+        // An empty `pause_collection` is how the Stripe API clears a pause. The SDK's generated shape types the field
+        // as an object or null and cannot express the empty string.
         // @phpstan-ignore argument.type (the SDK's generated shape cannot express the empty string that clears a field)
         $this->stripe->subscriptions->update($reference, ['pause_collection' => '']);
 

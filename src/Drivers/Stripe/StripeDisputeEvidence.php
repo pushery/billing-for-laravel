@@ -95,8 +95,8 @@ final readonly class StripeDisputeEvidence implements SubmitsDisputeEvidence
      */
     private function upload(string $path, string $key, array $account): string
     {
-        // DisputeEvidence refuses a document it cannot read when it is built, so failing here means the file went
-        // away since.
+        // DisputeEvidence refuses a document it cannot read when it is built and again when submit() takes its
+        // fingerprint, before any upload, so failing here means the file went away between the two.
         $handle = fopen($path, 'rb') ?: throw new RuntimeException("The dispute document at '{$path}' could not be opened.");
 
         try {

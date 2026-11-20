@@ -54,11 +54,12 @@ final class DirectDebitAnnouncedNotification extends BillingNotification
     {
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.direct_debit_announced.subject'))
-            ->line(Lang::get('billing::notifications.direct_debit_announced.intro', [
-                'payee' => $this->payee,
+            // The payee is the company name the application configures, or the creditor's name at the provider, so
+            // it goes into the Markdown line as text.
+            ->line(MarkdownText::interpolate((string) Lang::get('billing::notifications.direct_debit_announced.intro', [
                 'amount' => LocalizedMoney::format($this->amount),
                 'date' => LocalizedDate::long($this->debitOn),
-            ]));
+            ]), ['payee' => $this->payee]));
 
         if ($this->recurring) {
             $mail->line(Lang::get('billing::notifications.direct_debit_announced.recurring'));

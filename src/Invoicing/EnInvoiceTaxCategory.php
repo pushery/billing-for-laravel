@@ -234,10 +234,9 @@ final readonly class EnInvoiceTaxCategory
     /**
      * Whether an archetype is a supply of goods rather than a service.
      *
-     * Here rather than on `TaxArchetype`, and that placement is enforced: `ProductTaxonomyTest` asserts the
-     * enum carries no accessors, because an accessor on it would hard-code one jurisdiction's answer into a
-     * fact that every jurisdiction shares, and a consumer elsewhere could not replace it without replacing
-     * the enum.
+     * Here rather than on `TaxArchetype`, and the enum carries no accessors on purpose: an accessor on it
+     * would hard-code one jurisdiction's answer into a fact that every jurisdiction shares, and a consumer
+     * elsewhere could not replace it without replacing the enum.
      *
      * Goods-versus-services is not one of those varying answers — a download is a service wherever it is
      * sold — so it is read here rather than pushed into the profile contract as a sixth taxonomy cell every

@@ -24,13 +24,13 @@ use SensitiveParameter;
 final readonly class PaymentAccount
 {
     /** A driver name as the service providers register it. */
-    private const string PROVIDER_PATTERN = '/^[a-z][a-z0-9_-]{0,31}$/';
+    private const string PROVIDER_PATTERN = '/^[a-z][a-z0-9_-]{0,31}$/D';
 
     /** A key is part of the webhook address: lowercase letters, digits and inner hyphens, at most 64 characters. */
-    private const string KEY_PATTERN = '/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/';
+    private const string KEY_PATTERN = '/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/D';
 
     /** A host name: labels of letters, digits and inner hyphens, joined by dots, without a scheme, a port or a path. */
-    private const string HOST_PATTERN = '/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/i';
+    private const string HOST_PATTERN = '/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/iD';
 
     /**
      * @param  string  $provider  the driver the account belongs to, such as `mollie` or `stripe`

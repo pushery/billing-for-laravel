@@ -94,8 +94,7 @@ final readonly class StripePaymentRails implements CancelsPayments, PaymentRails
         return $this->settle(
             // The SDK's generated param shape cannot express a payload assembled at runtime: the routing keys
             // are present or absent depending on the charge type, and an unrouted payment must carry neither.
-            // The payload is a valid PaymentIntent request; its exact fields are asserted one by one in
-            // StripeMarketplaceRoutingTest, including the assertion that an unrouted charge emits none of them.
+            // The payload is a valid PaymentIntent request either way.
             // @phpstan-ignore argument.type (the SDK's generated shape cannot express a payload assembled at run time)
             fn (): PaymentIntent => $this->stripe->paymentIntents->create($this->traced($params, $idempotencyKey, $narrative, $options instanceof ChargeOptions ? $options->metadata : []), $this->options($idempotencyKey)),
             $amount,
@@ -189,8 +188,7 @@ final readonly class StripePaymentRails implements CancelsPayments, PaymentRails
         return $this->settle(
             // The SDK's generated param shape cannot express a payload assembled at runtime: the routing keys
             // are present or absent depending on the charge type, and an unrouted payment must carry neither.
-            // The payload is a valid PaymentIntent request; its exact fields are asserted one by one in
-            // StripeMarketplaceRoutingTest, including the assertion that an unrouted charge emits none of them.
+            // The payload is a valid PaymentIntent request either way.
             // @phpstan-ignore argument.type (the SDK's generated shape cannot express a payload assembled at run time)
             fn (): PaymentIntent => $this->stripe->paymentIntents->create($this->traced($params, $idempotencyKey, $narrative), $options),
             $amount,

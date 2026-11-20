@@ -33,7 +33,7 @@ final readonly class StripePaymentMethodDomains
     {
         $domain = strtolower(trim($domain));
 
-        if (preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/', $domain) !== 1) {
+        if (preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/D', $domain) !== 1) {
             throw new InvalidArgumentException("A wallet domain is a host name such as `shop.example`, without a scheme or a path, and `{$domain}` is not.");
         }
 

@@ -175,13 +175,20 @@ final readonly class MollieCardPresentPayments implements CardPresentPayments, I
      * A text field of a Mollie resource, or null where it is missing or blank.
      *
      * A resource is decoded JSON, whatever its docblocks promise, so a field Mollie left out arrives as null.
+     *
+     * @param  mixed  $value  a field of a Mollie resource, as the response decoded it, which the SDK leaves untyped
      */
     private function text(mixed $value): ?string
     {
         return is_string($value) && trim($value) !== '' ? $value : null;
     }
 
-    /** The image a pairing code carries under `details.qrCode.src`, where Mollie sent one. */
+    /**
+     * The image a pairing code carries under `details.qrCode.src`, where Mollie sent one.
+     *
+     * @param  mixed  $details  the details of a pairing code, as the response decoded it, which the SDK leaves untyped
+     * @return mixed the image under details.qrCode.src as the response decoded it, or null
+     */
     private function qrCodeOf(mixed $details): mixed
     {
         $qrCode = $details instanceof stdClass ? $details->qrCode ?? null : null;
@@ -266,6 +273,6 @@ final readonly class MollieCardPresentPayments implements CardPresentPayments, I
             ? $this->terminalCountries[$terminal]
             : ($profile === null ? null : $this->terminalCountries[$profile] ?? null);
 
-        return is_string($declared) && preg_match('/^[A-Za-z]{2}$/', $declared) === 1 ? strtoupper($declared) : null;
+        return is_string($declared) && preg_match('/^[A-Za-z]{2}$/D', $declared) === 1 ? strtoupper($declared) : null;
     }
 }

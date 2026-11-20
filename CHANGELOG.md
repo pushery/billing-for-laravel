@@ -4,6 +4,27 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.63.0] - 2026-11-20
+
+### 🐛 Fixed
+
+- **A tier whose key is made of digits works throughout.** PHP stores a key such as `2024` as an integer, and four places handed the keys of the tier list to methods that take a string: the swap offer of the plan catalog and of a marketplace's platform tiers, the lookup of a tier by its provider price, and the price comparison of `billing:doctor`, each of which ended with a type error. The configuration check reported such a `zero_tier` or untouchable tier as missing, and the doctor's checks of yearly tiers passed over it. A list of paths handed to `DisputeEvidence` is refused with the message that names its first key, where it ended with a type error as well.
+- **A dispute document that is gone by the time the evidence is submitted is refused with the message that names its path.** The fingerprint read each document with `hash_file()` before any upload, so in an application a missing file ended in the warning of that read, turned into an `ErrorException`, and where warnings are not reported the fingerprint was taken over an empty hash, the same for any two missing documents.
+- **The declarations list announces a resolution that has run for a second, in the plain markup as well.** WireKit's buttons say after a second that their act still runs. The plain list showed the wait only as a disabled button, which a screen reader does not announce, so a resolution that took a while went unheard. Its status region now says that the resolution still runs once it has waited a second, and the WireKit list hands its buttons the same sentence, `billing::admin.declarations.busy`, in place of WireKit's own "Loading". A host that published the views takes the line from the package's `livewire/declarations-awaiting-review.blade.php` into its copy.
+- **The Boost skill asks for `ignoreMigrations()` before it publishes the migrations.** Its configure step published every group in one block, the migrations among them, and never named the call, so an agent that ran the block in order left the package loading its own migrations beside the published copies, and `migrate` ran both. The step now publishes the configuration alone, names the other tags in a sentence, and publishes the migrations in a block of their own below the call to `BillingServiceProvider::ignoreMigrations()`.
+- **The re-confirmation field of the danger zone points at its error only while there is one.** Its `aria-describedby` named `reconfirm-error` in every state, and that element exists only after a wrong secret, so the description pointed at nothing until then. The field now carries it, together with `aria-invalid`, while the error stands.
+
+### 🔒 Security
+
+- **Billing's mails wait in the queue encrypted.** A notice carries amounts, invoice numbers, a mandate reference or the last characters of an account, and a queued notice waits in the queue's store, the `jobs` table by default, and in `failed_jobs` once it has failed, both as plain text until now. `BillingNotification` is `ShouldBeEncrypted`, so Laravel encrypts each job with the application key, and every notice of the package inherits it. A worker reads the jobs with the same `APP_KEY` as the application, and a job queued before the update is still read as it was written.
+- **What billing's mails take from a payment provider or from the application is set as text.** The mails are Markdown, and a value set into a line as it came arrived as Markdown: written as a link, it became a working link, and written as an image, an image the mail program fetches. These values are now set as text, so their Markdown stays characters and a web address in them is written so that a mail program does not link it: the brand of a payment method in the warning before a card expires and in the notice that the fallback method was charged, the provider's invoice reference in the notice of a failed payment and in the receipt, the wording of the declarations a buyer made in the receipt and in the contract confirmation, the payee in the announcement of a direct debit, the text of what changes in the announcement of a price change, the label of a meter in the quota warning, and the name of a field no translation names in the reminder about missing seller details. The amounts and dates beside them are set as before.
+
+  **Upgrade:** nothing to do in the application. A test that compares the lines of these mails reads them through `strval()`, because they are `HtmlString`s now, and through `html_entity_decode()` where a value holds punctuation, which is written as character references.
+
+### 📚 Documentation
+
+- **The PHP examples import every class they name.** An example that opens with `use` lines is the head of a file a reader copies, and a class those lines leave out resolves in the namespace of that file instead: `Money::of()` in a class under `namespace App\Http\Controllers;` asks for `App\Http\Controllers\Money`. Twenty-four examples named a class without importing it: `BillingManager`, `Money`, `PaymentAccount`, `PlatformFee`, `TaxArchetype`, `CardPresentPayments`, `UsageHistoryProvider` or the `Billing` facade of the package, Laravel's `Model`, `LengthAwarePaginator` or `Event` facade, `Mockery`, PHP's `RuntimeException`, or a class of the application, such as a model or a class the example binds to one of the package's contracts. Each imports it now.
+
 ## [0.62.0] - 2026-11-15
 
 ### ✨ Added
@@ -8624,7 +8645,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.62.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.63.0...HEAD
+[0.63.0]: https://github.com/pushery/billing-for-laravel/compare/v0.62.0...v0.63.0
 [0.62.0]: https://github.com/pushery/billing-for-laravel/compare/v0.61.0...v0.62.0
 [0.61.0]: https://github.com/pushery/billing-for-laravel/compare/v0.60.0...v0.61.0
 [0.60.0]: https://github.com/pushery/billing-for-laravel/compare/v0.59.0...v0.60.0

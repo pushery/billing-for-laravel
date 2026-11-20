@@ -62,6 +62,7 @@ return [
         'ends_on' => 'Il contratto termina il (facoltativo)',
         'resolve' => 'Risolvi',
         'resolved' => 'Dichiarazione risolta.',
+        'busy' => 'La dichiarazione è ancora in corso di risoluzione.',
         'gone' => 'Questa dichiarazione non aspetta più una persona.',
         'invalid_day' => 'Inserisci il giorno come data.',
     ],

@@ -184,7 +184,11 @@ final readonly class ShopifyWebhookEventMapper implements DerivesDeliveryKey, We
         );
     }
 
-    /** A moment Shopify states as an ISO 8601 string, in Unix seconds, or null where it states none it can read. */
+    /**
+     * A moment Shopify states as an ISO 8601 string, in Unix seconds, or null where it states none it can read.
+     *
+     * @param  mixed  $value  a moment Shopify states, as the JSON decoded it
+     */
     private function momentOf(mixed $value): ?int
     {
         if (! is_string($value) || $value === '') {
@@ -265,9 +269,8 @@ final readonly class ShopifyWebhookEventMapper implements DerivesDeliveryKey, We
         $active = is_array($installation) ? ($installation['activeSubscriptions'] ?? null) : null;
 
         return array_any(
-            is_array($active) ? $active : [],
-            static fn (mixed $subscription): bool => is_array($subscription)
-                && is_string($subscription['id'] ?? null)
+            array_filter(is_array($active) ? $active : [], is_array(...)),
+            static fn (array $subscription): bool => is_string($subscription['id'] ?? null)
                 && $subscription['id'] !== $id,
         );
     }

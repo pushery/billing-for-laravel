@@ -37,6 +37,8 @@ final readonly class ConfigLicense implements License
      * Every other value is uncapped, as an unlisted key is.
      *
      * @internal shared with ConfigEntitlements, which reads a dimension's ceiling the same way.
+     *
+     * @param  mixed  $value  a ceiling as configured, which env() may deliver as a string
      */
     public static function ceiling(mixed $value): ?int
     {
@@ -44,7 +46,7 @@ final readonly class ConfigLicense implements License
             return $value;
         }
 
-        return is_string($value) && preg_match('/^\s*\d+\s*$/', $value) === 1 ? (int) trim($value) : null;
+        return is_string($value) && preg_match('/^\s*\d+\s*$/D', $value) === 1 ? (int) trim($value) : null;
     }
 
     /**

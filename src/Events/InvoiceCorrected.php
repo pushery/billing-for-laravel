@@ -38,6 +38,7 @@ final readonly class InvoiceCorrected implements BillingDomainEvent, HasDeprecat
 
     public function deprecatedAlias(): BillingDomainEvent
     {
+        // @phpstan-ignore new.deprecatedClass, method.deprecatedClass (this method is the alias: it builds the event under its old name, so a listener on that name keeps being called for the deprecation window)
         return new InvoiceCredited($this->correction);
     }
 }

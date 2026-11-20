@@ -77,7 +77,7 @@ final readonly class StripeCheckoutCharge
         ];
         $intent = array_filter(
             ['metadata' => $metadata, 'description' => $narrative?->statement(StripePaymentRails::DESCRIPTION_LIMIT)],
-            static fn (mixed $value): bool => $value !== null && $value !== [],
+            $this->isSent(...),
         );
         $payload = array_filter([
             'mode' => 'payment',
@@ -89,7 +89,7 @@ final readonly class StripeCheckoutCharge
             'metadata' => $metadata,
             'payment_intent_data' => $intent,
             'expires_at' => $this->expiresAt($options?->expiresAt),
-        ], static fn (mixed $value): bool => $value !== null && $value !== []);
+        ], $this->isSent(...));
 
         // @phpstan-ignore argument.type (the SDK's generated shape cannot express a payload assembled at run time)
         $session = $this->stripe->checkout->sessions->create($payload, $idempotencyKey === null ? [] : ['idempotency_key' => $idempotencyKey]);
@@ -109,6 +109,16 @@ final readonly class StripeCheckoutCharge
             clientSecret: $page,
             refusedPageHost: $page === null ? SafeExternalUrl::refusedHost($session->url ?? null, $hosts) : null,
         );
+    }
+
+    /**
+     * Whether a field goes into the Checkout payload: Stripe takes no null and no empty list.
+     *
+     * @param  mixed  $value  a field of the payload, of whatever type the field has
+     */
+    private function isSent(mixed $value): bool
+    {
+        return $value !== null && $value !== [];
     }
 
     /**

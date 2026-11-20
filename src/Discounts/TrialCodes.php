@@ -43,6 +43,8 @@ final readonly class TrialCodes
             throw new TrialCodeRefused;
         }
 
+        // giving() hands back only a coupon that gives the tier days of trial, so no trial code reaches this refusal:
+        // it is there for the nullable return of trialDaysFor().
         return $coupon->trialDaysFor($tierKey) ?? throw new TrialCodeRefused;
     }
 

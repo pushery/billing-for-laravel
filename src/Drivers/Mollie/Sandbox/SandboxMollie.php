@@ -373,6 +373,8 @@ final readonly class SandboxMollie
 
     /**
      * @param  array<string, string|null>  $details
+     * @param  mixed  $reference  the mandate reference the request carried, as its JSON body decoded it, or null
+     * @param  mixed  $signatureDate  the signature date the request carried, as its JSON body decoded it, or null
      * @return array<string, mixed>
      */
     private function mandate(string $customer, string $method, array $details, mixed $reference, mixed $signatureDate): array
@@ -469,7 +471,10 @@ final readonly class SandboxMollie
         Bus::dispatch($ping);
     }
 
-    /** @return array{value: string, currency: string} */
+    /**
+     * @param  mixed  $amount  an amount as the JSON body of the request decoded it
+     * @return array{value: string, currency: string}
+     */
     private function amountOf(mixed $amount): array
     {
         $value = is_array($amount) && is_string($amount['value'] ?? null) ? $amount['value'] : '0.00';

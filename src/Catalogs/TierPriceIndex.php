@@ -49,7 +49,10 @@ final readonly class TierPriceIndex
             return null;
         }
 
-        foreach (array_keys($this->tiers->all()) as $key) {
+        foreach ($this->tiers->all() as $identity) {
+            // The identity carries the key as a string; the array holds a key made of digits as an int.
+            $key = $identity->key;
+
             foreach ($this->plans->intervalsFor($key) as $interval) {
                 if ($this->plans->providerPriceFor($key, $interval) === $priceId) {
                     return ['tier' => $key, 'interval' => $interval];

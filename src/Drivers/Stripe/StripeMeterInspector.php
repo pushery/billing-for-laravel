@@ -72,6 +72,8 @@ final class StripeMeterInspector implements MeterInspector
      * A first tier that charges per unit gives nothing away whatever its bound, and reads as null too. So does
      * every tier of a volume-tiered price, which is why only a graduated one is read: there, every unit is
      * priced at the tier the total lands in, so the first tier's units are free only while the total stays in it.
+     *
+     * @param  mixed  $tiers  a price's tiers as the SDK decoded them
      */
     private function firstTierUpTo(mixed $tiers): ?int
     {

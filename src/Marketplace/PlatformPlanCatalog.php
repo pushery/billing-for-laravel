@@ -56,7 +56,10 @@ final readonly class PlatformPlanCatalog implements PlanCatalog
     {
         $out = [];
 
-        foreach ($this->tiers->all() as $key => $identity) {
+        foreach ($this->tiers->all() as $identity) {
+            // The identity carries the key as a string; the array holds a key made of digits as an int.
+            $key = $identity->key;
+
             if ($key === $current->key) {
                 continue;
             }

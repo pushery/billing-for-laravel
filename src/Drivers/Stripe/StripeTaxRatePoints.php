@@ -19,6 +19,8 @@ final class StripeTaxRatePoints
 {
     /**
      * The percentage as basis points, or null for anything that is not a non-negative whole number of them.
+     *
+     * @param  mixed  $percentage  a tax rate's percentage as the SDK decoded it
      */
     public static function of(mixed $percentage): ?int
     {

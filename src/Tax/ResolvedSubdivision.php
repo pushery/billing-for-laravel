@@ -62,10 +62,7 @@ final readonly class ResolvedSubdivision
         $configured = $this->config->get('billing.tax_evidence.subdivision_countries', ['US']);
         $countries = is_array($configured) ? $configured : ['US'];
 
-        $upper = array_map(
-            static fn (mixed $code): string => is_string($code) ? strtoupper($code) : '',
-            $countries,
-        );
+        $upper = array_map(strtoupper(...), array_filter($countries, is_string(...)));
 
         return in_array(strtoupper($country), $upper, true);
     }

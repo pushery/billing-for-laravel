@@ -102,7 +102,7 @@ final class DeclarationsAwaitingReview extends Component
         if ($day !== '') {
             // A day of the calendar and nothing else: the parser beneath also reads "tomorrow" and "+1 year", which a
             // date field never sends and a crafted request could.
-            if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $day, $parts) !== 1 || ! checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1])) {
+            if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D', $day, $parts) !== 1 || ! checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1])) {
                 $this->result = 'invalid_day';
 
                 return;

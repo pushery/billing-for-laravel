@@ -47,6 +47,7 @@ final class UtcDateTime implements CastsAttributes
 
     /**
      * @param  array<string, mixed>  $attributes
+     * @param  mixed  $value  the column as the driver returns it, which the CastsAttributes contract leaves untyped
      */
     public function get(Model $model, string $key, mixed $value, array $attributes): ?Carbon
     {
@@ -69,6 +70,9 @@ final class UtcDateTime implements CastsAttributes
 
     /**
      * @param  array<string, mixed>  $attributes
+     * @param  mixed  $value  what the application assigns to the attribute, which the CastsAttributes contract leaves untyped
+     *
+     * @phpstan-param  Carbon|DateTimeInterface|string|null  $value
      */
     public function set(Model $model, string $key, mixed $value, array $attributes): ?string
     {

@@ -27,7 +27,7 @@ use Pushery\Billing\Preflight\Profiles\GermanReportingProfile;
  * With the shipped defaults the two questions agree at the money figure: the declaration fires at it, and
  * the statutory exemption, which only covers less than the figure, no longer holds there. That agreement is
  * where the German statute draws its line, not a shared rule, which is why they stay in separate classes
- * reading separate keys. Moving one must never move the other. Pinned by DeMinimisBoundaryHasOneHomeTest.
+ * reading separate keys. Moving one must never move the other.
  */
 final readonly class SellerActivityThreshold
 {
@@ -71,6 +71,8 @@ final readonly class SellerActivityThreshold
      * `>=` by default: reaching the figure is enough. `>` asks for more than it. Any other value falls back to
      * `>=`, the earlier of the two, because this is a question meant to be asked early. It lives here and
      * nowhere else on purpose: the reporting exemption compares its own figures by its own rule.
+     *
+     * @param  mixed  $comparison  the operator configured for the threshold, which a host may have set to any type
      */
     private function reaches(int $figure, int $threshold, mixed $comparison): bool
     {

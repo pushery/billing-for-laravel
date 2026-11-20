@@ -369,6 +369,7 @@ final class DoctorCommand extends Command
      * misses nothing, and an endpoint that does not say which events it receives makes no claim to check. With the
      * marketplace enabled, the platform's list includes the types only a routed sale needs.
      *
+     * @param  mixed  $enabled  the endpoint's enabled events as the SDK holds them, a list or nothing
      * @return list<string>
      */
     private function eventTypesMissingAt(Repository $config, string $url, mixed $enabled): array
@@ -978,8 +979,11 @@ final class DoctorCommand extends Command
         // The package's own engine charges the price a tier shows, a provider the price it holds.
         $engine = $this->boundAnnualTerms() instanceof LocalAnnualTerms;
 
-        foreach (is_array($tiers) ? array_keys($tiers) : [] as $tierKey) {
-            if (! is_string($tierKey) || ! in_array(BillingInterval::Year, $plans->intervalsFor($tierKey), true)) {
+        foreach (is_array($tiers) ? array_keys($tiers) : [] as $key) {
+            // A tier key made of digits is an int key of the array, and a tier all the same.
+            $tierKey = (string) $key;
+
+            if (! in_array(BillingInterval::Year, $plans->intervalsFor($tierKey), true)) {
                 continue;
             }
 
@@ -1014,8 +1018,11 @@ final class DoctorCommand extends Command
         $plans = Container::getInstance()->make(PlanCatalog::class);
         $tiers = $config->get('billing.tiers', []);
 
-        foreach (is_array($tiers) ? array_keys($tiers) : [] as $tierKey) {
-            if (is_string($tierKey) && in_array(BillingInterval::Year, $plans->intervalsFor($tierKey), true)) {
+        foreach (is_array($tiers) ? array_keys($tiers) : [] as $key) {
+            // A tier key made of digits is an int key of the array, and a tier all the same.
+            $tierKey = (string) $key;
+
+            if (in_array(BillingInterval::Year, $plans->intervalsFor($tierKey), true)) {
                 $this->components->warn("Tier '{$tierKey}' is sold yearly, and the package's own billing engine renews a "
                     ."consumer's year of it as a year. Sell it monthly, or set billing.audience to business_only if the "
                     .'application sells only to businesses.');
@@ -1303,9 +1310,7 @@ final class DoctorCommand extends Command
             return false;
         }
 
-        $offset = static fn (mixed $seconds): float => is_numeric($seconds) ? (float) $seconds : 0.0;
-
-        if ($offset($session['winter'] ?? null) === 0.0 && $offset($session['summer'] ?? null) === 0.0) {
+        if ($this->offsetOf($session['winter'] ?? null) === 0.0 && $this->offsetOf($session['summer'] ?? null) === 0.0) {
             return false;
         }
 
@@ -1318,6 +1323,16 @@ final class DoctorCommand extends Command
         );
 
         return true;
+    }
+
+    /**
+     * An offset the server reported, in seconds, and none for anything that is not a number.
+     *
+     * @param  mixed  $seconds  a column of the row the query returned, as the driver hands it over
+     */
+    private function offsetOf(mixed $seconds): float
+    {
+        return is_numeric($seconds) ? (float) $seconds : 0.0;
     }
 
     /**
@@ -1696,7 +1711,9 @@ final class DoctorCommand extends Command
             $consumers = false;
         }
 
-        foreach (array_keys($tiers->all()) as $key) {
+        foreach ($tiers->all() as $identity) {
+            // The identity carries the key as a string; the array holds a key made of digits as an int.
+            $key = $identity->key;
             $toConsumers = $consumers && KeyedConfig::setting($config, 'billing.tiers', $key, 'buyers') !== BuyerAudience::Business->value;
 
             // The tier at its default interval first, as before, then at each further interval it is sold at.

@@ -73,6 +73,9 @@ final readonly class ConfigDatevAccountResolver implements DatevAccountResolver
             ?? throw DatevTransactionUnresolvable::forTransaction($transaction, $country);
     }
 
+    /**
+     * @param  mixed  $entry  an entry of the DATEV account map in the config, which a host may have set to any type
+     */
     private function account(mixed $entry): ?DatevAccount
     {
         if (! is_array($entry)) {

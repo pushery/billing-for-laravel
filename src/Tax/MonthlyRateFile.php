@@ -120,6 +120,6 @@ final readonly class MonthlyRateFile
 
     private function isCurrency(string $value): bool
     {
-        return preg_match('/^[A-Z]{3}$/', $value) === 1;
+        return preg_match('/^[A-Z]{3}$/D', $value) === 1;
     }
 }

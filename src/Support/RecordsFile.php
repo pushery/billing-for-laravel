@@ -25,6 +25,8 @@ final class RecordsFile
      */
     public static function render(array $columns, iterable $rows): array
     {
+        // php://temp is memory that moves to a temporary file once it grows, so it fails to open only where the
+        // process can open no file at all.
         $handle = fopen('php://temp', 'w+') ?: throw new RuntimeException('No buffer could be opened for the records.');
         $count = 0;
 
@@ -42,10 +44,14 @@ final class RecordsFile
         return [$contents, $count];
     }
 
-    /** A calendar day written as YYYY-MM-DD, at its start in UTC, or null where the value is no such day. */
+    /**
+     * A calendar day written as YYYY-MM-DD, at its start in UTC, or null where the value is no such day.
+     *
+     * @param  mixed  $value  a day as the records file holds it, which may be any value
+     */
     public static function day(mixed $value): ?CarbonImmutable
     {
-        if (! is_string($value) || preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $parts) !== 1 || ! checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1])) {
+        if (! is_string($value) || preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D', $value, $parts) !== 1 || ! checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1])) {
             return null;
         }
 

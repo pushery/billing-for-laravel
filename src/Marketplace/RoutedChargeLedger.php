@@ -234,7 +234,7 @@ final readonly class RoutedChargeLedger
     {
         $country = strtoupper(trim($country));
 
-        if (preg_match('/^[A-Z]{2}$/', $country) !== 1) {
+        if (preg_match('/^[A-Z]{2}$/D', $country) !== 1) {
             return false;
         }
 

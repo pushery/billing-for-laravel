@@ -14,14 +14,18 @@ use Pushery\Billing\Exceptions\InvalidBillingConfig;
  */
 final class Micros
 {
-    /** @throws InvalidBillingConfig when the value is not a non-negative decimal with at most six places */
+    /**
+     * @param  mixed  $value  a price as the AI pricing config holds it, which a host may have written as any type
+     *
+     * @throws InvalidBillingConfig when the value is not a non-negative decimal with at most six places
+     */
     public static function parse(mixed $value, string $key): int
     {
         if (is_int($value) && $value >= 0) {
             return $value * 1_000_000;
         }
 
-        if (! is_string($value) || preg_match('/^(\d+)(?:\.(\d{1,6}))?$/', trim($value), $parts) !== 1) {
+        if (! is_string($value) || preg_match('/^(\d+)(?:\.(\d{1,6}))?$/D', trim($value), $parts) !== 1) {
             throw InvalidBillingConfig::forKey($key, 'a non-negative decimal amount such as \'0.25\', with at most six decimal places');
         }
 

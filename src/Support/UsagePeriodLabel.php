@@ -21,7 +21,7 @@ final class UsagePeriodLabel
     public static function for(string $key): string
     {
         $translator = Container::getInstance()->make(Translator::class);
-        $day = preg_match('/^\d{4}-\d{2}-\d{2}$/', $key) === 1 ? CarbonImmutable::createFromFormat('!Y-m-d', $key, 'UTC') : null;
+        $day = preg_match('/^\d{4}-\d{2}-\d{2}$/D', $key) === 1 ? CarbonImmutable::createFromFormat('!Y-m-d', $key, 'UTC') : null;
 
         if ($day instanceof CarbonImmutable) {
             $label = $translator->get('billing::account.usage_history.period_from', ['date' => (string) LocalizedDate::long($day)]);
@@ -29,7 +29,7 @@ final class UsagePeriodLabel
             return is_string($label) ? $label : $key;
         }
 
-        $month = preg_match('/^\d{4}-\d{2}$/', $key) === 1 ? CarbonImmutable::createFromFormat('!Y-m', $key, 'UTC') : null;
+        $month = preg_match('/^\d{4}-\d{2}$/D', $key) === 1 ? CarbonImmutable::createFromFormat('!Y-m', $key, 'UTC') : null;
 
         return $month instanceof CarbonImmutable ? $month->settings(['locale' => $translator->getLocale()])->isoFormat('MMMM YYYY') : $key;
     }

@@ -18,7 +18,7 @@ use Pushery\Billing\ValueObjects\SellerPeriodReport;
  *
  * No shipped renderer will ever be a payment-settlement return, and this contract is not the way to get one
  * into the package: that filing is the payment provider's duty as the settlement entity, not the platform's,
- * and `UsRegimeBoundaryTest` holds the line by scanning `src/` for it. A consumer who has been told they owe
+ * and no class under `src/` renders one. A consumer who has been told they owe
  * one binds it here, which is exactly the right place for a duty the package does not have.
  *
  * ## Which sellers it is handed

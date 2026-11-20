@@ -32,7 +32,11 @@ enum VoucherInstrumentType: string
      */
     public const string CONFIG_KEY = 'billing.marketplace.vouchers.instrument_type';
 
-    /** The configured type, or the one that taxes nothing yet — the safer answer where nobody has said. */
+    /**
+     * The configured type, or the one that taxes nothing yet — the safer answer where nobody has said.
+     *
+     * @param  mixed  $configured  a value of the package's config, which a host may have set to any type
+     */
     public static function fromConfigured(mixed $configured): self
     {
         return self::tryFrom(is_string($configured) ? $configured : '') ?? self::MultiPurpose;

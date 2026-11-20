@@ -10,10 +10,9 @@ use InvalidArgumentException;
 /**
  * What caused a credit-balance movement — an add-on purchase, a refund attempt, an order.
  *
- * It exists as its own type rather than as a second `Model` parameter on the ledger, and the reason is a
- * guard rather than taste. `CreditLedgerContainmentTest` treats any call taking two models as the shape of
- * value moving between parties, because that shape is the risk whatever the author meant by it — and a
- * cause passed as a model is indistinguishable from a second owner to a reader and to the check alike.
+ * It exists as its own type rather than as a second `Model` parameter on the ledger. A ledger call taking
+ * two models has the shape of value moving between parties, and that shape is the risk whatever the author
+ * meant by it — a cause passed as a model is indistinguishable from a second owner to a reader.
  *
  * Naming the cause as a distinct type keeps the ledger's invariant literally true instead of true-by-comment:
  * exactly one model enters the ledger, and it is always the owner whose balance moves. A source is a

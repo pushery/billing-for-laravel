@@ -69,8 +69,7 @@ final readonly class SellerActivity
      * row as `reportable: delegated` in as many words. It is restated here as an exhaustive match rather
      * than read from the taxonomy, because this is a value object and injecting a profile into it would make
      * the rule's inputs stop being pure — the one property that lets a period be replayed years later to the
-     * same answer. `DelegatingArchetypesAgreeTest` holds the two statements together, so the restatement
-     * cannot drift into a second, quieter truth.
+     * same answer. The two statements agree, archetype for archetype.
      *
      * ## An unresolved delegation stays unresolved
      *
@@ -118,8 +117,8 @@ final readonly class SellerActivity
      * The match lives here and not on the enum, and that is not where it was first written. An accessor on
      * `TaxArchetype` reads better and is wrong: the archetypes are a fact about commerce and what follows
      * from one is a jurisdiction's answer, so an answer on the enum is one a consumer elsewhere cannot
-     * replace without replacing the fact. `ProductTaxonomyTest` holds that line and caught this. Beside
-     * `isGoods()` is where a reading of an archetype belongs — the same shape, one file, replaceable.
+     * replace without replacing the fact. Beside `isGoods()` is where a reading of an archetype belongs — the
+     * same shape, one file, replaceable.
      *
      * Exhaustive on purpose: a new case makes this fail static analysis rather than defaulting to `false`,
      * which would answer for a case nobody has considered, in the under-reporting direction.

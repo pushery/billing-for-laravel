@@ -38,15 +38,25 @@ also load automatically). Point the package at your billable model with
 
 ### 2. Configure
 
-Publish one asset kind, or everything at once:
+Publish the configuration:
 
 ```bash
 php artisan vendor:publish --tag=billing-config
-php artisan vendor:publish --tag=billing-migrations
-php artisan vendor:publish --tag=billing-views
-php artisan vendor:publish --tag=billing-lang
-php artisan vendor:publish --tag=billing        # config + migrations + views + lang
 ```
+
+The other groups have tags of their own: `billing-views` for the Blade views, `billing-lang` for
+the translations, and `billing` for every group at once, the migrations included.
+
+The migrations load from the package as they are. To keep them in your application instead, call
+`\Pushery\Billing\BillingServiceProvider::ignoreMigrations()` in the `register()` method of your
+`AppServiceProvider` first, or `migrate` runs both copies. Then publish them once and run them:
+
+```bash
+php artisan vendor:publish --tag=billing-migrations
+php artisan migrate
+```
+
+After an update, the same command copies only the migrations the update added.
 
 Key settings in `config/billing.php`:
 

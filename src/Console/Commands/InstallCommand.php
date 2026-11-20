@@ -92,7 +92,7 @@ final class InstallCommand extends Command
     private function unusableName(string $table, string $tierColumn, string $customerColumn): ?string
     {
         foreach (['owner table' => $table, 'column in billing.tier_column' => $tierColumn, 'column in billing.customer.column' => $customerColumn] as $what => $name) {
-            if (preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,63}$/', $name) !== 1) {
+            if (preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,63}$/D', $name) !== 1) {
                 return "The {$what}, '{$name}', is not a name the generated migration can carry: use letters, digits and underscores, not starting with a digit, at most 64 characters.";
             }
         }

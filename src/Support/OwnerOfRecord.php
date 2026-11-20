@@ -22,6 +22,9 @@ use Illuminate\Database\Eloquent\Relations\Relation;
  */
 final class OwnerOfRecord
 {
+    /**
+     * @param  mixed  $id  the owner's key as a row stores it, of whatever type the owner model keys on
+     */
     public static function find(?string $type, mixed $id): ?Model
     {
         if ($type === null || $type === '' || (! is_int($id) && ! is_string($id))) {

@@ -353,7 +353,7 @@ final readonly class SaleTaxDecision
      */
     private function pointOfSale(string $soldAt): string
     {
-        if (preg_match('/^[A-Za-z]{2}$/', $soldAt) !== 1) {
+        if (preg_match('/^[A-Za-z]{2}$/D', $soldAt) !== 1) {
             throw PointOfSaleUnknown::notACountry($soldAt);
         }
 

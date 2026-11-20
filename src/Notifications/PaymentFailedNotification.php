@@ -12,6 +12,7 @@ use Pushery\Billing\Contracts\DunningGuard;
 use Pushery\Billing\Enums\BillingAction;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Support\LocalizedMoney;
+use Pushery\Billing\Support\MarkdownText;
 use Pushery\Billing\ValueObjects\Money;
 
 /**
@@ -42,10 +43,10 @@ final class PaymentFailedNotification extends BillingNotification
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.payment_failed.subject'))
             ->line(Lang::get('billing::notifications.payment_failed.intro'))
-            ->line(Lang::get('billing::notifications.payment_failed.summary', [
+            // The invoice reference is the provider's, so it goes into the Markdown line as text.
+            ->line(MarkdownText::interpolate((string) Lang::get('billing::notifications.payment_failed.summary', [
                 'amount' => LocalizedMoney::format($this->amount),
-                'invoice' => $this->invoiceReference,
-            ]));
+            ]), ['invoice' => $this->invoiceReference]));
 
         if ($paused) {
             $mail->line(Lang::get('billing::notifications.payment_failed.paused'));

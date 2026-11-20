@@ -30,7 +30,7 @@ final readonly class DeclaredSeller
         public array $taxNumbers = [],
     ) {
         foreach (['establishedIn' => $establishedIn, 'dispatchedFrom' => $dispatchedFrom] as $name => $country) {
-            if ($country !== null && preg_match('/^[A-Z]{2}$/', $country) !== 1) {
+            if ($country !== null && preg_match('/^[A-Z]{2}$/D', $country) !== 1) {
                 throw new InvalidArgumentException("A declared {$name} is a country as two capital letters of ISO 3166; got [{$country}].");
             }
         }

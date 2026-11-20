@@ -67,13 +67,20 @@ final class ImmutableIssuedInvoiceGuard
     /**
      * Whether two values are one moment however each is written. On PostgreSQL a moment is written with its
      * offset and read back in the server's own notation, so the text of an unchanged `issued_at` differs.
+     *
+     * @param  mixed  $original  the attribute as it was loaded, in whatever notation the driver wrote it
+     * @param  mixed  $current  the attribute as the application set it, of whatever type it assigned
      */
     private function sameMoment(mixed $original, mixed $current): bool
     {
         return $original instanceof DateTimeInterface && $current instanceof DateTimeInterface && $original->getTimestamp() === $current->getTimestamp();
     }
 
-    /** A JSON column as it was loaded, decoded, or null where it held nothing. */
+    /**
+     * A JSON column as it was loaded, decoded, or null where it held nothing.
+     *
+     * @return mixed the column as it was loaded, decoded, whatever its JSON held
+     */
     private function storedJson(InvoiceRecord $invoice, string $field): mixed
     {
         $raw = $invoice->getRawOriginal($field);

@@ -91,6 +91,7 @@ final readonly class MolliePaymentMethods implements KeepsAFallbackMethod, Payme
     {
         $methods = [];
 
+        // One billable's mandates, a handful at most, so the result PDO buffers stays small.
         foreach ($this->chargeable($billable)->orderByDesc('is_default')->orderBy('id')->cursor() as $mandate) {
             $methods[] = new PaymentMethod(
                 id: (string) $mandate->mandate_reference,

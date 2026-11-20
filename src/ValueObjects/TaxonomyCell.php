@@ -21,13 +21,20 @@ use LogicException;
  */
 final readonly class TaxonomyCell
 {
+    /**
+     * @param  mixed  $value  the fixed answer, of the type the cell's question has
+     */
     private function __construct(
         private mixed $value,
         private bool $delegated,
         private bool $deferred,
     ) {}
 
-    /** The answer is this, always. */
+    /**
+     * The answer is this, always.
+     *
+     * @param  mixed  $value  the answer, of the type the cell's question has
+     */
     public static function fixed(mixed $value): self
     {
         return new self($value, false, false);
@@ -97,6 +104,8 @@ final readonly class TaxonomyCell
      * Refuses for the other two kinds rather than returning null, because null at a call site reads as "no
      * opinion" and gets replaced by whatever the caller thinks is reasonable — which is exactly the silent
      * default this class exists to make impossible.
+     *
+     * @return mixed the fixed answer, of the type the cell's question has
      */
     public function value(): mixed
     {

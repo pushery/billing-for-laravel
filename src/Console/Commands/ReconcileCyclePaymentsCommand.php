@@ -33,7 +33,7 @@ final class ReconcileCyclePaymentsCommand extends Command
     {
         $hours = $this->option('hours');
 
-        if (! is_string($hours) || preg_match('/^\d+$/', $hours) !== 1 || (int) $hours < 1) {
+        if (! is_string($hours) || preg_match('/^\d+$/D', $hours) !== 1 || (int) $hours < 1) {
             $this->components->error('--hours takes a whole number of hours, from 1 up.');
 
             return self::INVALID;

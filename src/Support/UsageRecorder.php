@@ -65,6 +65,8 @@ final readonly class UsageRecorder
      * whose campaigns share a number, had the second usage dropped as a retry of the first: not billed, not
      * counted, and answered with the same `false` a real retry gets. Hashed rather than stored side by side,
      * because the three columns and the key together are longer than a MySQL index may be.
+     *
+     * @param  mixed  $ownerId  the key of the owner, of whatever type the owner model keys on
      */
     public static function sourceScope(string $ownerType, mixed $ownerId, string $meterKey, string $sourceKey): string
     {

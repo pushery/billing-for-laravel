@@ -147,7 +147,11 @@ final class Billing extends Facade
      * fake nothing was bound to: the code under test reached the real seams, and `assertNothingCharged()`
      * passed over a charge it never saw.
      *
-     * @param  string  $name
+     * @param  mixed  $name  the facade's name, untyped in the method of Laravel's Facade this overrides
+     *
+     * @phpstan-param  string  $name
+     *
+     * @return mixed the instance behind the facade, which Laravel's Facade declares as mixed
      */
     #[Override]
     protected static function resolveFacadeInstance(mixed $name): mixed

@@ -23,6 +23,7 @@ final class KeyedConfig
      * @param  string  $key  the entry's key, read literally, dots included
      * @param  string  $path  the setting inside the entry, dot-separated, such as `price_display.amount`;
      *                        empty for the whole entry
+     * @return mixed the entry or its setting as the config holds it, which a host may have set to any type
      */
     public static function setting(Repository $config, string $map, string $key, string $path = ''): mixed
     {

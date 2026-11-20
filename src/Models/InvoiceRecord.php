@@ -266,7 +266,7 @@ class InvoiceRecord extends Model
      *
      * Without them a model created without these columns holds null for each, while the row the database
      * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
-     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     * it hides.
      *
      * @var array<string, bool|string>
      */
@@ -469,9 +469,8 @@ class InvoiceRecord extends Model
      * boolean would be a copy that can disagree with the thing it copies. This package has paid for that
      * shape twice already, and both times the copy was the one that answered.
      *
-     * The equivalence is structural rather than lucky, and `InvoicePdfAndOriginTest` holds it across both
-     * families of writer: the day something hydrates a local document with a provider's id, that case goes
-     * red and names the decision instead of letting the meaning drift.
+     * The equivalence is structural rather than lucky, and it holds for both families of writer: a document
+     * produced here never carries a provider's id.
      */
     public function locallyGenerated(): bool
     {

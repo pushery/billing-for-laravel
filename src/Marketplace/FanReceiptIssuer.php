@@ -325,8 +325,18 @@ final readonly class FanReceiptIssuer
                 'tax_rate' => $rateBps / 100,
                 'period_start' => $period?->startsOn(),
                 'period_end' => $period?->endsOn(),
-            ], static fn (mixed $value): bool => $value !== null)],
+            ], $this->isStated(...))],
         ]), $chargeReference, $provider);
+    }
+
+    /**
+     * Whether a field of a receipt's line is stated: a line leaves out what it does not state.
+     *
+     * @param  mixed  $value  a field of the line, of whatever type the field has
+     */
+    private function isStated(mixed $value): bool
+    {
+        return $value !== null;
     }
 
     /**
@@ -422,7 +432,7 @@ final readonly class FanReceiptIssuer
         // guard could never refuse and the branch could never run — a check that cannot fail is a line
         // somebody later reads as protection. The refusal that matters happens earlier, in
         // `SellerFeeCalculator::feeFor()`, where the regime is a parameter and a commission chain really can
-        // arrive; `DocumentRoleGuardTest` holds the guard itself in both directions.
+        // arrive.
         [$feeNet, $feeTax] = $feeGross->baseFromMarkup($feeRateBps);
 
         // The merchant is the recipient of this invoice and is named as its buyer, from the resolver the marketplace

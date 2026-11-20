@@ -98,8 +98,8 @@ use Pushery\Billing\ValueObjects\Money;
  * returns its ChargeResult to the caller synchronously. A `payment_intent.payment_failed` fires in parallel
  * with `invoice.payment_failed` for the same failure but carries the payment-intent id, not the invoice —
  * so mapping that to PaymentFailed would bypass the dunning dedup and mail the customer a second "payment
- * failed", while covering no failure the invoice event does not already cover. `PaymentIntentMappingTest`
- * pins the exclusion so it stays a decision rather than an oversight.
+ * failed", while covering no failure the invoice event does not already cover. The exclusion is a
+ * decision, not an oversight.
  *
  * What the routed arms map instead is a payment with no invoice at all — the discriminator is taken from the
  * payload rather than from a lookup, and the effect behind it no-ops on a reference this package never wrote
@@ -118,8 +118,8 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
      *
      * An endpoint that subscribes to a selection without one of these loses what hangs off it, and nothing says so:
      * an event that never arrives produces nothing. `billing:doctor` holds each endpoint against this list, and
-     * against {@see self::MARKETPLACE_EVENT_TYPES} once the marketplace is enabled. `StripeEventTypesAreListedTest`
-     * holds the two lists together against the arms of {@see self::map()}.
+     * against {@see self::MARKETPLACE_EVENT_TYPES} once the marketplace is enabled. Together the two lists
+     * name every event type {@see self::map()} handles.
      *
      * @var list<string>
      */
@@ -1167,7 +1167,11 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
         return $sum;
     }
 
-    /** A discount's id, whether the payload names it or expands it. */
+    /**
+     * A discount's id, whether the payload names it or expands it.
+     *
+     * @param  mixed  $discount  a discount as the payload names it or expands it
+     */
     private function discountId(mixed $discount): ?string
     {
         $id = is_array($discount) ? ($discount['id'] ?? null) : $discount;
@@ -1177,6 +1181,8 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
 
     /**
      * Sum the `amount` fields of a Stripe amount list (total_discount_amounts, a line's discount_amounts).
+     *
+     * @param  mixed  $rows  a Stripe amount list as the payload decoded it
      */
     private function sumAmounts(mixed $rows): int
     {

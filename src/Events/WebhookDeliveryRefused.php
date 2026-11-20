@@ -33,7 +33,7 @@ use Pushery\Billing\Contracts\IpCountryResolver;
  * the {@see IpCountryResolver} a consumer bound — and nothing else may read one, because a second path is
  * where it leaks. An event is the worst of those paths: it travels into queued payloads, audit tables and
  * exception context, which is precisely the journey the guarantee exists to prevent.
- * `PlaceEvidencePrivacyTest` fails the build over it, and it did over this event.
+ * So this event carries no network address.
  *
  * A consumer who wants the address is not blocked by that and should not be: their listener runs inside
  * the request, so the address is theirs to take from it. Then keeping it is their decision, in their

@@ -39,7 +39,7 @@ final readonly class Iban
     {
         $value = strtoupper((string) preg_replace('/\s+/u', '', $input));
 
-        if (preg_match('/^[A-Z]{2}\d{2}[A-Z0-9]+$/', $value) !== 1) {
+        if (preg_match('/^[A-Z]{2}\d{2}[A-Z0-9]+$/D', $value) !== 1) {
             return null;
         }
 

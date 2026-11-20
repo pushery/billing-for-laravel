@@ -25,6 +25,8 @@ enum BuyerAudience: string
      *
      * An unset value is anyone. Anything else that is not one of the cases is refused rather than read as anyone,
      * because a typo there would sell an offer meant for businesses to consumers.
+     *
+     * @param  mixed  $value  a value of the package's config, which a host may have set to any type
      */
     public static function fromConfig(mixed $value, string $key): self
     {

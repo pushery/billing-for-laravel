@@ -75,7 +75,7 @@ final readonly class GoodsConsignment
             throw new InvalidArgumentException("A consignment holds at least one item; got {$quantity}.");
         }
 
-        if ($goodsLocatedIn !== null && preg_match('/^[A-Z]{2}$/', $goodsLocatedIn) !== 1) {
+        if ($goodsLocatedIn !== null && preg_match('/^[A-Z]{2}$/D', $goodsLocatedIn) !== 1) {
             throw new InvalidArgumentException(
                 "State where the goods are as a country of two capital letters of ISO 3166; got [{$goodsLocatedIn}]."
             );

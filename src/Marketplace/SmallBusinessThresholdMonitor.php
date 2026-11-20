@@ -164,7 +164,7 @@ final readonly class SmallBusinessThresholdMonitor
         $earned = $this->counter->earnedIn($creator, $currency, $year)->minorUnits;
 
         $reached = array_values(array_filter(
-            array_map(static fn (mixed $level): float => is_numeric($level) ? (float) $level : 0.0, $levels),
+            array_map(floatval(...), array_filter($levels, is_numeric(...))),
             static fn (float $level): bool => $level > 0.0 && $earned >= (int) round($limit * $level),
         ));
 

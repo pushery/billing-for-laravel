@@ -95,7 +95,11 @@ final readonly class StripeEnabledPaymentMethods implements EnabledPaymentMethod
         return [];
     }
 
-    /** Whether an entry of the configuration is a method Stripe makes available to the account and the configuration shows. */
+    /**
+     * Whether an entry of the configuration is a method Stripe makes available to the account and the configuration shows.
+     *
+     * @param  mixed  $setting  an entry of the payment method configuration as the SDK decoded it
+     */
     private function isShown(mixed $setting): bool
     {
         return is_array($setting)

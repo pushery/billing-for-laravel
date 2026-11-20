@@ -96,7 +96,7 @@ final class InvalidDatevBatch extends RuntimeException
      * settle the wrong open item with it. Asserted over every row of a produced batch; six digits is the only
      * thing read as a date.
      */
-    public const string DUE_DATE_PATTERN = '/^(|"\d{6}")$/';
+    public const string DUE_DATE_PATTERN = '/^(|"\d{6}")$/D';
 
     public static function sachverhaltMustNotBeZero(string $account, string $configured): self
     {

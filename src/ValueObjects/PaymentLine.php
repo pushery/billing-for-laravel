@@ -58,7 +58,7 @@ final readonly class PaymentLine
             throw new InvalidArgumentException("The amounts of the payment line `{$description}` are in one currency, and they are in ".implode(' and ', $currencies).'.');
         }
 
-        if ($vatRate !== null && preg_match('/^\d{1,3}\.\d{2}$/', $vatRate) !== 1) {
+        if ($vatRate !== null && preg_match('/^\d{1,3}\.\d{2}$/D', $vatRate) !== 1) {
             throw new InvalidArgumentException("The VAT rate of a payment line is a percentage with two decimals, such as `19.00`, and `{$vatRate}` is not.");
         }
 

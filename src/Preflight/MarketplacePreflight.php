@@ -218,6 +218,7 @@ final readonly class MarketplacePreflight
      * The checkpoint keys the configured waiver list names: its string entries, and nothing from a value that
      * is not a list.
      *
+     * @param  mixed  $configured  a value of the package's config, which a host may have set to any type
      * @return list<string>
      */
     private function waivedKeys(mixed $configured): array
@@ -236,6 +237,8 @@ final readonly class MarketplacePreflight
      * Such a value waives nothing, and an entry that is not a string waives nothing either: that is the safe
      * reading. It must not stay silent, for the reason waiverIntegrityLine() gives. Null and an empty string
      * read as an empty list, because nothing was written there.
+     *
+     * @param  mixed  $configured  a value of the package's config, which a host may have set to any type
      */
     private function malformedWaivers(mixed $configured): ?string
     {
@@ -247,7 +250,7 @@ final readonly class MarketplacePreflight
             return 'the value is '.get_debug_type($configured).', not a list of checkpoint keys';
         }
 
-        $others = array_values(array_filter($configured, static fn (mixed $entry): bool => ! is_string($entry)));
+        $others = array_values(array_diff_key($configured, array_filter($configured, is_string(...))));
 
         if ($others === []) {
             return null;

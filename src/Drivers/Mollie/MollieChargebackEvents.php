@@ -198,7 +198,11 @@ final readonly class MollieChargebackEvents
         }
     }
 
-    /** A non-empty string Mollie wrote, or null. */
+    /**
+     * A non-empty string Mollie wrote, or null.
+     *
+     * @param  mixed  $value  a field Mollie wrote, as the response decoded it, which the SDK leaves untyped
+     */
     private static function text(mixed $value): ?string
     {
         return is_string($value) && $value !== '' ? $value : null;

@@ -121,10 +121,10 @@ final readonly class DuplicateBuyerReceiptCheckpoint implements GoLiveCheckpoint
         // Filtered to strings rather than cast, and the difference matters: the column is nullable, and a
         // cast would turn a null that slipped past the `whereNotNull` into an empty entry in a list an
         // operator is meant to search by. Nothing there is better than an empty name.
-        $named = $offenders->take(self::SAMPLE)
-            ->map(static fn (object $row): mixed => $row->settled_charge_reference)
-            ->filter(static fn (mixed $reference): bool => is_string($reference) && $reference !== '')
-            ->implode(', ');
+        $named = implode(', ', array_filter(
+            array_filter($offenders->take(self::SAMPLE)->pluck('settled_charge_reference')->all(), is_string(...)),
+            static fn (string $reference): bool => $reference !== '',
+        ));
 
         $more = $offenders->count() > self::SAMPLE ? ' and more' : '';
 

@@ -78,6 +78,7 @@ final readonly class DeclaredPriceChanges
     /**
      * The change, or every rule it breaks.
      *
+     * @param  mixed  $declared  a declared price change as the config holds it, which a host may have written as any type
      * @return PriceChange|list<string>
      */
     private function read(mixed $declared, string $key): PriceChange|array
@@ -132,6 +133,7 @@ final readonly class DeclaredPriceChanges
     /**
      * The new price of each tier, in the currency the tier is priced in.
      *
+     * @param  mixed  $declared  the change's prices as the config declares them, which a host may have written as any type
      * @param  list<string>  $problems
      *
      * @param-out  list<string>  $problems
@@ -174,6 +176,7 @@ final readonly class DeclaredPriceChanges
     /**
      * The new price per package of each meter, by tier, in the currency the catalog prices the meter in.
      *
+     * @param  mixed  $declared  the change's meter prices as the config declares them, which a host may have written as any type
      * @param  list<string>  $problems
      *
      * @param-out  list<string>  $problems
@@ -228,6 +231,7 @@ final readonly class DeclaredPriceChanges
     /**
      * What changes, by language.
      *
+     * @param  mixed  $declared  the change's texts as the config declares them, which a host may have written as any type
      * @param  list<string>  $problems
      *
      * @param-out  list<string>  $problems
@@ -251,10 +255,14 @@ final readonly class DeclaredPriceChanges
         return $texts;
     }
 
-    /** The day a value names, as midnight UTC, or null where it names none or one the calendar does not have. */
+    /**
+     * The day a value names, as midnight UTC, or null where it names none or one the calendar does not have.
+     *
+     * @param  mixed  $value  a day as the config declares it, which a host may have written as any type
+     */
     private function day(mixed $value): ?CarbonImmutable
     {
-        if (! is_string($value) || preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $parts) !== 1
+        if (! is_string($value) || preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D', $value, $parts) !== 1
             || ! checkdate((int) $parts[2], (int) $parts[3], (int) $parts[1])) {
             return null;
         }

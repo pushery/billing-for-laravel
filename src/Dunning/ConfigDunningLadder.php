@@ -86,6 +86,8 @@ final readonly class ConfigDunningLadder
      * written as "500" would be zero.
      *
      * @internal shared with BillingConfigValidator, which checks the ladder's order the same way.
+     *
+     * @param  mixed  $value  a number of days or minor units as configured, which env() may deliver as a string
      */
     public static function wholeNumber(mixed $value): ?int
     {
@@ -93,7 +95,7 @@ final readonly class ConfigDunningLadder
             return $value;
         }
 
-        return is_string($value) && preg_match('/^\s*\d+\s*$/', $value) === 1 ? (int) trim($value) : null;
+        return is_string($value) && preg_match('/^\s*\d+\s*$/D', $value) === 1 ? (int) trim($value) : null;
     }
 
     private function currency(): string

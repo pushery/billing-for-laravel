@@ -100,7 +100,11 @@ final readonly class TrialPolicy
         return DateTimeImmutable::createFromInterface($from)->add(new DateInterval("P{$days}D"));
     }
 
-    /** A per-tier trial override at `billing.tiers.<key>.trial.<knob>`, or null when there is none. */
+    /**
+     * A per-tier trial override at `billing.tiers.<key>.trial.<knob>`, or null when there is none.
+     *
+     * @return mixed the override as the config holds it, which a host may have set to any type, or null
+     */
     private function perTier(?string $tierKey, string $knob): mixed
     {
         if ($tierKey === null || $tierKey === '') {

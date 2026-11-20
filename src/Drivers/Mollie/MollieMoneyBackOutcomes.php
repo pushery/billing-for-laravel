@@ -234,6 +234,8 @@ final class MollieMoneyBackOutcomes implements ReportsMoneyBackOutcomes
      *
      * An outcome without its amount is left out rather than reported as zero, and the warning names it, so it can be
      * found. The next run reads it again.
+     *
+     * @param  mixed  $amount  the amount of a refund or a chargeback, as the response decoded it, which the SDK leaves untyped
      */
     private function amountOf(mixed $amount, string $kind, string $id): ?Money
     {
@@ -249,7 +251,11 @@ final class MollieMoneyBackOutcomes implements ReportsMoneyBackOutcomes
         }
     }
 
-    /** A date Mollie sent, or null where it sent none or one that does not parse. */
+    /**
+     * A date Mollie sent, or null where it sent none or one that does not parse.
+     *
+     * @param  mixed  $value  a date Mollie sent, as the response decoded it, which the SDK leaves untyped
+     */
     private function dateOf(mixed $value): ?CarbonImmutable
     {
         if (! is_string($value) || $value === '') {

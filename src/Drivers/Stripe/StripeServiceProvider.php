@@ -361,9 +361,9 @@ final class StripeServiceProvider extends ServiceProvider
 
     /**
      * Wire the package's default webhook effects onto the neutral effect bus so a Stripe app syncs plans,
-     * credits add-ons, reverses refunded ones and sends dunning out of the box. Effects are registered by
-     * class, so each is dispatched as its own queued job — isolated, retried and recorded on its own. A
-     * consuming app registers further effects on the same registry.
+     * credits add-ons, reverses refunded ones and sends dunning without registering an effect itself.
+     * Effects are registered by class, so each is dispatched as its own queued job — isolated, retried and
+     * recorded on its own. A consuming app registers further effects on the same registry.
      */
     private function registerDefaultEffects(WebhookEffectRegistry $registry): void
     {

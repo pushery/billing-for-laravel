@@ -169,6 +169,8 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
     /**
      * What an event about the intent itself reports: the intent it names, read back as a reference to it would be. A
      * `payment_intent.succeeded` delivered after a refund reports the refund, and so does a replay of it.
+     *
+     * @param  mixed  $intentId  the intent the event's object names, untyped in the SDK's StripeObject
      */
     private function ofIntentEvent(mixed $intentId): ?AccountPaymentChanged
     {
@@ -198,6 +200,7 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
      * neither a session nor an intent, or one Stripe does not know. An error that says nothing about the payment
      * travels.
      *
+     * @param  mixed  $reference  a payment reference as the payload or the caller holds it
      * @return list<AccountPaymentChanged>
      */
     private function ofReference(mixed $reference): array
@@ -292,6 +295,7 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
      * that stands paid, a partial and a full refund.
      *
      * @param  array<array-key, mixed>|null  $dispute  the dispute the event carries, as it stands now
+     * @param  mixed  $intentId  the intent a refund or a dispute names, untyped in the SDK's StripeObject
      */
     private function ofNamedIntent(mixed $intentId, ?AccountPaymentStatus $status = null, ?string $refund = null, ?array $dispute = null): ?AccountPaymentChanged
     {
@@ -463,6 +467,7 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
      * The change, with the payment's own mode: Stripe marks every object of a test-mode request `livemode: false`.
      *
      * @param  list<PaymentChargeback>  $chargebacks
+     * @param  mixed  $metadata  the payment's metadata, untyped in the SDK's StripeObject
      */
     private function change(string $paymentReference, AccountPaymentStatus $status, Money $amount, Money $refunded, Money $chargedBack, mixed $metadata, ?string $refund = null, bool $testmode = false, array $chargebacks = []): AccountPaymentChanged
     {

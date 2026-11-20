@@ -39,6 +39,7 @@ final class TaxModeUnsupported extends RuntimeException
      * back to the no-op, and every invoice goes out with 0% VAT while nothing looks broken.
      *
      * @param  list<string>  $resolvable
+     * @param  mixed  $mode  the configured tax mode, which a host may have set to any type
      */
     public static function unresolvable(mixed $mode, array $resolvable): self
     {

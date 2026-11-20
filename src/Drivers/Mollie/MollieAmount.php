@@ -17,7 +17,7 @@ use Pushery\Billing\ValueObjects\Money;
  * three-decimal one keeps all three.
  *
  * What lives here is only the provider's shape. Putting a `toMollie()` on the value object every driver
- * shares would name one provider in the neutral core — the same leak `ArchTest` refuses for imports, one
+ * shares would name one provider in the neutral core — the same leak the core keeps out of its imports, one
  * layer down, and it would invite an `toAdyen()` beside it until the core knew every driver by name.
  *
  * Nothing rounds. `fromDecimal()` refuses an amount with more precision than the currency has rather than
@@ -48,6 +48,8 @@ final readonly class MollieAmount
      *
      * A shape that is neither is refused rather than coerced. It means the response was not what we asked
      * for, and inventing a zero there would report a charge of nothing as a real amount.
+     *
+     * @param  mixed  $amount  a resource's amount as the response decoded it, which the SDK leaves untyped
      */
     public static function fromResource(mixed $amount): Money
     {
@@ -69,6 +71,8 @@ final readonly class MollieAmount
      * Only absence reads as zero. A present amount that cannot be read still refuses, for the reason above.
      * The parameter stays `mixed` because the two majors of the SDK disagree about the type: version 4 hands
      * over its own money object, version 3 the decoded JSON object.
+     *
+     * @param  mixed  $amount  an amount Mollie may leave out, as the response decoded it, which the SDK leaves untyped
      */
     public static function fromOptionalResource(mixed $amount, string $currency): Money
     {
@@ -81,6 +85,8 @@ final readonly class MollieAmount
      * Unlike {@see self::fromOptionalResource()}, absence stays absence here, for a caller that has to tell "Mollie
      * names no amount" from "the amount is zero". A present amount that cannot be read still refuses, and the
      * parameter stays `mixed` for the same reason as there.
+     *
+     * @param  mixed  $amount  an amount Mollie states only where it applies, as the response decoded it, which the SDK leaves untyped
      */
     public static function fromNullableResource(mixed $amount): ?Money
     {

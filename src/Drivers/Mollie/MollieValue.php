@@ -42,7 +42,11 @@ final readonly class MollieValue
 
     public const string METHOD_POINT_OF_SALE = 'pointofsale';
 
-    /** The wire value of a field Mollie sent back: the string itself on SDK 3, the enum's value on SDK 4. */
+    /**
+     * The wire value of a field Mollie sent back: the string itself on SDK 3, the enum's value on SDK 4.
+     *
+     * @param  mixed  $value  a field Mollie sent back: a string on version 3 of the SDK, an enum on version 4
+     */
     public static function of(mixed $value): ?string
     {
         if ($value instanceof BackedEnum) {
@@ -58,6 +62,8 @@ final readonly class MollieValue
      * Version 4 types it as one. Version 3 leaves it as the JSON decoder made it, which is an integer for a
      * numeric id, and a cast written at the call site reads as dead code to every tool that analyses against
      * version 4.
+     *
+     * @param  mixed  $id  a resource's id: a string on version 4, whatever the JSON decoder made of it on version 3
      */
     public static function id(mixed $id): string
     {
@@ -73,6 +79,7 @@ final readonly class MollieValue
      * @template T of object
      *
      * @param  class-string<T>  $class
+     * @param  mixed  $sent  what send() handed back, which version 3 of the SDK declares as mixed
      * @return T|null
      */
     public static function narrow(mixed $sent, string $class): ?object
@@ -86,6 +93,8 @@ final readonly class MollieValue
      * Version 3 hands the reason back as a plain object that may carry no code, or one that is not text;
      * version 4 as a typed class whose code is always a string, if possibly an empty one. An empty code quotes
      * nothing either.
+     *
+     * @param  mixed  $reason  a status reason: a plain object on version 3 of the SDK, a typed class on version 4
      */
     public static function reasonCode(mixed $reason): ?string
     {

@@ -50,6 +50,9 @@ final class WebhookPayloadSecrets
      *
      * The string comes back unchanged when nothing was removed, and so does anything that is not a JSON object or
      * array, so a caller can tell from the answer alone whether a row needs writing.
+     *
+     * @param  mixed  $json  a payload as a database row holds it, a JSON string or whatever else the column held
+     * @return mixed the payload without those keys, or the value unchanged
      */
     public static function stripJson(mixed $json): mixed
     {

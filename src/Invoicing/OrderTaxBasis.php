@@ -476,11 +476,11 @@ final readonly class OrderTaxBasis
             return match (true) {
                 $prefix === 'EL' => 'GR',
                 $prefix === 'XI' => 'GB',
-                preg_match('/^[A-Z]{2}$/', $prefix) === 1 => $prefix,
+                preg_match('/^[A-Z]{2}$/D', $prefix) === 1 => $prefix,
                 default => null,
             };
         }
 
-        return preg_match('/^([a-z]{2})_[a-z]+$/', $type, $matches) === 1 ? strtoupper($matches[1]) : null;
+        return preg_match('/^([a-z]{2})_[a-z]+$/D', $type, $matches) === 1 ? strtoupper($matches[1]) : null;
     }
 }

@@ -440,13 +440,16 @@ final readonly class ConsumerWithdrawal
      */
     private function refundedForWithdrawal(Model $owner, string $chargeReference, string $currency): ?Money
     {
-        $moved = BillingEvent::model()::query()
+        // A payload is decoded JSON, so one that holds no object is left out before a field of it is read.
+        $payloads = array_filter(BillingEvent::model()::query()
             ->where('type', 'admin.refund')
             ->where('subject_type', $owner->getMorphClass())
             ->where('subject_id', $owner->getKey())
             ->pluck('payload')
-            ->filter(static fn (mixed $payload): bool => is_array($payload)
-                && ($payload['charge'] ?? null) === $chargeReference
+            ->all(), is_array(...));
+
+        $moved = collect($payloads)
+            ->filter(static fn (array $payload): bool => ($payload['charge'] ?? null) === $chargeReference
                 && ($payload['kind'] ?? null) === RefundKind::StatutoryWithdrawal->value
                 && ($payload['currency'] ?? null) === $currency
                 && ($payload['successful'] ?? null) === true

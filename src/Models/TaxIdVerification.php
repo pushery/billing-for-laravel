@@ -51,7 +51,6 @@ class TaxIdVerification extends Model
 
     /**
      * The same defaults the schema carries, so a model created without these columns reads what its row holds.
-     * Held against the migration by ModelSchemaDefaultsTest.
      *
      * @var array<string, int>
      */

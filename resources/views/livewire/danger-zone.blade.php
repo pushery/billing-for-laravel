@@ -14,14 +14,16 @@
         @else
             <p class="mt-4 text-sm font-semibold text-red-900 dark:text-red-100">{{ __('billing::account.danger.confirm_question') }}</p>
 
-            {{-- Re-confirm identity before the irreversible cancel. A wrong secret / throttle lockout blocks it. --}}
+            {{-- Re-confirm identity before the irreversible cancel. A wrong secret / throttle lockout blocks it.
+                 The field names the error as its description only while the error stands: the element
+                 exists only then, and a description that names a missing id describes nothing. --}}
             <div class="mt-3">
                 <label for="reconfirm" class="block text-sm font-medium text-red-900 dark:text-red-100">
                     {{ $prompt }}
                 </label>
                 <input id="reconfirm" type="password" wire:model="credential" autocomplete="off"
                     class="mt-1 w-full max-w-sm rounded-lg border border-red-300 px-3 py-2 text-base sm:text-sm dark:border-red-800 dark:bg-gray-900"
-                    aria-describedby="reconfirm-error">
+                    @error('credential') aria-describedby="reconfirm-error" aria-invalid="true" @enderror>
                 @error('credential')
                     <p id="reconfirm-error" role="alert" class="mt-1 text-sm font-medium text-red-700 dark:text-red-300">{{ $message }}</p>
                 @enderror

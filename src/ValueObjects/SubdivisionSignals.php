@@ -60,11 +60,11 @@ final readonly class SubdivisionSignals
 
         // `US-CA` and `CA` are the same claim. The prefix is dropped rather than kept, because the country
         // is already a column of its own and two copies of one fact eventually disagree.
-        if (preg_match('/^[A-Z]{2}-([A-Z0-9]{1,3})$/', $clean, $matched) === 1) {
+        if (preg_match('/^[A-Z]{2}-([A-Z0-9]{1,3})$/D', $clean, $matched) === 1) {
             return $matched[1];
         }
 
-        return preg_match('/^[A-Z0-9]{1,3}$/', $clean) === 1 ? $clean : null;
+        return preg_match('/^[A-Z0-9]{1,3}$/D', $clean) === 1 ? $clean : null;
     }
 
     /** The subdivision this source named, or null where it named none this object can read. */

@@ -32,7 +32,11 @@ final class SafeExternalUrl
     /** @var list<string> The only schemes a browser navigates as a normal web address. */
     private const array ALLOWED_SCHEMES = ['http', 'https'];
 
-    /** The URL when it is a safe absolute http(s) URL with a host; null otherwise (missing, empty, or unsafe). */
+    /**
+     * The URL when it is a safe absolute http(s) URL with a host; null otherwise (missing, empty, or unsafe).
+     *
+     * @param  mixed  $url  a URL as a provider's answer or the config holds it, which may be any value
+     */
     public static function orNull(mixed $url): ?string
     {
         if (! is_string($url) || $url === '' || self::mayOpenAnotherHost($url)) {
@@ -61,6 +65,7 @@ final class SafeExternalUrl
      * nothing but a button that does not take them anywhere.
      *
      * @param  list<string>  $hosts  the hosts the driver's pages are served from
+     * @param  mixed  $url  a URL as a provider's answer or the config holds it, which may be any value
      */
     public static function onHosts(mixed $url, array $hosts): ?string
     {
@@ -88,6 +93,7 @@ final class SafeExternalUrl
      * back without the address, so nothing can send a customer to the refused page from here.
      *
      * @param  list<string>  $hosts  the hosts the driver's pages are served from
+     * @param  mixed  $url  a URL as a provider's answer or the config holds it, which may be any value
      */
     public static function refusedHost(mixed $url, array $hosts): ?string
     {

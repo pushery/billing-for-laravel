@@ -777,6 +777,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
      *     deemedSupply: ?DeemedSupplyOfGoods,
      *     consignment: ?GoodsConsignment,
      * }  $routed
+     * @param  mixed  $paymentIntent  the intent as the caller has it: its id, the SDK's PaymentIntent, or what an answer held
      */
     private function recordPendingSale(
         array $routed,

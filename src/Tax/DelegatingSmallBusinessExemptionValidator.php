@@ -12,7 +12,7 @@ use Pushery\Billing\Enums\VatIdValidation;
  * The shipped default: asks the bound {@see SmallBusinessIdValidator} and leaves the member state out.
  *
  * An implementation of the one-argument contract predates the member state, and it has to keep answering
- * when a caller starts passing one. Out of the box the one-argument contract is bound to the null validator,
+ * when a caller starts passing one. By default the one-argument contract is bound to the null validator,
  * so nothing is contacted and the answer is `Unavailable`. The member state reaches a register only when you
  * bind an implementation of this contract that sends it, {@see SmeOnTheWebExemptionValidator}.
  */

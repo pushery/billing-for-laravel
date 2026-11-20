@@ -103,6 +103,8 @@ final readonly class UsageFlusher
     /**
      * Fold each owner+meter+period's un-rolled pending usage into one rollup event. Scoped to a single
      * owner when one is given (a force-flush), otherwise every owner (the scheduled flush).
+     *
+     * @param  mixed  $ownerId  the key of the owner, of whatever type the owner model keys on, or null for every owner
      */
     private function coalesce(?string $ownerType = null, mixed $ownerId = null): void
     {
@@ -182,6 +184,7 @@ final readonly class UsageFlusher
      * rollup mid-backoff is still reported here on purpose: the invoice is closing now, so the usage goes on it
      * regardless of when its next scheduled retry would have been.
      *
+     * @param  mixed  $ownerId  the key of the owner, of whatever type the owner model keys on
      * @return Collection<int, UsageEvent>
      */
     private function pendingRollupsFor(string $ownerType, mixed $ownerId): Collection

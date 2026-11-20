@@ -35,33 +35,45 @@ final readonly class LanguageFallbackLoader implements Loader
     }
 
     /**
-     * @param  string  $locale
-     * @param  string  $group
-     * @param  string|null  $namespace
+     * @param  mixed  $locale  the locale, untyped in Laravel's Loader contract
+     * @param  mixed  $group  the group, untyped in Laravel's Loader contract
+     * @param  mixed  $namespace  the namespace, untyped in Laravel's Loader contract
+     *
+     * @phpstan-param  string  $locale
+     * @phpstan-param  string  $group
+     * @phpstan-param  string|null  $namespace
+     *
      * @return array<array-key, mixed>
      */
     public function load(mixed $locale, mixed $group, mixed $namespace = null): array
     {
-        $lines = $this->lines((string) $locale, (string) $group, $namespace);
-        $language = self::languageOf((string) $locale);
+        $lines = $this->lines($locale, $group, $namespace);
+        $language = self::languageOf($locale);
 
         if ($namespace !== $this->namespace || $language === null) {
             return $lines;
         }
 
-        return array_replace_recursive($this->lines($language, (string) $group, $namespace), $lines);
+        return array_replace_recursive($this->lines($language, $group, $namespace), $lines);
     }
 
     /**
-     * @param  string  $namespace
-     * @param  string  $hint
+     * @param  mixed  $namespace  the namespace, untyped in Laravel's Loader contract
+     * @param  mixed  $hint  the directory of the namespace, untyped in Laravel's Loader contract
+     *
+     * @phpstan-param  string  $namespace
+     * @phpstan-param  string  $hint
      */
     public function addNamespace(mixed $namespace, mixed $hint): void
     {
         $this->inner->addNamespace($namespace, $hint);
     }
 
-    /** @param  string  $path */
+    /**
+     * @param  mixed  $path  the directory of JSON translations, untyped in Laravel's Loader contract
+     *
+     * @phpstan-param  string  $path
+     */
     public function addJsonPath(mixed $path): void
     {
         $this->inner->addJsonPath($path);

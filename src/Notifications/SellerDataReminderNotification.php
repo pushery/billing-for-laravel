@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\SellerDataEscalationStage;
 use Pushery\Billing\Enums\SellerDataMeasure;
 use Pushery\Billing\Support\LocalizedDate;
+use Pushery\Billing\Support\MarkdownText;
 
 /**
  * A seller's record is still missing something, and the notice names what.
@@ -42,14 +43,17 @@ final class SellerDataReminderNotification extends BillingNotification
 
     public function toMail(object $notifiable): MailMessage
     {
+        $introKey = $this->reminder === SellerDataEscalationStage::SecondReminder
+            ? 'billing::notifications.seller_data_reminder.intro_second'
+            : 'billing::notifications.seller_data_reminder.intro_first';
+
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.seller_data_reminder.subject'))
-            ->line(Lang::get(
-                $this->reminder === SellerDataEscalationStage::SecondReminder
-                    ? 'billing::notifications.seller_data_reminder.intro_second'
-                    : 'billing::notifications.seller_data_reminder.intro_first',
-                ['fields' => implode(', ', array_map($this->label(...), $this->missingFields))],
-            ));
+            // A field no translation names is shown by its name in the reporting profile, which the application can
+            // bind, so the fields go into the Markdown line as text.
+            ->line(MarkdownText::interpolate((string) Lang::get($introKey), [
+                'fields' => implode(', ', array_map($this->label(...), $this->missingFields)),
+            ]));
 
         if ($this->measure instanceof SellerDataMeasure && $this->measureFrom instanceof CarbonInterface) {
             $mail->line(Lang::get(

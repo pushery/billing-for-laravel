@@ -30,7 +30,7 @@ final class StripeAccountClient
     {
         $key = trim($account->credential);
 
-        if (preg_match('/^[sr]k_(test|live)_\S+$/', $key, $mode) !== 1) {
+        if (preg_match('/^[sr]k_(test|live)_\S+$/D', $key, $mode) !== 1) {
             throw new InvalidArgumentException("The credential of the Stripe payment account `{$account->key}` is no secret or restricted key. A Stripe key begins `sk_test_`, `sk_live_`, `rk_test_` or `rk_live_`.");
         }
 
