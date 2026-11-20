@@ -146,7 +146,7 @@ final readonly class MollieWebhookVerifier implements WebhookVerifier
         }
 
         return array_values(array_filter(
-            array_map(static fn (mixed $secret): string => is_string($secret) ? trim($secret) : '', $configured),
+            array_map(trim(...), array_filter($configured, is_string(...))),
             static fn (string $secret): bool => $secret !== '',
         ));
     }

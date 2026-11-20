@@ -417,7 +417,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
 
         $details = is_object($mandate?->details) ? get_object_vars($mandate->details) : [];
         $text = static fn (string $field): ?string => is_string($details[$field] ?? null) && $details[$field] !== '' ? $details[$field] : null;
-        $expiry = preg_match('/^(\d{4})-(\d{2})-\d{2}$/', $text('cardExpiryDate') ?? '', $parts) === 1 ? $parts : null;
+        $expiry = preg_match('/^(\d{4})-(\d{2})-\d{2}$/D', $text('cardExpiryDate') ?? '', $parts) === 1 ? $parts : null;
 
         return new PaymentMethod(
             id: $mandateId,

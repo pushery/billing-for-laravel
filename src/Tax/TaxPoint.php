@@ -90,7 +90,7 @@ final readonly class TaxPoint
     public function ratesAtExecution(?string $country): bool
     {
         $configured = $this->config->get('billing.tax_rate_at_execution', self::RATE_AT_EXECUTION);
-        $countries = is_array($configured) ? array_map(static fn (mixed $code): string => is_string($code) ? strtoupper(trim($code)) : '', $configured) : [];
+        $countries = is_array($configured) ? array_map(static fn (string $code): string => strtoupper(trim($code)), array_filter($configured, is_string(...))) : [];
 
         return $country !== null && in_array(strtoupper(trim($country)), $countries, true);
     }

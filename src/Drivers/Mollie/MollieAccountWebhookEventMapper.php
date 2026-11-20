@@ -215,6 +215,7 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Names
     /**
      * The idempotency key the charge carried, and the rest of its metadata as the charge's options set it.
      *
+     * @param  mixed  $metadata  the charge's metadata: an object on version 4 of the SDK, decoded JSON on version 3, or nothing
      * @return array{0: ?string, 1: array<string, string|int>}
      */
     private function metadataOf(mixed $metadata): array

@@ -15,7 +15,11 @@ enum ToastLevel: string
     case Warning = 'warning';
     case Danger = 'danger';
 
-    /** Resolve an untrusted wire value to a known level, defaulting to Info. */
+    /**
+     * Resolve an untrusted wire value to a known level, defaulting to Info.
+     *
+     * @param  mixed  $value  a level as the browser sent it, which may be any value
+     */
     public static function fromWire(mixed $value): self
     {
         return is_string($value) ? (self::tryFrom($value) ?? self::Info) : self::Info;

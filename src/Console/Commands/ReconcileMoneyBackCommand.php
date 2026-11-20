@@ -83,6 +83,6 @@ final class ReconcileMoneyBackCommand extends Command
     {
         $value = $this->option($option);
 
-        return is_string($value) && preg_match('/^\d+$/', $value) === 1 && (int) $value >= 1 ? (int) $value : null;
+        return is_string($value) && preg_match('/^\d+$/D', $value) === 1 && (int) $value >= 1 ? (int) $value : null;
     }
 }

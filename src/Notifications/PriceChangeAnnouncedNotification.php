@@ -9,6 +9,7 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\BillingAction;
 use Pushery\Billing\Support\LocalizedDate;
+use Pushery\Billing\Support\MarkdownText;
 
 /**
  * The announcement of a declared price change to a subscription it reaches: from which day the new price applies, what
@@ -36,7 +37,8 @@ final class PriceChangeAnnouncedNotification extends BillingNotification
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.price_change.subject'))
             ->line(Lang::get('billing::notifications.price_change.intro', ['date' => $date]))
-            ->line($this->texts[$locale] ?? $this->texts[substr($locale, 0, 2)] ?? $this->texts['en'] ?? '')
+            // What changes is the application's text, so it goes into the mail as a line of text.
+            ->line(MarkdownText::text($this->texts[$locale] ?? $this->texts[substr($locale, 0, 2)] ?? $this->texts['en'] ?? ''))
             ->line(Lang::get('billing::notifications.price_change.cancel'));
 
         return $this->withAction($mail, Lang::get('billing::notifications.price_change.cta'), $this->actionFor($notifiable, BillingAction::Plan));

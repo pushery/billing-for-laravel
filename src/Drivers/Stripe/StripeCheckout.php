@@ -125,7 +125,7 @@ final readonly class StripeCheckout implements Checkout
 
         // The Stripe SDK's generated param shape cannot express a payload assembled at runtime (optional
         // trial/tax/promo/discount groups, a variable line-item list). The payload is a valid
-        // subscription-mode Checkout Session request; its shape is asserted field-by-field in StripeCheckoutTest.
+        // subscription-mode Checkout Session request, field by field.
         // @phpstan-ignore argument.type (the SDK's generated shape cannot express a payload assembled at run time)
         $session = $this->stripe->checkout->sessions->create($this->payload($billable, $tierKey, $price, $customerId, $couponCode, $merchant, $declarationReference, $collectTaxId, $type, $callerReference, $interval));
 

@@ -141,7 +141,9 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
      * @template T
      *
      * @param  callable(): T  $call
-     * @return T
+     * @return mixed what $call returns, whatever its type
+     *
+     * @phpstan-return T
      */
     private function loggingProviderNotices(callable $call): mixed
     {
@@ -254,29 +256,36 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
         $account = $this->stripe->accounts->retrieve($row->account_reference);
         $requirements = $account->requirements ?? null;
 
-        // Only the entries that are strings, and non-string entries are dropped rather than coerced. A
-        // requirement key is a string in every version of this API; something else in that position means
-        // the shape changed, and printing `Array` or `1` as a thing a merchant must go and do is worse
-        // than printing one item fewer.
-        $list = static function (mixed $value): array {
-            $items = match (true) {
-                is_array($value) => $value,
-                $value instanceof StripeObject => $value->toArray(),
-                default => [],
-            };
-
-            return array_values(array_filter($items, is_string(...)));
-        };
-
         $due = $requirements === null ? null : ($requirements['currently_due'] ?? null);
         $eventually = $requirements === null ? null : ($requirements['eventually_due'] ?? null);
         $reason = $requirements === null ? null : ($requirements['disabled_reason'] ?? null);
 
         return [
-            'currently_due' => $list($due),
-            'eventually_due' => $list($eventually),
+            'currently_due' => $this->requirementKeys($due),
+            'eventually_due' => $this->requirementKeys($eventually),
             'disabled_reason' => is_string($reason) && $reason !== '' ? $reason : null,
         ];
+    }
+
+    /**
+     * The requirement keys of a list the provider sent, its string entries only.
+     *
+     * Non-string entries are dropped rather than coerced. A requirement key is a string in every version of
+     * this API; something else in that position means the shape changed, and printing `Array` or `1` as a
+     * thing a merchant must go and do is worse than printing one item fewer.
+     *
+     * @param  mixed  $value  a list of requirements as the SDK holds it: an array, a StripeObject, or nothing
+     * @return list<string>
+     */
+    private function requirementKeys(mixed $value): array
+    {
+        $items = match (true) {
+            is_array($value) => $value,
+            $value instanceof StripeObject => $value->toArray(),
+            default => [],
+        };
+
+        return array_values(array_filter($items, is_string(...)));
     }
 
     /**

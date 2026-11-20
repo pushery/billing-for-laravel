@@ -34,10 +34,15 @@ final class TimedStripeClient extends StripeClient
     }
 
     /**
-     * @param  'delete'|'get'|'post'  $method
-     * @param  string  $path
-     * @param  array<array-key, mixed>|null  $params
-     * @param  array<array-key, mixed>|RequestOptions|null  $opts
+     * @param  mixed  $method  the HTTP method, untyped in the method of StripeClient this overrides
+     * @param  mixed  $path  the path of the request, untyped in the method of StripeClient this overrides
+     * @param  mixed  $params  the parameters of the request, untyped in the method of StripeClient this overrides
+     * @param  mixed  $opts  the options of the request, untyped in the method of StripeClient this overrides
+     *
+     * @phpstan-param  'delete'|'get'|'post'  $method
+     * @phpstan-param  string  $path
+     * @phpstan-param  array<array-key, mixed>|null  $params
+     * @phpstan-param  array<array-key, mixed>|RequestOptions|null  $opts
      */
     public function request(mixed $method, mixed $path, mixed $params, mixed $opts): StripeObject
     {
@@ -50,7 +55,9 @@ final class TimedStripeClient extends StripeClient
      * @template T
      *
      * @param  Closure(): T  $request
-     * @return T
+     * @return mixed what $request returns, whatever its type
+     *
+     * @phpstan-return T
      */
     private function withTimeouts(Closure $request): mixed
     {

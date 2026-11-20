@@ -44,7 +44,7 @@ final class WireKit
             return true;
         }
 
-        $release = (string) preg_replace('/\.x-dev$/', '.'.PHP_INT_MAX, ltrim($version, 'vV'));
+        $release = (string) preg_replace('/\.x-dev$/D', '.'.PHP_INT_MAX, ltrim($version, 'vV'));
 
         return version_compare($release, self::MINIMUM, '>=');
     }

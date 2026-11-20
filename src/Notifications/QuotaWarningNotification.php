@@ -7,6 +7,7 @@ namespace Pushery\Billing\Notifications;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\BillingAction;
+use Pushery\Billing\Support\MarkdownText;
 
 /**
  * Warns the owner that a metered allowance is running out, while they can still do something about it —
@@ -29,11 +30,11 @@ final class QuotaWarningNotification extends BillingNotification
     {
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.quota_warning.subject', ['meter' => $this->label]))
-            ->line(Lang::get('billing::notifications.quota_warning.intro', [
-                'meter' => $this->label,
+            // The meter is named by the label the application configures, so it goes into the Markdown line as text.
+            ->line(MarkdownText::interpolate((string) Lang::get('billing::notifications.quota_warning.intro', [
                 'used' => $this->used,
                 'included' => $this->included,
-            ]))
+            ]), ['meter' => $this->label]))
             ->line(Lang::get('billing::notifications.quota_warning.outro'));
 
         return $this->withAction(

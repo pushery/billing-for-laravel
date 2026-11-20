@@ -47,8 +47,13 @@ trait DegradesGracefully
      * @template TValue
      *
      * @param  callable(): TValue  $resolve
-     * @param  TValue  $fallback
-     * @return TValue
+     * @param  mixed  $fallback  what the panel shows instead, of the type its data has
+     *
+     * @phpstan-param  TValue  $fallback
+     *
+     * @return mixed the panel's data, or the fallback where it could not be read
+     *
+     * @phpstan-return TValue
      */
     protected function orDegrade(callable $resolve, mixed $fallback = null): mixed
     {
@@ -82,6 +87,8 @@ trait DegradesGracefully
      *
      * Everything else is deliberately identical — a 403/404 still propagates rather than softening into
      * an outage, and the log still carries the class name only, never the message.
+     *
+     * @return mixed what $resolve returns, or null where it failed
      */
     protected function orOmit(callable $resolve): mixed
     {

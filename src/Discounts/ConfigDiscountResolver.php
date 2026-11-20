@@ -72,7 +72,7 @@ final readonly class ConfigDiscountResolver implements DiscountResolver
 
         $end = Carbon::parse($expiresAt);
 
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', trim($expiresAt)) === 1) {
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/D', trim($expiresAt)) === 1) {
             $end = $end->endOfDay();
         }
 

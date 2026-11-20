@@ -33,6 +33,8 @@ enum RoundingResidual: string
      *
      * Null for anything unrecognized, so a caller decides what to do about a value it cannot honor rather
      * than silently getting one of the two directions.
+     *
+     * @param  mixed  $value  a value of the package's config, which a host may have set to any type
      */
     public static function fromConfigured(mixed $value): ?self
     {
@@ -55,6 +57,8 @@ enum RoundingResidual: string
      * that already happened, and refusing to answer would make an old charge unreadable over a setting that
      * has nothing to do with it. The resolver that prices a sale does throw, because a sale not yet made can
      * still be stopped.
+     *
+     * @param  mixed  $configured  a value of the package's config, which a host may have set to any type
      */
     public static function forReconstruction(mixed $configured): self
     {

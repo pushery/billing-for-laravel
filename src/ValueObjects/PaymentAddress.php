@@ -33,7 +33,7 @@ final readonly class PaymentAddress
         public ?string $phone = null,
         public ?string $title = null,
     ) {
-        if ($country !== null && preg_match('/^[A-Z]{2}$/', $country) !== 1) {
+        if ($country !== null && preg_match('/^[A-Z]{2}$/D', $country) !== 1) {
             throw new InvalidArgumentException("The country of a payment address is its ISO 3166-1 code in two capital letters, such as `DE`, and `{$country}` is not.");
         }
     }

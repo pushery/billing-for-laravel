@@ -62,6 +62,7 @@ return [
         'ends_on' => 'Contract eindigt op (optioneel)',
         'resolve' => 'Afhandelen',
         'resolved' => 'Verklaring afgehandeld.',
+        'busy' => 'De verklaring wordt nog afgehandeld.',
         'gone' => 'Die verklaring wacht niet meer op een persoon.',
         'invalid_day' => 'Voer de dag in als datum.',
     ],

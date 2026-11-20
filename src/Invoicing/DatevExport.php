@@ -441,7 +441,7 @@ final readonly class DatevExport
 
         // Delimited with ~ rather than / because the permitted set itself contains a slash, which would
         // close the pattern early and turn a validation into a syntax error nobody sees until it runs.
-        if (preg_match('~^['.InvalidDatevBatch::REFERENCE_ALPHABET.']*$~', $reference) !== 1) {
+        if (preg_match('~^['.InvalidDatevBatch::REFERENCE_ALPHABET.']*$~D', $reference) !== 1) {
             throw InvalidDatevBatch::referenceHasForbiddenCharacter($reference);
         }
 
@@ -1180,7 +1180,7 @@ final readonly class DatevExport
     {
         $configured = $this->datev()['business_year_start'] ?? '01-01';
 
-        if (! is_string($configured) || preg_match('/^(\d{2})-(\d{2})$/', $configured, $parts) !== 1
+        if (! is_string($configured) || preg_match('/^(\d{2})-(\d{2})$/D', $configured, $parts) !== 1
             || ! checkdate((int) $parts[1], (int) $parts[2], 2001)) {
             throw InvalidBillingConfig::forKey('billing.datev.business_year_start', 'must be a day of the year as MM-DD, such as 07-01');
         }

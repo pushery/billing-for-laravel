@@ -370,6 +370,19 @@ final class BillingServiceProvider extends ServiceProvider
     private const string MIGRATIONS = __DIR__.'/../database/migrations/server';
 
     /**
+     * The sections of the config that are catalogs, as dotted paths from the config key: maps whose
+     * keys the host chooses, one entry per plan, per document or per signing key. A key that a
+     * published catalog leaves out was removed by the host rather than added by a later release, so
+     * the merge takes a published catalog as it stands. A catalog the host never published arrives
+     * whole from the default. Filled from the shipped default instead, a removed hub entry came back
+     * to the sidebar and a renamed zero tier came back as `free`, appended and so ranked above every
+     * other tier.
+     *
+     * @var list<string>
+     */
+    private const array CATALOG_SECTIONS = ['billing.tiers', 'billing.navigation'];
+
+    /**
      * Whether the bundled migrations are registered automatically. Disable with
      * self::ignoreMigrations() to publish and manage them in the host app instead.
      */
@@ -1135,7 +1148,7 @@ final class BillingServiceProvider extends ServiceProvider
      */
     private function authorizeOwnerChannel(BroadcastManager $broadcasting): void
     {
-        $broadcasting->channel('billing.{ownerType}.{ownerId}', function (mixed $user, string $ownerType, string $ownerId): bool {
+        $broadcasting->channel('billing.{ownerType}.{ownerId}', function (?object $user, string $ownerType, string $ownerId): bool {
             if (! $user instanceof Model || ! (bool) $this->app->make(Repository::class)->get('billing.realtime.enabled', false)) {
                 return false;
             }
@@ -1186,7 +1199,7 @@ final class BillingServiceProvider extends ServiceProvider
         //
         // Said explicitly because a consumer reads "the routes do not exist" literally: these three endpoints
         // carry no CSRF middleware (the verifier authenticates by signature instead), so that is exactly the
-        // kind of promise somebody stops checking. `MasterSwitchLeavesOnlyTheWebhooksTest` holds the answer.
+        // kind of promise somebody stops checking. With billing off, these three are the only routes still mounted.
         if ((bool) $this->app->make(Repository::class)->get('billing.enabled', true)) {
             // A tier that bills for usage on a driver that cannot report it would count every unit and
             // invoice none of them. Refuse to boot instead.
@@ -1886,11 +1899,14 @@ final class BillingServiceProvider extends ServiceProvider
      * `array_is_list([])` is true, which is the behavior you want: an empty array is a host
      * saying "none", and descending into it could only re-introduce what it emptied.
      *
-     * Note the early return, because it bounds what this can rescue. A host with a cached
-     * config is never merged at all -- the framework's design, not this method's limit. For
-     * those installations the published file is the whole truth, which is why a read site
-     * reaching a nested key needs its fallback to agree with the shipped default. The two are
-     * halves of one guarantee.
+     * Recursion stops at a catalog as well, a section named in CATALOG_SECTIONS. Its keys are the
+     * host's, so a key missing from the published catalog is one the host removed, and laying the
+     * default under it would hand that entry back.
+     *
+     * A host with a cached config is not merged at runtime: the cache already holds the merge
+     * `config:cache` did when it ran. A key a later release adds is missing from it until the host
+     * caches again, so a package that reads a nested key needs its read-site fallback to agree with
+     * the shipped default.
      *
      * One honest note on scope: `license.php` has no nested map today, so routing it through
      * here changes nothing for it. It is routed through anyway, because the alternative leaves
@@ -1914,26 +1930,18 @@ final class BillingServiceProvider extends ServiceProvider
             is_array($shipped) ? $shipped : [],
             is_array($existing) ? $existing : [],
             $key.'.',
+            self::CATALOG_SECTIONS,
         ));
     }
-
-    /**
-     * The sections that are catalogs: maps keyed by names the host chooses, where a key the published
-     * file leaves out was removed rather than not yet published. The merge takes a published catalog as
-     * it stands. Filled from the shipped default, a removed hub entry came back to the sidebar and a
-     * renamed zero tier came back as `free`, appended and so ranked above every other tier.
-     *
-     * @var list<string>
-     */
-    private const array CATALOG_SECTIONS = ['billing.tiers', 'billing.navigation'];
 
     /**
      * @param  array<array-key, mixed>  $shipped
      * @param  array<array-key, mixed>  $published
      * @param  string  $path  the dotted path of the two maps, so a catalog section is recognized at any depth
+     * @param  list<string>  $catalogs  the dotted paths of the catalogs, which the merge takes as published
      * @return array<array-key, mixed>
      */
-    private function mergeConfigSections(array $shipped, array $published, string $path = ''): array
+    private function mergeConfigSections(array $shipped, array $published, string $path = '', array $catalogs = []): array
     {
         foreach ($shipped as $key => $value) {
             if (! array_key_exists($key, $published)) {
@@ -1946,8 +1954,8 @@ final class BillingServiceProvider extends ServiceProvider
             // list, or the published value is a scalar or an explicit null, what the host wrote
             // stands. An explicit null is a value like any other here, which keeps "set it to null
             // to switch this off" working exactly as the shipped config file describes it.
-            if (is_array($value) && is_array($published[$key]) && ! array_is_list($value) && ! array_is_list($published[$key]) && ! in_array($path.$key, self::CATALOG_SECTIONS, true)) {
-                $published[$key] = $this->mergeConfigSections($value, $published[$key], $path.$key.'.');
+            if (is_array($value) && is_array($published[$key]) && ! array_is_list($value) && ! array_is_list($published[$key]) && ! in_array($path.$key, $catalogs, true)) {
+                $published[$key] = $this->mergeConfigSections($value, $published[$key], $path.$key.'.', $catalogs);
             }
         }
 

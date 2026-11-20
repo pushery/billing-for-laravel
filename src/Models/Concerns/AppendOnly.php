@@ -72,7 +72,9 @@ trait AppendOnly
      * @template T
      *
      * @param  callable(): T  $callback
-     * @return T
+     * @return mixed what $callback returns, whatever its type
+     *
+     * @phpstan-return T
      */
     public static function purging(callable $callback): mixed
     {
@@ -135,8 +137,8 @@ trait AppendOnly
     /**
      * What to tell a caller whose delete was refused.
      *
-     * It says what does remove the row, where anything does. AppendOnlyRuleHasOneHomeTest holds that
-     * against the retention matrix and the foreign keys.
+     * It says what does remove the row, where anything does, as the retention matrix and the foreign keys
+     * decide it.
      */
     abstract protected static function appendOnlyDeleteRefusal(): string;
 }

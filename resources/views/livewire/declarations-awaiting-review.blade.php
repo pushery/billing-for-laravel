@@ -7,6 +7,10 @@
     {{-- Persistent live regions, like the console's: the wrappers stay in the DOM and only their text toggles, so a
          screen reader announces the change. --}}
     <div role="status" aria-live="polite">
+        {{-- A resolution that has run for a second is announced here, as WireKit's buttons announce theirs: the
+             disabled button shows the wait to a sighted reader and says nothing to a screen reader. Livewire's styles
+             keep the line hidden until that second has passed, and it is hidden again once the answer is drawn. --}}
+        <span class="sr-only" wire:loading.delay.longest wire:target="resolveCancellation, resolveWithdrawal">{{ __('billing::admin.declarations.busy') }}</span>
         @if ($result === 'resolved')
             <div class="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm text-green-800 dark:border-green-900 dark:bg-green-950/40 dark:text-green-200">
                 {{ __('billing::admin.declarations.resolved') }}

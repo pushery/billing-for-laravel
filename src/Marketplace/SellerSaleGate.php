@@ -198,7 +198,7 @@ final readonly class SellerSaleGate
     {
         $configured = $this->configuredImportSchemeNumber();
 
-        if ($configured === null || preg_match('/^IM\d{10}$/', $configured) !== 1) {
+        if ($configured === null || preg_match('/^IM\d{10}$/D', $configured) !== 1) {
             throw RegimeNotPermitted::importedConsignmentWithoutAnImportSchemeNumber($configured);
         }
     }

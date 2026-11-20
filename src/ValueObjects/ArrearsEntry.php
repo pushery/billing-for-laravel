@@ -33,6 +33,9 @@ final readonly class ArrearsEntry
 {
     use SerializesModels;
 
+    /**
+     * @param  mixed  $subscription  the roster's own key or record of the subscription, whose shape the roster's storage decides
+     */
     public function __construct(
         public Model $owner,
         public MerchantScope $merchant,

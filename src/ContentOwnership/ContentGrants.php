@@ -352,7 +352,11 @@ final readonly class ContentGrants
         }
 
         try {
-            return $this->insertBehindASavepoint($attributes);
+            // The insert runs in a transaction of its own, which inside a caller's transaction is a savepoint: a
+            // collision rolls back the insert alone, and the caller's transaction goes on.
+            $query = AccessGrant::model()::query();
+
+            return $query->getModel()->getConnection()->transaction(static fn (): AccessGrant => $query->create($attributes));
         } catch (UniqueConstraintViolationException $collision) {
             $raced = $this->existingGrant($owner, $content, $merchant, locking: true);
 
@@ -444,17 +448,5 @@ final readonly class ContentGrants
         }
 
         return $query->first();
-    }
-
-    /**
-     * Insert the row in a transaction of its own, which inside a caller's transaction is a savepoint.
-     *
-     * @param  array<string, mixed>  $attributes
-     */
-    private function insertBehindASavepoint(array $attributes): AccessGrant
-    {
-        $query = AccessGrant::model()::query();
-
-        return $query->getModel()->getConnection()->transaction(static fn (): AccessGrant => $query->create($attributes));
     }
 }

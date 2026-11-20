@@ -9,8 +9,8 @@ use Pushery\Billing\Contracts\CanTransactMoney;
 
 /**
  * The package default eligibility gate: everyone may transact. Eligibility (age, KYC, …) is a
- * project-specific requirement, so money flows out of the box; an app that needs to gate it binds the
- * fail-closed ComposedEligibilityGate with its own checks instead.
+ * project-specific requirement, so by default money flows without a check; an app that needs to gate
+ * it binds the fail-closed ComposedEligibilityGate with its own checks instead.
  */
 final readonly class AlwaysEligible implements CanTransactMoney
 {

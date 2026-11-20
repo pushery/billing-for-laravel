@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/pushery/billing-for-laravel">
-    <img src="art/header.png" alt="Billing for Laravel" width="100%">
+    <img src="https://raw.githubusercontent.com/pushery/billing-for-laravel/main/art/header.png" alt="Billing for Laravel" width="100%">
   </a>
 </p>
 
@@ -11,12 +11,12 @@
 [![Laravel Versions](https://badge.laravel.cloud/badge/pushery/billing-for-laravel?style=flat)](https://packagist.org/packages/pushery/billing-for-laravel)
 [![License](https://img.shields.io/packagist/l/pushery/billing-for-laravel.svg)](LICENSE)
 
-[![Tests](https://img.shields.io/badge/tests-Pest%205-8BC34A.svg)](https://pestphp.com)
-![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)
-![Type Coverage](https://img.shields.io/badge/types-100%25-brightgreen.svg)
-[![PHPStan](https://img.shields.io/badge/PHPStan-max-blue.svg)](https://phpstan.org)
-[![Code Style](https://img.shields.io/badge/code%20style-pint-orange.svg)](https://laravel.com/docs/pint)
-![Databases](https://img.shields.io/badge/tested%20on-PostgreSQL%20%2B%20MySQL-336791.svg)
+[![Tests: Pest 5](https://img.shields.io/badge/tests-Pest%205-8BC34A.svg)](https://pestphp.com)
+![Coverage: 100%](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)
+![Type coverage: 100%](https://img.shields.io/badge/types-100%25-brightgreen.svg)
+[![PHPStan: level 10](https://img.shields.io/badge/PHPStan-10-blue.svg)](https://phpstan.org)
+[![Code style: Pint](https://img.shields.io/badge/code%20style-pint-orange.svg)](https://laravel.com/docs/pint)
+![Tested on: PostgreSQL + MySQL](https://img.shields.io/badge/tested%20on-PostgreSQL%20%2B%20MySQL-336791.svg)
 
 Provider-neutral billing for Laravel: subscriptions, invoices, metered usage, dunning, tax and e-invoicing. Three drivers, one set of contracts.
 
@@ -27,7 +27,7 @@ Everything crosses a small set of contracts, so your app talks to _billing_ — 
 - **Two-layer, provider-neutral core** — `PaymentRails` (moves money, stores mandates) and `BillingEngine` (the recurring cycle). Money crosses the boundary as a `Money` value object, never a raw provider response.
 - **Subscriptions** — in-app upgrade/downgrade **swap** with a proration **preview**, cancel-into-grace, resume, and immediate cancel — the client submits a tier _key_, never a price (anti-price-injection).
 - **Account hub** — a publishable Livewire hub (overview, subscription, change-plan, payment methods, invoices, usage, payment recovery, danger zone) with config-driven routes and a self-contained Blade view set. Drop a `<x-billing::banner />` into your layout to surface a failed payment, a lapsing grace period or a trial about to end. Screens of your own read an owner's state through `OwnerSubscriptionState`, the reader the hub itself asks.
-- **Webhooks** — an idempotent, signature-verified backbone with effects out of the box (plan-sync, add-on credit, dunning notice, invoice persistence) and a fail-loud webhook-secret guard.
+- **Webhooks** — an idempotent, signature-verified backbone whose default effects come registered (plan-sync, add-on credit, dunning notice, invoice persistence), and a fail-loud webhook-secret guard.
 - **Usage-based billing** — charge a base fee _plus_ what a customer actually used, with a retry that cannot double-bill, an outage that cannot silently lose revenue, oversell-safe reserve/work/settle metering, quota policies, and prepaid units that never expire.
 - **Entitlements & seats** — a separate `License` gate for what a tier _unlocks_ (feature grants + numeric limits), independent of what it costs, plus team seats and a User-XOR-Team owner model.
 - **Dunning, suspension & tax** — a config-driven multi-level dunning ladder, a per-surface `423 Locked` suspension gate driven by a stored delinquency clock (outage-safe), and provider tax (Stripe Tax) on the invoice with a pluggable `TaxCalculator` seam for a local computation path.
@@ -39,7 +39,7 @@ Everything crosses a small set of contracts, so your app talks to _billing_ — 
 - PHP 8.4+
 - Laravel 13+
 
-Tested on PostgreSQL and MySQL 8.4, the databases Laravel Cloud runs (serverless Postgres and MySQL 8.4 LTS), so it runs there out of the box. The fast suite runs on SQLite.
+Tested on PostgreSQL and MySQL 8.4, the databases Laravel Cloud runs (serverless Postgres and MySQL 8.4 LTS). The fast suite runs on SQLite.
 
 ## Installation
 
@@ -74,7 +74,7 @@ The card is captured on the provider's own hosted page, so no card data ever tou
 
 This package is built and maintained by [Pushery](https://www.pushery.com) — a Berlin-based studio building Laravel applications, SaaS products, and open-source tools.
 
-Building a Laravel UI? [WireKit](https://wirekit.app), Pushery's open-source Livewire component kit, gives you a themeable component library out of the box. Browse the rest of our work at [pushery.com](https://www.pushery.com).
+Building a Laravel UI? [WireKit](https://www.wirekit.app) is Pushery's open-source Livewire component kit. Browse the rest of our work at [pushery.com](https://www.pushery.com).
 
 ## License
 

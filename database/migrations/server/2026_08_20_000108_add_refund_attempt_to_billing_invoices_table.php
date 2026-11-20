@@ -41,7 +41,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * It does not change where any counter places any figure. The DAC7 fee figure still runs on the money's
  * clock and the value figure on the document's, and this column does not by itself bring them together —
- * the divergence that `ThreeCountersOneSaleTest` pins is a sale with no refund in it at all, which no
+ * the two figures already diverge on a sale with no refund in it at all, which no
  * link from a correction can reach. Picking one clock for both figures is a reporting decision with a tax
  * consequence and it is not made here.
  *

@@ -221,7 +221,7 @@ final class RetentionMatrix
      */
     public function datesBy(string $table, string $column): void
     {
-        if (preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,63}$/', $column) !== 1) {
+        if (preg_match('/^[A-Za-z_][A-Za-z0-9_]{0,63}$/D', $column) !== 1) {
             throw new InvalidArgumentException("The issue-date column for {$table}, '{$column}', is not a plain identifier: use letters, digits and underscores, not starting with a digit, at most 64 characters.");
         }
 

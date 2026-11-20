@@ -7,6 +7,7 @@ namespace Pushery\Billing\Notifications;
 use Illuminate\Bus\Queueable;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Notifications\Messages\MailMessage;
@@ -17,7 +18,7 @@ use Pushery\Billing\Contracts\BillingActionUrls;
 use Pushery\Billing\Enums\BillingAction;
 
 /**
- * The base every billing notice extends. It carries the four things that are the same for all of them,
+ * The base every billing notice extends. It carries the five things that are the same for all of them,
  * so no individual notice can get them wrong:
  *
  * 1. **Queued after the commit.** A webhook effect claims, sends and marks itself handled in one transaction;
@@ -38,11 +39,17 @@ use Pushery\Billing\Enums\BillingAction;
  *    then five minutes apart, unless `config('billing.notifications')` says otherwise, so a mail server's
  *    timeout or temporary refusal does not lose the notice.
  *
+ * 5. **Encrypted in the queue** — {@see ShouldBeEncrypted}. A notice carries amounts, invoice numbers, a mandate
+ *    reference or the last characters of an account, and a queued notice waits in the queue's store, the
+ *    `jobs` table by default, and in `failed_jobs` once it has failed. Laravel encrypts the job with the
+ *    application key, so neither holds the notice as plain text, and a worker reads it with the same `APP_KEY`.
+ *    A job queued as plain text before is still read as it was written.
+ *
  * The customer's language is Laravel's own job: a notifiable implementing `HasLocalePreference` gets its
  * mail rendered in its stored locale, and every string here resolves through the publishable, overridable
  * `billing::notifications` namespace.
  */
-abstract class BillingNotification extends Notification implements ShouldQueueAfterCommit
+abstract class BillingNotification extends Notification implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use Queueable;
 
@@ -170,7 +177,11 @@ abstract class BillingNotification extends Notification implements ShouldQueueAf
         return false;
     }
 
-    /** A value of the application's config, read when it is asked for rather than when the notice was built. */
+    /**
+     * A value of the application's config, read when it is asked for rather than when the notice was built.
+     *
+     * @return mixed the value as the application's config holds it, of any type
+     */
     private function setting(string $key): mixed
     {
         return Container::getInstance()->make(Repository::class)->get($key);

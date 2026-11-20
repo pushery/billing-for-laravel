@@ -41,7 +41,7 @@ final class TaxRateCorrectionsCommand extends Command
     {
         $since = $this->option('since');
 
-        if ($since !== null && preg_match('/^\d{4}-\d{2}-\d{2}$/', $since) !== 1) {
+        if ($since !== null && preg_match('/^\d{4}-\d{2}-\d{2}$/D', $since) !== 1) {
             $this->components->error('--since takes a day as YYYY-MM-DD.');
 
             return self::INVALID;
@@ -106,6 +106,7 @@ final class TaxRateCorrectionsCommand extends Command
      * The rate it was taxed at is the statutory one where the invoice records it, and otherwise the rate the two
      * amounts give.
      *
+     * @param  mixed  $country  the invoice's country as its stored tax basis holds it, which may be any value of decoded JSON
      * @return list<string>|false|null
      */
     private function correctionOf(InvoiceRecord $invoice, DatedTaxRateTable $history, TaxPoint $taxPoint, mixed $country): array|false|null

@@ -44,15 +44,17 @@
                                 <x-wirekit::text size="sm" intent="warning">{{ __('billing::admin.declarations.failure', ['failure' => \Pushery\Billing\Consumer\DeclarationFailure::sentence($declaration->failure)]) }}</x-wirekit::text>
                             @endif
 
-                            {{-- One row from 48rem up, the field and its button on one line; below that, one above the other. --}}
+                            {{-- One row from 48rem up, the field and its button on one line; below that, one above the other.
+                                 WireKit announces a resolution that has run for a second, and each button hands it the
+                                 sentence the plain markup announces as well. --}}
                             @if ($kind === 'cancellation')
                                 <x-wirekit::row as="form" align-fields wire:submit="resolveCancellation({{ $declaration->id }})">
                                     <x-wirekit::input type="date" id="declaration-ends-{{ $declaration->id }}" :label="__('billing::admin.declarations.ends_on')" wire:model="endsOn.{{ $declaration->id }}" />
-                                    <x-wirekit::button type="submit" loading-target="resolveCancellation({{ $declaration->id }})">{{ __('billing::admin.declarations.resolve') }}</x-wirekit::button>
+                                    <x-wirekit::button type="submit" loading-target="resolveCancellation({{ $declaration->id }})" data-wk-busy-text="{{ __('billing::admin.declarations.busy') }}">{{ __('billing::admin.declarations.resolve') }}</x-wirekit::button>
                                 </x-wirekit::row>
                             @else
                                 <form wire:submit="resolveWithdrawal({{ $declaration->id }})">
-                                    <x-wirekit::button type="submit" loading-target="resolveWithdrawal({{ $declaration->id }})">{{ __('billing::admin.declarations.resolve') }}</x-wirekit::button>
+                                    <x-wirekit::button type="submit" loading-target="resolveWithdrawal({{ $declaration->id }})" data-wk-busy-text="{{ __('billing::admin.declarations.busy') }}">{{ __('billing::admin.declarations.resolve') }}</x-wirekit::button>
                                 </form>
                             @endif
                         </x-wirekit::stack>

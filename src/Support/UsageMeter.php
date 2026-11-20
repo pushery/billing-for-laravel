@@ -458,6 +458,8 @@ final class UsageMeter
      * does not exist yet — insertOrIgnore, not create: two workers racing the first request for a brand-new
      * counter must not both get a unique violation. The loser falls through and reads the row the winner
      * wrote.
+     *
+     * @param  mixed  $ownerId  the key of the owner, of whatever type the owner model keys on
      */
     private function lockedCounterFor(string $ownerType, mixed $ownerId, string $meterKey, string $period): UsageCounter
     {
@@ -487,6 +489,8 @@ final class UsageMeter
      * Deliberately does not create the row: an owner who never bought prepaid units must not get one written
      * for them on every single usage record. Locked after the counter, always in that order, so the two
      * rows can never be taken in opposite orders by two requests and deadlock.
+     *
+     * @param  mixed  $ownerId  the key of the owner, of whatever type the owner model keys on
      */
     private function lockedPrepaid(string $ownerType, mixed $ownerId, string $meterKey): ?PrepaidUnits
     {
@@ -503,6 +507,7 @@ final class UsageMeter
      * caller's transaction after the counter and the balance row, always in that order, so no two requests take them
      * the other way round.
      *
+     * @param  mixed  $ownerId  the key of the owner, of whatever type the owner model keys on
      * @return array<int, UsageGrant>
      */
     private function lockedGrants(string $ownerType, mixed $ownerId, string $meterKey): array
@@ -510,7 +515,10 @@ final class UsageMeter
         return $this->grantsOf($ownerType, $ownerId, $meterKey, lock: true);
     }
 
-    /** @return array<int, UsageGrant> */
+    /**
+     * @param  mixed  $ownerId  the key of the owner, of whatever type the owner model keys on
+     * @return array<int, UsageGrant>
+     */
     private function grantsOf(string $ownerType, mixed $ownerId, string $meterKey, bool $lock): array
     {
         $query = UsageGrant::model()::query()
@@ -541,6 +549,8 @@ final class UsageMeter
     /**
      * The owner's balance row, created when an overdraft has to be written and the owner never bought a unit. Locked
      * like {@see self::lockedPrepaid()}, which deliberately creates nothing on an ordinary record.
+     *
+     * @param  mixed  $ownerId  the key of the owner, of whatever type the owner model keys on
      */
     private function createdPrepaid(string $ownerType, mixed $ownerId, string $meterKey): PrepaidUnits
     {

@@ -272,7 +272,7 @@ final readonly class AnnualTerms
             // The engine keeps no schedule at a provider: it reads a further year from the log when the year ends.
             'provider_schedule_id' => $this->billedByTheEngine($subscription) ? null : $arrangement,
             'monthly_terms_at' => $monthlyTermsAt,
-        ], static fn (mixed $value): bool => $value !== null))->save();
+        ], static fn (string|CarbonImmutable|null $value): bool => $value !== null))->save();
     }
 
     /** The subscription's key as text, for a log entry and a cache key. */

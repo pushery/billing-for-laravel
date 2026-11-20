@@ -44,8 +44,8 @@ final readonly class StripeMarketplaceWebhookEventMapper implements MarketplaceW
     /**
      * Every event type this mapper answers, which is what the endpoint for the connected accounts has to receive.
      *
-     * Held against each such endpoint by `billing:doctor`, and against the arms of {@see self::map()} by
-     * `StripeEventTypesAreListedTest`.
+     * Held against each such endpoint by `billing:doctor`, and equal to the event types {@see self::map()}
+     * handles.
      *
      * @var list<string>
      */

@@ -63,6 +63,7 @@ final readonly class Line
      * One end of a period, kept only when the other end is there too.
      *
      * @param  array<array-key, mixed>  $data
+     * @param  mixed  $counterpart  the other end of the period as the line's data holds it
      */
     private static function date(array $data, string $key, mixed $counterpart): ?string
     {

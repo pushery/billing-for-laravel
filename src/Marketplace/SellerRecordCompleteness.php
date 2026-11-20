@@ -101,6 +101,9 @@ final readonly class SellerRecordCompleteness
         return $missing;
     }
 
+    /**
+     * @param  mixed  $value  the seller's value for the field as the application's SuppliesSellerRecords returned it
+     */
     private function satisfied(SellerRecordField $field, mixed $value): bool
     {
         if (! is_string($value) || trim($value) === '') {
@@ -124,7 +127,7 @@ final readonly class SellerRecordCompleteness
     {
         $normalized = strtoupper(preg_replace('/\s+/u', '', $account) ?? '');
 
-        if (preg_match('/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/', $normalized) !== 1) {
+        if (preg_match('/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/D', $normalized) !== 1) {
             return false;
         }
 
@@ -151,7 +154,7 @@ final readonly class SellerRecordCompleteness
     {
         $digits = preg_replace('/\s+/u', '', $identifier) ?? '';
 
-        if (preg_match('/^\d{11}$/', $digits) !== 1) {
+        if (preg_match('/^\d{11}$/D', $digits) !== 1) {
             return false;
         }
 

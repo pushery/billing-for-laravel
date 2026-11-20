@@ -52,7 +52,11 @@ final readonly class RecordSellerDataReminderDelivery
         });
     }
 
-    /** Append the channel this reminder was handed to, and the recipient, to the episode's deliveries. */
+    /**
+     * Append the channel this reminder was handed to, and the recipient, to the episode's deliveries.
+     *
+     * @param  mixed  $notifiable  the recipient of the notice, untyped in Laravel's notification events
+     */
     private function append(SellerDataEscalationEpisode $episode, SellerDataReminderNotification $notification, string $channel, mixed $notifiable): void
     {
         $key = $notifiable instanceof Model ? $notifiable->getKey() : null;

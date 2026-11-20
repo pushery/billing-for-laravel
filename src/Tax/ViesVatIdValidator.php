@@ -102,14 +102,18 @@ final class ViesVatIdValidator implements ChecksVatIds, VatIdValidator
         $normalized = strtoupper(preg_replace('/\s+/u', '', $vatId ?? '') ?? '');
 
         // Every VAT id of the union carries a digit, so a word that only looks like a country code and a number is none.
-        if (preg_match('/^([A-Z]{2})(?=[0-9A-Z]*[0-9])([0-9A-Z]{2,12})$/', $normalized, $matches) !== 1) {
+        if (preg_match('/^([A-Z]{2})(?=[0-9A-Z]*[0-9])([0-9A-Z]{2,12})$/D', $normalized, $matches) !== 1) {
             return null;
         }
 
         return [$matches[1], $matches[2]];
     }
 
-    /** A detail of the answer, or null where VIES supplied none. */
+    /**
+     * A detail of the answer, or null where VIES supplied none.
+     *
+     * @param  mixed  $value  a detail of the VIES answer, as its response decoded it
+     */
     private function supplied(mixed $value): ?string
     {
         if (! is_string($value)) {
@@ -121,7 +125,11 @@ final class ViesVatIdValidator implements ChecksVatIds, VatIdValidator
         return $value === '' || $value === self::WITHHELD ? null : $value;
     }
 
-    /** The moment of the answer, or null where VIES named none it can be read as. */
+    /**
+     * The moment of the answer, or null where VIES named none it can be read as.
+     *
+     * @param  mixed  $value  the moment of the VIES answer, as its response decoded it
+     */
     private function moment(mixed $value): ?CarbonImmutable
     {
         if (! is_string($value) || $value === '') {

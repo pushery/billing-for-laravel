@@ -130,8 +130,7 @@ final readonly class FanChosenPricing
         // Note the asymmetry with the early return above, because it is the surprising part: with no tip
         // rate configured the ordinary fee is returned whole, flat component included. So a tip carries the
         // flat fee exactly when the operator has said nothing about tips, and stops carrying it the moment
-        // they set a rate. Both branches are pinned in FanChosenPricingTest — neither was, which is why
-        // rewriting this line moved money on every tip and turned nothing red.
+        // they set a rate. Rewriting this line moves money on every tip.
         return new PlatformFee($bps, 0, $normalFee->residual);
     }
 

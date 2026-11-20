@@ -284,7 +284,11 @@ final readonly class BillingAdmin
         return new Money(array_sum($refunds), $amount->currency);
     }
 
-    /** One refund's identity: the provider's reference, or for a refund recorded without one the key a retry of it collapses onto. */
+    /**
+     * One refund's identity: the provider's reference, or for a refund recorded without one the key a retry of it collapses onto.
+     *
+     * @param  mixed  $reference  the provider's reference of the refund as the attempt row holds it, or nothing
+     */
     private function refundIdentity(mixed $reference, string $chargeReference, int $amount, string $currency): string
     {
         return is_string($reference) && $reference !== '' ? $reference : 'refund:'.$chargeReference.':'.$amount.':'.$currency;

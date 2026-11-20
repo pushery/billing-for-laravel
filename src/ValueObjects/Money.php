@@ -35,7 +35,7 @@ final readonly class Money
         public int $minorUnits,
         public string $currency,
     ) {
-        if (! preg_match('/^[A-Z]{3}$/', $currency)) {
+        if (! preg_match('/^[A-Z]{3}$/D', $currency)) {
             throw new InvalidArgumentException("Invalid ISO-4217 currency code: '{$currency}'.");
         }
     }
@@ -56,7 +56,7 @@ final readonly class Money
      */
     public static function fromDecimal(string $amount, string $currency): self
     {
-        if (! preg_match('/^(-)?(\d+)(?:\.(\d+))?$/', $amount, $m)) {
+        if (! preg_match('/^(-)?(\d+)(?:\.(\d+))?$/D', $amount, $m)) {
             throw new InvalidArgumentException("Invalid decimal amount: '{$amount}'.");
         }
 

@@ -33,8 +33,7 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  *
  * There are no provider API keys here to delete. This package stores no secret of any kind — the merchant
  * row carries an account reference (`acct_…`), which is an identifier and goes with the row; a credential
- * would be a different thing and there is no column for one. `NoStoredCredentialsTest` holds that, so the
- * sentence cannot quietly stop being true.
+ * would be a different thing and there is no column for one.
  *
  * **If your app stores a merchant's API keys, erasing them is your job.**
  * `BillableAccountDeleting` is the hook — dispatched first and outside the transaction, so a listener can

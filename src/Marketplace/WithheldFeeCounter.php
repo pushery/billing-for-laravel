@@ -115,7 +115,7 @@ final readonly class WithheldFeeCounter
                 // touches what reaches the seller, so it can never be a deduction from their
                 // consideration. Summing "everything the platform charged on this sale" here is a
                 // one-line edit that balances perfectly and over-reports the seller in a return nobody
-                // re-derives. `ReportedWithheldFeeByRegimeTest` fails on exactly that edit.
+                // re-derives.
                 $total += $charge->fee_minor;
             }
 

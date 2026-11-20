@@ -94,8 +94,6 @@ class MerchantCharge extends Model
     /**
      * The same defaults the schema carries, so a row that was just created reads like one that was read back.
      *
-     * Held against the migration by ModelSchemaDefaultsTest.
-     *
      * @var array<string, int|string>
      */
     protected $attributes = [

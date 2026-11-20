@@ -103,7 +103,7 @@ final class SmeOnTheWebExemptionValidator implements SmallBusinessExemptionValid
     {
         $code = strtoupper(trim($memberState));
 
-        if (preg_match('/^[A-Z]{2}$/', $code) !== 1) {
+        if (preg_match('/^[A-Z]{2}$/D', $code) !== 1) {
             throw new InvalidArgumentException(sprintf(
                 'The member state of exemption has to be a two-letter code, and "%s" is not one. The exemption '
                 .'is asked for the member state the supply is taxed in, which is never the one the business is '

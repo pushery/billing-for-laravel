@@ -46,7 +46,8 @@ use Pushery\Billing\ValueObjects\MerchantScope;
  * Always read a coupon through {@see Coupon::scopeIssuedBy()}, and by its code through {@see CouponCodes::find()},
  * which matches a code the same way on every database. A bare `where('code', ...)` finds any issuer's coupon of
  * that name, which after this column exists means one seller's discount can be spent on another seller's sale.
- * `CouponsAreReadScopedTest` holds that, because the mistake is a query that looks completely ordinary.
+ * The package itself reads coupons only that way, because the mistake is a query that looks completely
+ * ordinary.
  *
  * @property int $id
  * @property string $code
@@ -82,7 +83,7 @@ class Coupon extends Model
      *
      * Without them a model created without these columns holds null for each, while the row the database
      * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
-     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     * it hides.
      *
      * @var array<string, bool|int|string>
      */

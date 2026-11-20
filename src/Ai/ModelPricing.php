@@ -55,6 +55,9 @@ final readonly class ModelPricing
         return $applies;
     }
 
+    /**
+     * @param  mixed  $entry  the model's entry in the AI pricing config, which a host may have set to any type
+     */
     private function rateFrom(string $model, mixed $entry): ModelRate
     {
         $key = "billing.ai.rates[{$model}]";
@@ -66,7 +69,7 @@ final readonly class ModelPricing
         $validFrom = $entry['valid_from'] ?? '1970-01-01';
         $currency = $entry['currency'] ?? $this->config->get('billing.ai.currency', 'USD');
 
-        if (! is_string($validFrom) || ! is_string($currency) || preg_match('/^[A-Z]{3}$/', $currency) !== 1) {
+        if (! is_string($validFrom) || ! is_string($currency) || preg_match('/^[A-Z]{3}$/D', $currency) !== 1) {
             throw InvalidBillingConfig::forKey($key, 'a valid_from date and a three-letter currency');
         }
 

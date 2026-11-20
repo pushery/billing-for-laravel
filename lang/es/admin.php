@@ -62,6 +62,7 @@ return [
         'ends_on' => 'El contrato termina el (opcional)',
         'resolve' => 'Resolver',
         'resolved' => 'Declaración resuelta.',
+        'busy' => 'La declaración aún se está resolviendo.',
         'gone' => 'Esa declaración ya no espera a una persona.',
         'invalid_day' => 'Introduce el día como fecha.',
     ],

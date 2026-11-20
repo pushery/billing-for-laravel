@@ -103,6 +103,9 @@ final class MerchantReopenCommand extends Command
         return $merchant instanceof Model ? $merchant : $this->missing($type, $id);
     }
 
+    /**
+     * @param  mixed  $id  the key the command was given, as Laravel hands an argument over
+     */
     private function missing(string $type, mixed $id): null
     {
         $this->components->error("No {$type} exists with key ".(is_scalar($id) ? (string) $id : '(unreadable)').'.');

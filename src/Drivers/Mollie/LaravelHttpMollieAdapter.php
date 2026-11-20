@@ -127,11 +127,10 @@ final readonly class LaravelHttpMollieAdapter implements HttpAdapterContract
      * ## Read from Composer, never from `app()`
      *
      * `app()` is a foundation-only helper, and this package declares sixteen `illuminate/*` components and
-     * not `laravel/framework` — a stance held at zero Foundation helper calls across the whole shipped tree
-     * and guarded by `LeanDependencyContractTest`. One call here would have been the first, and the guard
-     * caught it. The version that actually matters is the transport's anyway: `illuminate/http` is what
-     * carries the request, and it is a declared dependency rather than something inferred from what the
-     * application happens to have installed.
+     * not `laravel/framework`, so the whole shipped tree makes no Foundation helper call. One call here
+     * would have been the first. The version that actually matters is the transport's anyway:
+     * `illuminate/http` is what carries the request, and it is a declared dependency rather than something
+     * inferred from what the application happens to have installed.
      *
      * `null` when Composer's runtime is absent, which the interface allows and which is the honest answer —
      * the same guard the client factory uses for the same reason.

@@ -41,7 +41,7 @@ use Pushery\Billing\ValueObjects\SepaMandateText;
 final readonly class DirectDebitMandates
 {
     /** The characters a SEPA mandate reference may hold, at most 35 of them. */
-    private const string REFERENCE_PATTERN = '/^[A-Za-z0-9+?\/:().,\' -]{1,35}$/';
+    private const string REFERENCE_PATTERN = '/^[A-Za-z0-9+?\/:().,\' -]{1,35}$/D';
 
     public function __construct(
         private Container $container,

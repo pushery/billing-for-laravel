@@ -239,7 +239,11 @@ final readonly class MollieConnect
         return $this->linkOf($link->_links, 'clientLink');
     }
 
-    /** The address of the named link in a resource's `_links`, or null where it carries none or no address. */
+    /**
+     * The address of the named link in a resource's `_links`, or null where it carries none or no address.
+     *
+     * @param  mixed  $links  a resource's _links as the response decoded it, which the SDK leaves untyped
+     */
     private function linkOf(mixed $links, string $name): ?string
     {
         // The SDK declares the links an object, and a response that carries none leaves the property null.

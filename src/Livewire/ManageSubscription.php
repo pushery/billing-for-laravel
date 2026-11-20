@@ -111,9 +111,8 @@ final class ManageSubscription extends AccountScreen
 
         // Resolved into a variable rather than written as a ternary inside the array below, and the reason
         // is measurable rather than stylistic: pcov attributes the arms of a multi-line ternary to a single
-        // line, so one of them counts as never executed however the branch goes. Under a 100% floor that
-        // reads as a missing test, and the case it asks for already exists. `TernaryInAnArrayIsNotCoverableTest`
-        // keeps the shape out.
+        // line, so one of them counts as never executed however the branch goes. No array in this package
+        // holds a multi-line ternary for that reason.
         $trialDays = null;
 
         if ($trialPolicy->subscriptionTrialEnabled() && ! Subscription::ownerHasHadATrial($this->owner())) {
@@ -424,8 +423,7 @@ final class ManageSubscription extends AccountScreen
         // straight back out: the analyzer this package pins derives the relationship and reports the
         // conjunct as always true, so the line written to make the gate and a developer machine agree
         // is the line that made them disagree. What produced it was a local vendor tree two analyzer
-        // releases behind the pin, which DevToolPinsTest now reports rather than leaving to be found
-        // by a red integration run.
+        // releases behind the pin.
         if ($timing === SwapTiming::PeriodEnd) {
             // A change arranged at the provider for an earlier choice comes off first, or the provider would still make it.
             Container::getInstance()->make(ScheduledSwapRunner::class)->releaseArranged($subscription);

@@ -9,6 +9,7 @@ use InvalidArgumentException;
 use Mollie\Api\Exceptions\ApiException;
 use Mollie\Api\Exceptions\RequestException;
 use Mollie\Api\Http\Data\Date;
+use Mollie\Api\Http\Request;
 use Mollie\Api\Http\Requests\CancelPaymentRequest;
 use Mollie\Api\Http\Requests\CreateMandateRequest;
 use Mollie\Api\Http\Requests\CreatePaymentRefundRequest;
@@ -157,7 +158,7 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
             additional: MollieChargeOptions::additional($options),
         );
 
-        return $this->settle($this->keyed($idempotencyKey, fn (): mixed => $this->client->send($request)), $amount);
+        return $this->settle($this->keyed($idempotencyKey, $request), $amount);
     }
 
     /**
@@ -315,7 +316,7 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
             );
         }
 
-        $payment = $this->keyed($idempotencyKey, fn (): mixed => $this->client->send(new CreatePaymentRequest(
+        $payment = $this->keyed($idempotencyKey, new CreatePaymentRequest(
             description: $this->describe($narrative, 'Subscription', $this->recurringDescriptionLimit($mandate)),
             amount: MollieAmount::toMollie($amount),
             webhookUrl: $this->webhookUrl,
@@ -324,7 +325,7 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
             mandateId: $mandate->id,
             customerId: $mandate->customerReference,
             profileId: $this->profileId,
-        )));
+        ));
 
         return $this->settle($payment, $amount);
     }
@@ -340,7 +341,7 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
     public function refund(string $chargeReference, Money $amount, ?string $idempotencyKey = null, ?ChargeRouting $routing = null): RefundResult
     {
         try {
-            $refund = $this->keyed($idempotencyKey, fn (): mixed => $this->client->send(new CreatePaymentRefundRequest(
+            $refund = $this->keyed($idempotencyKey, new CreatePaymentRefundRequest(
                 paymentId: $chargeReference,
                 // 'Refund', not the reference. Mollie shows a refund's description to the customer, the same
                 // way it shows a payment's — so this field leaked an internal id onto the statement of somebody
@@ -351,7 +352,7 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
                 description: 'Refund',
                 amount: MollieAmount::toMollie($amount),
                 metadata: $this->traceOf($idempotencyKey),
-            )));
+            ));
         } catch (RequestException $refusal) {
             // Mollie refused this refund: more than is left to refund, a payment that cannot be refunded, an id it
             // does not know. That is an answer, and it comes back as one with Mollie's own words. A refusal that
@@ -502,6 +503,8 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
      *
      * The parameter stays `mixed`, because the two majors of the SDK disagree about the type: version 4 declares the
      * metadata as an object, version 3 leaves it as the JSON decoder made it.
+     *
+     * @param  mixed  $metadata  a refund's metadata: an object on version 4 of the SDK, decoded JSON on version 3
      */
     private function keyIn(mixed $metadata): ?string
     {
@@ -557,7 +560,7 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
     }
 
     /**
-     * Run one request with the idempotency key armed, and disarm it afterwards whatever happened.
+     * Send one request with the idempotency key armed, and disarm it afterwards whatever happened.
      *
      * The client is a singleton, so a key still set after this call would go out with the next request: a
      * customer creation could come back as the previous charge, or be refused for a payload that does not
@@ -572,20 +575,24 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
      * The answer stays `mixed` on purpose. Each caller checks what came back before it reads it, because the
      * SDK hands over what the response hydrated to, and an answer of another shape is a case they handle.
      *
-     * @param  callable(): mixed  $send
+     * @return mixed what the SDK's send() hands back, which version 3 declares as mixed
      */
-    private function keyed(?string $idempotencyKey, callable $send): mixed
+    private function keyed(?string $idempotencyKey, Request $request): mixed
     {
         $this->client->setIdempotencyKey($idempotencyKey);
 
         try {
-            return $send();
+            return $this->client->send($request);
         } finally {
             $this->client->resetIdempotencyKey();
         }
     }
 
-    /** Translate a Mollie payment into the neutral outcome, keeping "not yet" apart from "no". */
+    /**
+     * Translate a Mollie payment into the neutral outcome, keeping "not yet" apart from "no".
+     *
+     * @param  mixed  $payment  what keyed() handed back, which this method checks is a payment
+     */
     private function settle(mixed $payment, Money $amount): ChargeResult
     {
         if (! $payment instanceof Payment) {

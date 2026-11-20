@@ -17,10 +17,8 @@ use Pushery\Billing\ValueObjects\Money;
  * The field is plural and it is a list. The mapper read `balance_transaction` — singular — and a Dispute has
  * no such key; it declares `balance_transactions`, "a list of zero, one, or two balance transactions that
  * show funds withdrawn and reinstated". So the fee was null on every real webhook, `RecordProviderFee`
- * dropped it at its own guard, and no provider-fee row was ever written for a lost dispute. The suite stayed
- * green because the fixtures wrote the singular key the code read — a payload a test invents can only ever
- * confirm the parse it was written against. StripeDisputePayloadShapeTest checks the keys against the SDK's
- * own Dispute declaration instead.
+ * dropped it at its own guard, and no provider-fee row was ever written for a lost dispute. The keys read
+ * here are the ones the SDK's own Dispute declaration names.
  *
  * Summed, not first-of-list, and that is what makes the two-entry case right. The withdrawal states the fee
  * as a positive number; a later reinstatement states it back as a negative one. Summing nets those to

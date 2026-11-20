@@ -28,7 +28,7 @@ final readonly class ConfiguredBaseInterestRates implements BaseInterestRates
         foreach ((array) $this->config->get('billing.dunning_interest.base_rates', []) as $from => $value) {
             $from = (string) $from;
 
-            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) === 1 && is_numeric($value) && $from <= $wanted && $from > $since) {
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/D', $from) === 1 && is_numeric($value) && $from <= $wanted && $from > $since) {
                 $since = $from;
                 $rate = (float) $value;
             }

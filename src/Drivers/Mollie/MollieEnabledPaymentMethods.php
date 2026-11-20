@@ -69,13 +69,19 @@ final readonly class MollieEnabledPaymentMethods implements EnabledPaymentMethod
     /**
      * A limit of a method, or null where Mollie states none. Version 4 of the SDK hands a limit over as its money
      * object, version 3 as the decoded JSON object, and both carry `value` and `currency`.
+     *
+     * @param  mixed  $amount  a limit: version 4 of the SDK hands over its money object, version 3 the decoded JSON object
      */
     private function limitOf(mixed $amount): ?Money
     {
         return is_object($amount) ? MollieAmount::fromResource($amount) : null;
     }
 
-    /** The address of a logo, the vector version where Mollie has one, or null where it sent none. */
+    /**
+     * The address of a logo, the vector version where Mollie has one, or null where it sent none.
+     *
+     * @param  mixed  $image  the method's image, as the response decoded it, which the SDK leaves untyped
+     */
     private function imageOf(mixed $image): ?string
     {
         if (! is_object($image)) {
@@ -83,12 +89,12 @@ final readonly class MollieEnabledPaymentMethods implements EnabledPaymentMethod
         }
 
         $address = array_find(
-            [
+            array_filter([
                 property_exists($image, 'svg') ? $image->svg : null,
                 property_exists($image, 'size2x') ? $image->size2x : null,
                 property_exists($image, 'size1x') ? $image->size1x : null,
-            ],
-            static fn (mixed $candidate): bool => is_string($candidate) && $candidate !== '',
+            ], is_string(...)),
+            static fn (string $candidate): bool => $candidate !== '',
         );
 
         return is_string($address) ? $address : null;
@@ -97,6 +103,7 @@ final readonly class MollieEnabledPaymentMethods implements EnabledPaymentMethod
     /**
      * The issuers of a method, which both majors of the SDK hand over as the decoded JSON objects.
      *
+     * @param  mixed  $issuers  the issuers of a method as both majors of the SDK hand them over, decoded JSON objects or nothing
      * @return list<PaymentMethodIssuer>
      */
     private function issuersOf(mixed $issuers): array

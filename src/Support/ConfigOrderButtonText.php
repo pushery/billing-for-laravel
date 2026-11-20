@@ -63,7 +63,11 @@ final readonly class ConfigOrderButtonText implements OrderButtonText
         return (is_string($configured) ? BillingInterval::tryFrom($configured) : null) ?? BillingInterval::Month;
     }
 
-    /** An entry as the text it stands for: a translation key in the request's locale, else the text as written. */
+    /**
+     * An entry as the text it stands for: a translation key in the request's locale, else the text as written.
+     *
+     * @param  mixed  $entry  a value of the package's config, which a host may have set to any type
+     */
     private function translated(mixed $entry): ?string
     {
         if (! is_string($entry) || trim($entry) === '') {

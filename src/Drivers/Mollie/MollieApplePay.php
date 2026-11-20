@@ -40,7 +40,7 @@ final readonly class MollieApplePay
             throw new InvalidArgumentException("The validation URL of an Apple Pay session is an https address of Apple, and `{$validationUrl}` is not.");
         }
 
-        if (preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/i', $domain) !== 1) {
+        if (preg_match('/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/iD', $domain) !== 1) {
             throw new InvalidArgumentException("The domain of an Apple Pay session is a host name such as `shop.example`, and `{$domain}` is not.");
         }
 

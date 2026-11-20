@@ -62,6 +62,7 @@ return [
         'ends_on' => 'Vertrag endet am (optional)',
         'resolve' => 'Erledigt',
         'resolved' => 'Erklärung erledigt.',
+        'busy' => 'Die Erklärung wird noch erledigt.',
         'gone' => 'Diese Erklärung wartet nicht mehr auf einen Menschen.',
         'invalid_day' => 'Gib den Tag als Datum ein.',
     ],

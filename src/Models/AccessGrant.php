@@ -84,7 +84,7 @@ class AccessGrant extends Model
     ];
 
     /**
-     * The same defaults the schema carries. Held against the migration by ModelSchemaDefaultsTest.
+     * The same defaults the schema carries.
      *
      * @var array<string, bool|string>
      */

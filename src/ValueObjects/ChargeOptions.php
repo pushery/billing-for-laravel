@@ -61,11 +61,11 @@ final readonly class ChargeOptions
             }
         }
 
-        if ($locale !== null && preg_match('/^[a-z]{2}_[A-Z]{2}$/', $locale) !== 1) {
+        if ($locale !== null && preg_match('/^[a-z]{2}_[A-Z]{2}$/D', $locale) !== 1) {
             throw new InvalidArgumentException("The locale of a charge is a language and a country, such as `de_DE`, and `{$locale}` is not.");
         }
 
-        if ($this->anyRefused($methods, static fn (mixed $method): bool => ! is_string($method) || trim($method) === '')) {
+        if ($this->anyRefused($methods, $this->isNoMethod(...))) {
             throw new InvalidArgumentException('The methods of a charge are the ids of payment methods, and one of them is empty.');
         }
 
@@ -73,11 +73,11 @@ final readonly class ChargeOptions
             throw new InvalidArgumentException('The rails keep `'.self::RESERVED_METADATA_KEY.'` with a payment themselves, so the metadata of a charge cannot carry it.');
         }
 
-        if ($this->anyRefused($metadata, static fn (mixed $value): bool => ! is_string($value) && ! is_int($value))) {
+        if ($this->anyRefused($metadata, $this->isNoMetadataValue(...))) {
             throw new InvalidArgumentException('The metadata of a charge holds text and whole numbers, nothing else.');
         }
 
-        if ($this->anyRefused($lines, static fn (mixed $line): bool => ! $line instanceof PaymentLine)) {
+        if ($this->anyRefused($lines, $this->isNoLine(...))) {
             throw new InvalidArgumentException('The lines of a charge are PaymentLine values.');
         }
 
@@ -114,5 +114,35 @@ final readonly class ChargeOptions
     private function anyRefused(array $values, callable $refused): bool
     {
         return array_any($values, $refused);
+    }
+
+    /**
+     * Whether an entry of the methods is no id of a payment method.
+     *
+     * @param  mixed  $method  an entry as the caller passed it, which this refuses unless it is a non-empty string
+     */
+    private function isNoMethod(mixed $method): bool
+    {
+        return ! is_string($method) || trim($method) === '';
+    }
+
+    /**
+     * Whether a value of the metadata is neither text nor a whole number.
+     *
+     * @param  mixed  $value  a value as the caller passed it, which this refuses unless it is text or a whole number
+     */
+    private function isNoMetadataValue(mixed $value): bool
+    {
+        return ! is_string($value) && ! is_int($value);
+    }
+
+    /**
+     * Whether an entry of the lines is no PaymentLine.
+     *
+     * @param  mixed  $line  an entry as the caller passed it, which this refuses unless it is a PaymentLine
+     */
+    private function isNoLine(mixed $line): bool
+    {
+        return ! $line instanceof PaymentLine;
     }
 }

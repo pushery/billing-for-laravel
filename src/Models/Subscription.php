@@ -91,7 +91,7 @@ class Subscription extends Model
      *
      * Without them a model created without these columns holds null for each, while the row the database
      * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
-     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     * it hides.
      *
      * @var array<string, int|string>
      */
@@ -100,7 +100,7 @@ class Subscription extends Model
         'dunning_level' => 0,
         // The single-seller sentinel. A subscription created without a merchant reads as the platform's
         // own, exactly as the schema default records it — so the row and the freshly-built instance agree
-        // before anyone re-reads. Held against the migration by ModelSchemaDefaultsTest.
+        // before anyone re-reads.
         'merchant_uid' => 'platform',
         'seat_days_accrued' => 0,
         'tier_adjustment_accrued' => 0,

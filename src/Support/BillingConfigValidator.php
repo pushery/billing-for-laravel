@@ -102,7 +102,8 @@ final readonly class BillingConfigValidator
             return; // an unconfigured install has no tiers to validate
         }
 
-        $tierKeys = array_keys($tiers);
+        // As strings: the settings below name a tier as one, and the array holds a key made of digits as an int.
+        $tierKeys = array_map(strval(...), array_keys($tiers));
         $dimensionKeys = array_keys((array) $this->config->get('billing.dimensions', []));
 
         // A configured app must define the tier its free / churned owners land on.
@@ -154,6 +155,8 @@ final readonly class BillingConfigValidator
      * Checked here because every reader of it runs after the customer has paid. A grant the catalog cannot read
      * fails the webhook that should hand the units over, and a scalar in its place, taken for no grant, would
      * credit money instead. A value read through `env()` arrives as a string, the ordinary way to get there.
+     *
+     * @param  mixed  $grant  a value of the package's config, which a host may have set to any type
      */
     private function assertGrant(string $key, mixed $grant): void
     {
@@ -177,6 +180,8 @@ final readonly class BillingConfigValidator
      *
      * Refused at boot because the catalog refuses it when the hub asks, and a typo read as "anyone" would sell an
      * offer meant for businesses to consumers.
+     *
+     * @param  mixed  $buyers  a value of the package's config, which a host may have set to any type
      */
     private function assertAudience(string $where, mixed $buyers): void
     {
@@ -187,6 +192,9 @@ final readonly class BillingConfigValidator
         throw InvalidBillingConfig::forKey($where, "must be 'anyone' or 'business', or absent");
     }
 
+    /**
+     * @param  mixed  $priceDisplay  a value of the package's config, which a host may have set to any type
+     */
     private function assertCurrency(string $where, mixed $priceDisplay): void
     {
         if (! is_array($priceDisplay) || ! isset($priceDisplay['currency'])) {
@@ -195,7 +203,7 @@ final readonly class BillingConfigValidator
 
         $currency = $priceDisplay['currency'];
 
-        if (! is_string($currency) || preg_match('/^[A-Z]{3}$/', $currency) !== 1) {
+        if (! is_string($currency) || preg_match('/^[A-Z]{3}$/D', $currency) !== 1) {
             throw InvalidBillingConfig::invalidCurrency($where, is_string($currency) ? $currency : gettype($currency));
         }
     }

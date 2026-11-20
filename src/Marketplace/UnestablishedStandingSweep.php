@@ -130,6 +130,8 @@ final readonly class UnestablishedStandingSweep
             ->whereNull('merchant_erased_at')
             ->orderBy('merchant_type')
             ->orderBy('merchant_id')
+            // One row of two short columns per merchant, so even a large marketplace buffers little, and
+            // lazyById() needs a key this distinct select does not have.
             ->cursor();
 
         foreach ($merchants as $charge) {

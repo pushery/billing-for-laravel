@@ -201,7 +201,11 @@ final readonly class UsageReconciler
             ->get();
     }
 
-    /** The owner the reported usage stands in the name of, the one the flusher billed it to. */
+    /**
+     * The owner the reported usage stands in the name of, the one the flusher billed it to.
+     *
+     * @param  mixed  $ownerId  the key of the owner, of whatever type the owner model keys on
+     */
     private function ownerOf(string $ownerType, mixed $ownerId): ?Model
     {
         return OwnerOfRecord::find($ownerType, $ownerId);

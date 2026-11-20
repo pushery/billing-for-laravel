@@ -124,9 +124,9 @@ final readonly class GermanJurisdictionProfile implements DocumentsDeemedSupplyO
     public function marginSchemeNote(TaxationBasis $basis): string
     {
         // The three keys are written out, and that is deliberate rather than lazy. Built by concatenation
-        // they are invisible to `TranslationKeysAreReachableTest`, which scans for the literal key a
-        // package renders -- and a string shipped in seven languages that no scan can reach is exactly
-        // what that guard exists to refuse. Spelled here, the mapping is also greppable: somebody asking
+        // they are invisible to a search for the literal key a package renders -- and a string shipped
+        // in seven languages that no search can reach is one nobody can tell is still in use. Spelled
+        // here, the mapping is also greppable: somebody asking
         // "which words does an antique carry" finds the answer in the file that decides it.
         //
         // Second-hand goods keeps the unsuffixed key, and that is not tidiness. `margin_scheme_note` has

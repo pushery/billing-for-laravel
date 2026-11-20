@@ -64,7 +64,7 @@ final readonly class SellerDeclarations
      */
     public function contradict(Model $seller, string $signal, CarbonImmutable $observedAt, ?string $detail = null): SellerDeclarationContradiction
     {
-        if (preg_match('/^[a-z0-9_.-]{1,64}$/', $signal) !== 1) {
+        if (preg_match('/^[a-z0-9_.-]{1,64}$/D', $signal) !== 1) {
             throw new InvalidArgumentException("A contradicting signal is named by a short key of lower-case letters, digits, dots, dashes and underscores; got [{$signal}].");
         }
 

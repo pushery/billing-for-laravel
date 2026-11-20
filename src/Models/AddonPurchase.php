@@ -49,7 +49,7 @@ class AddonPurchase extends Model
      *
      * Without them a model created without these columns holds null for each, while the row the database
      * stores holds the value — a disagreement that lasts only until somebody re-reads, which is exactly why
-     * it hides. Held against the migration by ModelSchemaDefaultsTest.
+     * it hides.
      *
      * @var array<string, int>
      */

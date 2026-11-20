@@ -201,8 +201,7 @@ final readonly class WebhookReceiver
      * URL write rows into it.
      *
      * And no network address, here or on the event. This package hands an address to exactly one seam and
-     * reads one nowhere else -- a promise `PlaceEvidencePrivacyTest` enforces over the whole shipped tree,
-     * and one this announcement broke on its first attempt. A consumer who wants the address reads it from
+     * reads one nowhere else in the shipped tree. A consumer who wants the address reads it from
      * the request in their own listener, where the decision to keep it is theirs to make.
      */
     private function announceRefusal(Request $request): void

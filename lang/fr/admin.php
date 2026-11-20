@@ -62,6 +62,7 @@ return [
         'ends_on' => 'Le contrat prend fin le (facultatif)',
         'resolve' => 'Régler',
         'resolved' => 'Déclaration réglée.',
+        'busy' => 'La déclaration est encore en cours de règlement.',
         'gone' => 'Cette déclaration n\'attend plus une personne.',
         'invalid_day' => 'Saisis le jour sous forme de date.',
     ],

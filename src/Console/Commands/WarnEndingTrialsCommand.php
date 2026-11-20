@@ -337,7 +337,7 @@ final class WarnEndingTrialsCommand extends Command
         // that is quietly ignored is worse than one that is refused.
         //
         // The card-expiry command carried the stricter check for a while and this comment said so. It no
-        // longer does, and `BothWindowOptionsAcceptEitherFormTest` keeps the two from drifting apart again.
+        // longer does: both commands take the window as a string or as an int, the same way.
         $option = $this->option('days');
 
         if (is_numeric($option) && (int) $option > 0) {

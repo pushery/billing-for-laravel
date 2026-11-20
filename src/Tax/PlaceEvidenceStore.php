@@ -108,7 +108,7 @@ final readonly class PlaceEvidenceStore
         foreach (PlaceEvidence::model()::query()->where('reference', 'like', $prefix.'%')->pluck('reference') as $candidate) {
             $from = is_string($candidate) && str_starts_with($candidate, $prefix) ? substr($candidate, strlen($prefix)) : '';
 
-            if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $from) === 1 && $from <= $day->toDateString() && $from > $latest) {
+            if (preg_match('/^\d{4}-\d{2}-\d{2}$/D', $from) === 1 && $from <= $day->toDateString() && $from > $latest) {
                 [$answer, $latest] = [(string) $candidate, $from];
             }
         }

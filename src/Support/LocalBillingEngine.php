@@ -95,10 +95,9 @@ use Throwable;
  * second driver runs what Mollie runs" quietly degrades into "it runs something similar", which is the
  * outcome the shared core exists to prevent. The provider-specific parts are injected collaborators instead.
  *
- * Two things hold that claim rather than stating it. `LocalEngineIsReusableByASecondDriverTest` drives the
- * full cycle — including the dunning half, not just the happy path — for a provider that exists nowhere in
- * this package. `NoProviderLiteralInTheCycleTest` fails the build if a provider name appears in the code
- * here, because that is how a shared core stops being shared: one reasonable `if` at a time.
+ * The full cycle, the dunning half included, runs for a provider this package does not ship, and
+ * no provider name appears in the code here, because that is how a shared core stops being shared: one
+ * reasonable `if` at a time.
  *
  * **When a period is collected** is recorded on each subscription ({@see CollectionTiming}). In advance, the
  * run charges a period when it begins and opens the next one when it ends; in arrears, it charges a period
@@ -134,8 +133,7 @@ final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMa
          *
          * That helper lives in laravel/framework's Foundation, which this package deliberately does not
          * depend on — it requires focused `illuminate/*` components instead, and an install without
-         * Foundation would fatal on the call rather than degrade. LeanDependencyContractTest holds the
-         * line, and it caught this one.
+         * Foundation would fatal on the call rather than degrade.
          */
         private Repository $config,
         /**

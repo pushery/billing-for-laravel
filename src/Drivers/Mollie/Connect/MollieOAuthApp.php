@@ -29,7 +29,7 @@ final readonly class MollieOAuthApp
         public string $clientSecret,
         public string $redirectUri,
     ) {
-        if (preg_match('/^app_\w+$/', $clientId) !== 1) {
+        if (preg_match('/^app_\w+$/D', $clientId) !== 1) {
             throw new InvalidArgumentException("A Mollie OAuth app is named by its client id, which begins `app_`, not `{$clientId}`.");
         }
 

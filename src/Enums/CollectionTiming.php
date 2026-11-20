@@ -27,7 +27,11 @@ enum CollectionTiming: string
     /** Where an installation states when new subscriptions are collected. */
     public const string CONFIG_KEY = 'billing.collection_timing';
 
-    /** The configured timing, or collection in advance where nothing valid is configured. */
+    /**
+     * The configured timing, or collection in advance where nothing valid is configured.
+     *
+     * @param  mixed  $configured  a value of the package's config, which a host may have set to any type
+     */
     public static function fromConfigured(mixed $configured): self
     {
         return self::tryFrom(is_string($configured) ? $configured : '') ?? self::InAdvance;

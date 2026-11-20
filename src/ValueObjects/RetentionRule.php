@@ -49,8 +49,7 @@ final readonly class RetentionRule
          *
          * Nullable because a consumer's own rule predates this field and because "nobody said" is a real
          * state worth being able to see — it is exactly the state two shipped rules were in, declared and
-         * executed by nothing. `RetentionRulesAreExecutedTest` fails on a null here, so the gap is loud at
-         * the moment the rule is written rather than silent until somebody audits a deletion concept.
+         * executed by nothing. Every rule this package ships names its executor.
          */
         public ?RetentionExecutor $executor = null,
         /**

@@ -52,6 +52,9 @@ final readonly class MeterCatalog
         return $definition === null ? null : $this->make($tierKey, $meterKey, $definition);
     }
 
+    /**
+     * @param  mixed  $definition  the meter's entry in the config, which a host may have set to any type
+     */
     private function make(string $tierKey, string $meterKey, mixed $definition): MeteredComponent
     {
         if (! is_array($definition)) {
@@ -254,6 +257,9 @@ final readonly class MeterCatalog
         );
     }
 
+    /**
+     * @param  mixed  $price  a price of the meter as the config holds it, which a host may have set to any type
+     */
     private function money(mixed $price, string $tierKey, string $meterKey): ?Money
     {
         if ($price === null) {

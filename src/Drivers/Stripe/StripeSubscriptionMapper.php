@@ -347,7 +347,12 @@ final readonly class StripeSubscriptionMapper
         ];
     }
 
-    /** A discount's coupon, under either the field the older versions used or the one the pinned version uses. */
+    /**
+     * A discount's coupon, under either the field the older versions used or the one the pinned version uses.
+     *
+     * @param  mixed  $discount  a discount as the payload carries it, an id or an expanded object
+     * @return mixed the discount's coupon as the payload carries it, an id, an expanded object or nothing
+     */
     private function couponOf(mixed $discount): mixed
     {
         if (! is_array($discount)) {
@@ -360,13 +365,23 @@ final readonly class StripeSubscriptionMapper
     }
 
     /**
+     * Whether a discount is named only by its id, or names its coupon only by its id.
+     *
+     * @param  mixed  $discount  a discount as the payload carries it, an id or an expanded object
+     */
+    private function namedOnlyById(mixed $discount): bool
+    {
+        return is_string($discount) || is_string($this->couponOf($discount));
+    }
+
+    /**
      * Whether a discount is named only by id, or names its coupon only by id, so that the payload cannot answer.
      *
      * @param  list<mixed>  $discounts
      */
     private function carriesUnexpanded(array $discounts): bool
     {
-        return array_any($discounts, fn (mixed $discount): bool => is_string($discount) || is_string($this->couponOf($discount)));
+        return array_any($discounts, $this->namedOnlyById(...));
     }
 
     /**

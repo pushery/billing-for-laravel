@@ -8,6 +8,7 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\BillingAction;
 use Pushery\Billing\Support\LocalizedMoney;
+use Pushery\Billing\Support\MarkdownText;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\WithdrawalConsent;
 
@@ -41,18 +42,19 @@ final class PaymentSucceededNotification extends BillingNotification
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.payment_succeeded.subject'))
             ->line(Lang::get('billing::notifications.payment_succeeded.intro'))
-            ->line(Lang::get('billing::notifications.payment_succeeded.summary', [
+            // The reference is the provider's, so it goes into the Markdown line as text.
+            ->line(MarkdownText::interpolate((string) Lang::get('billing::notifications.payment_succeeded.summary', [
                 'amount' => LocalizedMoney::format($this->amount),
-                'reference' => $this->invoiceReference,
-            ]));
+            ]), ['reference' => $this->invoiceReference]));
 
         // The wording, not a link to it. A receipt pointing at "our withdrawal policy" confirms nothing:
         // the linked text changes and the purchase does not, so what would arrive years later is whatever
         // the page says then. Both or neither -- one of the two reads as a complete confirmation and is not.
+        // The wording is the operator's text as the buyer was shown it, so each declaration is a line of text.
         if ($this->consent instanceof WithdrawalConsent && $this->consent->hasWording()) {
             $mail->line(Lang::get('billing::notifications.payment_succeeded.declarations'))
-                ->line((string) $this->consent->immediateProvisionNotice)
-                ->line((string) $this->consent->forfeitureNotice);
+                ->line(MarkdownText::text((string) $this->consent->immediateProvisionNotice))
+                ->line(MarkdownText::text((string) $this->consent->forfeitureNotice));
         }
 
         return $this->withAction(

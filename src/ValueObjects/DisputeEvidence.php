@@ -6,6 +6,7 @@ namespace Pushery\Billing\ValueObjects;
 
 use InvalidArgumentException;
 use Pushery\Billing\Enums\DisputeDocument;
+use RuntimeException;
 
 /**
  * What a host submits to answer a dispute: statements about the sale, and documents that prove them.
@@ -56,7 +57,8 @@ final readonly class DisputeEvidence
         public array $documents = [],
     ) {
         foreach ($documents as $kind => $path) {
-            if (! DisputeDocument::tryFrom($kind) instanceof DisputeDocument) {
+            // A list of paths has the int keys 0, 1, …, which name no kind and are refused as such.
+            if (! DisputeDocument::tryFrom((string) $kind) instanceof DisputeDocument) {
                 throw new InvalidArgumentException("'{$kind}' is not a kind of dispute document. Use a DisputeDocument value.");
             }
 
@@ -153,9 +155,21 @@ final readonly class DisputeEvidence
         $statements = $this->statements();
         ksort($statements);
 
-        $documents = array_map(static fn (string $path): string => (string) hash_file('sha256', $path), $this->documents);
+        $documents = array_map($this->hashOf(...), $this->documents);
         ksort($documents);
 
         return hash('sha256', json_encode([$statements, $documents], JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * The SHA-256 of a document. A file that went away since the evidence was built is refused by its path, before
+     * PHP is asked to read it: an application reports the warning of a failed read as an error of its own, and
+     * where warnings are not reported the read answers false, which would give every missing document one hash.
+     */
+    private function hashOf(string $path): string
+    {
+        $hash = is_file($path) && is_readable($path) ? hash_file('sha256', $path) : false;
+
+        return $hash !== false ? $hash : throw new RuntimeException("The dispute document at '{$path}' could not be opened.");
     }
 }

@@ -145,6 +145,8 @@ final readonly class PrepaidLedger
      * The owner's balance row for a meter, locked for the caller's transaction. Created if absent —
      * insertOrIgnore, not create: two workers racing the first grant must not both hit a unique violation;
      * the loser falls through and reads the row the winner wrote.
+     *
+     * @param  mixed  $ownerId  the key of the owner, of whatever type the owner model keys on
      */
     private function locked(string $ownerType, mixed $ownerId, string $meterKey): PrepaidUnits
     {

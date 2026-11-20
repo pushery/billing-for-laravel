@@ -86,7 +86,10 @@ final readonly class ConfigPlanCatalog implements PlanCatalog
     {
         $out = [];
 
-        foreach (array_keys($this->tiers->all()) as $key) {
+        foreach ($this->tiers->all() as $identity) {
+            // The identity carries the key as a string; the array holds a key made of digits as an int.
+            $key = $identity->key;
+
             if ($key === $current->key) {
                 continue;
             }
@@ -143,7 +146,11 @@ final readonly class ConfigPlanCatalog implements PlanCatalog
         return $out;
     }
 
-    /** A setting of the tier at an interval: the tier's own key at its default interval, its `intervals` entry at another. */
+    /**
+     * A setting of the tier at an interval: the tier's own key at its default interval, its `intervals` entry at another.
+     *
+     * @return mixed the setting as the config holds it, which a host may have set to any type
+     */
     private function setting(string $tierKey, BillingInterval $interval, string $setting): mixed
     {
         if ($interval === $this->defaultInterval($tierKey)) {

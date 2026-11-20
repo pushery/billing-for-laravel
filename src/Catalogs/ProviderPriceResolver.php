@@ -40,6 +40,9 @@ final readonly class ProviderPriceResolver
         return $this->resolve(KeyedConfig::setting($this->config, 'billing.addons', $addonKey, 'provider_price'), $provider);
     }
 
+    /**
+     * @param  mixed  $price  a tier's provider price as the config holds it: an id, a map by provider, or what a host wrote
+     */
     private function resolve(mixed $price, ?string $provider): ?string
     {
         if (is_string($price)) {

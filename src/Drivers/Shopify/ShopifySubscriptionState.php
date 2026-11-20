@@ -89,6 +89,9 @@ final readonly class ShopifySubscriptionState
         return CarbonImmutable::createFromTimestamp($created)->addDays($days)->getTimestamp();
     }
 
+    /**
+     * @param  mixed  $value  a moment of the Shopify payload, as the JSON decoded it
+     */
     private static function moment(mixed $value): ?int
     {
         if (! is_string($value) || trim($value) === '') {

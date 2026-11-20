@@ -46,14 +46,15 @@ final class ContractConfirmationNotification extends BillingNotification
 
         // Each declaration in its wording, and only the ones the buyer made. A subscription asks for the request that
         // the service begin early and seldom for more, so one of the two is the ordinary case here, unlike on a
-        // receipt for a work whose right ends on delivery.
+        // receipt for a work whose right ends on delivery. The wording is the operator's text as the buyer was shown
+        // it, so each declaration is a line of text.
         $declared = $this->declared($this->contract->consent);
 
         if ($declared !== []) {
             $mail->line(Lang::get('billing::notifications.contract_confirmation.declarations'));
 
             foreach ($declared as $wording) {
-                $mail->line($wording);
+                $mail->line(MarkdownText::text($wording));
             }
         }
 

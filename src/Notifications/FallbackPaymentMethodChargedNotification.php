@@ -8,6 +8,7 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\BillingAction;
 use Pushery\Billing\Support\LocalizedMoney;
+use Pushery\Billing\Support\MarkdownText;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PaymentMethod;
 
@@ -31,11 +32,11 @@ final class FallbackPaymentMethodChargedNotification extends BillingNotification
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.fallback_method_charged.subject'))
             ->line(Lang::get('billing::notifications.fallback_method_charged.intro'))
-            ->line(Lang::get('billing::notifications.fallback_method_charged.summary', [
+            // The method is named by the provider's label, so it goes into the Markdown line as text, and the
+            // reference with it.
+            ->line(MarkdownText::interpolate((string) Lang::get('billing::notifications.fallback_method_charged.summary', [
                 'amount' => LocalizedMoney::format($this->amount),
-                'method' => $this->method->label(),
-                'reference' => $this->reference,
-            ]))
+            ]), ['method' => $this->method->label(), 'reference' => $this->reference]))
             ->line(Lang::get('billing::notifications.fallback_method_charged.outro'));
 
         return $this->withAction(
