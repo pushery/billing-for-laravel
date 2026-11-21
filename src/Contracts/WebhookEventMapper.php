@@ -11,7 +11,7 @@ use Pushery\Billing\Events\BillingDomainEvent;
  * Translates a verified provider webhook into zero or more neutral domain events. This is the one
  * place provider vocabulary (`customer.subscription.updated`, `invoice.payment_failed`, …) is turned
  * into the stable events effects listen on, so the same effect works for every driver. Returning
- * nothing is normal — an event with no neutral meaning is simply ignored.
+ * nothing is normal — an event with no neutral meaning is ignored.
  */
 interface WebhookEventMapper
 {

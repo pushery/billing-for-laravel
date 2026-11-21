@@ -48,7 +48,7 @@ final class MollieNotConfigured extends RuntimeException
         return new self(
             'The Mollie API key in `billing.mollie.api_key` (BILLING_MOLLIE_API_KEY) was rejected by the '.
             "Mollie client: {$detail} A test key begins `test_`, a live one `live_`. This is a typo or a ".
-            'truncated secret rather than a missing one — the value is set, it is simply not a key.'
+            'truncated secret rather than a missing one — the value is set, it is not a key.'
         );
     }
 
@@ -57,7 +57,7 @@ final class MollieNotConfigured extends RuntimeException
     {
         return new self(
             "The credential of the Mollie payment account `{$account}` was rejected by the Mollie client. An API key begins ".
-            '`test_` or `live_`, an OAuth access token `access_`. The value is set, it is simply neither.'
+            '`test_` or `live_`, an OAuth access token `access_`. The value is set, it is neither.'
         );
     }
 

@@ -33,7 +33,7 @@ use Pushery\Billing\Support\SweepAttempts;
  * Arrears concern the period that was not paid. If the last paid period still runs, access continues to its
  * end — the subscription is canceled now, and lapses then. The package already has exactly this shape:
  * `ends_at` in the future is "canceled but paid through the period end", which `onGracePeriod()` reads. So
- * expiry sets `ends_at`, and the ordinary case (nothing left paid for) simply sets it to now.
+ * expiry sets `ends_at`, and the ordinary case (nothing left paid for) sets it to now.
  *
  * The obvious implementation — canceled means access off — gets this wrong, which is why it has its own
  * test rather than a comment.

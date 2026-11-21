@@ -20,8 +20,8 @@ use Pushery\Billing\ValueObjects\MerchantTierRow;
  * way, and the way the contract reads — turns every incoming subscription event into a burst of identical
  * queries.
  *
- * That cost is invisible in tests: an in-memory fake answers instantly, so the suite is green at any N, and
- * the storm only appears under a real database with real traffic.
+ * That cost is invisible in tests: an in-memory fake answers instantly at any N, and the storm only appears
+ * under a real database with real traffic.
  *
  * ## Why the package memoizes rather than asking hosts to
  *

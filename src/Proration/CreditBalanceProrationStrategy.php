@@ -26,7 +26,7 @@ use Pushery\Billing\ValueObjects\Plan;
  * becomes customer credit, and the next order is offset against it.
  *
  * Stripe prorates on its own side, which is what DelegatedProrationStrategy defers to. A driver that collects each
- * period in advance and has no provider-side proration needs this instead: a swap there is simply a new order at
+ * period in advance and has no provider-side proration needs this instead: a swap there is a new order at
  * the new price, and without the credit the customer pays twice for the same days. Bind it in place of the
  * delegated strategy on such a driver. The package's own engine is not one: it bills a period when it closes, so
  * there is no paid remainder to give back, and it binds {@see ArrearsProrationStrategy}.

@@ -217,7 +217,7 @@ final readonly class MollieClientFactory
      *
      * Guarded by class_exists rather than by requiring composer-runtime-api: the constraint block of this
      * package decides who may install it, and adding an entry there to send a telemetry header would be a
-     * poor trade. Without Composer's runtime the header is simply omitted.
+     * poor trade. Without Composer's runtime the header is omitted.
      */
     private function versionString(): ?string
     {

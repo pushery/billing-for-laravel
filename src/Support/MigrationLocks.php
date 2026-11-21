@@ -20,10 +20,12 @@ use WeakMap;
  *
  * Called first in the up() and down() of a migration that alters a table. On PostgreSQL the settings are `SET LOCAL`
  * and end with the transaction Laravel runs each migration in there, so no other migration of the same run inherits
- * them. MySQL has neither `SET LOCAL` nor a statement bound for DDL, so the bound is a setting of the session there,
- * and the value the session had before is put back when the migration ends. A later migration of the same run, the
- * application's own included, and the seeders of `migrate --seed` then wait as long as they did without it. Under
- * `migrate --pretend` nothing runs, so nothing is read and nothing is put back. SQLite takes no such locks.
+ * them; a migration that sets `$withinTransaction` to false runs outside one, where `SET LOCAL` changes nothing. MySQL
+ * has neither `SET LOCAL` nor a statement bound for DDL, so the bound is a setting of the session there, and the value
+ * the session had before is put back when the migration ends. MariaDB, which Laravel names a driver of its own, keeps
+ * the same setting and takes the same bound. A later migration of the same run, the application's own included, and
+ * the seeders of `migrate --seed` then wait as long as they did without it. Under `migrate --pretend` nothing runs, so
+ * nothing is read and nothing is put back. SQLite takes no such locks.
  *
  * Part of the public API, because the migrations this package publishes call it. Once published, a migration runs in
  * the host's own namespace, and a host that analyzes its migrations reads every call there into a class the package
@@ -32,8 +34,8 @@ use WeakMap;
 final class MigrationLocks
 {
     /**
-     * The MySQL connections whose session waits for the end of a migration to get its lock wait
-     * back, each with the mark of the one listener that puts it back.
+     * The MySQL and MariaDB connections whose session waits for the end of a migration to get its lock
+     * wait back, each with the mark of the one listener that puts it back.
      *
      * @var WeakMap<Connection, stdClass>|null
      */

@@ -4,6 +4,37 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.64.0] - 2026-11-21
+
+### ✨ Added
+
+- **An application can bind the dated rate history instead of configuring it.** `ProvidesTaxRateHistory` hands the `eu_oss` calculator, the tax of a deemed supply of goods and `billing:tax-rates:corrections` the intervals a table of the application holds, asked when the rates are needed rather than while the application boots. Without a binding, `billing.tax_matrix.history` answers as before.
+- **The view of the contract confirmation gets `$asText`, which sets a value of the buyer or the catalog into the mail as text.** The mail is Markdown, and Blade's `{{ }}` escapes HTML only, so a name written as a link arrived as one. `{{ $asText($owner->name) }}` shows it as it was typed; `$owner` and `$contract` are unchanged.
+- **Billing prunes the expired cache entries it keeps, once a day.** A database or a file cache store deletes an expired entry only when its key is read again, and billing writes keys nobody reads again: the holds of a scheduled tier change, and the counters of the identity reconfirmation and of the provider call budget. The schedule the package registers now calls `PruneExpiredCacheKeys` at 03:45, beside `billing:prune`, in full and in payments-only mode. It deletes the expired rows under `billing:` from the default store and the store in `cache.limiter`, and the expired files of a file store. Redis, Memcached and every other store that expires its entries itself stay untouched. Nothing is scheduled while `billing.enabled` is off.
+- **An authorized payment can be captured later or released, on Stripe as on Mollie.** `StripeCaptures` captures the payment a charge with the capture mode `manual` authorized, in full or in part, or releases its hold, by the reference the charge returned, a Checkout Session included. `MollieCaptures::release()` releases a hold at Mollie, which cancels an authorized payment through a request of its own rather than through the cancellation of an open one. The payment accounts guide lists the methods each provider can authorize, and how long a hold lasts.
+- **An open bank transfer names where the money goes, and Mollie keeps it open until the charge's expiry.** A charge at Mollie with the method `banktransfer` returns `paymentInstructions` in its `ChargeResult`: the name the transfer goes to, the IBAN, the BIC and the reference, for the shop to show the customer. A payment read back through the account's webhooks carries them too while the transfer is awaited, and both name the method the customer pays with in `paymentMethod`. `ChargeOptions::$expiresAt` sets the transfer's `dueDate`, the day Mollie keeps it open until, from tomorrow to 100 days after tomorrow; a day outside that is refused before Mollie hears of the payment.
+- **A bank transfer can be offered on Stripe's checkout page, and its instructions arrive with the account's report.** `ChargeOptions::$customerReference` names the customer of the account a payment belongs to, and a charge that offers `customer_balance` sends it with the session, together with the kind of account Stripe opens for the currency: in euros an IBAN in the billing address's country, or in `billing.stripe.bank_transfer_country` where Stripe opens none there. A transfer without a customer, or in euros without either country, is refused before Stripe hears of it. `StripeAccountCustomers::create()` creates the customer on the account, once for each person who buys, with the name, email and address of a `PaymentAddress`. The account's webhooks read `payment_intent.requires_action` and `payment_intent.partially_funded` and report a transfer waiting for its money as `Pending`, with `paymentMethod` `customer_balance` and its `paymentInstructions`; an intent waiting for an authentication still reports nothing.
+
+### 🔧 Changed
+
+- **`Money::toDecimal()` declares `numeric-string`.** It always renders an optional minus sign and digits, with a point before the minor digits where the currency has any, so its result goes to `bcadd()` and the other bcmath functions without a check of the caller's own.
+
+### 🐛 Fixed
+
+- **A second move of a customer from the same day is recorded as a correction instead of failing.** `SupplyPlaceDecision::relocate()` kept a move under the sale's reference and the day, so a second move from that day met the unique reference and the database refused it. It is now kept beside the first under the same day with a number behind a `#`, the first stays as the record of what was in force until then, and a cycle that begins on that day reads the later one.
+- **The usage flush is planned again where units are held or granted without a metered tier.** Since 0.62.0 `billing:usage:flush` was planned only where a tier meters something, and the command is also what hands an expired hold back and writes an expired grant off. An application that holds units with `UsageMeter::reserve()` or grants them with `UsageGrants::grant()` on a meter no tier names kept a hold its dead worker left behind, which refused allowance nobody had spent, and never wrote an expired grant off. The flush is now planned as well while a hold with an expiry waits to be handed back or a grant to run out.
+- **The capture mode `manual` reaches a payment on Stripe's checkout page.** A charge of a Stripe payment account that opens Stripe's checkout passed no capture method to the payment the customer makes there, so Stripe drew the money at once, while the same charge on Mollie only authorized it.
+
+### 🔒 Security
+
+- **Billing's jobs wait in the queue encrypted, as its mails do since 0.63.0.** The effect of a webhook took the whole domain event onto the queue, with the tax id of a buyer or the mandate and the payment method of a payer, and the other jobs took the references and amounts of a sale, into the `jobs` table by default and into `failed_jobs` once a job had failed, both as plain text until now. Every class the package queues is `ShouldBeEncrypted` now: its nine jobs, the effect of a webhook, the listener that syncs the seats of a subscription and the ping of the Mollie sandbox, so Laravel encrypts each of them with the application key.
+
+  **Upgrade:** a queue worker reads these jobs with the same `APP_KEY` as the application, and a job queued before the update is still read as it was written. A tool that reads the `jobs` or `failed_jobs` table finds them encrypted.
+
+### 📚 Documentation
+
+- **The documentation says how the cache store can lose the hold of a scheduled change and the count of identity confirmations.** Both sit in the default store, and a store that evicts, is flushed by `cache:clear` or `optimize:clear`, or restarts without persistence loses them: a lost hold lets the hourly run try a change that waits for payment again, and a lost count gives five fresh tries. The troubleshooting guide and the account hub page name the keys and the stores that keep them.
+
 ## [0.63.0] - 2026-11-20
 
 ### 🐛 Fixed
@@ -6293,6 +6324,7 @@ named — the range contained their changes without being exclusive to them, and
   reasoning the class carried now lives on the matrix branch that performs the hold, pinned by a test so
   deleting it is a decision rather than a tidy-up. Never released — the class was added after v0.9.0, so no
   published version loses anything.
+- **Three configuration keys that promised behavior and delivered none.** `billing.marketplace.fee.processing_fee.borne_by` said in its own comment that the package records which side carries the provider's fee, and nothing recorded anything — wiring it would mean freezing a fee-incidence claim onto a money row while the package still contradicts itself about who actually bears that fee on a destination charge, so it goes until that is settled. `billing.tax_small_business.reattestation.on_year_change` offered to switch off the thing that makes declarations work at all: a declaration is a statement about a year in progress, so it cannot outlive that year, and an installation able to disable the expiry would carry standings that read as current and are not. `billing.consumer_rights.window_days` shipped a statutory-looking 14 and computed nothing — nothing in the package records the moment a work was provided, which is what a window would have to be measured from, and a number that changes nothing is worse than no number because an operator who raises it for their jurisdiction gets silence. Each is removed from the config, the documentation and the environment surface in one change, and each comes back the day it can be honest.
 
 ### Fixed
 
@@ -7594,20 +7626,6 @@ named — the range contained their changes without being exclusive to them, and
 
 ### Removed
 
-- **Three configuration keys that promised behavior and delivered none.**
-  `billing.marketplace.fee.processing_fee.borne_by` said in its own comment that the package records which
-  side carries the provider's fee, and nothing recorded anything — wiring it would mean freezing a
-  fee-incidence claim onto a money row while the package still contradicts itself about who actually bears
-  that fee on a destination charge, so it goes until that is settled.
-  `billing.tax_small_business.reattestation.on_year_change` offered to switch off the thing that makes
-  declarations work at all: a declaration is a statement about a year in progress, so it cannot outlive
-  that year, and an installation able to disable the expiry would carry standings that read as current and
-  are not. `billing.consumer_rights.window_days` shipped a statutory-looking 14 and computed nothing —
-  nothing in the package records the moment a work was provided, which is what a window would have to be
-  measured from, and a number that changes nothing is worse than no number because an operator who raises
-  it for their jurisdiction gets silence. Each is removed from the config, the documentation and the
-  environment surface in one change, and each comes back the day it can be honest.
-
 - **The documentation pages for features that do not ship.** Thirteen pages whose whole content was a
   placeholder banner and an outline are gone, and the entry page is rewritten as the six setup decisions a
   reader actually has to make, each with its config key and default. A page that announces itself as empty is
@@ -8645,7 +8663,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.63.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.64.0...HEAD
+[0.64.0]: https://github.com/pushery/billing-for-laravel/compare/v0.63.0...v0.64.0
 [0.63.0]: https://github.com/pushery/billing-for-laravel/compare/v0.62.0...v0.63.0
 [0.62.0]: https://github.com/pushery/billing-for-laravel/compare/v0.61.0...v0.62.0
 [0.61.0]: https://github.com/pushery/billing-for-laravel/compare/v0.60.0...v0.61.0

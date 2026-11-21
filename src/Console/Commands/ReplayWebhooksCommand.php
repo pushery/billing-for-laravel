@@ -25,7 +25,7 @@ use Pushery\Billing\Webhooks\WebhookEffectRegistry;
  *
  * A provider retries a failed webhook for a while and then gives up — Stripe stops after ~3 days. If an
  * effect was still failing when that window closed (a bug, an outage, a migration that had not run yet),
- * the work is simply never done again and no one is coming back to do it: an add-on stays uncredited, a
+ * the work is never done again and no one is coming back to do it: an add-on stays uncredited, a
  * plan stays out of sync. That is the gap this closes. The receiver stores every verified delivery with
  * its raw payload, so the package can re-drive it itself, on its own schedule, long after the provider
  * has stopped caring.

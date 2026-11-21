@@ -14,7 +14,7 @@ use Illuminate\Contracts\Config\Repository;
  * record for).
  *
  * The URL passes through {@see SafeExternalUrl}, so a tampered or misconfigured value can never become an
- * open redirect: an unsafe or missing value simply turns link-out off (url() is null), and the hub falls
+ * open redirect: an unsafe or missing value turns link-out off (url() is null), and the hub falls
  * back to its in-app flow rather than sending the customer somewhere unsafe.
  */
 final readonly class LinkOut

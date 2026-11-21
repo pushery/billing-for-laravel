@@ -24,7 +24,7 @@ use Illuminate\Database\Eloquent\Model;
  * `billing.tax_exchange_rates.currencies` looks like it, and a loop over it is silently incomplete: it lists
  * the currencies rates are imported for, which its own configuration comment separates in as many words from
  * the currencies money is settled in. A creator with earnings in a currency nobody imports rates for would
- * simply be shown one balance fewer, with nothing anywhere going red.
+ * be shown one balance fewer, with nothing anywhere going red.
  *
  * ## Why a sibling contract rather than a method on the balance reader
  *

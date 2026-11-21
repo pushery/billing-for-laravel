@@ -6,6 +6,7 @@ namespace Pushery\Billing\Drivers\Mollie\Sandbox;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
@@ -21,7 +22,7 @@ use Pushery\Billing\Webhooks\WebhookReceiver;
  * Queued on the connection and queue of the webhook effects, after the transaction that wrote the payment commits,
  * so the driver has the payment's answer before its ping arrives, as with Mollie.
  */
-final class SendSandboxPing implements ShouldQueueAfterCommit
+final class SendSandboxPing implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use BacksOffBetweenAttempts;
     use Queueable;

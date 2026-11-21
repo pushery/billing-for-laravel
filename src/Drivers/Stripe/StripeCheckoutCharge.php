@@ -60,8 +60,14 @@ final readonly class StripeCheckoutCharge
      * line for the amount that names the lines. The language of the options becomes the page's where Stripe speaks
      * it, and the methods of the options are the ones offered, all the account has turned on without them.
      *
-     * @throws InvalidArgumentException when there is nowhere to send the customer back to, or the lines of the charge
-     *                                  do not add up to its amount
+     * The customer of the options goes with the session. A bank transfer, `customer_balance` among the methods, needs
+     * one, because Stripe keeps the money on that customer's balance, and it is offered with the kind of account Stripe
+     * opens for the currency: in euros an IBAN of the billing address's country where Stripe opens one there,
+     * otherwise of `billing.stripe.bank_transfer_country`.
+     *
+     * @throws InvalidArgumentException when there is nowhere to send the customer back to, the lines of the charge do
+     *                                  not add up to its amount, or a bank transfer has no customer or no account
+     *                                  Stripe opens for its currency and country
      */
     public function charge(Money $amount, ?string $idempotencyKey = null, ?ChargeNarrative $narrative = null, ?ChargeOptions $options = null): ChargeResult
     {
@@ -71,21 +77,40 @@ final readonly class StripeCheckoutCharge
             throw new InvalidArgumentException('A payment on Stripe\'s checkout page needs an address to send the customer back to: the return address of the charge, or `billing.stripe.return_url`.');
         }
 
+        $methods = $options instanceof ChargeOptions ? $options->methods : [];
+        $customer = $options?->customerReference;
+        $transfer = in_array(StripeBankTransfer::METHOD, $methods, true);
+
+        if ($transfer && $customer === null) {
+            throw new InvalidArgumentException("A bank transfer on Stripe's checkout page belongs to a customer of the account, whose balance takes the money: name its id as the charge's `customerReference`.");
+        }
+
         $metadata = [
             ...($options instanceof ChargeOptions ? $options->metadata : []),
             ...($idempotencyKey === null ? [] : [ChargeOptions::RESERVED_METADATA_KEY => $idempotencyKey]),
         ];
+        // The capture mode of the charge reaches the payment the customer makes on the page: `manual` authorizes it, and
+        // StripeCaptures captures or releases it later. Without one, Stripe captures when the customer pays.
         $intent = array_filter(
-            ['metadata' => $metadata, 'description' => $narrative?->statement(StripePaymentRails::DESCRIPTION_LIMIT)],
+            [
+                'metadata' => $metadata,
+                'description' => $narrative?->statement(StripePaymentRails::DESCRIPTION_LIMIT),
+                'capture_method' => $options?->captureMode,
+            ],
             $this->isSent(...),
         );
+        $transferOptions = $transfer
+            ? ['customer_balance' => StripeBankTransfer::checkoutOptions($amount, $options->billingAddress, $this->config->get('billing.stripe.bank_transfer_country'))]
+            : null;
         $payload = array_filter([
             'mode' => 'payment',
             'line_items' => $this->lineItems($amount, $options instanceof ChargeOptions ? $options->lines : [], $narrative),
             'success_url' => $returnUrl,
             'cancel_url' => $options?->cancelUrl,
             'locale' => $this->locale($options?->locale),
-            'payment_method_types' => $options instanceof ChargeOptions ? $options->methods : [],
+            'payment_method_types' => $methods,
+            'customer' => $customer,
+            'payment_method_options' => $transferOptions,
             'metadata' => $metadata,
             'payment_intent_data' => $intent,
             'expires_at' => $this->expiresAt($options?->expiresAt),

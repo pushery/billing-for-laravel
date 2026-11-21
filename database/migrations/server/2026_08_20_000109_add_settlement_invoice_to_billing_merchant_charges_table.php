@@ -16,8 +16,8 @@ use Illuminate\Support\Facades\Schema;
  *
  * So after a collective run the package held no link at all between a routed charge and the document that
  * settled it. A refund on such a sale therefore found no settlement to correct and issued nothing, while
- * the money ledger updated correctly and every guard stayed green — the exact shape of failure this area
- * keeps finding in itself, an absence read as an answer.
+ * the money ledger updated correctly and nothing reported the missing correction: an absence read as an
+ * answer.
  *
  * ## Why on the charge rather than in the document's lines
  *

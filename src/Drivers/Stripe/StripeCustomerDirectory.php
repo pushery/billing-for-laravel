@@ -13,7 +13,7 @@ use Pushery\Billing\Contracts\CustomerDirectory;
  * configured customer model's reference column (Cashier stores it in `stripe_id`). This is the seam
  * the webhook effects use to act on the right account. It fails soft — an unconfigured model, a
  * misconfigured class, or an unknown reference all return null rather than throwing, so a clone
- * without a billable model still boots and a stray webhook is simply ignored.
+ * without a billable model still boots and a stray webhook is ignored.
  *
  * A customer the application hides is still found. The provider goes on billing a customer the application has
  * soft-deleted or scoped to another tenant, and an invoice it finalizes or a payment it takes for that customer is

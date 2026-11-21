@@ -6,19 +6,19 @@ declare(strict_types=1);
 // standing blocks is a jurisdiction's rule, and the person reading it may sit in another one.
 //
 // The lapsed-attestation wording says plainly that the recipient did nothing wrong. They did not — the date
-// simply passed — and a notice that reads like an accusation is one they answer defensively instead of
+// passed — and a notice that reads like an accusation is one they answer defensively instead of
 // acting on.
 
 return [
 
     'attestation_lapsed' => [
         'title' => 'Your tax attestation has expired',
-        'body' => 'Until it is renewed you cannot sell or receive payouts. Nothing you did caused this — the attestation simply reached its end date.',
+        'body' => 'Until it is renewed you cannot sell or receive payouts. Nothing you did caused this — the attestation reached its end date.',
     ],
 
     'status_recorded' => [
         'title' => 'Your tax standing needs clarifying',
-        'body' => 'Until it is renewed you cannot sell or receive payouts. Nothing you did caused this — the attestation simply reached its end date.',
+        'body' => 'Until it is renewed you cannot sell or receive payouts. Nothing you did caused this — the attestation reached its end date.',
     ],
 
     'deadline_approaching' => [

@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\CheckpointOutcome;
  * Whether any jurisdiction's obligations are being checked at all.
  *
  * Without a profile the first two stages of the checklist hold no points, and a report whose terms and
- * registration stages are simply empty is the most flattering thing this command could print: everything
+ * registration stages are empty is the most flattering thing this command could print: everything
  * that is missing is also invisible. This line makes the absence say its own name, once, in words.
  *
  * It warns rather than blocks. The package genuinely does not know which jurisdictions need a profile, and

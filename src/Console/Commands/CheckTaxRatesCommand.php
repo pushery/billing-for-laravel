@@ -24,7 +24,7 @@ use Pushery\Billing\Tax\TedbRateSource;
  * The work that turns that report into something an operator can act on — plausibility, triage against the
  * countries this installation has actually billed into, a reviewable proposal on disk — was built, tested,
  * and had no entry point at all. `RateImporter` had zero callers, which made the whole cluster behind it
- * unreachable from shipped code while every one of its own tests stayed green.
+ * unreachable from shipped code. This command is its entry point.
  *
  * ## It proposes. It does not apply.
  *

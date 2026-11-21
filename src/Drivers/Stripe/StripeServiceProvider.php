@@ -158,8 +158,8 @@ final class StripeServiceProvider extends ServiceProvider
      * Cashier builds its own client with `Cashier::STRIPE_VERSION`, which is `StripeApiVersion::CURRENT`
      * — the SDK's constant. So Cashier's version moves with every SDK update while this one, correctly,
      * does not. Apart, the two talk to the same Stripe account about the same objects in two different
-     * response shapes. The rule above guards the half that does not move on its own, and the package's own
-     * tests compare the two, so a drift fails there instead of waiting to be noticed.
+     * response shapes. The rule above guards the half that does not move on its own, and both values are
+     * held equal before a release, so a drift fails there instead of waiting to be noticed.
      *
      * Matching Cashier's value is an alignment, not a departure. It is also the floor the Accounts v2 API
      * requires: under `basil` that API is not addressable at all on the real test API.
@@ -555,7 +555,7 @@ final class StripeServiceProvider extends ServiceProvider
         }
 
         // The merchant endpoint has its own secret, and a marketplace running without it is the quietest
-        // possible failure: every merchant event fails verification, so the capability flags simply never
+        // possible failure: every merchant event fails verification, so the capability flags never
         // move — a merchant who lost their payout capability keeps being paid, and nothing anywhere reports
         // an error. Refuse to boot instead.
         $merchantSecret = $config->get(StripeMarketplaceWebhookVerifier::SECRET_KEY);

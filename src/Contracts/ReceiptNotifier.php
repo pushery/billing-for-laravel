@@ -14,7 +14,7 @@ use Pushery\Billing\ValueObjects\Money;
  * accounting system, a document service, its own template).
  *
  * The once-per-payment guarantee lives in the caller (the webhook effect dedups on the payment reference,
- * not on the delivery), so an implementation simply delivers.
+ * not on the delivery), so an implementation delivers.
  */
 interface ReceiptNotifier
 {

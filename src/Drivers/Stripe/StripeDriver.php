@@ -87,7 +87,7 @@ final readonly class StripeDriver implements BillingDriver, RoutesMoney
             // would send a screen to a lane that answers with an exception.
             //
             // It was omitted entirely before, which defaulted it to false on every install — including a
-            // fully wired marketplace. Nothing went red, because nothing in the shipped tree read it: the
+            // fully wired marketplace. Nothing in the shipped tree read it, so the default went unnoticed: the
             // guard decides on `instanceof RoutesMoney`, and the flag was set to true only inside test
             // fixtures, where it decorates a decision that never looks at it. A field with no producer and
             // no reader is indistinguishable from one that works.

@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Log;
  * A page of the payment provider passes a second check where the driver reads it from the provider's answer:
  * `onHosts()` also requires `https` and a host the driver serves its pages from. So a tampered payload, a
  * misconfigured driver, or a compromised provider response can never turn a billing link-out into an XSS or
- * an open redirect. A refused URL yields null, and the caller declines to redirect (a Livewire screen simply
+ * an open redirect. A refused URL yields null, and the caller declines to redirect (a Livewire screen
  * does not navigate; the portal controller 404s) rather than sending the customer somewhere unsafe.
  */
 final class SafeExternalUrl

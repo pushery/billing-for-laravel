@@ -39,7 +39,7 @@ use Pushery\Billing\ValueObjects\Money;
  * Together those keep this a prepayment against the seller's own supplies. A withdraw()/payout() method, or
  * a debit() wired to a "pay out my remaining balance" button, changes what the instrument is — and it does
  * so without breaking a single test, which is precisely why the properties are pinned by an explicit
- * containment test in the package's own suite instead of being left to this comment. If a
+ * containment test instead of being left to this comment. If a
  * feature seems to need one of these, it is a design decision to escalate, not a method to add.
  */
 final class CreditLedger

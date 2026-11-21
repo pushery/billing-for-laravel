@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * A merchant reaches a tax hold two ways, and only one of them writes anything. Somebody recording a
  * blocking standing is a write, and a write can be watched. An attestation expiring is not: the hold begins
- * because time passed, `statusAt()` simply starts answering "unclarified", and nothing anywhere fires.
+ * because time passed, `statusAt()` starts answering "unclarified", and nothing anywhere fires.
  *
  * Detection therefore has to be a scheduled sweep, and a sweep needs to know what it has already announced —
  * otherwise it re-announces every night for as long as the hold lasts, which is how a notification channel

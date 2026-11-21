@@ -18,7 +18,7 @@ use Pushery\Billing\Enums\ExchangeRateLayer;
  * package-level default would be wrong for somebody by law rather than by oversight.
  *
  * So the question is asked of the profile, and a profile that does not implement this is not answered for.
- * An installation with no FX rule declared simply does not freeze a rate — which is the honest outcome, and
+ * An installation with no FX rule declared does not freeze a rate — which is the honest outcome, and
  * strictly better than freezing one under a rule nobody chose.
  *
  * ## Only the document layer, deliberately

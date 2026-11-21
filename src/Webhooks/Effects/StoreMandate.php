@@ -47,7 +47,7 @@ final readonly class StoreMandate
 
         if (! $owner instanceof Model) {
             // A customer belonging to somebody else's install, or one deleted since. Resolving to nobody
-            // is the answer here rather than an exception: the delivery is genuine, it is simply not ours.
+            // is the answer here rather than an exception: the delivery is genuine, it is not ours.
             return;
         }
 

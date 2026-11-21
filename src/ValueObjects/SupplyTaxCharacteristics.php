@@ -92,7 +92,7 @@ final readonly class SupplyTaxCharacteristics
      * The empty set of characteristics — a caller that knows none of them.
      *
      * Named rather than left as `new SupplyTaxCharacteristics()` at each call site, so that a document
-     * issued with nothing known says so deliberately instead of by an argument list simply ending.
+     * issued with nothing known says so deliberately instead of by an argument list ending.
      */
     public static function unknown(): self
     {

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Mollie;
 
+use Carbon\CarbonImmutable;
+use DateTimeInterface;
 use InvalidArgumentException;
 use Mollie\Api\Http\Data\Address;
 use Mollie\Api\Http\Data\DataCollection;
@@ -17,8 +19,8 @@ use Pushery\Billing\ValueObjects\PaymentLine;
  * The options of a charge in the shapes Mollie's payment request takes.
  *
  * Mollie takes every field of ChargeOptions: the return, cancel and webhook addresses, the locale, the methods, the
- * metadata, the lines, both addresses and the card token from Mollie Components. Both supported majors of the SDK
- * name these fields alike.
+ * metadata, the lines, both addresses, the card token from Mollie Components and, for a bank transfer, the expiry.
+ * Both supported majors of the SDK name these fields alike.
  */
 final class MollieChargeOptions
 {
@@ -120,16 +122,44 @@ final class MollieChargeOptions
     }
 
     /**
-     * The card token from Mollie Components and the Apple Pay token, which the request carries beside its named fields.
+     * What the request carries beside its named fields: the card token from Mollie Components, the Apple Pay token,
+     * and for a bank transfer the day Mollie keeps it open until, its `dueDate`.
      *
+     * The due date is the day of the charge's `expiresAt`, in the time zone that moment carries, and it is sent where
+     * the payment is created with `banktransfer` among its methods. Mollie takes a day from tomorrow to 100 days after
+     * tomorrow, so a day outside that is refused here, before Mollie hears of the payment. Every other method keeps the
+     * lifetime Mollie gives it.
+     *
+     * @param  list<string>|string|null  $method  the method the payment is created with, as method() names it
      * @return array<string, string>
+     *
+     * @throws InvalidArgumentException for a bank transfer due on a day Mollie does not take
      */
-    public static function additional(?ChargeOptions $options): array
+    public static function additional(?ChargeOptions $options, array|string|null $method = null): array
     {
         if (! $options instanceof ChargeOptions) {
             return [];
         }
 
-        return array_filter(['cardToken' => $options->cardToken, 'applePayPaymentToken' => $options->applePayToken], is_string(...));
+        $additional = array_filter(['cardToken' => $options->cardToken, 'applePayPaymentToken' => $options->applePayToken], is_string(...));
+
+        if (! $options->expiresAt instanceof DateTimeInterface || ! in_array(MolliePaymentInstructions::METHOD, (array) $method, true)) {
+            return $additional;
+        }
+
+        $due = CarbonImmutable::instance($options->expiresAt)->startOfDay();
+        $first = CarbonImmutable::now($due->getTimezone())->startOfDay()->addDay();
+        $last = $first->addDays(100);
+
+        if ($due->lessThan($first) || $due->greaterThan($last)) {
+            throw new InvalidArgumentException(sprintf(
+                'Mollie keeps a bank transfer open until a day from %s to %s, and the charge asks for %s.',
+                $first->toDateString(),
+                $last->toDateString(),
+                $due->toDateString(),
+            ));
+        }
+
+        return [...$additional, 'dueDate' => $due->toDateString()];
     }
 }

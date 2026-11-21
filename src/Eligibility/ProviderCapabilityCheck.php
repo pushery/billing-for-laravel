@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\MerchantAccountReference;
  * payouts, and has finished submitting their details.
  *
  * It never throws. A check is one voice in a composed gate, and a check that threw would turn a merchant
- * who simply has not onboarded into an error page — so an absent account, a stale account and a
+ * who has not onboarded into an error page — so an absent account, a stale account and a
  * half-onboarded account all answer the same way: no.
  *
  * A consumer adds their own predicates beside this one (verified, of age, not suspended). The two kinds are

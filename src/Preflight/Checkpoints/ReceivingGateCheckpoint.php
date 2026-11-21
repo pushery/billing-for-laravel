@@ -31,7 +31,7 @@ use Pushery\Billing\ValueObjects\CheckpointOutcome;
  * The failure direction is as quiet as it gets: no test goes red, nothing is logged, and the first symptom
  * is at a stranger's checkout. Stripe refuses a payment to an account that cannot receive, so the buyer
  * sees the error rather than the merchant. In the less friendly case — an account that still receives but
- * is suspended in the operator's own records — the money simply arrives at a merchant they just blocked.
+ * is suspended in the operator's own records — the money arrives at a merchant they just blocked.
  *
  * ## Blocking, and waivable
  *

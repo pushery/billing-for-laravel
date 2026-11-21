@@ -28,7 +28,7 @@ use Carbon\CarbonImmutable;
  *   LU state their legal basis in `comment`. "Has a comment" looks like a tidy proxy for "is a footnote" and
  *   is nothing of the kind.
  * - **`EL` is Greece.** TEDB uses the EU's own code, not ISO's `GR`. `XI` (Northern Ireland) is never folded
- *   into the union list silently, and `GB` is simply absent — a lookup that quietly returns nothing for it
+ *   into the union list silently, and `GB` is absent — a lookup that quietly returns nothing for it
  *   would read as "no VAT there".
  */
 final readonly class TedbRateReduction

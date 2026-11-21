@@ -7,18 +7,21 @@ namespace Pushery\Billing\Drivers\Mollie;
 use Mollie\Api\Exceptions\ApiException;
 use Mollie\Api\Exceptions\RequestException;
 use Mollie\Api\Http\Requests\CreatePaymentCaptureRequest;
+use Mollie\Api\Http\Requests\ReleasePaymentAuthorizationRequest;
 use Mollie\Api\Resources\Capture;
 use Pushery\Billing\ValueObjects\CaptureResult;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PaymentAccount;
+use Pushery\Billing\ValueObjects\PaymentCancellation;
 
 /**
- * Captures an authorized payment of a payment account at Mollie, in full or in part.
+ * Captures an authorized payment of a payment account at Mollie, in full or in part, or releases it.
  *
  * Klarna, in3, Billie and Riverty end a payment in `authorized`, and so does a card payment created with the capture
- * mode `manual`. The money moves once the payment is captured, usually when the order ships. A capture the provider
- * refuses comes back as a result with Mollie's status and words; an error that says nothing about the capture
- * travels.
+ * mode `manual`. The money moves once the payment is captured, usually when the order ships. Released instead, the
+ * hold ends and nothing moves: Mollie cancels an authorized payment through its own release, not through the
+ * cancellation of an open one. What the provider refuses comes back as a result with Mollie's status and words; an
+ * error that says nothing about the payment travels.
  */
 final readonly class MollieCaptures
 {
@@ -64,5 +67,31 @@ final readonly class MollieCaptures
             status: $status,
             failureCode: $status === 'failed' ? $status : null,
         );
+    }
+
+    /**
+     * End the hold of an authorized payment, so nothing moves. Mollie takes the release and reports the payment
+     * canceled through its webhook; a payment it keeps, one already captured for instance, comes back as not released.
+     */
+    public function release(PaymentAccount $account, string $paymentReference): PaymentCancellation
+    {
+        try {
+            $this->clients->forAccount($account)->send(new ReleasePaymentAuthorizationRequest($paymentReference));
+        } catch (RequestException $refusal) {
+            $status = $refusal->getStatusCode();
+
+            if ($status < 400 || $status >= 500 || in_array($status, [401, 403, 429], true)) {
+                throw $refusal;
+            }
+
+            return new PaymentCancellation(
+                $paymentReference,
+                canceled: false,
+                failureCode: (string) $status,
+                failureMessage: $refusal instanceof ApiException ? $refusal->getPlainMessage() : $refusal->getMessage(),
+            );
+        }
+
+        return new PaymentCancellation($paymentReference, canceled: true);
     }
 }

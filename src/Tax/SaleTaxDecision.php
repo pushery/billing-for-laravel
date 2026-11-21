@@ -291,7 +291,7 @@ final readonly class SaleTaxDecision
         // for the tax itself. Checking the union membership first would call that supply an outbound one.
         // Would this regime have taxed anything at all? An installation configured for no tax returns zero
         // for every sale, and reading those zeros as exemptions would print a legal claim the operator never
-        // made — "supplied outside the union" on a shop that simply does not compute VAT. So the question is
+        // made — "supplied outside the union" on a shop that does not compute VAT. So the question is
         // asked of the calculator itself, with the plainest domestic sale there is: if that is also zero, the
         // zero here says nothing about this supply, and there is no exemption to name.
         //

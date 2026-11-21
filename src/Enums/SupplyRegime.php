@@ -43,7 +43,7 @@ enum SupplyRegime: string
      *   arranging it. That fee is real, it is taken out of what reaches them, and it is what the field is
      *   for.
      *
-     * The platform's margin does not vanish under the first answer — it is simply not a fee, and the gross
+     * The platform's margin does not vanish under the first answer — it is not a fee, and the gross
      * inflow the seller received is unaffected either way. Confusing the two is the expensive direction:
      * reducing the reported inflow instead of emptying the fee field understates what the seller received.
      */

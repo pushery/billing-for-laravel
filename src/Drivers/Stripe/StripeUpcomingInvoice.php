@@ -47,7 +47,7 @@ final readonly class StripeUpcomingInvoice implements UpcomingInvoiceContract
         $subscriptionId = $this->subscriptionReference($billable);
 
         // Stripe cannot preview an invoice from a customer alone — it rejects the call unless told what to
-        // preview. With no live subscription there is simply nothing upcoming; short-circuit before any read.
+        // preview. With no live subscription there is nothing upcoming; short-circuit before any read.
         if ($customerId === null || $subscriptionId === null) {
             return null;
         }
@@ -64,7 +64,7 @@ final readonly class StripeUpcomingInvoice implements UpcomingInvoiceContract
             //
             // @rate-limit-deliberate: a 429 is swallowed here on purpose, and it is the one place in this
             // driver where that is right. Nothing is written, nothing is marked done, and the failure is not
-            // cached — so the next render simply asks again, which is exactly what a retry would do. Letting
+            // cached — so the next render asks again, which is exactly what a retry would do. Letting
             // it through would 500 a page whose whole job is to be informational.
             return null;
         }

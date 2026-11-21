@@ -14,7 +14,7 @@ use Illuminate\Database\Eloquent\Model;
  * That contract is public surface a consumer may implement. Adding a method to it would break every
  * implementation the day this package upgraded, with a fatal error and nothing to do about it but write
  * the method — the classic reason an interface stops being safe to extend. Segregated, an implementation
- * opts in, and one that does not simply answers nothing here.
+ * opts in, and one that does not opt in answers nothing here.
  *
  * ## Why the answer is not on `MerchantAccountReference`
  *

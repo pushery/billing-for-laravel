@@ -7,6 +7,7 @@ namespace Pushery\Billing\Jobs;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Queue\InteractsWithQueue;
@@ -48,7 +49,7 @@ use Pushery\Billing\ValueObjects\Money;
  * finds it. A share this installation cannot move at all is recorded the same way, so it is counted rather than
  * left as a pending row nothing looks at.
  */
-final class MoveMerchantShareOnConfirmation implements ShouldQueueAfterCommit
+final class MoveMerchantShareOnConfirmation implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use BacksOffBetweenAttempts;
     use InteractsWithQueue;

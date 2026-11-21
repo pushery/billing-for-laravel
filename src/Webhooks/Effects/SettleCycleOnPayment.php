@@ -44,8 +44,8 @@ final readonly class SettleCycleOnPayment
         // container can actually build. `BillingEngine` is an interface bound nowhere — the engine is
         // reached only as `driver()->engine()` — so injecting it would make this class unconstructible, and
         // `HandleWebhookEffect` builds effects with `Container::make()`. Every held cycle would then stay
-        // held forever while every test stayed green, because a test that constructs the engine by hand
-        // never asks the container the question a real delivery asks.
+        // held forever, and only a real delivery would show it: an engine constructed by hand never asks
+        // the container the question a real delivery asks.
         $engine = $this->manager->driver()->engine();
 
         if (! $engine instanceof LocalBillingEngine) {

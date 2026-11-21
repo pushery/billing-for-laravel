@@ -82,7 +82,7 @@ final readonly class RatePlausibility
         }
 
         // A country we price that the proposal does not mention. The most dangerous shape here, because a
-        // shorter list is structurally valid and a silent accept simply deletes the country.
+        // shorter list is structurally valid and a silent accept deletes the country.
         $vanished = array_values(array_diff(array_keys($current), array_keys($proposed)));
 
         return ['implausible' => $implausible, 'vanished' => $vanished, 'notable' => $notable];

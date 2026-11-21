@@ -28,7 +28,7 @@ use Pushery\Billing\Models\DocumentDelivery;
  *
  * An absent notification cannot be told apart from one that was never attempted, and those need opposite
  * responses — one a retry, the other someone finding out why nothing tried. So a failure is written down,
- * and the document is simply not yet delivered.
+ * and the document is not yet delivered.
  *
  * The log is channel-neutral. A portal with a notification is one way to put a document within reach; an
  * email is another. Both record the same three things, and nothing here names either.

@@ -21,7 +21,7 @@ use Illuminate\Queue\SerializesModels;
  *
  * 1. **Somebody records a blocking standing.** Observable already — a write happens, and a write can be
  *    watched.
- * 2. **An attestation expires.** Nothing is written. `statusAt()` simply begins answering `Unclarified`
+ * 2. **An attestation expires.** Nothing is written. `statusAt()` begins answering `Unclarified`
  *    because time passed. No event, no row, no signal — and this is the route where the merchant most needs
  *    telling, because they did nothing and can suddenly neither sell nor be paid.
  *

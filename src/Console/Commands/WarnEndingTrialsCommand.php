@@ -30,7 +30,7 @@ use Throwable;
  * A subscription trial ends with a provider event — `customer.subscription.trial_will_end` — and the webhook
  * effect behind it has shipped for a long time. The generic trial has no provider at all: it is a date on
  * the owner's own row, written by `Trials::grant()` with a `save()` and nothing else. Nobody could send that
- * event, and nothing here looked for the date, so the trial simply ended.
+ * event, and nothing here looked for the date, so the trial ended.
  *
  * That is the mode without a card, which is the one where the customer has no other signal — no failed
  * charge, no receipt, nothing. They lost access on the day, having been told nothing. For the operator it is

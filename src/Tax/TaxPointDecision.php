@@ -12,7 +12,7 @@ use Pushery\Billing\Enums\TaxPointBasis;
  *
  * The two travel together because the date alone cannot be checked. Recomputing a tax point years later
  * applies today's configuration to a sale made under a different one — so a reviewer who finds a different
- * month has learned nothing: the original may have been wrong, or the rule may simply have changed since.
+ * month has learned nothing: the original may have been wrong, or the rule may have changed since.
  * With the basis frozen beside the date, the same reviewer can tell those apart in one look.
  *
  * `taxedAhead` is here rather than left to the caller because it is the question a document has to be able

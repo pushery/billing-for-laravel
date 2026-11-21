@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\DunningLevel;
  * position at which it locks; it is locked once the owner has reached that level or higher, so
  * surfaces can be pulled at different stages of delinquency. It reads no clock and touches no owner —
  * the stateful ladder feeds it the current level (from ConfigDunningLadder) — so a not-yet-delinquent
- * owner (null level) or an unconfigured surface simply never locks.
+ * owner (null level) or an unconfigured surface never locks.
  */
 final readonly class SuspensionPolicy
 {

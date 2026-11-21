@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\FeePlacement;
  *
  * The ordinary rule anchors a fee for arranging a supply to the place of that supply. It is a good rule and
  * it has a hole: a sale between private people is not a taxable supply, so there is no place to anchor to.
- * An engine that reads the anchor from an underlying-supply object simply has no object here.
+ * An engine that reads the anchor from an underlying-supply object has no object here.
  *
  * ## The two wrong answers, which are wrong in opposite directions
  *

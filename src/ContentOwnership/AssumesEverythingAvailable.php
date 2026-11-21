@@ -19,7 +19,7 @@ use Pushery\Billing\ValueObjects\ContentReference;
  * The direction is deliberate and is the opposite of the scope's. Availability is not a permission: reported
  * wrongly it produces a broken download in the consumer's own delivery path, which the consumer sees
  * immediately. Defaulting it to "gone" would instead show every owned work as taken down in a library that
- * simply never wired a catalog — a false alarm about the one thing a buyer is most sensitive to.
+ * never wired a catalog — a false alarm about the one thing a buyer is most sensitive to.
  */
 final readonly class AssumesEverythingAvailable implements ContentCatalog
 {

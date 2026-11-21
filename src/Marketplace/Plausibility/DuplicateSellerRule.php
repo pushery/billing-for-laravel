@@ -11,7 +11,7 @@ use Pushery\Billing\ValueObjects\PlausibilityFinding;
  * One seller, one row — the rule no single row can break.
  *
  * A duplicate is the failure mode that survives every per-row check, because both rows are correct. Their
- * figures are right, their fields are complete, their identifiers hold; the period is simply reported twice
+ * figures are right, their fields are complete, their identifiers hold; the period is reported twice
  * for that seller, which doubles the income attributed to them at the receiving end.
  *
  * The roster is built with `distinct()` on the stored morph pair, so this should be impossible — and that

@@ -41,7 +41,7 @@ return new class extends Migration
             $table->boolean('details_submitted')->default(false);
 
             // When the provider last told us. An operator seeing a merchant stuck at "cannot receive" needs
-            // to know whether we simply never heard, or heard and were told no.
+            // to know whether we never heard, or heard and were told no.
             $table->timestamp('capabilities_refreshed_at')->nullable();
             $table->timestamps();
 

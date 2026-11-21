@@ -106,7 +106,7 @@ final readonly class LocalSubscriptionStarter implements StartsOverAMandate, Sta
         // running — it hands the existing end back — and it is not idempotent for one that has lapsed: it
         // writes a fresh end. Called from a buy button that turns Subscribe into an unlimited renewal:
         // press it again after the fourteen days and get fourteen more, as often as you like. Nothing looks
-        // wrong, because every call reports success and the customer simply never pays.
+        // wrong, because every call reports success and the customer never pays.
         //
         // The column is checked directly rather than through `onGenericTrial()`, which answers "is one
         // running" and is false for exactly the lapsed case this has to catch.

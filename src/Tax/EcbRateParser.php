@@ -21,7 +21,7 @@ use Pushery\Billing\Exceptions\ExchangeRateFeedUnreadable;
  * ## Why the SDMX endpoint and not the daily XML file
  *
  * Measured, 2026-07-27. Asked for Saturday to Monday, the SDMX service returns **only Monday** — the
- * weekend simply has no observation. The classic `eurofxref-daily.xml` fetched on a Saturday answers **HTTP
+ * weekend has no observation. The classic `eurofxref-daily.xml` fetched on a Saturday answers **HTTP
  * 200 carrying Friday's data**, with the real date inside the document.
  *
  * That difference decides which one is usable. The rule for a day the bank did not publish is the next

@@ -30,7 +30,7 @@ use Pushery\Billing\ValueObjects\Money;
  * be selectable rather than assumed either way.
  *
  * **The regime.** A buyer fee is the platform's own intermediation supply to the buyer — its first supply in
- * the intermediary posture. That is a fact about `intermediation` sales, and it is simply false under a
+ * the intermediary posture. That is a fact about `intermediation` sales, and it is false under a
  * commission chain: there the platform is the seller, it sells to the buyer directly, and there is no
  * mediation to charge for. A fee booked there as intermediation revenue would invent a supply relationship
  * that does not exist.

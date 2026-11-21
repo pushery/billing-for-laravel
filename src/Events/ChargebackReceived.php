@@ -69,7 +69,7 @@ final readonly class ChargebackReceived implements BillingDomainEvent, Identifie
          * Everything else on this event is deliberately about the charge: the correcting documents and the
          * clawback both act on the sale, not on the dispute, and for them the charge reference is right.
          *
-         * Nullable and trailing, so a caller that dispatches this event by hand keeps working and simply gets
+         * Nullable and trailing, so a caller that dispatches this event by hand keeps working and gets
          * the coarser claim it always had.
          */
         public ?string $disputeReference = null,

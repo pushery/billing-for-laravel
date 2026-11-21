@@ -247,7 +247,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
 
         // A row with no reference on it is the same answer as no row: there is no account to ask about.
         // Asking anyway sends an empty id to the provider, which refuses it — and an operator sweeping every
-        // merchant would get an exception rather than a skipped line, for a merchant who simply never
+        // merchant would get an exception rather than a skipped line, for a merchant who never
         // finished onboarding.
         if (! $row instanceof MerchantAccount || trim($row->account_reference) === '') {
             return null;
@@ -306,7 +306,7 @@ final readonly class StripeMerchantOnboarding implements MerchantOnboarding, Rep
 
         // A row with no reference on it is the same answer as no row: there is nothing to ask about. Asking
         // anyway sends an empty id to the provider, which refuses it — and an operator sweeping every
-        // merchant would get an exception instead of a skipped line, for somebody who simply never finished
+        // merchant would get an exception instead of a skipped line, for somebody who never finished
         // onboarding.
         if (! $row instanceof MerchantAccount || trim($row->account_reference) === '') {
             return null;

@@ -10,7 +10,7 @@ use Pushery\Billing\Contracts\SeatBilling;
 /**
  * The seat seam for a driver that does not bill seats at a provider. It reports no seat billing to keep in
  * sync, so the seat service no-ops before it ever asks for a change. Unlike the usage seam — where a missing
- * capability is a revenue hole that must be surfaced loudly — a driver with no seat concept simply has no
+ * capability is a revenue hole that must be surfaced loudly — a driver with no seat concept has no
  * seat quantity, so there is nothing to fail on.
  */
 final readonly class NullSeatBilling implements SeatBilling

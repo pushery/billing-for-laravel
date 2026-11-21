@@ -169,7 +169,7 @@ final readonly class PeriodicTaxReturn
      * Which period a correcting document corrects, or null when it corrects nothing.
      *
      * A correction issued in the same period as the sale it corrects is not a correction of an earlier
-     * return — nothing was filed yet — so it simply nets against this period's own line.
+     * return — nothing was filed yet — so it nets against this period's own line.
      */
     private function originPeriodOf(
         InvoiceRecord $sale,

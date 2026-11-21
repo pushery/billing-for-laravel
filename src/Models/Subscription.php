@@ -186,7 +186,7 @@ class Subscription extends Model
      *
      * The local engine reads this when the period ends. Collected in arrears, the cycle that closes the period then
      * ends the subscription instead of opening the next period; collected in advance, the period is paid already and
-     * the subscription simply ends.
+     * the subscription ends.
      */
     public function endsWithThisPeriod(): bool
     {

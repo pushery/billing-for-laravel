@@ -19,7 +19,7 @@ use Pushery\Billing\ValueObjects\DriverCapabilities;
  * machinery — the cycle, the proration, the tax, the credit, the dunning ladder.
  *
  * That inverts what a missing piece costs. Under Stripe, a gap in the package means the provider handles
- * it. Under Mollie, a gap means nobody handles it: a subscriber is simply never billed, and nothing fails
+ * it. Under Mollie, a gap means nobody handles it: a subscriber is never billed, and nothing fails
  * to say so. It is the reason the engine and the rails are injected rather than constructed here — both
  * are exercised on their own long before anything resolves this class.
  *

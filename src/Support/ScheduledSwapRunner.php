@@ -26,7 +26,7 @@ use Throwable;
 
 /**
  * Executes the plan changes that were scheduled for later — a downgrade waiting for the period it was
- * deferred to. A due swap is simply the normal swap performed at the moment it comes due, so this is
+ * deferred to. A due swap is the normal swap performed at the moment it comes due, so this is
  * driver-neutral: whatever SubscriptionActions does for an immediate swap is what a scheduled one becomes
  * when its date arrives.
  *

@@ -128,7 +128,7 @@ final readonly class ProrationCreditCorrectionIssuer
         foreach (CreditConsumption::of($offset, $history) as $lot) {
             if ($lot->reason->booksAgainstMoney()) {
                 // Paid credit. The redemption releases the liability it opened and corrects nothing: the
-                // original sale is unchanged, somebody simply used what they had bought.
+                // original sale is unchanged, somebody used what they had bought.
                 continue;
             }
 

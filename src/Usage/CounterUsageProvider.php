@@ -20,7 +20,7 @@ use Pushery\Billing\ValueObjects\QuotaSnapshot;
  *
  * The gauge's ceiling is the tier's included allowance, which is what an owner wants to see — "7 300 of
  * your 10 000 included emails" — not a hard cap. Whether going past it costs money (a metered
- * component) or is simply refused (a quota) is what the metering policy says, and the screen renders
+ * component) or is refused (a quota) is what the metering policy says, and the screen renders
  * that. A tier with no metered components reports an empty snapshot, so the panel stays silent rather
  * than showing a zeroed gauge that means nothing.
  */

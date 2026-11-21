@@ -63,7 +63,7 @@ use Pushery\Billing\ValueObjects\UnitGrant;
  *
  * The threshold is an amount in one currency, and a rate this class picked would put a number nobody
  * published under a supervisory figure. A top-up in another currency is counted under that currency and is
- * simply not part of this answer.
+ * not part of this answer.
  */
 final readonly class CreditTopUpVolume
 {

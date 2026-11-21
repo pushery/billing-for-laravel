@@ -11,7 +11,7 @@ namespace Pushery\Billing\ValueObjects;
  * This matters more than it looks. The free allowance does not live in `billing.tiers.*.metered.*.included`
  * — that value only drives the gauge the customer sees. It lives in the provider's price (a graduated first
  * tier costing nothing up to the allowance). If the two disagree, nothing breaks visibly: the customer is
- * simply given a different number of free units than the interface promised them, and nobody finds out until
+ * given a different number of free units than the interface promised them, and nobody finds out until
  * an invoice looks wrong.
  *
  * A null field means the provider did not say — the price is not meter-backed, or not tiered.

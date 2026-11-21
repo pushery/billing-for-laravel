@@ -15,7 +15,7 @@ use Stripe\StripeClient;
 /**
  * The period's payment on Stripe: the newest invoice that started or renewed the subscription.
  *
- * ## Which invoice, and why not simply the newest
+ * ## Which invoice, and why not the newest
  *
  * Stripe collects a subscription in advance, so the invoice for the period in progress is the newest one raised to
  * start or renew it. An invoice raised for a change within the period (a proration, a usage threshold) is not the

@@ -37,7 +37,7 @@ final class MerchantRelationshipEnded extends RuntimeException
     {
         return new self(
             "This merchant's relationship with the platform has ended ({$provider} account {$reference}), so "
-            .'onboarding cannot simply continue with it — the provider no longer releases funds through that '
+            .'onboarding cannot continue with it — the provider no longer releases funds through that '
             .'account. Reopen the relationship first with `billing:merchant:reopen`, which is a deliberate '
             .'act rather than something a retry does quietly, and then let the provider report its '
             .'capabilities again.'

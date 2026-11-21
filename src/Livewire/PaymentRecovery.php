@@ -21,7 +21,7 @@ use Pushery\Billing\ValueObjects\PaymentMethod;
 /**
  * The account-hub payment-recovery screen. When a payment has failed (a subscription is past due) it
  * guides the owner to fix their payment method so the provider can retry, and where the driver pays an open
- * invoice on request it offers to pay it at once with the method on file; otherwise it simply reports
+ * invoice on request it offers to pay it at once with the method on file; otherwise it reports
  * that nothing needs recovering. Fixing the method redirects to the same hosted card page the
  * payment-methods screen uses.
  *

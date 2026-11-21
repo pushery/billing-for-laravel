@@ -6,6 +6,7 @@ namespace Pushery\Billing\Jobs;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Config;
@@ -44,7 +45,7 @@ use Throwable;
  * telling us. Re-reading it here means the amounts and the status come from the row as it is now, and a
  * retry after a partial failure sees what the first run left behind rather than what it started from.
  */
-final class ReverseMerchantShareForChargeback implements ShouldQueueAfterCommit
+final class ReverseMerchantShareForChargeback implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use BacksOffBetweenAttempts;
     use InteractsWithQueue;

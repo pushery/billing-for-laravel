@@ -19,7 +19,7 @@ use Pushery\Billing\Models\CreatorTaxStatusRecord;
  * message nobody needed; a bug here is a wrong tax treatment on real documents, in either direction.
  *
  * It exists for the same reason the other does — the event nobody can observe. A creator crossing a turnover
- * limit writes no row anywhere. Enough sales accumulate and a threshold is simply past, which means the
+ * limit writes no row anywhere. Enough sales accumulate and a threshold is past, which means the
  * moment the flip should have happened is a moment nothing dispatched. Only something that goes looking
  * finds it.
  *

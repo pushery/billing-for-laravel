@@ -139,7 +139,7 @@ final readonly class RoutedPayment
          *
          * It refused a sale with no archetype from the day it was written, and nothing could reach the
          * refusal: the archetype arrived as an argument, no record in this package carries one, and a
-         * consumer who simply never called it sold anyway. A rule that cannot be reached is a comment.
+         * consumer who never called it sold anyway. A rule that cannot be reached is a comment.
          */
         private ProductClassifier $classifier,
         /**
@@ -388,7 +388,7 @@ final readonly class RoutedPayment
         //
         // The rule was already written and could not be reached: `FanChosenPricing` refuses a zero amount
         // with exactly this reasoning — "everything downstream, the provider call, the document, the
-        // reportable inflow, must simply not happen, not happen-with-zeros" — and nothing in `src/` calls
+        // reportable inflow, must not happen, not happen-with-zeros" — and nothing in `src/` calls
         // that class. So the guard existed as prose while this path, the only one that reaches
         // `PaymentRails::charge()`, sent `amount: 0` to the provider and wrote a row for it.
         //
@@ -861,7 +861,7 @@ final readonly class RoutedPayment
      * Move the merchant's share on the lane where the provider does not move it for us, and keep the whole answer.
      *
      * On a destination charge the transfer is part of the payment. On a separate transfer it is a second
-     * call, and if nobody makes it the merchant is simply never paid while every signal looks healthy -- a
+     * call, and if nobody makes it the merchant is never paid while every signal looks healthy -- a
      * successful result, no exception, and a null transfer reference indistinguishable from one still
      * settling. And the separate transfer is the DEFAULT charge type, so this is the common path.
      *

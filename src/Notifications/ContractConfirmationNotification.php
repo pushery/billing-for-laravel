@@ -17,6 +17,7 @@ use Pushery\Billing\Support\LocalizedDate;
 use Pushery\Billing\Support\MarkdownText;
 use Pushery\Billing\ValueObjects\ContractConfirmation;
 use Pushery\Billing\ValueObjects\WithdrawalConsent;
+use Stringable;
 
 /**
  * The confirmation of a contract, sent as a subscription begins or an add-on is bought, before the service does.
@@ -24,7 +25,8 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  * It states what the package knows, what was bought and the day, repeats the declarations the buyer made in the words
  * they were shown, and renders the operator's view below the button: the trader's identity and address, the price and
  * the terms, the withdrawal notice with the model withdrawal form. The mail is Markdown, so the view writes Markdown,
- * and HTML where it needs to.
+ * and HTML where it needs to. Beside `$owner` and `$contract` the view gets `$asText`, which sets a value of the buyer
+ * or of the catalog into that Markdown as text.
  */
 final class ContractConfirmationNotification extends BillingNotification
 {
@@ -71,6 +73,9 @@ final class ContractConfirmationNotification extends BillingNotification
         $mail->line(new HtmlString(Container::getInstance()->make(Factory::class)->make($view, [
             'owner' => $notifiable,
             'contract' => $this->contract,
+            // Blade's {{ }} escapes HTML and leaves Markdown alone, so a name the buyer wrote as a link would arrive as
+            // one. Through this the view sets such a value as text, and the class behind it stays the package's own.
+            'asText' => static fn (string|int|float|Stringable|null $value): HtmlString => MarkdownText::text((string) $value),
         ])->render()));
 
         // The documents the operator keeps beside the text rather than in it, the terms in the version accepted for

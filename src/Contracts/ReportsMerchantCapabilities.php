@@ -25,7 +25,7 @@ use Pushery\Billing\ValueObjects\MerchantAccountReference;
  *
  * `MerchantOnboarding` is public surface a consumer may implement. A method added there breaks every
  * implementation the day this package upgrades, fatally, with nothing to do but write it. Segregated, an
- * implementation opts in and one that does not simply answers nothing here — which the command reports by
+ * implementation opts in, and one that does not opt in answers nothing here — which the command reports by
  * name rather than dying on.
  *
  * ## It reports. It does not decide.

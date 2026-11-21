@@ -15,7 +15,7 @@ use Pushery\Billing\Support\LocalizedDate;
  *
  * The change is not a preference and neither is this notice — which is why it is non-suppressible. Crossing
  * a turnover limit changes what the merchant owes and what their own documents have to say, from a date the
- * platform picked out of its own records. A merchant who is not told simply keeps filing as they were, and
+ * platform picked out of its own records. A merchant who is not told keeps filing as they were, and
  * finds out from an authority.
  *
  * Three things are stated because a merchant cannot act on fewer: what changed, from when, and what it means

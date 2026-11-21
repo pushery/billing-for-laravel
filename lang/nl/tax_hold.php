@@ -6,7 +6,7 @@ declare(strict_types=1);
 // standing blocks is a jurisdiction's rule, and the person reading it may sit in another one.
 //
 // The lapsed-attestation wording says plainly that the recipient did nothing wrong. They did not — the date
-// simply passed — and a notice that reads like an accusation is one they answer defensively instead of
+// passed — and a notice that reads like an accusation is one they answer defensively instead of
 // acting on.
 
 return [

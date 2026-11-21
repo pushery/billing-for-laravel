@@ -18,7 +18,7 @@ use Pushery\Billing\Support\LocalBillingEngine;
  * them before deciding, because "a retry is only safe where the provider was never called". Until now that
  * was the end of the line: the report named the problem and nothing could act on it. The order stayed
  * `processing` forever, no tick reopened it, no webhook could arrive because no payment was ever created,
- * and the subscriber was simply never billed again.
+ * and the subscriber was never billed again.
  *
  * ## Why an operator runs this and a sweep does not
  *

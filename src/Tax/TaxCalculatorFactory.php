@@ -7,6 +7,7 @@ namespace Pushery\Billing\Tax;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
+use Pushery\Billing\Contracts\ProvidesTaxRateHistory;
 use Pushery\Billing\Contracts\SuppliesTaxRates;
 use Pushery\Billing\Contracts\TaxCalculator;
 use Pushery\Billing\Enums\TaxRateCategory;
@@ -60,6 +61,13 @@ final readonly class TaxCalculatorFactory
         private ?ShippedTaxRates $shipped = null,
         /** The coverage map the host bound, or null where it bound none, which leaves pricing as it is. */
         private ?CoverageMap $coverage = null,
+        /**
+         * The rate history the host bound, or null where it bound none, which leaves the history to the configuration.
+         *
+         * An interface, so a container that builds this factory on its own passes null where nothing is bound,
+         * rather than a table it made up.
+         */
+        private ?ProvidesTaxRateHistory $history = null,
     ) {}
 
     public function make(): TaxCalculator
@@ -97,7 +105,8 @@ final readonly class TaxCalculatorFactory
     }
 
     /**
-     * The configured rate history as dated intervals, or null when the installation keeps none.
+     * The rate history as dated intervals, the bound one before the configured one, or null when the installation keeps
+     * none.
      *
      * Public for the same reason as the matrix above: the tax of a deemed supply of goods is read from the tables
      * the calculator prices from, in the same order, and a second reading of the history beside this one would be
@@ -189,7 +198,11 @@ final readonly class TaxCalculatorFactory
     }
 
     /**
-     * The configured rate history as dated intervals, or null when the installation has not configured one.
+     * The rate history as dated intervals: the one the host bound, else the configured one, or null when there is none.
+     *
+     * A bound history answers alone. The host took the history over, so its null means the installation prices at one
+     * table, and the configuration is not read behind it. A table without intervals counts as no history, the way an
+     * empty list does in the configuration.
      *
      * Null is the ordinary case and means exactly one thing: this installation prices at one table, and a
      * tax point arriving on the money path changes nothing for it. That inertness is deliberate — the tax
@@ -203,6 +216,12 @@ final readonly class TaxCalculatorFactory
      */
     private function rateHistory(): ?DatedTaxRateTable
     {
+        if ($this->history instanceof ProvidesTaxRateHistory) {
+            $bound = $this->history->history();
+
+            return $bound instanceof DatedTaxRateTable && $bound->all() !== [] ? $bound : null;
+        }
+
         $matrix = $this->config->get('billing.tax_matrix');
 
         if (! is_array($matrix) || ! array_key_exists('history', $matrix)) {

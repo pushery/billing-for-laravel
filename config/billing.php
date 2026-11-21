@@ -108,6 +108,10 @@ return [
         // application lists and charges cards alone. Read by `PaymentMethods::setupIntent()` and by the hosted page
         // of `addMethodUrl()`. Null offers every type enabled in the Stripe dashboard.
         'setup_payment_method_types' => null,
+        // The country of the IBAN a bank transfer in euros on Stripe's checkout page goes to, where the billing address
+        // names no country Stripe opens one in: `BE`, `DE`, `ES`, `FR`, `IE` or `NL`. Any SEPA bank can pay to each of
+        // them. Null leaves such a transfer refused before Stripe hears of it.
+        'bank_transfer_country' => null,
     ],
 
     /*
@@ -356,7 +360,7 @@ return [
         'purchase_cancel_url' => env('BILLING_CHECKOUT_PURCHASE_CANCEL_URL'),
         'portal_return_url' => env('BILLING_PORTAL_RETURN_URL'),
         // Where a hosted "add a card" page returns the customer. `CheckoutUrls::paymentMethodsReturnUrl()`
-        // has read this since it was written; it was simply never declared here, so the one key of the four
+        // has read this since it was written; it was never declared here, so the one key of the four
         // that an adopter could not discover by reading the published config was the one they were most
         // likely to need. Absent it still falls back to the payment-methods route, exactly as before.
         'payment_methods_return_url' => env('BILLING_PAYMENT_METHODS_RETURN_URL'),
@@ -676,7 +680,7 @@ return [
     |
     | `features` is a list of translation keys — your app owns the strings, in every
     | locale — which PricingCatalog::bulletsFor() resolves in order. `highlight` and
-    | `badge` are optional; leaving them off simply renders a plain card.
+    | `badge` are optional; leaving them off renders a plain card.
     |
     | A tier may also say what kind of product it sells for the consumer-rights
     | profile, with the key an add-on carries: 'archetype' => 'download'. Unset, a
@@ -1429,7 +1433,7 @@ return [
     |     ],
     | ],
     |
-    | Absent, nothing changes: a tax point traveling on the money path is simply
+    | Absent, nothing changes: a tax point traveling on the money path is
     | ignored and every sale prices exactly as it does today. Present, a country
     | the history carries is answered from it, and a tax point falling in a gap is
     | refused rather than answered with the nearest rate — a made-up rate with a
@@ -2017,7 +2021,7 @@ return [
     // this off the bound ExchangeRateSource answers every conversion by saying the package ships no rates
     // and what to do about it.
     //
-    // Two reasons it is opt-in rather than simply on. A single-currency install never converts, so it would
+    // Two reasons it is opt-in rather than on by default. A single-currency install never converts, so it would
     // carry a table and a schedule it never reads. And turning it on means outbound connections on a
     // schedule -- a package that dials out of somebody else's application unasked is an unpleasant surprise,
     // however good its reasons.
@@ -2073,7 +2077,7 @@ return [
         // The account numbers are German-accountant defaults (SKR03/SKR04) confirmed with the tax advisor,
         // not values the package invents; a consumer with a different frame overrides them here — no code
         // change. These are read only behind the German jurisdiction profile (billing.tax_profile = 'de');
-        // a consumer elsewhere runs an empty set and the DATEV export is simply not used.
+        // a consumer elsewhere runs an empty set and the DATEV export is not used.
         //
         // Each account is [account, automatic]. An "automatic" account (Automatikkonto) derives its VAT from
         // the posting itself, so a BU-Schlüssel is never set alongside it — doing so cancels the automatic
@@ -2305,7 +2309,8 @@ return [
         // withdrawal form. With a consumer profile and this view, the package sends the confirmation as a
         // subscription with the platform begins, before the service does. It writes the tier, the day and the
         // buyer's declarations, and renders your view below them with `$owner` and a `ContractConfirmation` as
-        // `$contract`. The mail is Markdown. Unset, no confirmation goes out.
+        // `$contract`. The mail is Markdown, so set a value of the buyer or the catalog with `$asText($value)`, which
+        // the view gets as well: `{{ }}` alone would keep its Markdown. Unset, no confirmation goes out.
         'contract_confirmation_view' => env('BILLING_CONTRACT_CONFIRMATION_VIEW'),
     ],
 
@@ -2394,7 +2399,7 @@ return [
         // is not the conformity axis: a defect fix or a security patch is owed regardless of what stands
         // here, which is why there is no value that switches those off.
         //
-        // A misspelt value is refused at first use rather than defaulted. Falling back to `latest` would
+        // A misspelled value is refused at first use rather than defaulted. Falling back to `latest` would
         // promise free updates forever on every sale the install ever makes — the most expensive possible
         // reading of a typo, and one nothing else would surface.
         'default_update_policy' => env('BILLING_DEFAULT_UPDATE_POLICY', 'latest'),
@@ -2402,7 +2407,7 @@ return [
         // Whether a work added to a bundle later reaches people who bought the bundle earlier.
         //
         // Off, because a bundle is normally what it was on the day it was bought. Bundle grants are
-        // materialized at purchase, so off costs nothing to enforce -- a work added next month simply has no
+        // materialized at purchase, so off costs nothing to enforce -- a work added next month has no
         // row for an earlier buyer, and there is nothing to remember to switch off. On, a repeat call for the
         // same buyer tops up what has since been added.
         'bundle_additive_default' => EnvSwitch::read(env('BILLING_BUNDLE_ADDITIVE_DEFAULT'), false),

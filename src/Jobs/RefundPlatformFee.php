@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Jobs;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Config;
@@ -31,7 +32,7 @@ use Pushery\Billing\ValueObjects\Money;
  * which the driver finds on a fee refund it already made. One that fails for good is a failed job, and the merchant's
  * missing fee shows in `billing:merchants:reconcile` until somebody gives it back.
  */
-final class RefundPlatformFee implements ShouldQueueAfterCommit
+final class RefundPlatformFee implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use BacksOffBetweenAttempts;
     use InteractsWithQueue;

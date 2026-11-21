@@ -1453,7 +1453,7 @@ final class DoctorCommand extends Command
             "{$held} billing order(s) have been waiting on a payment for more than ".self::HELD_ORDER_DAYS
             .' days. A charge that long in flight has almost certainly been settled or refused at the '
             .'provider without this application hearing about it — a lost delivery, a failed signature, or '
-            .'an effect job that ran out of retries. Do NOT simply charge again: look the payment up at the '
+            .'an effect job that ran out of retries. Do NOT charge again: look the payment up at the '
             .'provider first, because the money may already have moved. Where the package bills the cycles itself, '
             .'`php artisan billing:cycles:reconcile` reads each such payment back and records where it stands.'
         );
@@ -1581,7 +1581,7 @@ final class DoctorCommand extends Command
      * that could not be issued: the lookup walks forward at most `FORWARD_LIMIT_DAYS`, and past that it finds
      * no row and refuses the document. A warning that arrives then is not a warning, it is the incident.
      *
-     * ## Why the limit is not simply the forward window
+     * ## Why the limit is not the forward window
      *
      * 14 days is where it breaks. Reporting at the breaking point is the same as not reporting, so the
      * configured limit defaults well under it — three days is two missed daily imports plus a weekend. The
