@@ -124,7 +124,7 @@ final readonly class SellerReportingPeriod
                 // and the sales the platform arranged as an intermediary, which produce no such document.
                 grossInflow: $settled['gross']->plus($arranged['gross']),
                 transactions: $settled['transactions'] + $arranged['transactions'],
-                // Not simply what the platform kept. "Separately withheld fees" asks what the seller was
+                // Not what the platform kept. "Separately withheld fees" asks what the seller was
                 // charged. Under a commission chain the answer is nothing: the platform's margin is the
                 // difference between two supplies, never billed to them, and reporting it would invent a
                 // service relationship the books do not contain. Under intermediation the platform charges

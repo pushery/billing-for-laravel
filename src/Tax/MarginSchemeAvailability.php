@@ -30,7 +30,7 @@ use RuntimeException;
  *
  * The case that matters here — a person who tips into trader status and then sells their own belongings,
  * bought years earlier as a consumer — fails that test outright: there is no counterparty and no
- * consideration, so there was no supply to the reseller at all. Not a contested exclusion; simply not the
+ * consideration, so there was no supply to the reseller at all. Not a contested exclusion; not the
  * situation the scheme describes.
  *
  * Which also means the opposite must not be inferred: goods bought from a private person, for a price, are

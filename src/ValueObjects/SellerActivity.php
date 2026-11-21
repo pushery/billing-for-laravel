@@ -43,7 +43,7 @@ final readonly class SellerActivity
         /**
          * Says this was commissioned when the archetype cannot say so — a commission the catalog never
          * classified. It can only ever widen the answer; see {@see individuallyCommissioned()} for why it
-         * is not simply the old boolean back.
+         * is not the old boolean back.
          */
         public bool $commissionedRegardless = false,
         /**

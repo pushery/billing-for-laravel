@@ -18,7 +18,7 @@ use Pushery\Billing\ValueObjects\Money;
  * What a merchant owes the platform, and how the next settlement pays it down.
  *
  * A clawback can fail. The merchant's provider balance may hold nothing to take back, and without somewhere
- * for the shortfall to sit that is a loss nobody sees: the reversal simply did not happen and no row says
+ * for the shortfall to sit that is a loss nobody sees: the reversal did not happen and no row says
  * so. So a shortfall is charged here, the balance goes negative, and the next settlement is applied against
  * it before anything leaves.
  *
@@ -26,7 +26,7 @@ use Pushery\Billing\ValueObjects\Money;
  *
  * This is the distinction the whole class turns on. Withholding a settlement to pay down a debt changes what
  * the merchant receives; it does not change what they earned. The settlement document still states its full
- * amount, the tax base is untouched, and no correcting document is due — the money simply went to the debt
+ * amount, the tax base is untouched, and no correcting document is due — the money went to the debt
  * instead of to the bank. Treating an offset as a reduction would quietly turn a collection into a tax
  * correction, understating the platform's own turnover by the same amount, and the documents would still all
  * look right.

@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * when their access ends. A cancellation without that date is the notice customers write in about.
  *
  * The once-per-cancellation guarantee lives in the caller (the webhook effect dedups on the subscription
- * and its access-end moment, not on the delivery), so an implementation simply delivers.
+ * and its access-end moment, not on the delivery), so an implementation delivers.
  */
 interface SubscriptionNotifier
 {

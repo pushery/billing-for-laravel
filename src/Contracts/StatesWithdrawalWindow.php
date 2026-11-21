@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\WithdrawalConsent;
  * {@see ConsumerWithdrawalPolicy} is public surface a consumer implements to bind their own country's
  * reading. A third method on it would break every such profile the day this package upgraded, with a fatal
  * error and nothing to do about it but write the method. Segregated, a profile opts in — and one that does
- * not simply states no window, which is an honest answer rather than a broken one.
+ * not opt in states no window, which is an honest answer rather than a broken one.
  *
  * ## The length is profile data, and so is whether there is a window at all
  *

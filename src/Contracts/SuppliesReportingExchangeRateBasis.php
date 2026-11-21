@@ -21,7 +21,7 @@ use Pushery\Billing\Enums\ExchangeRateLayer;
  * periodic return at all, or file one under a regime this package knows nothing about. Two contracts let a
  * profile answer the half it actually owns; one contract would make it answer both or neither.
  *
- * ## What "reporting" means here, and why it is not simply the EU rule
+ * ## What "reporting" means here, and why it is more than the EU rule
  *
  * For a one-stop-shop return the answer is fixed EU-wide — the central bank's rate on the last day of the
  * tax period, with the next publication day where that day has none (§ 16 (6) sentence 4 UStG, Art. 369h(2)

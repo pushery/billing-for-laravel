@@ -137,7 +137,7 @@ final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMa
          */
         private Repository $config,
         /**
-         * Optional, and null means the chain is simply not there.
+         * Optional, and null means the chain is not there.
          *
          * A second driver constructs this engine directly — that is the whole of what adopting the cycle
          * costs — so a required parameter here would be a breaking change to the one seam this class
@@ -155,7 +155,7 @@ final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMa
         /** Optional for the same reason; null means a local cycle raises no invoice of its own. */
         private ?OrderInvoiceIssuer $invoices = null,
         /**
-         * Optional; null means a failed cycle is not retried on a ladder and simply stays past_due.
+         * Optional; null means a failed cycle is not retried on a ladder and stays past_due.
          *
          * That was the behavior before this parameter existed, and it was not a policy — it was an
          * oversight nobody could see: the order stayed `failed`, the claim refused to reopen it, and the
@@ -965,7 +965,7 @@ final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMa
      *
      * The half that did not exist. Until now the only writer of a paid order was {@see self::recordSuccess()}
      * inside the synchronous tick, so a charge that settled later — every bank debit — had nowhere to land.
-     * That is why the pending branch above could not simply hold the order: holding it would have stranded
+     * That is why the pending branch above could not hold the order: holding it would have stranded
      * it. The two are one change.
      *
      * Public because a webhook effect calls it, and deliberately the only thing that is: the effect stays a
@@ -1249,7 +1249,7 @@ final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMa
      * The failure this exists for is silent by construction. `claimCycle()` refuses to touch an order that
      * is still `processing`, which is exactly right while a charge is in flight and exactly wrong once the
      * process making it has died: the cycle stays claimed, no tick reopens it, no webhook can arrive
-     * because no payment was ever created, and the subscriber is simply never billed again. The only trace
+     * because no payment was ever created, and the subscriber is never billed again. The only trace
      * is that nothing happens. Since the credit is now spent under the row lock before the charge, what
      * sits in that window is the customer's balance rather than one uncollected cycle.
      *
@@ -2104,7 +2104,7 @@ final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMa
             // a change to every one of them for a reader that needs nothing else. A shared class rather than a line
             // here, because the effect that writes a subscription's first period asks the same question. Two
             // readings of one fact do not fail loudly when they drift — the first cycle and every cycle after it
-            // simply describe different subscriptions, which reads on an invoice as a period somebody mistyped.
+            // describe different subscriptions, which reads on an invoice as a period somebody mistyped.
             if ($subscription->collectsInAdvance()) {
                 $subscription->update(['scheduled_processing_at' => $subscription->endInsideItsPeriod() ?? $subscription->current_period_end]);
             } else {

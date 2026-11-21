@@ -44,8 +44,8 @@ Publish the configuration:
 php artisan vendor:publish --tag=billing-config
 ```
 
-The other groups have tags of their own: `billing-views` for the Blade views, `billing-lang` for
-the translations, and `billing` for every group at once, the migrations included.
+The other groups have tags of their own: `billing-views` for the Blade views and `billing-lang` for
+the translations. `--tag=billing` publishes every group at once, the migrations included.
 
 The migrations load from the package as they are. To keep them in your application instead, call
 `\Pushery\Billing\BillingServiceProvider::ignoreMigrations()` in the `register()` method of your

@@ -12,7 +12,7 @@ namespace Pushery\Billing\Contracts;
  * decision of the whole marketplace layer. PaymentRails has implementations outside this repository —
  * a consumer registers its own driver through the public BillingManager::extend() — so a method added
  * there is a fatal error in code we do not own. A sibling contract a driver may also implement breaks
- * nobody: a driver that does not route money simply does not implement it, and the marketplace path is
+ * nobody: a driver that does not route money does not implement it, and the marketplace path is
  * then unreachable rather than half-present.
  *
  * A driver announces that it implements this by implementing {@see RoutesMoney}.

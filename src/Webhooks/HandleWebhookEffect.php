@@ -6,6 +6,7 @@ namespace Pushery\Billing\Webhooks;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Container\Container;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Config;
@@ -43,7 +44,7 @@ use Throwable;
  * The dedup key is chosen by the effect (see DedupesOnReference), defaulting to the provider's event id inside
  * the account the delivery came from (see WebhookEffectLedger::referenceFor()).
  */
-final class HandleWebhookEffect implements ShouldQueueAfterCommit
+final class HandleWebhookEffect implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use BacksOffBetweenAttempts;
     use InteractsWithQueue;

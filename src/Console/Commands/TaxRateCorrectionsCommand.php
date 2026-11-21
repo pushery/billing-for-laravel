@@ -50,7 +50,7 @@ final class TaxRateCorrectionsCommand extends Command
         $history = $tables->answeringRateHistory();
 
         if (! $history instanceof DatedTaxRateTable) {
-            $this->components->info('No dated rate history is configured (billing.tax_matrix.history), so no rate has changed under an invoiced period.');
+            $this->components->info('No dated rate history is configured (billing.tax_matrix.history) or bound (ProvidesTaxRateHistory), so no rate has changed under an invoiced period.');
 
             return self::SUCCESS;
         }

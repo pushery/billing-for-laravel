@@ -19,7 +19,7 @@ use Pushery\Billing\ValueObjects\UsageMovement;
  * that before anything runs. The same reasoning already governs {@see RoutesMoney} and
  * {@see SuppliesProductArchetypes}.
  *
- * A project without a movement-level ledger simply does not implement it, and its history screen stays
+ * A project without a movement-level ledger does not implement it, and its history screen stays
  * exactly as it is today. That is the right outcome rather than a fallback: periods and top-ups are a
  * complete answer for a project that only records those, and synthesizing movements from totals would
  * invent an ordering nobody recorded.

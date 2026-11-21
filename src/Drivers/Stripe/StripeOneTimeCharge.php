@@ -280,7 +280,7 @@ final readonly class StripeOneTimeCharge implements OneTimeCharge
         // The same question the subscription lane answers, answered the same way — because it is one
         // installation-wide setting and must not give two opposite answers. Under a provider mode the
         // package deliberately computes nothing (the local calculator returns zero, correctly), so if the
-        // provider is also never asked, the tax simply does not exist. That is not hypothetical: it is the
+        // provider is also never asked, the tax does not exist. That is not hypothetical: it is the
         // exact failure StripeCheckout::providerTax() documents having already shipped once, where the
         // 'stripe' alias missed the comparison and "every invoice went out untaxed, and nothing raised
         // anything". This lane had the same hole for every one-time add-on.

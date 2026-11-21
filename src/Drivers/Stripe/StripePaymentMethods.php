@@ -81,8 +81,8 @@ final readonly class StripePaymentMethods implements AdoptsCollectedPaymentMetho
             'cancel_url' => $return,
             // Required, and the requirement is invisible locally. A setup-mode session carries no line
             // items, so nothing in the payload states a currency and the provider asks for one explicitly
-            // ("Missing required param: currency"). A faked client accepts the payload without it, which is
-            // how the shipped card-capture path was refused on every real request while the suite was green.
+            // ("Missing required param: currency"). A faked client accepts the payload without it, and the
+            // provider refuses every real card-capture request that lacks it.
             'currency' => strtolower(is_string($currency) ? $currency : 'EUR'),
             // What turns the collected card into the one the next charge reads. The session itself sets
             // nothing: the provider attaches the method to the customer and leaves every default as it was.

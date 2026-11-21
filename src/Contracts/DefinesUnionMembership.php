@@ -22,7 +22,7 @@ use Carbon\CarbonInterface;
  * "Is this country in my union" is only answerable by somebody who has a union. An operator in a
  * jurisdiction with no such grouping has no answer, and the honest result there is that nothing is treated
  * as internal — not that some other continent's grouping is used by default. A core constant cannot express
- * "I have no opinion"; a profile that simply does not implement this can.
+ * "I have no opinion"; a profile that does not implement this can.
  *
  * ## Not a market list
  *

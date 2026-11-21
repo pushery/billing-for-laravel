@@ -12,7 +12,7 @@ namespace Pushery\Billing\Enums;
  * remove, and when, is for the retention matrix to say, not for this enum.
  *
  * This enum exists so the answer is never given by absence. A model that spells out the append-only rule by
- * hand can simply lack a deletion arm, and a missing hook throws no error and reads exactly like a considered
+ * hand can lack a deletion arm, and a missing hook throws no error and reads exactly like a considered
  * decision: one archive could refuse deletion while its sibling under the same retention rule did not, and
  * nobody would notice, because there would be no place where the question is asked.
  *

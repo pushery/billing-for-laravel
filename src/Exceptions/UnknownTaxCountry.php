@@ -32,7 +32,7 @@ final class UnknownTaxCountry extends RuntimeException
      *
      * Separate from `code()` because the two are different problems with different fixes. `code()` is a
      * malformed or unassigned country code: a typo. This one is a perfectly real country that this
-     * installation has simply never answered for, and the fix is a decision rather than a correction.
+     * installation has never answered for, and the fix is a decision rather than a correction.
      *
      * It refuses instead of pricing at zero, and that is the whole reason it exists. A zero for an
      * unclassified country is indistinguishable from a relief — the invoice says zero, the return says zero,

@@ -91,13 +91,13 @@ final readonly class OrderInvoiceIssuer
     public function __construct(
         private InvoiceNumber $numbers,
         /**
-         * Required, and it was optional for about an hour.
+         * Required.
          *
          * A nullable parameter with a default is not auto-resolved: `Container::resolveClass()` returns the
          * default whenever one exists and the class is not explicitly bound, without ever attempting to
-         * build it. So every container-resolved issuer held null, the determination never ran, and the whole
-         * seam shipped inert — with the test suite green, because a document with no tax is precisely what
-         * this issuer produced before and every existing arm asserts exactly that.
+         * build it. Optional, every container-resolved issuer would hold null, the determination would never
+         * run, and every document would go out without tax, which is what this issuer issued before it
+         * consulted the basis, so nothing would look wrong.
          *
          * An optional dependency also says the wrong thing about this class. An issuer that cannot consult
          * the basis cannot decide whether a figure may be stated, and the honest shape of that is a

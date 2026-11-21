@@ -15,7 +15,7 @@ namespace Pushery\Billing\Contracts;
  * So the address goes in as an argument and a two-letter code comes out. There is no accessor for what was
  * asked, and nothing downstream is ever handed the address to begin with.
  *
- * The package ships no geolocation service and no database. Without an implementation bound there is simply
+ * The package ships no geolocation service and no database. Without an implementation bound there is
  * no signal from this direction — which is a missing input, not a failure: other signals answer the same
  * question, and one fewer of them is a weaker answer rather than a broken one.
  */

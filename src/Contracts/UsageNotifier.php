@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Model;
  * someone who happens to be looking at the account screen.
  *
  * The once-per-meter-per-period guarantee lives in the caller (UsageRecorder claims the counter row's
- * warned_at in a single conditional update), so an implementation simply delivers.
+ * warned_at in a single conditional update), so an implementation delivers.
  */
 interface UsageNotifier
 {

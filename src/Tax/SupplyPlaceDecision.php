@@ -74,7 +74,8 @@ final readonly class SupplyPlaceDecision
      * Directive), and the place of an electronic service to a consumer is where the consumer lives then (Art. 58), so a
      * customer who moves takes every later cycle with them, and every earlier cycle stays where it was. The move is
      * settled from signals exactly as the sale was, and recorded as a dated record of its own beside the sale's; a cycle
-     * reads the one in force on the first day of its period.
+     * reads the one in force on the first day of its period. A second move from the same day corrects the first and is
+     * kept beside it, and the day reads the later one.
      *
      * @throws InvalidArgumentException when the sale has no recorded place to move from
      * @throws RuntimeException when the signals do not settle on a country
@@ -90,7 +91,7 @@ final readonly class SupplyPlaceDecision
             throw new InvalidArgumentException("The sale `{$reference}` has no recorded place, so there is nothing to move: record its place first.");
         }
 
-        return $this->store->record($this->evidence->resolve($signals), PlaceEvidenceStore::datedReference($reference, $from), $resolvedAt, $owner)->resolved_country;
+        return $this->store->record($this->evidence->resolve($signals), $this->store->nextDatedReference($reference, $from), $resolvedAt, $owner)->resolved_country;
     }
 
     /**

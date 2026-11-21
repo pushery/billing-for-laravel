@@ -21,7 +21,7 @@ use Pushery\Billing\ValueObjects\UsageDrift;
  *
  * Usage reporting works — and that is exactly the problem it hides. The local ledger and the provider's
  * meter are two separate sources of truth, and they drift quietly: a report accepted on our side that never
- * arrived, an event the provider dropped, a meter that stopped rating. Nothing throws. The customer simply
+ * arrived, an event the provider dropped, a meter that stopped rating. Nothing throws. The customer
  * gets an invoice built on a number nobody checked, and the first person to notice is them.
  *
  * What we compare is the netted figure — usage minus the prepaid units the owner had already bought — because

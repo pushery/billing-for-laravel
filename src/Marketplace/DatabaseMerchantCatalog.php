@@ -49,7 +49,7 @@ final readonly class DatabaseMerchantCatalog implements MerchantCatalog
         private ?PlanCatalog $platformPlans = null,
     ) {
         // Wrapped unconditionally. An instanceof check to avoid double-wrapping would be a branch nothing
-        // ever takes — a memo around a memo simply delegates — and an untaken branch in a published package
+        // ever takes — a memo around a memo delegates — and an untaken branch in a published package
         // is a claim about a situation nobody has.
         $this->repository = new MemoizedMerchantTierRepository($repository);
     }

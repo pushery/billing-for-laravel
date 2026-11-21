@@ -15,7 +15,7 @@ use Carbon\CarbonImmutable;
  *
  * The window check is applied here rather than left to the fetcher because it is a **comparison** concern,
  * not a transport one: a response is only evidence about the moment it actually answers for. A source that
- * quietly answers for today when asked about next year is not unreachable and is not disagreeing — it simply
+ * quietly answers for today when asked about next year is not unreachable and is not disagreeing — it
  * has not answered the question, and reporting anything else about it would be an invention.
  */
 final readonly class RateConformityProbe

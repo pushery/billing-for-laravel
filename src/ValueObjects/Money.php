@@ -81,7 +81,13 @@ final readonly class Money
         return self::EXPONENTS[$currency] ?? 2;
     }
 
-    /** Render as a decimal string, e.g. 1000 EUR minor → "10.00", 500 JPY minor → "500". */
+    /**
+     * Render as a decimal string, e.g. 1000 EUR minor → "10.00", 500 JPY minor → "500".
+     *
+     * @return numeric-string an optional minus sign and digits, with a point before the minor digits
+     *                        where the currency has any, which bcadd() and the other bcmath
+     *                        functions take as it is
+     */
     public function toDecimal(): string
     {
         $exponent = self::exponentFor($this->currency);
@@ -95,7 +101,10 @@ final readonly class Money
         $integer = substr($digits, 0, -$exponent);
         $fraction = substr($digits, -$exponent);
 
-        return "{$sign}{$integer}.{$fraction}";
+        /** @var numeric-string $decimal */
+        $decimal = "{$sign}{$integer}.{$fraction}";
+
+        return $decimal;
     }
 
     public function plus(self $other): self

@@ -28,7 +28,7 @@ namespace Pushery\Billing\Enums;
  */
 enum DisputeReason: string
 {
-    /** The card was used without its holder's authority. The supply stands; the money is simply gone. */
+    /** The card was used without its holder's authority. The supply stands; the money is gone. */
     case Fraudulent = 'fraudulent';
 
     /** The holder does not recognize the charge. Treated as fraud until somebody says otherwise. */

@@ -13,7 +13,7 @@ use Pushery\Billing\ValueObjects\Money;
  * the add-on ledger claws back only the part it has not already reversed, so two partial refunds and a
  * redelivery each do the right thing.
  *
- * A refund of anything that is not a tracked add-on (a subscription invoice, an ad-hoc charge) simply
+ * A refund of anything that is not a tracked add-on (a subscription invoice, an ad-hoc charge)
  * matches no purchase and reverses nothing.
  */
 final readonly class AddonRefunded implements BillingDomainEvent

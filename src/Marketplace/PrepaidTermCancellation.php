@@ -38,7 +38,7 @@ use Pushery\Billing\ValueObjects\RefundResult;
  *
  * That is also why this is a service the consumer calls rather than a listener on a cancellation event. A refund is
  * a money movement, not a side effect of a status change: cancellations arrive from a webhook, an admin action and
- * the consumer's own UI, many of them owing nothing back (a cancellation at period end simply runs out), and a
+ * the consumer's own UI, many of them owing nothing back (a cancellation at period end runs out), and a
  * listener would have to tell those apart at a point that no longer knows the reason.
  *
  * ## Once per charge

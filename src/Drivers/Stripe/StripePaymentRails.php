@@ -497,7 +497,7 @@ final readonly class StripePaymentRails implements CancelsPayments, PaymentRails
      *
      * On a destination charge the transfer is created when the payment settles, so an intent that still
      * needs authentication has none. Absent is therefore a stage rather than a fault, and reporting it as
-     * an empty string would make a caller believe a transfer happened and was simply unnamed.
+     * an empty string would make a caller believe a transfer happened and was unnamed.
      *
      * That reading holds only for a destination charge. On a separate transfer the provider creates nothing
      * on its own — the platform takes the whole payment and the merchant's share is moved by a later call,
@@ -524,7 +524,7 @@ final readonly class StripePaymentRails implements CancelsPayments, PaymentRails
      * Both shapes have to be read, and that is not defensive coding. The field is an id until something asks
      * for it expanded, and the refund path now does exactly that on the lane that can reverse — so reading
      * only the string would return null on the one lane where a reversal actually happens, while the
-     * unexpanded lanes kept working and every test built on a stubbed id stayed green.
+     * unexpanded lanes kept working.
      */
     private function transferReversalOf(Refund $refund): ?string
     {
@@ -601,6 +601,8 @@ final readonly class StripePaymentRails implements CancelsPayments, PaymentRails
                 'destination' => $routing->destination->accountId,
             ]
             : ['transferReference' => null, 'applicationFee' => null, 'destination' => null];
+        $values = $intent->toArray();
+        $method = StripeBankTransfer::methodOf($values);
 
         return match ($intent->status) {
             'succeeded' => new ChargeResult(
@@ -610,7 +612,10 @@ final readonly class StripePaymentRails implements CancelsPayments, PaymentRails
                 transferReference: $split['transferReference'],
                 applicationFee: $split['applicationFee'],
                 destination: $split['destination'],
+                paymentMethod: $method,
             ),
+            // A bank transfer waits here as well, for the customer's money rather than an authentication, and names the
+            // account and the reference to pay with.
             'requires_action', 'requires_confirmation' => new ChargeResult(
                 successful: false,
                 reference: $intent->id,
@@ -618,6 +623,8 @@ final readonly class StripePaymentRails implements CancelsPayments, PaymentRails
                 failureReason: $intent->status,
                 requiresAction: true,
                 clientSecret: is_string($intent->client_secret) ? $intent->client_secret : null,
+                paymentMethod: $method,
+                paymentInstructions: StripeBankTransfer::instructions($values),
             ),
             'processing' => new ChargeResult(
                 successful: false,
@@ -625,12 +632,14 @@ final readonly class StripePaymentRails implements CancelsPayments, PaymentRails
                 amount: $amount,
                 failureReason: $intent->status,
                 pending: true,
+                paymentMethod: $method,
             ),
             default => new ChargeResult(
                 successful: false,
                 reference: $intent->id,
                 amount: $amount,
                 failureReason: $intent->status,
+                paymentMethod: $method,
             ),
         };
     }

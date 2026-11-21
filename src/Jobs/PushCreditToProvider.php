@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Jobs;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Queue\InteractsWithQueue;
@@ -27,7 +28,7 @@ use Pushery\Billing\ValueObjects\Money;
  * An owner erased before the job runs has no customer left at the provider to move a balance for, and the job is
  * dropped.
  */
-final class PushCreditToProvider implements ShouldQueueAfterCommit
+final class PushCreditToProvider implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use BacksOffBetweenAttempts;
     use InteractsWithQueue;

@@ -47,7 +47,7 @@ use Throwable;
  * A rate limit is the exception, and it has to be. Stripe's SDK makes `RateLimitException` a subclass of
  * `InvalidRequestException`, so a broad clause files a throttled call as a permanent rejection: the caller
  * raises its unreadable-cycle refusal, and an operator goes looking for a deleted invoice that is sitting
- * exactly where it always was. Rethrown here, the queue simply asks again.
+ * exactly where it always was. Rethrown here, the queue asks again.
  */
 final readonly class StripeRoutedInvoiceCommission implements ReadsRoutedInvoiceCommission
 {

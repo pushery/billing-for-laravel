@@ -17,7 +17,7 @@ use Throwable;
  *
  * One place, so every deletion path in `billing:prune` answers the question the same way — the same
  * reason {@see SubjectScopedRecords} exists one level down. A gate written per call site is a gate that
- * gets forgotten at the next one, and the failure is invisible: that path simply keeps deleting.
+ * gets forgotten at the next one, and the failure is invisible: that path keeps deleting.
  *
  * ## Bounded memory, whatever the table holds
  *

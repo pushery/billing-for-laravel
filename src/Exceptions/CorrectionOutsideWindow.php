@@ -11,7 +11,7 @@ use RuntimeException;
  *
  * It is refused rather than dropped or folded into the current period, and the difference matters. A
  * correction that vanishes is indistinguishable from one that was never owed — nothing is short, nothing
- * errors, and the return simply omits money that moved. One folded into the current period declares a
+ * errors, and the return omits money that moved. One folded into the current period declares a
  * country's tax in the wrong period, which is a misdeclaration rather than an omission.
  *
  * Both are worse than a refusal, because a refusal is the one outcome somebody has to decide about.

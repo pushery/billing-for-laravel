@@ -66,7 +66,7 @@ final readonly class FanChosenPricing
         }
 
         // Zero is no sale. Guarded first and explicitly, because everything downstream — the provider call,
-        // the document, the reportable inflow — must simply not happen, not happen-with-zeros.
+        // the document, the reportable inflow — must not happen, not happen-with-zeros.
         if ($chosen->isZero()) {
             return null;
         }

@@ -95,8 +95,34 @@ final readonly class PlaceEvidenceStore
     }
 
     /**
-     * The reference whose place is in force on a day: the latest move recorded from that day or before, or the sale's
-     * own reference where no move reaches it.
+     * The reference the next move from a day is recorded under: the dated one, or behind it a `#` and the number of a
+     * correction where the day already holds a move.
+     *
+     * A second move on one day corrects the first, a country entered wrongly in the morning and rightly in the
+     * afternoon. It is kept beside the first, which stays as the record of what was in force until then.
+     */
+    public function nextDatedReference(string $reference, CarbonInterface $from): string
+    {
+        $dated = self::datedReference($reference, $from);
+        $last = 0;
+
+        // LIKE narrows the read; the prefix is checked again here, because a `%` or `_` in a reference would match more.
+        foreach (PlaceEvidence::model()::query()->where('reference', 'like', $dated.'%')->pluck('reference') as $candidate) {
+            $suffix = is_string($candidate) && str_starts_with($candidate, $dated) ? substr($candidate, strlen($dated)) : null;
+
+            if ($suffix === '') {
+                $last = max($last, 1);
+            } elseif ($suffix !== null && preg_match('/^#([1-9]\d*)$/D', $suffix, $parts) === 1) {
+                $last = max($last, (int) $parts[1]);
+            }
+        }
+
+        return $last === 0 ? $dated : $dated.'#'.($last + 1);
+    }
+
+    /**
+     * The reference whose place is in force on a day: the latest move recorded from that day or before, the last
+     * correction where that day holds more than one, or the sale's own reference where no move reaches it.
      */
     public function referenceAt(string $reference, CarbonInterface $day): string
     {
@@ -106,10 +132,17 @@ final readonly class PlaceEvidenceStore
 
         // LIKE narrows the read; the prefix is checked again here, because a `%` or `_` in a reference would match more.
         foreach (PlaceEvidence::model()::query()->where('reference', 'like', $prefix.'%')->pluck('reference') as $candidate) {
-            $from = is_string($candidate) && str_starts_with($candidate, $prefix) ? substr($candidate, strlen($prefix)) : '';
+            $suffix = is_string($candidate) && str_starts_with($candidate, $prefix) ? substr($candidate, strlen($prefix)) : '';
 
-            if (preg_match('/^\d{4}-\d{2}-\d{2}$/D', $from) === 1 && $from <= $day->toDateString() && $from > $latest) {
-                [$answer, $latest] = [(string) $candidate, $from];
+            if (preg_match('/^(\d{4}-\d{2}-\d{2})(?:#([1-9]\d*))?$/D', $suffix, $parts) !== 1 || $parts[1] > $day->toDateString()) {
+                continue;
+            }
+
+            // The day, then the number of the correction at a fixed width, so the two compare as one string.
+            $order = $parts[1].'#'.str_pad($parts[2] ?? '1', 10, '0', STR_PAD_LEFT);
+
+            if ($order > $latest) {
+                [$answer, $latest] = [(string) $candidate, $order];
             }
         }
 

@@ -34,7 +34,7 @@ final readonly class NullUsageReporter implements UsageReporter
     }
 
     /**
-     * Null, not a throw: there is simply no second source to read back from. A driver that bills usage
+     * Null, not a throw: there is no second source to read back from. A driver that bills usage
      * locally is the authority, so a reconcile has nothing to compare against and correctly reports no drift
      * rather than a failure.
      */

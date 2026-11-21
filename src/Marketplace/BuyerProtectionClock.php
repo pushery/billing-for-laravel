@@ -481,7 +481,7 @@ final readonly class BuyerProtectionClock
     private function payOut(BuyerProtectionHold $hold): bool
     {
         // Nothing to move, so the release is complete rather than stuck. An unrouted sale has no merchant to
-        // pay: the platform kept the money and the protection period simply ended. Reporting that as
+        // pay: the platform kept the money and the protection period ended. Reporting that as
         // "decided but not paid" would leave a hold hanging forever over a payment nobody was owed.
         if ($hold->merchant_type === null || $hold->merchant_id === null) {
             return true;

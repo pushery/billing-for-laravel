@@ -52,7 +52,7 @@ final readonly class AccessDecision
     /**
      * Whether this access can be taken away, as opposed to running out on its own.
      *
-     * Delegated to the source rather than stored: a refund revokes a grant, while a subscription simply
+     * Delegated to the source rather than stored: a refund revokes a grant, while a subscription
      * lapses, and a stored flag would be a second place for that distinction to be got wrong.
      */
     public function isRevocable(): bool

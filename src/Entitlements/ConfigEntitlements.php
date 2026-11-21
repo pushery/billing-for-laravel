@@ -16,7 +16,7 @@ use Pushery\Billing\ValueObjects\Money;
  * describe and compare tiers straight from config('billing.tiers'). Identity/label/price/byok defer
  * to the TierCatalog; the metered dimensions are read from the tier's `dimensions` as definitions
  * (used = 0) for the pricing view; the upgrade ranking is the configured tier order. Anything
- * malformed degrades to a safe default rather than throwing — a tier absent from the ranking simply
+ * malformed degrades to a safe default rather than throwing — a tier absent from the ranking
  * ranks below every configured one.
  *
  * A tier's `dimensions` take the two forms a config can give them: the documented one, a list of keys

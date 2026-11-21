@@ -12,7 +12,7 @@ use Illuminate\Queue\SerializesModels;
  *
  * The two are separate sources of truth and they drift quietly: a report that was accepted locally but never
  * arrived, an event the provider rejected after the fact, a meter that stopped rating. Nothing throws — the
- * customer simply gets an invoice built on a different number than the one we showed them.
+ * customer gets an invoice built on a different number than the one we showed them.
  *
  * This is the alarm. It carries both numbers so a listener can decide what the difference means (a handful
  * of units mid-flush is noise; a whole cycle missing is revenue that will not be collected).

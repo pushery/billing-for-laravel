@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Jobs;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Queue\InteractsWithQueue;
@@ -22,7 +23,7 @@ use Pushery\Billing\Webhooks\Effects\MirrorDefaultPaymentMethod;
  * run, where a provider call holds the transaction open. So the effect hands the read over. A second delivery reads the
  * same method a second time, which is harmless.
  */
-final class RefreshCardOnFile implements ShouldQueueAfterCommit
+final class RefreshCardOnFile implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use BacksOffBetweenAttempts;
     use InteractsWithQueue;

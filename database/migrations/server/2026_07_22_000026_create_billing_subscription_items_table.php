@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Schema;
  * The provider-neutral lines of a local subscription: what is billed each cycle, and for how much.
  *
  * Only Stripe prices usage remotely, so for that driver Cashier's own `subscription_items` stays
- * authoritative and this table simply mirrors nothing. The local engine has no
+ * authoritative and this table mirrors nothing. The local engine has no
  * provider-side line model at all — it has to know the cycle's composition itself, which is what these
  * rows carry: the catalog key, an optional provider price reference, a quantity, whether the line is
  * metered, and the amount once it is known.
@@ -50,7 +50,7 @@ return new class extends Migration
             // The name is given explicitly because the generated one
             // (`billing_subscription_items_billing_subscription_id_plan_key_unique`) is 65 characters and
             // MySQL rejects any identifier over 64 — an error Postgres never raises, since it silently
-            // truncates instead. Left to the default, this table simply could not be created on MySQL.
+            // truncates instead. Left to the default, this table could not be created on MySQL.
             $table->unique(['billing_subscription_id', 'plan_key'], 'billing_sub_items_subscription_plan_unique');
         });
     }

@@ -24,7 +24,7 @@ use RuntimeException;
  *
  * **What to do about it is not "retry".** Somebody records the merchant's standing — usually the merchant
  * themselves, through the platform's own declaration flow — and the sale goes through. A declaration that
- * simply expired reads the same way here, which is intended: a statement about a year that has ended is not
+ * expired reads the same way here, which is intended: a statement about a year that has ended is not
  * a weaker answer, it is no answer.
  *
  * Concatenation in this class assembles sentence text rather than behavior, so swapping or dropping

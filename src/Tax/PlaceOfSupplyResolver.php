@@ -197,7 +197,7 @@ final readonly class PlaceOfSupplyResolver
      * Null for a supply taxed where the seller is, and that is a correction rather than an omission. The
      * column means the customer's country, and writing the seller's into it would hand every report that
      * reads it by its definition — a cross-border return, a country breakdown, an audit extract — the wrong
-     * country for every such sale, without a single test going red. A supply taxed at the seller is simply
+     * country for every such sale, without a single test going red. A supply taxed at the seller is
      * not one of those sales.
      */
     public function documentCountryFor(PlaceOfSupplyRule $productRule, TaxContext $buyer): ?string

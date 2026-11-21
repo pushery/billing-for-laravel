@@ -33,12 +33,18 @@ final readonly class ChargeOptions
      * @param  ?string  $captureMode  `manual` to authorize the payment and capture it later, `automatic` for the provider's default
      * @param  ?DateTimeInterface  $expiresAt  when the provider's payment page stops taking the payment, where a charge may set
      *                                         it: a Checkout Session on Stripe expires then, from 30 minutes to 24 hours after
-     *                                         it is created. Mollie keeps the lifetime of each method.
+     *                                         it is created. Mollie keeps a bank transfer open until the day of it,
+     *                                         from tomorrow to 100 days after tomorrow, its `dueDate`, and keeps
+     *                                         the lifetime of every other method.
+     * @param  ?string  $customerReference  the provider's id of the customer the payment belongs to, such as Stripe's
+     *                                      `cus_…`. A bank transfer on Stripe's checkout page needs one: Stripe
+     *                                      keeps the transfer on that customer's balance.
      *
      * @throws InvalidArgumentException for an address that is not absolute http or https, a locale in another format,
      *                                  an empty method, metadata under the key the rails write or a value that is not
      *                                  text or a whole number, a line that is not a PaymentLine, an empty card token or
-     *                                  an Apple Pay token that is no JSON, or a capture mode other than `automatic` or `manual`
+     *                                  an Apple Pay token that is no JSON, a capture mode other than `automatic` or `manual`,
+     *                                  or an empty customer
      */
     public function __construct(
         public ?string $returnUrl = null,
@@ -54,6 +60,7 @@ final readonly class ChargeOptions
         public ?string $applePayToken = null,
         public ?string $captureMode = null,
         public ?DateTimeInterface $expiresAt = null,
+        public ?string $customerReference = null,
     ) {
         foreach (['return' => $returnUrl, 'cancel' => $cancelUrl, 'webhook' => $webhookUrl] as $kind => $url) {
             if ($url !== null && ! $this->isAbsolute($url)) {
@@ -91,6 +98,10 @@ final readonly class ChargeOptions
 
         if ($captureMode !== null && ! in_array($captureMode, ['automatic', 'manual'], true)) {
             throw new InvalidArgumentException("The capture mode of a charge is `automatic` or `manual`, and `{$captureMode}` is neither.");
+        }
+
+        if ($customerReference !== null && trim($customerReference) === '') {
+            throw new InvalidArgumentException("The customer of a charge is the provider's id of a customer, and it is empty.");
         }
     }
 

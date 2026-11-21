@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Jobs;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Config;
@@ -38,7 +39,7 @@ use Pushery\Billing\ValueObjects\PlatformFee;
  * Nothing happens to a row that was refunded or reversed before this ran, to one already taken on the net, or where
  * the provider gives back less than the difference. A row left as it was still says what moved, with its zero.
  */
-final class TakeCommissionOnNet implements ShouldQueueAfterCommit
+final class TakeCommissionOnNet implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use BacksOffBetweenAttempts;
     use InteractsWithQueue;

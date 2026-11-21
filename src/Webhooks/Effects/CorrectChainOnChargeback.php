@@ -31,7 +31,7 @@ use RuntimeException;
  *
  * A chargeback is not one situation. Where the buyer never received what they paid for, the supply was
  * undone — both legs of the chain are corrected, and the creator's settlement goes back with it. Where the
- * payment was disputed as fraudulent or unrecognized, the creator delivered: the consideration simply never
+ * payment was disputed as fraudulent or unrecognized, the creator delivered: the consideration never
  * arrived, and it is the platform that carries the loss. Correcting the creator's leg there would take back
  * a settlement they earned, for a failure that was not theirs.
  *

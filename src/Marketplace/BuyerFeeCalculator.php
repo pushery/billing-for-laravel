@@ -76,7 +76,7 @@ final readonly class BuyerFeeCalculator
     /** The gross fee for a sale, from the configured model. */
     private function grossFeeFor(Money $saleGross): Money
     {
-        // A buyer fee is charged on top of the item price, so a fixed amount is simply that amount — it is
+        // A buyer fee is charged on top of the item price, so a fixed amount is that amount — it is
         // not capped by the sale, the way a seller-side deduction is capped by the payout it comes out of.
         return match ($this->model()) {
             BuyerFeeModel::Percent => $saleGross->proportion($this->bps(), 10_000),

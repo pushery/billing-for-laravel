@@ -28,7 +28,7 @@ use Pushery\Billing\Models\Coupon;
  * A provider coupon is immutable in its money: percent, amount, currency and duration are fixed when it is
  * created. So provisioning is keyed on exactly those, and asking twice for the same discount returns the
  * same coupon rather than a second one. Change the row's value and the key changes with it — the old coupon
- * is simply no longer the one this row provisions, which is the same invalidation a repriced tier gets.
+ * is no longer the one this row provisions, which is the same invalidation a repriced tier gets.
  */
 interface MerchantCouponProvisioner
 {

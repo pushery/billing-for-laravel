@@ -48,7 +48,7 @@ use Pushery\Billing\ValueObjects\UpcomingInvoicePreview;
  * which Laravel's Notifiable provides. On an owner model without them each queued notice fails, and
  * `billing:doctor` names such an owner type. The
  * once-per-failure / once-per-payment / once-per-rung / once-per-trial-end / once-per-cancellation
- * guarantees live in the callers (the webhook effects and the dunning-advance command); this simply delivers.
+ * guarantees live in the callers (the webhook effects and the dunning-advance command); this delivers.
  *
  * The three notices that name a last day, of a trial, of the access after a cancellation and of a canceled
  * subscription, get their moment in the zone the owner reads dates in ({@see OwnerTimezone}), so the day they name

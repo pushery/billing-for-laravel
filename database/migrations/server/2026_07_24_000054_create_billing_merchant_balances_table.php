@@ -12,7 +12,7 @@ use Pushery\Billing\Support\BillingSchema;
  * already gone.
  *
  * A reversal can fail: the merchant's provider balance may hold nothing to take back. Without somewhere for
- * the shortfall to sit, that is a loss nobody sees — the reversal simply did not happen, and no row says so.
+ * the shortfall to sit, that is a loss nobody sees — the reversal did not happen, and no row says so.
  * So the balance is signed and allowed to go negative, and the next settlement is applied against it before
  * anything is paid out.
  *

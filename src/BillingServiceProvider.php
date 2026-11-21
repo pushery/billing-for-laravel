@@ -17,6 +17,7 @@ use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Contracts\Translation\Loader;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\QueryException;
 use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Blade;
@@ -174,6 +175,7 @@ use Pushery\Billing\Contracts\PreviewsSwaps;
 use Pushery\Billing\Contracts\PriceChangeNotifier;
 use Pushery\Billing\Contracts\ProductTaxonomy;
 use Pushery\Billing\Contracts\ProrationStrategy;
+use Pushery\Billing\Contracts\ProvidesTaxRateHistory;
 use Pushery\Billing\Contracts\PublishesExchangeRates;
 use Pushery\Billing\Contracts\ReadsSubscriptionPayments;
 use Pushery\Billing\Contracts\ReceiptNotifier;
@@ -229,6 +231,7 @@ use Pushery\Billing\Dunning\NullLateFees;
 use Pushery\Billing\Eligibility\AlwaysEligible;
 use Pushery\Billing\Eligibility\AlwaysReceivable;
 use Pushery\Billing\Entitlements\ConfigLicense;
+use Pushery\Billing\Enums\ReservationState;
 use Pushery\Billing\Events\BillableAccountDeleting;
 use Pushery\Billing\Events\CreatorReattestationDue;
 use Pushery\Billing\Events\CreatorTaxStatusChanged;
@@ -300,6 +303,8 @@ use Pushery\Billing\Marketplace\SelfBillingAgreementGuard;
 use Pushery\Billing\Marketplace\SelfBillingEngine;
 use Pushery\Billing\Marketplace\UnmovedMerchantShares;
 use Pushery\Billing\Models\InPersonSaleRecord;
+use Pushery\Billing\Models\UsageGrant;
+use Pushery\Billing\Models\UsageReservation;
 use Pushery\Billing\Notifiers\HubBillingActionUrls;
 use Pushery\Billing\Notifiers\LaravelDunningNotifier;
 use Pushery\Billing\Notifiers\NoOwnerTimezone;
@@ -335,6 +340,7 @@ use Pushery\Billing\Support\NoRetentionHolds;
 use Pushery\Billing\Support\NullScheduleHeartbeat;
 use Pushery\Billing\Support\PasswordOrEmailReconfirmation;
 use Pushery\Billing\Support\PaymentsModeSchema;
+use Pushery\Billing\Support\PruneExpiredCacheKeys;
 use Pushery\Billing\Support\RetentionFloorGuard;
 use Pushery\Billing\Support\RetentionMatrix;
 use Pushery\Billing\Support\TaxSupportGuard;
@@ -1029,6 +1035,8 @@ final class BillingServiceProvider extends ServiceProvider
                 $app->make(ShippedTaxRates::class),
                 // Only a map the host bound: the package ships none, and without one pricing stays as it is.
                 $app->bound(CoverageMap::class) ? $app->make(CoverageMap::class) : null,
+                // Only a history the host bound: without one, the `history` of billing.tax_matrix answers.
+                $app->bound(ProvidesTaxRateHistory::class) ? $app->make(ProvidesTaxRateHistory::class) : null,
             )->make(),
         );
 
@@ -1056,7 +1064,12 @@ final class BillingServiceProvider extends ServiceProvider
             DeemedSupplyOfGoodsTaxDecision::class,
             static function (Application $app): DeemedSupplyOfGoodsTaxDecision {
                 $config = $app->make(Repository::class);
-                $tables = new TaxCalculatorFactory($config, $app->make(CheckpointRegistry::class), $app->make(ShippedTaxRates::class));
+                $tables = new TaxCalculatorFactory(
+                    $config,
+                    $app->make(CheckpointRegistry::class),
+                    $app->make(ShippedTaxRates::class),
+                    history: $app->bound(ProvidesTaxRateHistory::class) ? $app->make(ProvidesTaxRateHistory::class) : null,
+                );
                 $country = $config->get('billing.company.country');
 
                 return new DeemedSupplyOfGoodsTaxDecision(
@@ -1479,6 +1492,7 @@ final class BillingServiceProvider extends ServiceProvider
             // the billing of a SaaS application, which this mode leaves off.
             if ($scheduleConfig->get('billing.mode') === 'payments') {
                 $withHeartbeat($schedule->command('billing:prune')->dailyAt('03:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:prune');
+                self::scheduleCacheKeyPruning($schedule, $withHeartbeat);
                 self::scheduleAccountReconcile($schedule, $container, $withHeartbeat);
 
                 return;
@@ -1502,9 +1516,11 @@ final class BillingServiceProvider extends ServiceProvider
             if ($container->bound(CyclePaymentReconciler::class)) {
                 $withHeartbeat($schedule->command('billing:cycles:reconcile')->hourlyAt(30)->withoutOverlapping(self::LOCK_HOURLY)->onOneServer(), 'billing:cycles:reconcile');
             }
-            // Planned only where a tier meters something: without a metered component on any tier there is no
-            // usage to report and no allowance a hold defends, and a run every minute would read empty tables.
-            if ($container->make(MeterCatalog::class)->meterKeys() !== []) {
+            // Planned where a tier meters something, and also while a hold waits to be handed back or a grant to run
+            // out. The flush hands an expired hold back and writes an expired grant off before it reports anything,
+            // and an application can hold units with UsageMeter::reserve() and grant them with UsageGrants on a meter
+            // no tier names. Without either, a run every minute would read empty tables, or fail without them.
+            if ($container->make(MeterCatalog::class)->meterKeys() !== [] || self::usageAwaitsTheFlush()) {
                 $withHeartbeat($schedule->command('billing:usage:flush')->everyMinute()->withoutOverlapping(self::LOCK_MINUTELY)->onOneServer(), 'billing:usage:flush');
             }
             // A daily proactive nudge before a card expires — the biggest preventable cause of churn.
@@ -1540,6 +1556,7 @@ final class BillingServiceProvider extends ServiceProvider
             $withHeartbeat($schedule->command('billing:dunning:expire')->dailyAt('09:45')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:dunning:expire');
             // The retention clock. Personal data the package no longer needs is not data it may keep.
             $withHeartbeat($schedule->command('billing:prune')->dailyAt('03:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:prune');
+            self::scheduleCacheKeyPruning($schedule, $withHeartbeat);
             // The drift guard: read the provider's own totals back and compare, and alarm on a backlog held
             // past the point it can still be billed. The flush is quiet about both by design — this is the
             // daily check that surfaces revenue quietly going uncollected.
@@ -1560,7 +1577,7 @@ final class BillingServiceProvider extends ServiceProvider
                 // and again shortly before it runs out.
                 $withHeartbeat($schedule->command('billing:tax-holds:remind')->dailyAt('05:55')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:tax-holds:remind');
                 // The one hold nothing else can notice. A merchant whose attestation expires is stopped from
-                // selling and from being paid without a row changing anywhere — the date simply passed. Without
+                // selling and from being paid without a row changing anywhere — the date passed. Without
                 // this sweep they find out by trying to sell. Early, so the notice lands before their day does.
                 $withHeartbeat($schedule->command('billing:tax-holds:announce')->dailyAt('06:00')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:tax-holds:announce');
                 // The settlements a corrected creator standing has made wrong, issued again.
@@ -1584,7 +1601,7 @@ final class BillingServiceProvider extends ServiceProvider
                 $withHeartbeat($schedule->command('billing:vouchers:volume')->dailyAt('06:30')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:vouchers:volume');
             }
             // The other event nothing can observe, and this one decides rather than announces. A creator
-            // crossing a turnover limit writes no row: enough sales accumulate and a threshold is simply
+            // crossing a turnover limit writes no row: enough sales accumulate and a threshold is
             // past, so the moment the flip should have happened is a moment nothing dispatched. Left
             // unrun, a creator who has outgrown their relief keeps issuing tax-free documents, which is
             // knowingly wrong from the breaking sale onward. Just after the announcement, so a standing
@@ -1601,7 +1618,7 @@ final class BillingServiceProvider extends ServiceProvider
             $withHeartbeat($schedule->command('billing:exchange-rates:import')->dailyAt('17:30')->timezone('Europe/Berlin')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:exchange-rates:import');
             // The buyer-protection clock. Its two deadlines -- the buyer's silence turning into consent, and
             // the absolute decision date -- are dates, and a date only means something if something reads it.
-            // Unscheduled, the hold simply waits until the provider stops waiting and pays out anyway: the
+            // Unscheduled, the hold waits until the provider stops waiting and pays out anyway: the
             // money arrives, so nothing looks broken, and only the promise behind it was empty. The command
             // said "Meant to run daily" in its own docblock while nothing ran it.
             //
@@ -1811,6 +1828,36 @@ final class BillingServiceProvider extends ServiceProvider
     }
 
     /**
+     * Whether a hold with an expiry waits to be handed back, or a grant to be written off, in the tables of the
+     * usage meter. An install without those tables, one that ignores the package's migrations, has neither.
+     */
+    private static function usageAwaitsTheFlush(): bool
+    {
+        try {
+            return UsageReservation::model()::query()->where('state', ReservationState::Pending)->whereNotNull('expires_at')->exists()
+                || UsageGrant::model()::query()->whereNull('expired_at')->exists();
+        } catch (QueryException) {
+            return false;
+        }
+    }
+
+    /**
+     * Schedule the pruning of the expired cache entries this package keeps, in either mode.
+     *
+     * A database or a file store deletes an expired entry only when its key is read again, and the holds of a
+     * scheduled swap and the counters of the rate limiter are written under keys nobody reads once their moment has
+     * passed. PruneExpiredCacheKeys deletes them from the default store and the store of the rate limiter, and does
+     * nothing on a store that expires its entries itself. A callback carries no command, so the entry is named after
+     * the class, which the overlap and the one-server lock need.
+     *
+     * @param  Closure(Event, string): Event  $withHeartbeat
+     */
+    private static function scheduleCacheKeyPruning(Schedule $schedule, Closure $withHeartbeat): void
+    {
+        $withHeartbeat($schedule->call(PruneExpiredCacheKeys::class)->name(PruneExpiredCacheKeys::class)->dailyAt('03:45')->withoutOverlapping(self::LOCK_DAILY)->onOneServer(), 'billing:prune-cache-keys');
+    }
+
+    /**
      * Schedule the account run where the application lists its accounts, in either mode.
      *
      * Mollie calls no webhook for a refund canceled before it is paid out, and the run that picks such payments up has to
@@ -1886,7 +1933,7 @@ final class BillingServiceProvider extends ServiceProvider
      * has a reason to publish and edit, and every one is a block a later release adds to.
      *
      * The failure is silent in the direction that costs most. Nothing errors and nothing logs:
-     * the new setting simply reads as null, so a feature added in a minor release is off for
+     * the new setting reads as null, so a feature added in a minor release is off for
      * exactly the hosts who customized that area, and a corrected default never takes effect.
      *
      * Recursing is not enough on its own -- a list is a value, never a structure.

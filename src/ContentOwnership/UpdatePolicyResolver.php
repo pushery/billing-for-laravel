@@ -94,7 +94,7 @@ final readonly class UpdatePolicyResolver
      * What the grant resolves to at this moment.
      *
      * The windowed case is the only one that moves with the clock, and it moves lazily: while the window is
-     * open the buyer simply gets the newest version, and the boundary only starts applying once the window
+     * open the buyer gets the newest version, and the boundary only starts applying once the window
      * has closed. Nothing is written when a window lapses — a job that had to stamp every expired grant
      * would be a job that can be late, and a late job here means handing somebody a version they no longer
      * paid for.
@@ -162,7 +162,7 @@ final readonly class UpdatePolicyResolver
      * The install's default, refused rather than coerced when it is not one of the four.
      *
      * A typo that fell back to `latest` would be a silent promise of free updates forever on every sale the
-     * install ever makes — the most expensive possible reading of a misspelt word, and one nothing else
+     * install ever makes — the most expensive possible reading of a misspelled word, and one nothing else
      * would ever surface.
      */
     private function configuredDefault(): UpdatePolicy

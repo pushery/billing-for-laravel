@@ -15,6 +15,7 @@ use Pushery\Billing\Events\AccountPaymentChanged;
 use Pushery\Billing\ValueObjects\ChargeOptions;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PaymentChargeback;
+use Pushery\Billing\ValueObjects\PaymentInstructions;
 use Pushery\Billing\Webhooks\AccountWebhooks;
 use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\PermissionException;
@@ -38,9 +39,15 @@ use Stripe\StripeClient;
  */
 final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOfThePayment, WebhookEventMapper
 {
-    /** The events about a payment intent, each reported from the intent read back. */
+    /**
+     * The events about a payment intent, each reported from the intent read back. A bank transfer announces itself with
+     * `payment_intent.requires_action` once the customer has chosen it, and with `payment_intent.partially_funded` when
+     * part of the money has arrived.
+     */
     private const array INTENT_EVENTS = [
         'payment_intent.processing',
+        'payment_intent.requires_action',
+        'payment_intent.partially_funded',
         'payment_intent.amount_capturable_updated',
         'payment_intent.succeeded',
         'payment_intent.payment_failed',
@@ -192,7 +199,17 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
             return null;
         }
 
-        return $this->change($id, $status, $amount, Money::zero($amount->currency), Money::zero($amount->currency), $intent['metadata'] ?? null, testmode: ($intent['livemode'] ?? null) === false);
+        return $this->change(
+            $id,
+            $status,
+            $amount,
+            Money::zero($amount->currency),
+            Money::zero($amount->currency),
+            $intent['metadata'] ?? null,
+            testmode: ($intent['livemode'] ?? null) === false,
+            method: StripeBankTransfer::methodOf($intent),
+            instructions: StripeBankTransfer::instructions($intent),
+        );
     }
 
     /**
@@ -248,8 +265,9 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
 
     /**
      * A payment intent read back, in the status its own state names, as the intent's events report it. One that still
-     * waits for a method, a confirmation or an action reports nothing; one whose last attempt was declined reports
-     * `Failed`, as `payment_intent.payment_failed` does.
+     * waits for a method, a confirmation or an authentication reports nothing; one whose last attempt was declined
+     * reports `Failed`, as `payment_intent.payment_failed` does. A bank transfer waiting for its money reports
+     * `Pending`, with the account and the reference to pay with.
      */
     private function ofIntentReference(string $intentId): ?AccountPaymentChanged
     {
@@ -261,6 +279,7 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
             'requires_capture' => $this->ofIntent($intent, AccountPaymentStatus::Authorized),
             'canceled' => $this->ofIntent($intent, AccountPaymentStatus::Canceled),
             'requires_payment_method' => is_array($intent['last_payment_error'] ?? null) ? $this->ofIntent($intent, AccountPaymentStatus::Failed) : null,
+            'requires_action' => StripeBankTransfer::instructions($intent) instanceof PaymentInstructions ? $this->ofIntent($intent, AccountPaymentStatus::Pending) : null,
             default => null,
         };
     }
@@ -349,6 +368,7 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
             $refund,
             ($intent['livemode'] ?? null) === false,
             $chargebacks,
+            StripeBankTransfer::methodOf($intent),
         );
     }
 
@@ -469,7 +489,7 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
      * @param  list<PaymentChargeback>  $chargebacks
      * @param  mixed  $metadata  the payment's metadata, untyped in the SDK's StripeObject
      */
-    private function change(string $paymentReference, AccountPaymentStatus $status, Money $amount, Money $refunded, Money $chargedBack, mixed $metadata, ?string $refund = null, bool $testmode = false, array $chargebacks = []): AccountPaymentChanged
+    private function change(string $paymentReference, AccountPaymentStatus $status, Money $amount, Money $refunded, Money $chargedBack, mixed $metadata, ?string $refund = null, bool $testmode = false, array $chargebacks = [], ?string $method = null, ?PaymentInstructions $instructions = null): AccountPaymentChanged
     {
         $values = is_array($metadata) ? $metadata : [];
         $kept = [];
@@ -496,6 +516,8 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
             $testmode,
             $chargebacks,
             CarbonImmutable::now(),
+            $method,
+            $instructions,
         );
     }
 

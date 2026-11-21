@@ -132,7 +132,7 @@ final readonly class EuOssTaxCalculator implements TaxCalculator
      *
      * "Knows" includes a country correctly outside the tax area: zero there is an answer, not an absence.
      * The market gate asks this at boot so an opened market with no rate is refused on a deploy rather than
-     * discovered on an invoice, where it looks like a sale that simply carried no tax.
+     * discovered on an invoice, where it looks like a sale that carried no tax.
      */
     public function knowsRateFor(string $country): bool
     {

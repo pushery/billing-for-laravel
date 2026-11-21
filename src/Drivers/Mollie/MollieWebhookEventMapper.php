@@ -109,7 +109,7 @@ final class MollieWebhookEventMapper implements DerivesDeliveryKey, WebhookEvent
      * The legacy ping is a form with a single `id` field naming the payment. The next generation is signed
      * JSON describing an event, and it carries both: `id` is the event (`evt_…`) and `entityId` is the
      * resource the event happened to. So `entityId` is read first — the other order fetches the event id as
-     * if it were a payment, and the failure mode is silence rather than an error, because the fetch simply
+     * if it were a payment, and the failure mode is silence rather than an error, because the fetch
      * does not resolve and this class is built to say nothing about an id it cannot follow.
      *
      * Both generations then run the same path from here, which is the reason this returns an id rather than

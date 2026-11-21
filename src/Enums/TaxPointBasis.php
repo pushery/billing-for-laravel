@@ -15,7 +15,7 @@ namespace Pushery\Billing\Enums;
  * So the basis travels with the date and is frozen beside it. Without that, a document read years later
  * cannot be checked at all: a reviewer recomputing the tax point applies today's configuration to a sale
  * made under a different one, gets a different month, and has no way to tell whether the original was wrong
- * or the rule simply changed.
+ * or the rule changed.
  *
  * The package knows only these two readings. Which applies is a jurisdiction's answer, read from its
  * profile — the package never picks one on a jurisdiction's behalf.

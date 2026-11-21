@@ -6,6 +6,7 @@ namespace Pushery\Billing\Jobs;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Container\Container;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Config;
@@ -32,7 +33,7 @@ use Pushery\Billing\Support\Concerns\BacksOffBetweenAttempts;
  * row, and this job asks once that transaction has committed. It re-reads the row and does nothing when a
  * reference is already there.
  */
-final class NameTransferOnConfirmation implements ShouldQueueAfterCommit
+final class NameTransferOnConfirmation implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use BacksOffBetweenAttempts;
     use InteractsWithQueue;

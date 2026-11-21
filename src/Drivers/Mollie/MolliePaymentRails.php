@@ -140,6 +140,7 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
         // The request is built before the key is armed: an install with nowhere to send the customer back to, or
         // options Mollie would refuse, are refused here, before anything reaches Mollie. A return address in the
         // options is the shop's own page of the order, and with one the install needs none.
+        $method = MollieChargeOptions::method($token, $options);
         $request = new CreatePaymentRequest(
             description: $this->describe($narrative, 'Payment'),
             amount: MollieAmount::toMollie($amount),
@@ -150,12 +151,12 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
             billingAddress: MollieChargeOptions::address($options?->billingAddress),
             shippingAddress: MollieChargeOptions::address($options?->shippingAddress),
             locale: $options?->locale,
-            method: MollieChargeOptions::method($token, $options),
+            method: $method,
             metadata: MollieChargeOptions::metadata($options, $this->traceOf($idempotencyKey)),
             captureMode: $options?->captureMode,
             sequenceType: MollieValue::SEQUENCE_ONEOFF,
             profileId: $this->profileId,
-            additional: MollieChargeOptions::additional($options),
+            additional: MollieChargeOptions::additional($options, $method),
         );
 
         return $this->settle($this->keyed($idempotencyKey, $request), $amount);
@@ -600,21 +601,23 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
         }
 
         $reference = MollieValue::id($payment->id);
+        $method = MollieValue::of($payment->method);
 
         if ($payment->isPaid()) {
-            return new ChargeResult(true, $reference, $amount);
+            return new ChargeResult(true, $reference, $amount, paymentMethod: $method);
         }
 
         if ($payment->isFailed() || $payment->isCanceled() || $payment->isExpired()) {
-            return new ChargeResult(false, $reference, $amount, $this->reasonFor($payment));
+            return new ChargeResult(false, $reference, $amount, $this->reasonFor($payment), paymentMethod: $method);
         }
 
         $checkout = MollieHostedPages::checkout($payment);
 
-        // A checkout URL means the customer still has to act; without one the payment is simply in flight
+        // A checkout URL means the customer still has to act; without one the payment is in flight
         // (a bank debit settling over days). Both are "not yet", and neither is a decline — but only one
         // of them has somewhere to send the customer. A checkout on a host Mollie serves none from counts as
-        // none, so the payment waits for the provider rather than sending anybody there.
+        // none, so the payment waits for the provider rather than sending anybody there. An open bank transfer
+        // names the account and the reference from the start, for the shop to show beside Mollie's page.
         return new ChargeResult(
             successful: false,
             reference: $reference,
@@ -622,13 +625,15 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
             requiresAction: $checkout !== null,
             pending: $checkout === null,
             clientSecret: $checkout,
+            paymentMethod: $method,
+            paymentInstructions: MolliePaymentInstructions::of($payment),
         );
     }
 
     /**
      * Mollie's own words for why it refused, kept rather than replaced with ours.
      *
-     * Not every decline carries one: a canceled or expired payment simply ran out, and there is nothing to
+     * Not every decline carries one: a canceled or expired payment ran out, and there is nothing to
      * quote, and an empty code quotes nothing either. The status is then the reason, which is more useful
      * than a placeholder saying we do not know.
      */

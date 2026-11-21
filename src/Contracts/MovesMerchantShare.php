@@ -23,7 +23,7 @@ use Pushery\Billing\ValueObjects\TransferResult;
  * On a destination charge the provider creates the transfer as part of the payment: one call, and the
  * merchant's share is already on its way. On a separate transfer it does not. The platform takes the whole
  * payment, and moving the share is a second call that somebody has to make — and if nobody does, the
- * merchant is simply never paid while every signal looks healthy.
+ * merchant is never paid while every signal looks healthy.
  *
  * That was the state of this package until now, on the DEFAULT charge type, which is why the driver refused
  * the routing outright rather than serving half of it.

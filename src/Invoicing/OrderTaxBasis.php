@@ -102,7 +102,7 @@ final readonly class OrderTaxBasis
      *
      * Published as a method rather than left to each side to spell, because a reader and a writer that
      * agree on a string by convention are two strings that eventually differ — and the failure is silent
-     * in the expensive direction: every cycle simply finds no evidence and issues a document with no tax,
+     * in the expensive direction: every cycle finds no evidence and issues a document with no tax,
      * which is indistinguishable from an application that never recorded any.
      *
      * The subscription, not the order. The place is established once, when the customer signs up and the

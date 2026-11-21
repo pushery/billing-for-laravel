@@ -155,6 +155,8 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Names
             testmode: MollieValue::of($payment->mode) === 'test',
             chargebacks: MollieChargebackEvents::records($chargebacks),
             observedAt: CarbonImmutable::now(),
+            paymentMethod: MollieValue::of($payment->method),
+            paymentInstructions: MolliePaymentInstructions::of($payment),
         );
     }
 

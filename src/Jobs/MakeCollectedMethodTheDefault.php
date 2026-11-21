@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Jobs;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Queue\InteractsWithQueue;
@@ -26,7 +27,7 @@ use Pushery\Billing\Webhooks\Effects\AdoptCollectedPaymentMethod;
  * provider was asked to change it. A second delivery makes the same method the default a second time, which is
  * harmless.
  */
-final class MakeCollectedMethodTheDefault implements ShouldQueueAfterCommit
+final class MakeCollectedMethodTheDefault implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use BacksOffBetweenAttempts;
     use InteractsWithQueue;

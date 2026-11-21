@@ -46,6 +46,14 @@ final readonly class ChargeResult
          * it. The host alone, never the address. Null where the page was handed out, or where there was none.
          */
         public ?string $refusedPageHost = null,
+        /**
+         * The provider's id of the method the customer pays with, such as `banktransfer` at Mollie or `customer_balance`
+         * at Stripe, where the provider names it in its answer. Null before the customer has chosen one on the
+         * provider's page.
+         */
+        public ?string $paymentMethod = null,
+        /** Where an open bank transfer goes and the reference it carries, for the shop to show the customer. */
+        public ?PaymentInstructions $paymentInstructions = null,
     ) {}
 
     /** Whether this payment carried a merchant's share at all. */

@@ -15,7 +15,7 @@ namespace Pushery\Billing\Enums;
  * | EU option | the central bank's rate **at the moment the tax arose**, cross-rates via EUR | Art. 91 VAT Directive |
  * | OSS / IOSS | the central bank's rate on the **last day of the reporting period**; monthly averages are expressly excluded | UStAE 18i/18j/18k |
  *
- * Two consequences follow immediately. **"Central bank rate by default" would simply be wrong in Germany.**
+ * Two consequences follow immediately. **"Central bank rate by default" would be wrong in Germany.**
  * And the OSS rule contradicts the domestic one — on the same turnover. So the choice of rule is
  * **jurisdiction knowledge**, never a core default: the same seam the rates themselves sit behind.
  *

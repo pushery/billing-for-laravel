@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
  * The seam an app rebinds when this prompt should go somewhere other than Laravel's mail stack.
  *
  * The once-per-invoice guarantee lives in the caller (the webhook effect dedups on the invoice awaiting
- * authentication, not the delivery), so an implementation simply delivers.
+ * authentication, not the delivery), so an implementation delivers.
  */
 interface PaymentActionNotifier
 {

@@ -6,6 +6,7 @@ namespace Pushery\Billing\Jobs;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Queue\InteractsWithQueue;
@@ -42,7 +43,7 @@ use RuntimeException;
  * The owner is looked up again when the job runs, through the same directory the effect asked: a customer this app
  * no longer knows has nothing left to end or refund.
  */
-final class ReverseClosedMarketSale implements ShouldQueueAfterCommit
+final class ReverseClosedMarketSale implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use BacksOffBetweenAttempts;
     use InteractsWithQueue;

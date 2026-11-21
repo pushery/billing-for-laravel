@@ -9,7 +9,7 @@ namespace Pushery\Billing\Tax;
  *
  * ## Why the importer may not write
  *
- * This is "a silently wrong value is worse than an old one" cast in code. A manipulated or simply misparsed
+ * This is "a silently wrong value is worse than an old one" cast in code. A manipulated or misparsed
  * response cannot put a rate into production, because the thing that fetched it **has no write access to the
  * money path**. The snapshot changes when a person changes it, and the header then records who.
  *

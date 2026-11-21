@@ -180,7 +180,7 @@ final readonly class MolliePaymentMethods implements KeepsAFallbackMethod, Payme
                 throw new RuntimeException(
                     'This is the only payment method on the account and a subscription is still being '.
                     'charged against it. Removing it would not end the subscription — the next cycle would '.
-                    'simply fail — so cancel the subscription first, or add another method.'
+                    'fail — so cancel the subscription first, or add another method.'
                 );
             }
 

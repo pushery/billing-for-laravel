@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Pushery\Billing\Enums\AccountPaymentStatus;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PaymentChargeback;
+use Pushery\Billing\ValueObjects\PaymentInstructions;
 
 /**
  * A one-off payment into a payment account changed, as its provider reported it on the account's webhook address.
@@ -37,6 +38,10 @@ final readonly class AccountPaymentChanged implements BillingDomainEvent
      *                                                what the bank still holds
      * @param  CarbonImmutable  $observedAt  when the package worked out where the payment stands, so of two reports
      *                                       about the same payment the later one is the newer state
+     * @param  ?string  $paymentMethod  the provider's id of the method the customer pays with, such as `banktransfer`
+     *                                  at Mollie or `customer_balance` at Stripe, where the provider names it
+     * @param  ?PaymentInstructions  $paymentInstructions  where an open bank transfer goes and the reference it
+     *                                                     carries, while the transfer is still awaited
      */
     public function __construct(
         public string $provider,
@@ -52,5 +57,7 @@ final readonly class AccountPaymentChanged implements BillingDomainEvent
         public bool $testmode = false,
         public array $chargebacks = [],
         public CarbonImmutable $observedAt = new CarbonImmutable,
+        public ?string $paymentMethod = null,
+        public ?PaymentInstructions $paymentInstructions = null,
     ) {}
 }

@@ -6,6 +6,7 @@ namespace Pushery\Billing\Listeners;
 
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
+use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\AffectsSeats;
@@ -26,7 +27,7 @@ use Pushery\Billing\Support\Concerns\BacksOffBetweenAttempts;
  * open transaction and could yet roll back — reporting seats a rollback then un-does. A transient gateway
  * failure propagates so the queue retries it; a permanent one is handled (and logged) at the seam.
  */
-final readonly class SyncSeatsOnMembershipChange implements ShouldQueueAfterCommit
+final readonly class SyncSeatsOnMembershipChange implements ShouldBeEncrypted, ShouldQueueAfterCommit
 {
     use BacksOffBetweenAttempts;
 

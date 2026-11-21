@@ -19,7 +19,7 @@ use Pushery\Billing\Support\SweepAttempts;
  * A merchant reaches a tax hold two ways, and only one of them writes anything.
  *
  * Somebody **recording** a blocking standing is a write, and a write can be watched. An attestation
- * **expiring** is not: no row changes, nothing is dispatched, and `statusAt()` simply begins answering
+ * **expiring** is not: no row changes, nothing is dispatched, and `statusAt()` begins answering
  * `Unclarified` because a date passed. The hold starts by time alone — and that is precisely the route where
  * the merchant most needs telling, because they did nothing and can suddenly neither sell nor be paid.
  *
