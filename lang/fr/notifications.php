@@ -143,6 +143,7 @@ return [
     'card_expiring' => [
         'subject' => 'Ta carte est sur le point d’expirer',
         'intro' => 'La carte enregistrée (:card) expire bientôt.',
+        'intro_dated' => 'La carte enregistrée (:card) expire fin :month.',
         'outro' => 'Mets à jour ton moyen de paiement pour éviter une interruption de ton abonnement.',
         'cta' => 'Mettre à jour la carte',
     ],
@@ -156,7 +157,7 @@ return [
 
     'quota_warning' => [
         'subject' => 'Tu approches de ta limite de :meter',
-        'intro' => 'Tu as utilisé :used sur :included :meter inclus sur cette période.',
+        'intro' => 'Tu as utilisé :used sur les :included inclus dans :meter sur cette période.',
         'outro' => 'Recharge ou change d’offre pour continuer sans interruption.',
         'cta' => 'Voir la consommation',
     ],
@@ -171,6 +172,8 @@ return [
     'payment_action_required' => [
         'subject' => 'Confirme ton paiement pour continuer',
         'intro' => 'Ta banque a besoin que tu confirmes ce paiement avant que ton abonnement puisse continuer.',
+        'summary' => 'Montant : :amount · Facture : :invoice',
+        'summary_reference' => 'Facture : :invoice',
         'outro' => 'Confirme-le maintenant pour éviter toute interruption de service.',
         'cta' => 'Confirmer le paiement',
     ],

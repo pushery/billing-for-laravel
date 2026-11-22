@@ -13,13 +13,16 @@ use Pushery\Billing\Models\Concerns\StoresMomentsWithTheirOffset;
  * A fixed discount the application granted an owner, which the owner's next cycles use up before tax.
  *
  * What is left of it is never stored: it is the granted amount less the uses of orders that did not fail
- * ({@see DiscountAllowanceUse}), so it cannot drift from the cycles that consumed it.
+ * ({@see DiscountAllowanceUse}), so it cannot drift from the cycles that consumed it. `net` says whether the amount is
+ * meant before tax: each cycle then takes it off its net, at the rate the cycle is taxed at, and records what it took as
+ * net.
  *
  * @property int $id
  * @property string $owner_type
  * @property int $owner_id
  * @property string $currency
  * @property int $amount_minor
+ * @property bool $net
  * @property string $cause
  * @property string $description
  * @property ?Carbon $created_at
@@ -33,10 +36,20 @@ class DiscountAllowance extends Model
     protected $table = 'billing_discount_allowances';
 
     /** @var list<string> */
-    protected $fillable = ['owner_type', 'owner_id', 'currency', 'amount_minor', 'cause', 'description'];
+    protected $fillable = ['owner_type', 'owner_id', 'currency', 'amount_minor', 'net', 'cause', 'description'];
+
+    /**
+     * The default the schema carries, so an allowance that was just created reads like one that was read back.
+     *
+     * @var array<string, bool>
+     */
+    protected $attributes = [
+        'net' => false,
+    ];
 
     /** @var array<string,string> */
     protected $casts = [
         'amount_minor' => 'integer',
+        'net' => 'boolean',
     ];
 }

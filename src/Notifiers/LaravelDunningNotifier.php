@@ -8,16 +8,18 @@ use DateTimeInterface;
 use Illuminate\Container\Container;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Notification;
+use Pushery\Billing\Catalogs\MeterCatalog;
 use Pushery\Billing\Consumer\WithdrawalConsentLedger;
 use Pushery\Billing\Contracts\DunningNotifier;
 use Pushery\Billing\Contracts\MandateNotifier;
-use Pushery\Billing\Contracts\PaymentActionNotifier;
+use Pushery\Billing\Contracts\PaymentActionAmountNotifier;
 use Pushery\Billing\Contracts\PaymentMethodNotifier;
 use Pushery\Billing\Contracts\PriceChangeNotifier;
 use Pushery\Billing\Contracts\ReceiptNotifier;
 use Pushery\Billing\Contracts\SubscriptionEndingNotifier;
 use Pushery\Billing\Contracts\SubscriptionNotifier;
 use Pushery\Billing\Contracts\SuspensionNotifier;
+use Pushery\Billing\Contracts\TierResolver;
 use Pushery\Billing\Contracts\TrialNotifier;
 use Pushery\Billing\Contracts\UsageNotifier;
 use Pushery\Billing\Notifications\CardExpiringNotification;
@@ -54,7 +56,7 @@ use Pushery\Billing\ValueObjects\UpcomingInvoicePreview;
  * subscription, get their moment in the zone the owner reads dates in ({@see OwnerTimezone}), so the day they name
  * is the owner's day.
  */
-final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, PaymentActionNotifier, PaymentMethodNotifier, PriceChangeNotifier, ReceiptNotifier, SubscriptionEndingNotifier, SubscriptionNotifier, SuspensionNotifier, TrialNotifier, UsageNotifier
+final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, PaymentActionAmountNotifier, PaymentMethodNotifier, PriceChangeNotifier, ReceiptNotifier, SubscriptionEndingNotifier, SubscriptionNotifier, SuspensionNotifier, TrialNotifier, UsageNotifier
 {
     public function paymentFailed(Model $owner, Money $amount, string $invoiceReference): void
     {
@@ -63,7 +65,12 @@ final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, 
 
     public function paymentActionRequired(Model $owner, string $invoiceReference): void
     {
-        Notification::send($owner, new PaymentActionRequiredNotification);
+        Notification::send($owner, new PaymentActionRequiredNotification($invoiceReference));
+    }
+
+    public function paymentActionRequiredWithAmount(Model $owner, string $invoiceReference, Money $amount): void
+    {
+        Notification::send($owner, new PaymentActionRequiredNotification($invoiceReference, $amount));
     }
 
     /**
@@ -139,6 +146,20 @@ final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, 
 
     public function quotaWarning(Model $owner, string $meterKey, string $label, int $used, int $included): void
     {
-        Notification::send($owner, new QuotaWarningNotification($meterKey, $label, $used, $included));
+        Notification::send($owner, new QuotaWarningNotification($meterKey, $label, $used, $included, $this->unitOf($owner, $meterKey)));
+    }
+
+    /**
+     * The unit the owner's meter counts in, from the meter catalog of the owner's tier, or null where it names none.
+     *
+     * Looked up here rather than handed over: `UsageNotifier::quotaWarning()` passes the label and the two numbers, and
+     * a further parameter there would break every application that implements the contract.
+     */
+    private function unitOf(Model $owner, string $meterKey): ?string
+    {
+        $container = Container::getInstance();
+        $unit = $container->make(MeterCatalog::class)->component($container->make(TierResolver::class)->resolve($owner)->key, $meterKey)?->unit;
+
+        return $unit === null || trim($unit) === '' ? null : $unit;
     }
 }

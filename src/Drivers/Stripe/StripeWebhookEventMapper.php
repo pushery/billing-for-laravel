@@ -596,7 +596,16 @@ final readonly class StripeWebhookEventMapper implements WebhookEventMapper
             return [];
         }
 
-        return [new PaymentActionRequired($customer, $id)];
+        // The amount the invoice is due, so the prompt can name the payment it asks to confirm. Without a
+        // currency there is no amount to name, and the prompt names the invoice alone.
+        $currency = $this->string($object, 'currency');
+        $due = $this->int($object, 'amount_due');
+
+        return [new PaymentActionRequired(
+            $customer,
+            $id,
+            $currency === null || $due === null ? null : StripeAmount::toMoney($due, strtoupper($currency)),
+        )];
     }
 
     /**

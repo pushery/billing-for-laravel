@@ -7,11 +7,13 @@ namespace Pushery\Billing\Webhooks\Effects;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Contracts\CustomerDirectory;
 use Pushery\Billing\Contracts\DedupesOnReference;
+use Pushery\Billing\Contracts\PaymentActionAmountNotifier;
 use Pushery\Billing\Contracts\PaymentActionNotifier;
 use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Events\PaymentActionRequired;
 use Pushery\Billing\Support\BillingEventLog;
+use Pushery\Billing\ValueObjects\Money;
 use RuntimeException;
 
 /**
@@ -39,7 +41,11 @@ final readonly class SendPaymentActionRequiredNotice implements DedupesOnReferen
             return; // a customer this app does not own
         }
 
-        $this->notifier->paymentActionRequired($owner, $event->reference);
+        if ($event->amount instanceof Money && $this->notifier instanceof PaymentActionAmountNotifier) {
+            $this->notifier->paymentActionRequiredWithAmount($owner, $event->reference, $event->amount);
+        } else {
+            $this->notifier->paymentActionRequired($owner, $event->reference);
+        }
 
         $this->log->record('payment.action_required_notice_sent', $owner, [
             'reference' => $event->reference,

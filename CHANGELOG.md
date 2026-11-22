@@ -4,6 +4,26 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.65.0] - 2026-11-22
+
+### ✨ Added
+
+- **The mail that asks to confirm a payment names the amount and the invoice.** It asked for "this payment" without saying which, and a request to confirm a payment is a form phishing imitates. Stripe's `invoice.payment_action_required` now carries the amount due on `PaymentActionRequired::$amount`, and a notifier that implements the new `PaymentActionAmountNotifier` receives it. The shipped notifier does; one that implements only `PaymentActionNotifier` keeps working as it is. Without an amount the mail names the invoice alone.
+
+- **A coupon and a discount allowance can be meant before tax.** On a driver the package bills itself, a coupon of the type `net_percent` takes its share of the net of the lines it covers, in hundredths of a percent and rounded half away from zero to the cent, and one of the type `net_fixed` takes its amount off that net. `DiscountAllowances::grantNet()` grants an allowance whose amount each cycle takes off its net, and what is left of it stays net. The cycle is priced gross, so each discount line takes off the gross that leaves the reduced net with its tax, at the rate the cycle's invoice states, which `OrderTaxBasis::rateOfCycle()` decides while the cycle is priced. A plan of 30.00 net at 19 % with 15 % off before tax is invoiced as 25.50 net and 4.85 tax, where a coupon off the gross arrived at 25.50 and 4.84. The new column `net` of `billing_discount_allowances` comes with a migration, and every allowance granted before keeps `false`. **Upgrade:** a new migration, `2026_11_22_000204_record_the_net_allowances_on_billing_discount_allowances_table`, adds the column `net`, false on every allowance granted before, and `php artisan migrate` runs it. A host that keeps the migrations in its own `database/migrations` copies this one file from `vendor/pushery/billing-for-laravel/database/migrations/server`.
+
+- **`PruneExpiredCacheKeys` also prunes behind a `failover` store and a `storage` store.** Both of these Laravel cache drivers leave expired entries behind as a database or a file store does. A failover store writes each entry into the first of its stores that answers, so the pruner goes through each of its stores once. A storage store lays its files out on a filesystem disk the way a file store does in its directory, and the pruner deletes the expired files the store laid out there and leaves every other file on the disk alone.
+
+### 🔧 Changed
+
+- **The mail about an expiring card names the month the card expires in.** It said the card was expiring soon while the notification knew the month, so an owner could not tell by when to replace it. A card whose provider names no expiry keeps the line as it was, and `LocalizedDate::monthAndYear()` spells the month and the year in each of the seven languages.
+
+### 🐛 Fixed
+
+- **The quota warning names its quantities with the unit of the meter, written as the language writes numbers.** It put the label of the meter where its unit belongs, "of your 10000 included Translation usage", and wrote the numbers without grouping. The quantities now carry the `unit` of the metered component and go through the number format of the mail's language, "9,000 vT of the 10,000 vT included in Translation usage", in all seven languages, and the array of the notification carries the unit as well.
+
+- **The upcoming invoice preview is cached under the package's prefix, so `PruneExpiredCacheKeys` deletes it once it has expired.** On a database cache store the preview of each customer stayed in the table after its five minutes, because its key began outside `billing:`. The first render after the update reads the preview from Stripe once more.
+
 ## [0.64.0] - 2026-11-21
 
 ### ✨ Added
@@ -8663,7 +8683,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.64.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.65.0...HEAD
+[0.65.0]: https://github.com/pushery/billing-for-laravel/compare/v0.64.0...v0.65.0
 [0.64.0]: https://github.com/pushery/billing-for-laravel/compare/v0.63.0...v0.64.0
 [0.63.0]: https://github.com/pushery/billing-for-laravel/compare/v0.62.0...v0.63.0
 [0.62.0]: https://github.com/pushery/billing-for-laravel/compare/v0.61.0...v0.62.0

@@ -75,6 +75,7 @@ use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Exceptions\MollieNotConfigured;
 use Pushery\Billing\Invoicing\LocalInvoices;
 use Pushery\Billing\Invoicing\OrderInvoiceIssuer;
+use Pushery\Billing\Invoicing\OrderTaxBasis;
 use Pushery\Billing\Invoicing\ProrationCreditCorrectionIssuer;
 use Pushery\Billing\Marketplace\MarketplaceSaleContext;
 use Pushery\Billing\PriceChanges\PriceChanges;
@@ -419,6 +420,7 @@ final class MollieServiceProvider extends ServiceProvider
             $app->make(DiscountAllowances::class),
             $app->make(PriceChanges::class),
             $app->make(DefaultInterest::class),
+            $app->make(OrderTaxBasis::class),
         );
     }
 

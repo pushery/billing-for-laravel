@@ -143,6 +143,7 @@ return [
     'card_expiring' => [
         'subject' => 'Je kaart verloopt binnenkort',
         'intro' => 'De opgeslagen kaart (:card) verloopt binnenkort.',
+        'intro_dated' => 'De opgeslagen kaart (:card) verloopt eind :month.',
         'outro' => 'Werk je betaalmethode bij om een onderbreking van je abonnement te voorkomen.',
         'cta' => 'Kaart bijwerken',
     ],
@@ -156,7 +157,7 @@ return [
 
     'quota_warning' => [
         'subject' => 'Je nadert je :meter-limiet',
-        'intro' => 'Je hebt deze periode :used van je :included inbegrepen :meter gebruikt.',
+        'intro' => 'Je hebt deze periode :used van de :included gebruikt die bij :meter zijn inbegrepen.',
         'outro' => 'Vul aan of stap over om zonder onderbreking door te gaan.',
         'cta' => 'Verbruik bekijken',
     ],
@@ -171,6 +172,8 @@ return [
     'payment_action_required' => [
         'subject' => 'Bevestig je betaling om door te gaan',
         'intro' => 'Je bank vraagt je deze betaling te bevestigen voordat je abonnement kan doorlopen.',
+        'summary' => 'Bedrag: :amount · Factuur: :invoice',
+        'summary_reference' => 'Factuur: :invoice',
         'outro' => 'Bevestig het nu om onderbreking van je dienst te voorkomen.',
         'cta' => 'Betaling bevestigen',
     ],

@@ -7,6 +7,7 @@ namespace Pushery\Billing\Notifications;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\BillingAction;
+use Pushery\Billing\Support\LocalizedDate;
 use Pushery\Billing\Support\MarkdownText;
 use Pushery\Billing\ValueObjects\PaymentMethod;
 
@@ -21,11 +22,17 @@ final class CardExpiringNotification extends BillingNotification
 
     public function toMail(object $notifiable): MailMessage
     {
+        // The month the card runs out in, where the provider named it, so the owner knows by when to replace it.
+        $month = LocalizedDate::monthAndYear($this->method->expiresAt());
+        $intro = $month === null
+            ? (string) Lang::get('billing::notifications.card_expiring.intro')
+            : (string) Lang::get('billing::notifications.card_expiring.intro_dated', ['month' => $month]);
+
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.card_expiring.subject'))
             // A brand the package does not know is named by the key the provider sent, so the label goes into the
             // Markdown line as text.
-            ->line(MarkdownText::interpolate((string) Lang::get('billing::notifications.card_expiring.intro'), ['card' => $this->method->label()]))
+            ->line(MarkdownText::interpolate($intro, ['card' => $this->method->label()]))
             ->line(Lang::get('billing::notifications.card_expiring.outro'));
 
         return $this->withAction(

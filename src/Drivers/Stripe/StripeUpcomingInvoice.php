@@ -54,7 +54,7 @@ final readonly class StripeUpcomingInvoice implements UpcomingInvoiceContract
 
         try {
             $preview = Cache::remember(
-                "upcoming_invoice:v2:{$customerId}",
+                "billing:upcoming_invoice:v2:{$customerId}",
                 self::CACHE_TTL_SECONDS,
                 fn (): array => $this->fetch($customerId, $subscriptionId),
             );

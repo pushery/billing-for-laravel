@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Discounts;
 
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -46,16 +47,25 @@ use Pushery\Billing\ValueObjects\OrderItemDraft;
  * up to it. A line priced from a subscription item belongs to the `plan_key` its metadata carries, and the plan line
  * of a subscription billed by its tier to the tier. The discount line names the plans, so a document can tell which
  * lines it reduced.
+ *
+ * ## A coupon meant before tax
+ *
+ * A `net_percent` coupon takes its share of the net of its lines, in hundredths of a percent and rounded half away from
+ * zero to the minor unit, and a `net_fixed` one its amount off that net. The engine prices a cycle gross, so the line
+ * takes off the gross that leaves the reduced net with its tax, at the rate the cycle is taxed at, which the engine
+ * decides when such a coupon asks. The line keeps that rate in `tax_rate_bps`. Where no basis for the tax was
+ * established, the cycle's document states no tax, and the coupon takes its share as though the gross were the net.
  */
 final readonly class CycleCouponApplier
 {
     /**
      * @param  list<OrderItemDraft>  $drafts
+     * @param  (Closure(): ?int)|null  $rate  the rate the cycle is taxed at, in basis points, asked only by a coupon meant before tax
      * @return list<OrderItemDraft>
      */
-    public function apply(array $drafts, Subscription $subscription, Model $owner, string $period): array
+    public function apply(array $drafts, Subscription $subscription, Model $owner, string $period, ?Closure $rate = null): array
     {
-        return $this->discounted($drafts, $subscription, $owner, $period, true);
+        return $this->discounted($drafts, $subscription, $owner, $period, true, $rate);
     }
 
     /**
@@ -66,18 +76,20 @@ final readonly class CycleCouponApplier
      * would lose a month each time somebody opened the subscription page.
      *
      * @param  list<OrderItemDraft>  $drafts
+     * @param  (Closure(): ?int)|null  $rate  the rate the cycle is taxed at, in basis points, asked only by a coupon meant before tax
      * @return list<OrderItemDraft>
      */
-    public function preview(array $drafts, Subscription $subscription, Model $owner, string $period): array
+    public function preview(array $drafts, Subscription $subscription, Model $owner, string $period, ?Closure $rate = null): array
     {
-        return $this->discounted($drafts, $subscription, $owner, $period, false);
+        return $this->discounted($drafts, $subscription, $owner, $period, false, $rate);
     }
 
     /**
      * @param  list<OrderItemDraft>  $drafts
+     * @param  (Closure(): ?int)|null  $rate
      * @return list<OrderItemDraft>
      */
-    private function discounted(array $drafts, Subscription $subscription, Model $owner, string $period, bool $count): array
+    private function discounted(array $drafts, Subscription $subscription, Model $owner, string $period, bool $count, ?Closure $rate): array
     {
         $gross = $this->grossOf($drafts);
 
@@ -108,19 +120,16 @@ final readonly class CycleCouponApplier
             return $drafts;
         }
 
-        $discount = $this->discountFrom($coupon, $base);
+        $beforeTax = $coupon->isMeantBeforeTax();
+        $rateBps = $beforeTax && $rate instanceof Closure ? $rate() : null;
+        $reduction = $beforeTax ? $this->netReduction($coupon, $base, $rateBps ?? 0) : $this->grossReduction($coupon, $base);
 
-        if (! $discount instanceof Discount) {
-            return $drafts;
-        }
-
-        $reduction = $base->minus($discount->applyTo($base));
-
-        // Not a rounding guard: any percentage of a positive gross takes at least one minor unit off, and a fixed
-        // coupon of zero describes no discount and stops in discountFrom(). It is reached by a fixed coupon
-        // denominated in another currency, which resolves to zero rather than being converted, since converting
-        // here would invent an exchange rate on an invoice.
-        if (! $reduction->isPositive()) {
+        // Not a rounding guard for a coupon off the gross: any percentage of a positive gross takes at least one minor
+        // unit off, and a fixed coupon of zero describes no discount and stops in discountFrom(). It is reached by a
+        // fixed coupon denominated in another currency, which resolves to zero rather than being converted, since
+        // converting here would invent an exchange rate on an invoice. A coupon meant before tax takes nothing off a
+        // net too small for its share to round to a minor unit.
+        if (! $reduction instanceof Money || ! $reduction->isPositive()) {
             return $drafts;
         }
 
@@ -139,6 +148,7 @@ final readonly class CycleCouponApplier
                 'duration' => $coupon->duration,
                 'period' => $period,
                 ...($plans === null ? [] : ['plan_keys' => $plans]),
+                ...($beforeTax ? ['tax_rate_bps' => $rateBps] : []),
             ],
         );
 
@@ -221,7 +231,7 @@ final readonly class CycleCouponApplier
         }
 
         if ($coupon->type === 'fixed') {
-            $currency = is_string($coupon->currency) && $coupon->currency !== '' ? $coupon->currency : $gross->currency;
+            $currency = $this->currencyOf($coupon, $gross);
 
             return $currency === $gross->currency
                 ? Discount::fixed($coupon->code, Money::of($coupon->value, $currency))
@@ -229,6 +239,52 @@ final readonly class CycleCouponApplier
         }
 
         return Discount::percentage($coupon->code, $coupon->value);
+    }
+
+    /** What a coupon off the gross takes off the gross of its lines, or null where the row describes no discount. */
+    private function grossReduction(Coupon $coupon, Money $base): ?Money
+    {
+        $discount = $this->discountFrom($coupon, $base);
+
+        return $discount instanceof Discount ? $base->minus($discount->applyTo($base)) : null;
+    }
+
+    /**
+     * What a coupon meant before tax takes off the gross of its lines, or null where it takes nothing.
+     *
+     * The cycle's document splits the order's gross into the net and the tax at the cycle's rate. So the coupon takes
+     * its share of the net of its lines, or its fixed amount up to that net, and the line takes off the gross whose split
+     * leaves the net less the discount, with the tax of what is left. That is the figure an application arrives at that
+     * discounts its net price before adding tax, to the minor unit. A fixed amount in another currency takes nothing
+     * off, as one off the gross does.
+     */
+    private function netReduction(Coupon $coupon, Money $base, int $rateBps): ?Money
+    {
+        if (! $coupon->describesADiscount()) {
+            return null;
+        }
+
+        [$net] = $base->baseFromMarkup($rateBps);
+
+        $off = match (true) {
+            $coupon->type === 'net_percent' => $net->proportion($coupon->value, 10_000),
+            $this->currencyOf($coupon, $base) === $base->currency => Money::of(min($coupon->value, $net->minorUnits), $base->currency),
+            default => Money::zero($base->currency),
+        };
+
+        if (! $off->isPositive()) {
+            return null;
+        }
+
+        $left = $net->minus($off);
+
+        return $base->minus($left->plus($left->proportion($rateBps, 10_000)));
+    }
+
+    /** The currency a fixed coupon is denominated in: its own, or the cycle's where the row names none. */
+    private function currencyOf(Coupon $coupon, Money $base): string
+    {
+        return is_string($coupon->currency) && $coupon->currency !== '' ? $coupon->currency : $base->currency;
     }
 
     private function redemptionFor(Model $owner, Subscription $subscription): ?CouponRedemption
