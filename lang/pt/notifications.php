@@ -143,6 +143,7 @@ return [
     'card_expiring' => [
         'subject' => 'O teu cartão está prestes a expirar',
         'intro' => 'O cartão guardado (:card) expira em breve.',
+        'intro_dated' => 'O cartão guardado (:card) expira no fim de :month.',
         'outro' => 'Atualiza o teu método de pagamento para evitar uma interrupção da tua subscrição.',
         'cta' => 'Atualizar o cartão',
     ],
@@ -156,7 +157,7 @@ return [
 
     'quota_warning' => [
         'subject' => 'Estás perto do teu limite de :meter',
-        'intro' => 'Usaste :used de :included :meter incluídos neste período.',
+        'intro' => 'Usaste :used dos :included incluídos em :meter neste período.',
         'outro' => 'Recarrega ou muda de plano para continuares sem interrupções.',
         'cta' => 'Ver o consumo',
     ],
@@ -171,6 +172,8 @@ return [
     'payment_action_required' => [
         'subject' => 'Confirma o teu pagamento para continuar',
         'intro' => 'O teu banco precisa que confirmes este pagamento antes de a tua subscrição poder continuar.',
+        'summary' => 'Montante: :amount · Fatura: :invoice',
+        'summary_reference' => 'Fatura: :invoice',
         'outro' => 'Confirma-o agora para evitares qualquer interrupção do serviço.',
         'cta' => 'Confirmar o pagamento',
     ],

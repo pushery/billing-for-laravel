@@ -27,6 +27,9 @@ use Pushery\Billing\ValueObjects\Money;
  * the local driver's coupon question applies. The redemption cap is deliberately not read. It is a race by
  * nature, and the only place it can be enforced truthfully is the redeemer's locked transaction. A row whose
  * type or value cannot be a discount resolves to nothing, the way a malformed config entry does.
+ *
+ * A coupon meant before tax, `net_percent` or `net_fixed`, resolves to nothing as well. A hosted checkout discounts
+ * the price the provider charges, and only the local engine prices the net a cycle is taxed on.
  */
 final readonly class DatabaseDiscountResolver implements DiscountResolver
 {

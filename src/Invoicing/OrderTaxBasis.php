@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Invoicing;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\AddonCatalog;
 use Pushery\Billing\Contracts\SuppliesProductArchetypes;
@@ -24,6 +25,7 @@ use Pushery\Billing\Tax\SaleTaxDecision;
 use Pushery\Billing\Tax\StandingTaxIdVerification;
 use Pushery\Billing\Tax\SupplyPlaceDecision;
 use Pushery\Billing\Tax\UnionMembership;
+use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\ServicePeriod;
 use Pushery\Billing\ValueObjects\SupplyTaxCharacteristics;
 use Pushery\Billing\ValueObjects\TaxContext;
@@ -136,6 +138,33 @@ final readonly class OrderTaxBasis
         }
 
         return $this->determined($order, $archetype, $period, $country, $reference);
+    }
+
+    /**
+     * The rate the document of a subscription's current cycle will state, decided while the cycle is priced and before
+     * its order exists, in basis points, or null where the basis is not establishable.
+     *
+     * A discount meant before tax needs the rate when the cycle is priced, and the rate its document states is the one
+     * `for()` decides on the claimed order. Both run the same determination on the same facts: the tier's archetype, the
+     * place recorded for the first day of the period, the buyer's standing tax ID and the period. Only the day of the
+     * payment is not known yet, so `$pricedAt`, the moment the engine charges, stands in for it. Taxed on supply, the
+     * rate does not depend on that day (`TaxPoint`), and taxed on receipt it differs only where a rate changes between
+     * the charge and the arrival of the money. A buyer who accounts for the tax, and an exempt supply, answer 0.
+     */
+    public function rateOfCycle(Subscription $subscription, Money $gross, CarbonImmutable $pricedAt): ?int
+    {
+        $archetype = $this->archetypeOf($subscription);
+        $days = $this->daysBetween($subscription->current_period_start, $subscription->endInsideItsPeriod() ?? $subscription->current_period_end);
+        $period = $days === null ? null : new ServicePeriod($days[0], $days[1], $gross);
+        // The place in force on the first day of the period, as for the cycle's order.
+        $reference = $period instanceof ServicePeriod ? $this->evidence->referenceAt(self::placeReferenceFor($subscription), $period->from) : self::placeReferenceFor($subscription);
+        $country = $this->places->countryFor($reference);
+
+        if (! $archetype instanceof TaxArchetype || ! $period instanceof ServicePeriod || $country === null) {
+            return null;
+        }
+
+        return $this->decided($subscription->owner_type, $subscription->owner_id, $gross->currency, $pricedAt, $archetype, $period, $country, $reference)->appliedRateBps;
     }
 
     /**
@@ -298,21 +327,29 @@ final readonly class OrderTaxBasis
         return null;
     }
 
-    /**
-     * The determination itself, the same for a cycle and a purchase once each has answered its own questions.
-     *
-     * One method rather than two copies, because the gross, the buyer and the document fields are the half that
-     * must not differ between the two: an invoice for a purchase and one for a cycle are read by the same reader.
-     */
+    /** The determination for an order, on the owner, the currency and the day of the payment the order records. */
     private function determined(Order $order, TaxArchetype $archetype, ServicePeriod $period, string $country, string $reference): DeterminedOrderTax
+    {
+        $paidOn = $order->processed_at === null ? null : CarbonImmutable::parse($order->processed_at->toIso8601String());
+
+        return $this->decided($order->owner_type, $order->owner_id, $order->currency, $paidOn, $archetype, $period, $country, $reference);
+    }
+
+    /**
+     * The determination itself, the same for a cycle, a purchase and a cycle still being priced once each has answered
+     * its own questions.
+     *
+     * One method rather than copies, because the gross, the buyer and the document fields are the half that must not
+     * differ between them: an invoice for a purchase and one for a cycle are read by the same reader, and a cycle is
+     * priced at the rate its invoice states.
+     */
+    private function decided(string $ownerType, int $ownerId, string $currency, ?CarbonImmutable $paidOn, TaxArchetype $archetype, ServicePeriod $period, string $country, string $reference): DeterminedOrderTax
     {
         // The gross of the supply, which the period carries: the order's lines without the credit that paid part of
         // them. The order's own total is what the provider was asked to collect, and taxing that taxed the supply
         // only as far as the credit had not paid for it.
         $gross = $period->amount;
-        $buyer = $this->buyerOf($order, $country);
-
-        $paidOn = $order->processed_at === null ? null : CarbonImmutable::parse($order->processed_at->toIso8601String());
+        $buyer = $this->buyerOf($ownerType, $ownerId, $country);
 
         // Priced gross, because that is how the cycle was charged: the customer paid the order total and
         // the tax is the part of it that belongs to the state. Determining from a net would mean inventing
@@ -329,7 +366,7 @@ final readonly class OrderTaxBasis
             $atTheSeller = $this->taxes->decideOnGross($archetype, $gross, $buyer, $period, $paidOn, belowDistanceSaleThreshold: true);
             $year = ($paidOn ?? CarbonImmutable::now())->year;
 
-            if ($this->thresholds->ruleForSale($year, $order->currency, $gross->minus($atTheSeller->tax)->minorUnits) === PlaceOfSupplyRule::Domestic) {
+            if ($this->thresholds->ruleForSale($year, $currency, $gross->minus($atTheSeller->tax)->minorUnits) === PlaceOfSupplyRule::Domestic) {
                 $facts = $atTheSeller;
                 // The customer's country stays on the document although the tax is the seller's: the column
                 // names where the customer is, and the threshold counts the sale by it. Left empty, the sale
@@ -379,8 +416,16 @@ final readonly class OrderTaxBasis
         return $this->tiers->archetypeFor($key);
     }
 
+    /** The cycle of an order as a period a document may state, carrying the gross the order supplies, or null where it covers none. */
+    private function periodOf(Order $order): ?ServicePeriod
+    {
+        $days = $this->daysBetween($order->period_start, $order->period_end);
+
+        return $days === null ? null : new ServicePeriod($days[0], $days[1], $this->supplyOf($order)->gross);
+    }
+
     /**
-     * The cycle as a period a document may state, or null where it covers none.
+     * The first and the last day a cycle covers, or null where it covers none.
      *
      * ## The end moves by a day, and it has to
      *
@@ -388,13 +433,12 @@ final readonly class OrderTaxBasis
      * straight over — while a {@see ServicePeriod} ends on the last day covered. Copied across unchanged,
      * every document would claim a day the following document also claims, and two invoices lined up would
      * overlap by one day each month with every total still adding up.
+     *
+     * @return array{CarbonImmutable, CarbonImmutable}|null
      */
-    private function periodOf(Order $order): ?ServicePeriod
+    private function daysBetween(?CarbonInterface $start, ?CarbonInterface $end): ?array
     {
-        $start = $order->period_start;
-        $end = $order->period_end;
-
-        if ($start === null || $end === null) {
+        if (! $start instanceof CarbonInterface || ! $end instanceof CarbonInterface) {
             return null;
         }
 
@@ -405,7 +449,7 @@ final readonly class OrderTaxBasis
             return null; // a cycle that covers no whole day states no period, and inventing one would date a supply
         }
 
-        return new ServicePeriod($from, $to, $this->supplyOf($order)->gross);
+        return [$from, $to];
     }
 
     /**
@@ -425,9 +469,9 @@ final readonly class OrderTaxBasis
      * `unverified`, or a customer who removed the number, ends it; reading the latest `verified` row alone
      * reverse-charged every cycle after either.
      */
-    private function buyerOf(Order $order, string $country): TaxContext
+    private function buyerOf(string $ownerType, int $ownerId, string $country): TaxContext
     {
-        $verified = $this->standingVerification($order);
+        $verified = $this->standingVerification($ownerType, $ownerId);
 
         if (! $verified instanceof TaxIdVerification) {
             return new TaxContext(countryCode: $country);
@@ -450,9 +494,9 @@ final readonly class OrderTaxBasis
     }
 
     /** The verification the reverse charge may rest on, read by the class that answers it for every buyer. */
-    private function standingVerification(Order $order): ?TaxIdVerification
+    private function standingVerification(string $ownerType, int $ownerId): ?TaxIdVerification
     {
-        return new StandingTaxIdVerification()->of($order->owner_type, $order->owner_id);
+        return new StandingTaxIdVerification()->of($ownerType, $ownerId);
     }
 
     /**

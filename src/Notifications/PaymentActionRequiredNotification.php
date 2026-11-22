@@ -7,6 +7,9 @@ namespace Pushery\Billing\Notifications;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Facades\Lang;
 use Pushery\Billing\Enums\BillingAction;
+use Pushery\Billing\Support\LocalizedMoney;
+use Pushery\Billing\Support\MarkdownText;
+use Pushery\Billing\ValueObjects\Money;
 
 /**
  * Prompts the customer to confirm a payment their bank held for authentication (3-D Secure). Nothing is
@@ -19,12 +22,30 @@ use Pushery\Billing\Enums\BillingAction;
  */
 final class PaymentActionRequiredNotification extends BillingNotification
 {
+    /**
+     * The invoice the bank holds and its amount, where the caller knows them. A request to confirm a payment
+     * is a form phishing imitates, so the mail names the payment it means, as the mail about a failed payment
+     * does, and the customer can check it before following the link.
+     */
+    public function __construct(
+        private readonly ?string $invoiceReference = null,
+        private readonly ?Money $amount = null,
+    ) {}
+
     public function toMail(object $notifiable): MailMessage
     {
         $mail = new MailMessage()
             ->subject(Lang::get('billing::notifications.payment_action_required.subject'))
-            ->line(Lang::get('billing::notifications.payment_action_required.intro'))
-            ->line(Lang::get('billing::notifications.payment_action_required.outro'));
+            ->line(Lang::get('billing::notifications.payment_action_required.intro'));
+
+        if ($this->invoiceReference !== null) {
+            // The invoice reference is the provider's, so it goes into the Markdown line as text.
+            $mail->line(MarkdownText::interpolate($this->amount instanceof Money
+                ? (string) Lang::get('billing::notifications.payment_action_required.summary', ['amount' => LocalizedMoney::format($this->amount)])
+                : (string) Lang::get('billing::notifications.payment_action_required.summary_reference'), ['invoice' => $this->invoiceReference]));
+        }
+
+        $mail->line(Lang::get('billing::notifications.payment_action_required.outro'));
 
         return $this->withAction(
             $mail,
@@ -36,6 +57,10 @@ final class PaymentActionRequiredNotification extends BillingNotification
     /** @return array<string, mixed> */
     public function toArray(object $notifiable): array
     {
-        return ['type' => 'payment_action_required'];
+        return [
+            'type' => 'payment_action_required',
+            'amount' => $this->amount?->format(),
+            'invoice' => $this->invoiceReference,
+        ];
     }
 }

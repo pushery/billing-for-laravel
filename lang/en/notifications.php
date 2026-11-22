@@ -143,6 +143,7 @@ return [
     'card_expiring' => [
         'subject' => 'Your card is about to expire',
         'intro' => 'The card on file (:card) is expiring soon.',
+        'intro_dated' => 'The card on file (:card) expires at the end of :month.',
         'outro' => 'Update your payment method to avoid an interruption to your subscription.',
         'cta' => 'Update your card',
     ],
@@ -156,7 +157,7 @@ return [
 
     'quota_warning' => [
         'subject' => 'You are close to your :meter limit',
-        'intro' => 'You have used :used of your :included included :meter this period.',
+        'intro' => 'You have used :used of the :included included in :meter this period.',
         'outro' => 'Top up or upgrade to keep going without interruption.',
         'cta' => 'View your usage',
     ],
@@ -171,6 +172,8 @@ return [
     'payment_action_required' => [
         'subject' => 'Confirm your payment to continue',
         'intro' => 'Your bank needs you to confirm this payment before your subscription can continue.',
+        'summary' => 'Amount: :amount · Invoice: :invoice',
+        'summary_reference' => 'Invoice: :invoice',
         'outro' => 'Confirm it now to avoid any interruption to your service.',
         'cta' => 'Confirm your payment',
     ],

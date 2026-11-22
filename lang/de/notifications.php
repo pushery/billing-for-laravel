@@ -143,6 +143,7 @@ return [
     'card_expiring' => [
         'subject' => 'Deine Karte läuft bald ab',
         'intro' => 'Die hinterlegte Karte (:card) läuft bald ab.',
+        'intro_dated' => 'Die hinterlegte Karte (:card) läuft Ende :month ab.',
         'outro' => 'Aktualisiere deine Zahlungsmethode, um eine Unterbrechung deines Abos zu vermeiden.',
         'cta' => 'Karte aktualisieren',
     ],
@@ -156,7 +157,7 @@ return [
 
     'quota_warning' => [
         'subject' => 'Du näherst dich deinem :meter-Limit',
-        'intro' => 'Du hast in diesem Zeitraum :used von :included inkludierten :meter verbraucht.',
+        'intro' => 'Du hast in diesem Zeitraum :used der :included verbraucht, die in :meter enthalten sind.',
         'outro' => 'Lade auf oder wechsle den Tarif, damit es ohne Unterbrechung weitergeht.',
         'cta' => 'Verbrauch ansehen',
     ],
@@ -171,6 +172,8 @@ return [
     'payment_action_required' => [
         'subject' => 'Bestätige deine Zahlung, um fortzufahren',
         'intro' => 'Deine Bank muss diese Zahlung von dir bestätigt bekommen, bevor dein Abo weiterlaufen kann.',
+        'summary' => 'Betrag: :amount · Rechnung: :invoice',
+        'summary_reference' => 'Rechnung: :invoice',
         'outro' => 'Bestätige sie jetzt, damit dein Dienst nicht unterbrochen wird.',
         'cta' => 'Zahlung bestätigen',
     ],

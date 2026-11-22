@@ -18,7 +18,9 @@ use Pushery\Billing\ValueObjects\MerchantScope;
 /**
  * The package's own coupon — a local discount definition the billing engine applies, independent of any
  * provider. `value` is a percentage (for `type = percent`) or an amount in minor units (for `type = fixed`,
- * scoped by `currency`).
+ * scoped by `currency`). Two types are meant before tax and are applied by the local engine alone: `net_percent`,
+ * whose `value` is the share of the net in hundredths of a percent, so 1250 is 12.50 %, and `net_fixed`, whose `value`
+ * is an amount off the net in minor units, scoped by `currency`.
  *
  * `provider_coupon_id` is the provider's own id for this coupon, and the Stripe checkout reads it:
  * `StripeCheckout::providerCouponFor()` prefers it over the global `billing.coupons.<code>.stripe_coupon`
@@ -183,7 +185,8 @@ class Coupon extends Model
     }
 
     /**
-     * Whether this row describes a discount at all: a `percent` from 1 to 100, or a `fixed` amount above zero.
+     * Whether this row describes a discount at all: a `percent` from 1 to 100, a `net_percent` from 1 to 10000
+     * hundredths of a percent, or a `fixed` or `net_fixed` amount above zero.
      *
      * The row is written by the application, so a percentage of 0 or 150 or a type of `percentage` is a row the
      * package meets. One definition for the local driver's coupon question, the redemption of a carried code and
@@ -194,8 +197,18 @@ class Coupon extends Model
     {
         return match ($this->type) {
             'percent' => $this->value >= 1 && $this->value <= 100,
-            'fixed' => $this->value > 0,
+            'net_percent' => $this->value >= 1 && $this->value <= 10_000,
+            'fixed', 'net_fixed' => $this->value > 0,
             default => false,
         };
+    }
+
+    /**
+     * Whether the coupon is meant before tax: a `net_percent` takes its share of the net of the lines it discounts, and a
+     * `net_fixed` its amount off that net, at the rate the cycle is taxed at.
+     */
+    public function isMeantBeforeTax(): bool
+    {
+        return in_array($this->type, ['net_percent', 'net_fixed'], true);
     }
 }

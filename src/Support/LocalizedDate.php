@@ -76,6 +76,16 @@ final class LocalizedDate
         return self::render($moment, 'LL');
     }
 
+    /**
+     * The month and the year a moment falls in, spelled out: `June 2030`, `Juni 2030`, `junio de 2030`. For
+     * the month a card expires in, where a day would claim a precision the provider never gave.
+     */
+    public static function monthAndYear(?DateTimeInterface $moment): ?string
+    {
+        // Spanish and Portuguese join the month to the year with "de"; the other five write them side by side.
+        return self::render($moment, preg_match('/^(?:es|pt)(?:[_-]|$)/i', Lang::getLocale()) === 1 ? 'MMMM [de] YYYY' : 'MMMM YYYY');
+    }
+
     /** Compact date plus the clock, in the locale's own convention — `14:05 Uhr` in German, `2:05 PM` in English. */
     public static function shortWithTime(?DateTimeInterface $moment): ?string
     {

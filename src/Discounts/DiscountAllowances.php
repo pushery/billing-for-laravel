@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Discounts;
 
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -36,6 +37,12 @@ use Pushery\Billing\ValueObjects\OrderItemDraft;
  * the grant less the uses of orders that did not fail. A cycle priced again, as a dunning retry is, rewrites the use
  * of its own order, and a cycle that was never collected stops counting, so the remainder is right without anything
  * booking it back.
+ *
+ * ## An allowance meant before tax
+ *
+ * An application that prices net grants a net amount ({@see self::grantNet()}). Each cycle then takes it off the net
+ * of its open lines, at the rate the cycle is taxed at, and the line takes off the gross that net carries, so the
+ * amount means the same whatever the rate. What a cycle took is recorded as net, and what is left stays net.
  */
 final readonly class DiscountAllowances
 {
@@ -50,6 +57,24 @@ final readonly class DiscountAllowances
      */
     public function grant(Model $owner, Money $amount, string $cause, string $description): DiscountAllowance
     {
+        return $this->granted($owner, $amount, $cause, $description, false);
+    }
+
+    /**
+     * Grant an owner a discount meant before tax, which its next cycles take off their net until nothing of it is left.
+     *
+     * Each cycle takes the amount off its net at the rate it is taxed at, and what is left stays net for the next one. A
+     * second grant with the same cause changes nothing and returns the first, as `grant()` does.
+     *
+     * @throws InvalidArgumentException when the amount is not positive, or the cause or the description is empty
+     */
+    public function grantNet(Model $owner, Money $amount, string $cause, string $description): DiscountAllowance
+    {
+        return $this->granted($owner, $amount, $cause, $description, true);
+    }
+
+    private function granted(Model $owner, Money $amount, string $cause, string $description, bool $net): DiscountAllowance
+    {
         if (! $amount->isPositive() || trim($cause) === '' || trim($description) === '') {
             throw new InvalidArgumentException('A discount allowance needs a positive amount, a cause and a description.');
         }
@@ -57,11 +82,11 @@ final readonly class DiscountAllowances
         return UniqueRow::firstOrCreate(
             DiscountAllowance::model()::query(),
             ['owner_type' => $owner->getMorphClass(), 'owner_id' => $owner->getKey(), 'cause' => $cause],
-            ['currency' => $amount->currency, 'amount_minor' => $amount->minorUnits, 'description' => $description],
+            ['currency' => $amount->currency, 'amount_minor' => $amount->minorUnits, 'net' => $net, 'description' => $description],
         );
     }
 
-    /** What is left of the owner's allowances in a currency. */
+    /** What is left of the owner's allowances in a currency, each in its own terms: the net of one meant before tax. */
     public function remainingFor(Model $owner, string $currency): Money
     {
         $left = 0;
@@ -80,10 +105,14 @@ final readonly class DiscountAllowances
      * ({@see self::record()}). `$order` is the order of the cycle being priced, where it already exists: what it took
      * before is not counted against it, so pricing the same cycle again produces the same lines.
      *
+     * Each line keeps what it took off its allowance in `taken`: the gross of the line for an allowance off the gross, and
+     * the net for one meant before tax, which also keeps the cycle's rate in `tax_rate_bps`.
+     *
      * @param  list<OrderItemDraft>  $drafts
+     * @param  (Closure(): ?int)|null  $rate  the rate the cycle is taxed at, in basis points, asked only by an allowance meant before tax
      * @return list<OrderItemDraft>
      */
-    public function apply(array $drafts, Model $owner, ?int $order): array
+    public function apply(array $drafts, Model $owner, ?int $order, ?Closure $rate = null): array
     {
         $gross = $this->grossOf($drafts);
 
@@ -94,25 +123,57 @@ final readonly class DiscountAllowances
         $open = $gross->minorUnits;
 
         foreach ($this->allowancesOf($owner, $gross->currency) as $allowance) {
-            $taken = min($open, $this->leftOf($allowance, $order));
+            $left = $this->leftOf($allowance, $order);
 
-            if ($taken < 1) {
+            if ($left < 1 || $open < 1) {
+                continue;
+            }
+
+            $rateBps = $allowance->net && $rate instanceof Closure ? $rate() : null;
+            [$line, $taken] = $allowance->net
+                ? $this->takenBeforeTax(Money::of($open, $gross->currency), $left, $rateBps ?? 0)
+                : [min($open, $left), min($open, $left)];
+
+            if ($line < 1 || $taken < 1) {
                 continue;
             }
 
             $drafts[] = new OrderItemDraft(
                 $allowance->description,
-                -$taken,
+                -$line,
                 1,
                 $gross->currency,
                 OrderItemType::Discount,
-                ['discount_allowance' => $allowance->id, 'cause' => $allowance->cause],
+                [
+                    'discount_allowance' => $allowance->id,
+                    'cause' => $allowance->cause,
+                    'taken' => $taken,
+                    ...($allowance->net ? ['tax_rate_bps' => $rateBps] : []),
+                ],
             );
 
-            $open -= $taken;
+            $open -= $line;
         }
 
         return $drafts;
+    }
+
+    /**
+     * What an allowance meant before tax takes off the open lines: the gross of its line, and the net it counts against
+     * the allowance.
+     *
+     * It takes up to what is left of it from the net of the open gross, at the cycle's rate, and the line takes off the
+     * gross whose split leaves the rest of that net with its tax.
+     *
+     * @return array{int, int}
+     */
+    private function takenBeforeTax(Money $open, int $left, int $rateBps): array
+    {
+        [$net] = $open->baseFromMarkup($rateBps);
+        $taken = min($left, $net->minorUnits);
+        $rest = $net->minus(Money::of($taken, $net->currency));
+
+        return [$open->minus($rest->plus($rest->proportion($rateBps, 10_000)))->minorUnits, $taken];
     }
 
     /**
@@ -195,7 +256,8 @@ final readonly class DiscountAllowances
     }
 
     /**
-     * The amount each allowance line of the drafts takes off, by allowance.
+     * The amount each allowance line of the drafts takes off its allowance, by allowance: what the line keeps in `taken`,
+     * which is net for an allowance meant before tax, and else the line's own amount.
      *
      * @param  list<OrderItemDraft>  $drafts
      * @return array<int, int>
@@ -206,9 +268,10 @@ final readonly class DiscountAllowances
 
         foreach ($drafts as $draft) {
             $allowance = $draft->metadata['discount_allowance'] ?? null;
+            $amount = $draft->metadata['taken'] ?? null;
 
             if ($draft->type === OrderItemType::Discount && is_int($allowance)) {
-                $taken[$allowance] = ($taken[$allowance] ?? 0) - $draft->totalMinor();
+                $taken[$allowance] = ($taken[$allowance] ?? 0) + (is_int($amount) ? $amount : -$draft->totalMinor());
             }
         }
 

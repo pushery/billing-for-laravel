@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Pushery\Billing\Events;
 
 use Pushery\Billing\Contracts\IdentifiesCustomer;
+use Pushery\Billing\ValueObjects\Money;
 
 /**
  * A payment cannot complete until the cardholder confirms it — the bank asked for Strong Customer
@@ -13,12 +14,14 @@ use Pushery\Billing\Contracts\IdentifiesCustomer;
  * Left unprompted the subscription silently sits `incomplete` and the customer thinks they subscribed.
  *
  * Provider-neutral: Stripe raises it as `invoice.payment_action_required`; a local engine raises it when
- * its own charge returns a "needs authentication" status.
+ * its own charge returns a "needs authentication" status. The amount, where the provider names one, lets
+ * the prompt say which payment it asks the customer to confirm.
  */
 final readonly class PaymentActionRequired implements BillingDomainEvent, IdentifiesCustomer
 {
     public function __construct(
         public string $customerReference,
         public string $reference,
+        public ?Money $amount = null,
     ) {}
 }

@@ -6,6 +6,7 @@ namespace Pushery\Billing\Support;
 
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Closure;
 use DateTimeInterface;
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Config\Repository;
@@ -42,6 +43,7 @@ use Pushery\Billing\Events\FallbackPaymentMethodCharged;
 use Pushery\Billing\Events\PaymentFailed;
 use Pushery\Billing\Events\PaymentSucceeded;
 use Pushery\Billing\Invoicing\OrderInvoiceIssuer;
+use Pushery\Billing\Invoicing\OrderTaxBasis;
 use Pushery\Billing\Invoicing\ProratedTermRefund;
 use Pushery\Billing\Invoicing\ProrationCreditCorrectionIssuer;
 use Pushery\Billing\Models\CreditLedgerEntry;
@@ -205,6 +207,11 @@ final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMa
         private ?PriceChanges $priceChanges = null,
         /** Optional for the same reason; null means a cycle paid late owes no default interest. */
         private ?DefaultInterest $interest = null,
+        /**
+         * Decides the rate a cycle is taxed at while it is priced, for a coupon or an allowance meant before tax. Optional
+         * for the same reason as everything above; null prices such a discount as though the cycle carried no tax.
+         */
+        private ?OrderTaxBasis $taxBasis = null,
     ) {}
 
     public function tick(?DateTimeInterface $now = null): void
@@ -1573,8 +1580,39 @@ final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMa
         // their discounted cycles on a cycle nobody charged them for.
         //
         // A discount allowance comes after the coupon, so the coupon takes its share of the full price and the allowance
-        // only what is left, and before tax like the coupon, because it lowers the price of the supply as well.
-        return $this->allowanced($subscription, $this->discounted($subscription, $drafts, $count));
+        // only what is left, and before tax like the coupon, because it lowers the price of the supply as well. Both take
+        // the rate of the cycle where they are meant before tax, decided once for the two.
+        $rate = $this->rateOfTheCycle($subscription, $drafts);
+
+        return $this->allowanced($subscription, $this->discounted($subscription, $drafts, $count, $rate), $rate);
+    }
+
+    /**
+     * The rate the cycle is taxed at, in basis points, decided once and only when a discount meant before tax asks for it.
+     *
+     * Deciding it reads the place, the buyer's standing tax ID and the distance-sale threshold, and most cycles carry no
+     * such discount, so the question waits until a coupon or an allowance asks it. It is decided on the lines as they
+     * stand before any discount, at the moment of the run, which stands in for the day the payment arrives.
+     *
+     * @param  list<OrderItemDraft>  $drafts
+     * @return Closure(): ?int
+     */
+    private function rateOfTheCycle(Subscription $subscription, array $drafts): Closure
+    {
+        $decided = false;
+        $rate = null;
+
+        return function () use ($subscription, $drafts, &$decided, &$rate): ?int {
+            if (! $decided) {
+                $decided = true;
+                $currency = $drafts === [] ? null : $drafts[0]->currency;
+                $rate = $currency === null || ! $this->taxBasis instanceof OrderTaxBasis
+                    ? null
+                    : $this->taxBasis->rateOfCycle($subscription, $this->totalOf($drafts, $currency), CarbonImmutable::now());
+            }
+
+            return $rate;
+        };
     }
 
     /**
@@ -1584,9 +1622,10 @@ final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMa
      * it holds the order ({@see self::claimCycle()}).
      *
      * @param  list<OrderItemDraft>  $drafts
+     * @param  Closure(): ?int  $rate
      * @return list<OrderItemDraft>
      */
-    private function allowanced(Subscription $subscription, array $drafts): array
+    private function allowanced(Subscription $subscription, array $drafts, Closure $rate): array
     {
         $owner = $this->ownerOf($subscription);
 
@@ -1594,7 +1633,7 @@ final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMa
             return $drafts;
         }
 
-        return $this->allowances->apply($drafts, $owner, $this->orderOfTheCycle($subscription));
+        return $this->allowances->apply($drafts, $owner, $this->orderOfTheCycle($subscription), $rate);
     }
 
     /** The order already claimed for the cycle the subscription is in, the one a retry reopens, if there is one. */
@@ -1756,9 +1795,10 @@ final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMa
      * about which cycle this is.
      *
      * @param  list<OrderItemDraft>  $drafts
+     * @param  Closure(): ?int  $rate
      * @return list<OrderItemDraft>
      */
-    private function discounted(Subscription $subscription, array $drafts, bool $count): array
+    private function discounted(Subscription $subscription, array $drafts, bool $count, Closure $rate): array
     {
         $start = $subscription->current_period_start;
 
@@ -1773,10 +1813,10 @@ final readonly class LocalBillingEngine implements BillingEngine, ChargesOnTheMa
         }
 
         if ($count) {
-            return $this->coupons->apply($drafts, $subscription, $owner, $start->toDateString());
+            return $this->coupons->apply($drafts, $subscription, $owner, $start->toDateString(), $rate);
         }
 
-        return $this->coupons->preview($drafts, $subscription, $owner, $start->toDateString());
+        return $this->coupons->preview($drafts, $subscription, $owner, $start->toDateString(), $rate);
     }
 
     /**

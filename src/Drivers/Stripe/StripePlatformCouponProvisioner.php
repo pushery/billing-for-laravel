@@ -131,7 +131,8 @@ final readonly class StripePlatformCouponProvisioner implements MerchantCouponPr
         throw new InvalidArgumentException(
             "Coupon '{$coupon->code}' describes no discount a provider can carry: a percent coupon needs a "
             .'value between 1 and 100, a fixed one a positive value and a currency. The row is the same one '
-            .'the local resolver would refuse, so minting it would make the two disagree about one code.'
+            .'the local resolver would refuse, so minting it would make the two disagree about one code. A coupon meant '
+            .'before tax, net_percent or net_fixed, is applied by the local engine alone.'
         );
     }
 
