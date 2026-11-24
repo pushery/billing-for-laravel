@@ -343,7 +343,7 @@ final readonly class OrderTaxBasis
      * differ between them: an invoice for a purchase and one for a cycle are read by the same reader, and a cycle is
      * priced at the rate its invoice states.
      */
-    private function decided(string $ownerType, int $ownerId, string $currency, ?CarbonImmutable $paidOn, TaxArchetype $archetype, ServicePeriod $period, string $country, string $reference): DeterminedOrderTax
+    private function decided(string $ownerType, int|string $ownerId, string $currency, ?CarbonImmutable $paidOn, TaxArchetype $archetype, ServicePeriod $period, string $country, string $reference): DeterminedOrderTax
     {
         // The gross of the supply, which the period carries: the order's lines without the credit that paid part of
         // them. The order's own total is what the provider was asked to collect, and taxing that taxed the supply
@@ -469,7 +469,7 @@ final readonly class OrderTaxBasis
      * `unverified`, or a customer who removed the number, ends it; reading the latest `verified` row alone
      * reverse-charged every cycle after either.
      */
-    private function buyerOf(string $ownerType, int $ownerId, string $country): TaxContext
+    private function buyerOf(string $ownerType, int|string $ownerId, string $country): TaxContext
     {
         $verified = $this->standingVerification($ownerType, $ownerId);
 
@@ -494,7 +494,7 @@ final readonly class OrderTaxBasis
     }
 
     /** The verification the reverse charge may rest on, read by the class that answers it for every buyer. */
-    private function standingVerification(string $ownerType, int $ownerId): ?TaxIdVerification
+    private function standingVerification(string $ownerType, int|string $ownerId): ?TaxIdVerification
     {
         return new StandingTaxIdVerification()->of($ownerType, $ownerId);
     }

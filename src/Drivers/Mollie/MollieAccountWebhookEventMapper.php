@@ -117,6 +117,10 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Names
 
         $payment = $this->fetch($id);
 
+        if (! $payment instanceof Payment) {
+            MolliePingCounts::unknown($request, $id);
+        }
+
         return $this->read[$id] = $payment instanceof Payment ? $this->standing($payment) : null;
     }
 

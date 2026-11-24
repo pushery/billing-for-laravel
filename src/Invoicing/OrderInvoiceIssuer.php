@@ -6,6 +6,7 @@ namespace Pushery\Billing\Invoicing;
 
 use Illuminate\Container\Container;
 use Illuminate\Contracts\Debug\ExceptionHandler;
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\DeadlockException;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -14,6 +15,7 @@ use Pushery\Billing\Contracts\BuyerPartyResolver;
 use Pushery\Billing\Enums\InvoiceStatus;
 use Pushery\Billing\Enums\TaxArchetype;
 use Pushery\Billing\Enums\TaxExemptionReason;
+use Pushery\Billing\Events\InvoiceNotIssued;
 use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Models\OrderItem;
@@ -80,11 +82,14 @@ use Throwable;
  * tax was decided on. The rendered document and the e-invoice both read the snapshot, so they name the same
  * buyer.
  *
- * ## A basis that fails must never cost the document
+ * ## A basis that fails costs the document, and says so
  *
- * The determination runs in its own try/catch, and a throw leaves the document without tax rather than
- * without existence. A misconfigured archetype is a configuration defect that `billing:doctor` reports;
- * losing the numbered document for money that already moved is not recoverable in the same way.
+ * A refusal and a failure are different answers. A refusal means nothing establishes a tax, and the document states
+ * none. A failure, such as a misconfigured archetype or a query that fails, means nobody knows whether a tax was
+ * due, and a numbered invoice that states none for a taxable supply is not a complete one: once issued, it can
+ * only be canceled and issued again. So a failure ends the issuing before a number is drawn, as a failure to write
+ * the document does. Both are reported and announced as {@see InvoiceNotIssued}, and the order stays without an
+ * invoice until {@see issue()} runs for it again.
  */
 final readonly class OrderInvoiceIssuer
 {
@@ -113,7 +118,8 @@ final readonly class OrderInvoiceIssuer
      *
      * Never throws into the billing cycle. The money is already collected at this point, and a failure to
      * produce the document must not undo that or stop the run — a missing invoice is recoverable, a cycle
-     * that reports failure after taking the money is not.
+     * that reports failure after taking the money is not. The failure is reported and announced instead, see
+     * notIssued(), and calling this again for the order issues the document once the cause is fixed.
      *
      * The document is written in a transaction of its own, which inside the cycle's is a savepoint. On
      * PostgreSQL a failed statement aborts the transaction it runs in, so without one the cycle's next
@@ -127,8 +133,28 @@ final readonly class OrderInvoiceIssuer
             return $order->getConnection()->transaction(fn (): ?InvoiceRecord => $this->raise($order));
         } catch (DeadlockException $deadlock) {
             throw $deadlock;
-        } catch (Throwable) {
+        } catch (Throwable $failure) {
+            $this->notIssued($order, $failure);
+
             return null;
+        }
+    }
+
+    /**
+     * Report an order the issuing failed for, and announce it, without letting either throw into the cycle.
+     *
+     * The failure goes to the application's exception handler, where an operator looks for it, and
+     * {@see InvoiceNotIssued} names the order, so a listener can tell whoever keeps the books. A listener that
+     * throws is reported too, because its failure must not undo the collection either.
+     */
+    private function notIssued(Order $order, Throwable $failure): void
+    {
+        $this->report($failure);
+
+        try {
+            Container::getInstance()->make(Dispatcher::class)->dispatch(new InvoiceNotIssued($order, $failure->getMessage()));
+        } catch (Throwable $unheard) {
+            $this->report($unheard);
         }
     }
 
@@ -278,23 +304,19 @@ final readonly class OrderInvoiceIssuer
     }
 
     /**
-     * The tax basis for this cycle, or null where none could be established or the attempt failed, and whether the
-     * order sold a multi-purpose voucher, which no tax falls on when it is sold.
+     * The tax basis for this cycle, or null where none could be established, and whether the order sold a
+     * multi-purpose voucher, which no tax falls on when it is sold.
      *
-     * The catch is deliberate and narrow in its consequence: it costs the tax, never the document. See the
-     * class docblock — the money is already collected by the time this runs.
+     * A failure is not caught here. It ends the issuing in issue() before a number is drawn: a refusal leaves the
+     * document without tax, but after a failure nobody knows whether a tax was due. See the class docblock.
      *
      * @return array{?DeterminedOrderTax, bool}
      */
     private function determined(Order $order): array
     {
-        try {
-            $tax = $this->basis->for($order);
+        $tax = $this->basis->for($order);
 
-            return [$tax, ! $tax instanceof DeterminedOrderTax && $this->basis->sellsAMultiPurposeVoucher($order)];
-        } catch (Throwable) {
-            return [null, false];
-        }
+        return [$tax, ! $tax instanceof DeterminedOrderTax && $this->basis->sellsAMultiPurposeVoucher($order)];
     }
 
     /**

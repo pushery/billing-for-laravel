@@ -31,8 +31,8 @@ use Pushery\Billing\Models\Order;
  *
  * ## Paid first, the document after
  *
- * The money has moved when this runs. The issuer swallows its own failure for the reason it gives: a missing invoice
- * is recoverable, an order left in flight after the money arrived is not.
+ * The money has moved when this runs. The issuer reports its own failure rather than throwing it, for the reason it
+ * gives: a missing invoice is recoverable, an order left in flight after the money arrived is not.
  */
 final readonly class InvoiceLocalPurchase
 {

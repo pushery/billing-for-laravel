@@ -36,6 +36,13 @@ class UsageReservation extends Model
     protected $fillable = ['token', 'owner_type', 'owner_id', 'meter_key', 'period', 'amount', 'included', 'grace', 'state', 'expires_at'];
 
     /**
+     * The token settles or releases the hold, so it stays out of `toArray()` and JSON. It is still read as an attribute.
+     *
+     * @var list<string>
+     */
+    protected $hidden = ['token'];
+
+    /**
      * The same defaults the schema carries, so a row that was just created reads like one that was read back.
      *
      * Without them a model created without these columns holds null for each, while the row the database

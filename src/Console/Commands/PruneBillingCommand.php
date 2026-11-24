@@ -76,6 +76,13 @@ final class PruneBillingCommand extends Command
     ): int {
         $dryRun = $this->option('dry-run') === true;
 
+        // A file an earlier run could not remove is tried again first; its record, the one thing that named it, is gone.
+        if ($dryRun) {
+            $files->countStranded();
+        } else {
+            $files->retryStranded();
+        }
+
         $payloadCutoff = Carbon::now()->subDays($this->days($config, 'webhook_payload_days', 90));
 
         $payloads = BillingConnection::connection()->table(OwnerScopedTables::SCRUBBED)
