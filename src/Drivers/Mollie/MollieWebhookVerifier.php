@@ -39,7 +39,9 @@ use Pushery\Billing\Contracts\WebhookVerifier;
  *
  * Fetching back is the weaker defense: it lets anybody who can reach the endpoint drive processing and API
  * calls against the account by posting real ids. A signature throws a forged event away before anything
- * happens, which is why a request that carries one is never let through on its shape.
+ * happens, which is why a request that carries one is never let through on its shape. A classic ping is
+ * counted against the payment it names instead: one that names a payment more often than Mollie itself would,
+ * or one Mollie answered it does not know, is refused before Mollie is asked, see {@see MolliePingCounts}.
  */
 final readonly class MollieWebhookVerifier implements WebhookVerifier
 {
@@ -69,13 +71,28 @@ final readonly class MollieWebhookVerifier implements WebhookVerifier
         }
 
         if ($this->isClassicPing($request)) {
-            return $this->namesAPayment($id);
+            return $this->namesAPayment($id) && $this->mayAskAbout($id);
         }
 
         // An event with no signature that could be checked. Without a secret nothing can be checked, and the
         // fetch authenticates it as it does the classic ping. With one, the event claims to come from the
         // generation that signs every delivery, so arriving unsigned it is not Mollie's.
         return $secrets === [];
+    }
+
+    /**
+     * Whether Mollie may be asked about the payment a classic ping names, by the counts of that payment, and the
+     * ping counted when it may. A ping refused here is refused before it is recorded and before Mollie is asked.
+     */
+    private function mayAskAbout(string $payment): bool
+    {
+        if (MolliePingCounts::spent($payment)) {
+            return false;
+        }
+
+        MolliePingCounts::named($payment);
+
+        return true;
     }
 
     /** Whether the id has the shape of a Mollie payment id, the only resource a classic ping here names. */

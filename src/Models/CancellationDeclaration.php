@@ -69,6 +69,14 @@ class CancellationDeclaration extends Model
         'charge_reference', 'resolved_at', 'owner_erased_at',
     ];
 
+    /**
+     * The token opens the receipt page of the declaration, so it stays out of `toArray()` and JSON. It is still read
+     * as an attribute, and the route binds the record by it.
+     *
+     * @var list<string>
+     */
+    protected $hidden = ['token'];
+
     /** @var array<string,string> */
     protected $casts = [
         'kind' => CancellationKind::class,

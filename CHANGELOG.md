@@ -4,6 +4,26 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.67.0] - 2026-11-24
+
+### ✨ Added
+
+- **An application reads the tax rate corrections as values, with the owner of each invoice.** `billing:tax-rates:corrections` printed every invoiced period a dated rate taxes differently on its last day, and nothing else could read them: the check was private to the command, and a row of the table named no owner. `Tax\TaxRateCorrections::find()` now names them as `TaxRateCorrection` values, each with the invoice and its owner (`ownerType`, `ownerId`), the period and its country, the net, the tax charged at its rate, the rate of the last day and the tax at that rate, and counts the periods the history does not cover. The command prints what it names.
+
+### 🐛 Fixed
+
+- **A cycle whose tax cannot be determined gets no invoice that leaves the tax out, and the failure is reported.** A local engine issues the invoice of a paid order itself. When determining its tax failed, for example on a tier classified with something that is not an archetype, the invoice was issued anyway, numbered and without the tax of a taxable supply, and nothing said so. When writing the document failed, the order stayed without an invoice, silently as well. Either failure now goes to the application's exception handler and dispatches the new `InvoiceNotIssued` event with the order and what the failure said, and a failed determination issues no invoice. A determination that finds no basis, such as a customer whose place is not recorded, still issues the invoice without a tax figure. Once the cause is fixed, `OrderInvoiceIssuer::issue()` issues the missing invoice.
+
+- **A stored document file the disk did not remove is tried again by the next `billing:prune`.** The run removed a record's row before its file, logged a file the disk refused to remove and failed, and no later run could find the file again, because the row that named it was gone. The PDF of an invoice kept the payer's name, address and tax details on the disk until somebody read the log. Such a file now goes into `billing_stranded_files`, and every run works through that list before it prunes: a file the disk removes, or one already gone, ends its entry, one a newer row names again keeps its place and loses only the entry, and one the disk still refuses fails the run again. The row still goes first, so a row a hold keeps between selection and deletion keeps its file. A dry run counts the entries as pending. **Upgrade:** a new migration, `2026_11_24_000205_create_billing_stranded_files_table`, creates the table `billing_stranded_files`, and `php artisan migrate` runs it. A host that keeps the migrations in its own `database/migrations` copies this one file from `vendor/pushery/billing-for-laravel/database/migrations/server`.
+
+- **A host that keys its owners by uuid or ulid gets the tax of a cycle decided.** `OrderTaxBasis` took the owner's key as an integer on the way to the buyer, so with `billing.schema.host_key_type` set to `uuid` or `ulid` the rate of a cycle with a coupon meant before tax ended in a `TypeError`, and the invoice of every cycle was issued without its tax. The key is now taken as it is stored, an integer or a string.
+
+### 🔒 Security
+
+- **A cancellation, a withdrawal and a usage reservation keep their token out of `toArray()` and JSON.** The token of a declaration opens its receipt page, and the token of a reservation settles or releases the hold, yet a model serialized for a log, an export or a response carried it. `CancellationDeclaration`, `WithdrawalDeclaration` and `UsageReservation` now list `token` in `$hidden`. Reading `$model->token` and binding a route by it work as before.
+
+- **A classic Mollie ping that names one payment too often, or a payment Mollie does not know, is refused before Mollie is asked.** The classic ping is unsigned, and the driver believes it only after reading the payment back with the account's key. Anybody who knew a payment, a payer who knows their own for instance, could name it as often as the route let a sender through, and each ping spent one of the reads Mollie allows the organization and worked the payment again. A payment may now be named ten times in an hour, and one Mollie answers it does not know is not asked about again within the hour, counted under a hashed key per payment. The next ping is refused with a 400 before it is recorded. Mollie pings a payment once for each change of its status, far below that count, and delivers a refused ping again later. The counts know no sender, because the package reads no network address; a throttle per address in `billing.webhook_middleware` limits how many payments one sender can make up.
+
 ## [0.66.0] - 2026-11-23
 
 ### ✨ Added
@@ -8704,7 +8724,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.66.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.67.0...HEAD
+[0.67.0]: https://github.com/pushery/billing-for-laravel/compare/v0.66.0...v0.67.0
 [0.66.0]: https://github.com/pushery/billing-for-laravel/compare/v0.65.0...v0.66.0
 [0.65.0]: https://github.com/pushery/billing-for-laravel/compare/v0.64.0...v0.65.0
 [0.64.0]: https://github.com/pushery/billing-for-laravel/compare/v0.63.0...v0.64.0
