@@ -17,6 +17,8 @@ use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Tax\PeriodicTaxReturn;
 use Pushery\Billing\Tax\TaxReturnExportArchive;
 use Pushery\Billing\ValueObjects\ImportSchemePeriod;
+use Symfony\Component\Console\Formatter\OutputFormatter;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Writes one month of the import scheme's return to a file.
@@ -64,11 +66,11 @@ final class ImportSchemeReturnExportCommand extends Command
         $foreign = $this->currenciesOtherThan($period, $currency);
 
         if ($foreign !== '') {
-            $this->components->error(
+            $this->components->error(OutputFormatter::escape(
                 "The import scheme's return for {$period->label()} is made out in {$currency}, and sales of the month "
                 ."were issued in {$foreign}. Such a sale converts at the central bank's rate of the month's last day, "
                 .'which this package does not freeze for a month, so nothing was exported.'
-            );
+            ));
 
             return self::FAILURE;
         }
@@ -79,7 +81,7 @@ final class ImportSchemeReturnExportCommand extends Command
             $lines = $return->linesFor($period, $this->salesIn($period), is_int($window) ? $window : 3, scheme: TaxReturnScheme::ImportScheme);
         } catch (CorrectionOutsideWindow $e) {
             // Refused, not dropped: a correction that vanishes looks exactly like one that was never owed.
-            $this->components->error($e->getMessage());
+            $this->components->error(OutputFormatter::escape($e->getMessage()));
 
             return self::FAILURE;
         }
@@ -88,7 +90,7 @@ final class ImportSchemeReturnExportCommand extends Command
         $path = $this->option('path');
 
         if (! is_string($path) || $path === '') {
-            $this->line($record->contents);
+            $this->output->writeln($record->contents, OutputInterface::OUTPUT_RAW);
 
             return self::SUCCESS;
         }
@@ -96,7 +98,7 @@ final class ImportSchemeReturnExportCommand extends Command
         $files->ensureDirectoryExists(dirname($path));
         $files->put($path, $record->contents);
 
-        $this->components->info(count($lines)." line(s) written to {$path}.");
+        $this->components->info(OutputFormatter::escape(count($lines)." line(s) written to {$path}."));
 
         return self::SUCCESS;
     }

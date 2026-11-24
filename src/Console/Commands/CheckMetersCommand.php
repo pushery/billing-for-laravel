@@ -10,6 +10,7 @@ use Pushery\Billing\Catalogs\MeterCatalog;
 use Pushery\Billing\Contracts\MeterInspector;
 use Pushery\Billing\ValueObjects\MeteredComponent;
 use Pushery\Billing\ValueObjects\MeterPriceFacts;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Verifies that what the package believes about metered billing is what the provider actually has.
@@ -73,46 +74,46 @@ final class CheckMetersCommand extends Command
         $problems = 0;
 
         if (! in_array($meter, $active, true)) {
-            $this->components->error("Meter '{$meter}' ({$component->key}) is not an active meter at the provider — its usage will not be billed.");
+            $this->components->error(OutputFormatter::escape("Meter '{$meter}' ({$component->key}) is not an active meter at the provider — its usage will not be billed."));
             $problems++;
         }
 
         $facts = $inspector->priceFacts($price);
 
         if (! $facts instanceof MeterPriceFacts) {
-            $this->components->error("Price '{$price}' ({$component->key}) does not exist at the provider.");
+            $this->components->error(OutputFormatter::escape("Price '{$price}' ({$component->key}) does not exist at the provider."));
 
             return $problems + 1;
         }
 
         if ($facts->meterEventName !== $meter) {
-            $this->components->error(
+            $this->components->error(OutputFormatter::escape(
                 "Price '{$price}' ({$component->key}) is backed by meter '".($facts->meterEventName ?? 'none')."', but the tier reports usage to '{$meter}' — the usage and the price are wired to different meters."
-            );
+            ));
             $problems++;
         }
 
         $currency = $component->unitPrice?->currency;
 
         if ($currency !== null && $facts->currency !== null && $facts->currency !== $currency) {
-            $this->components->error("Price '{$price}' ({$component->key}) is in {$facts->currency}, but the tier displays {$currency}.");
+            $this->components->error(OutputFormatter::escape("Price '{$price}' ({$component->key}) is in {$facts->currency}, but the tier displays {$currency}."));
             $problems++;
         }
 
         // The one that hides. The allowance is the price's; `included` only drives the gauge.
         if ($component->included !== null && $facts->firstTierUpTo !== null && $facts->firstTierUpTo !== $component->included) {
-            $this->components->error(
+            $this->components->error(OutputFormatter::escape(
                 "Price '{$price}' ({$component->key}) gives away {$facts->firstTierUpTo} free unit(s), but the tier promises {$component->included} — the customer is billed on a different allowance than the one they are shown."
-            );
+            ));
             $problems++;
         }
 
         // Usage is reported raw, so a price without a free first tier bills from the first unit, whatever the
         // gauge shows. That is no allowance of a different size; it is none at all.
         if ($component->included !== null && $component->included > 0 && $facts->firstTierUpTo === null) {
-            $this->components->error(
+            $this->components->error(OutputFormatter::escape(
                 "Price '{$price}' ({$component->key}) gives away no free units, but the tier promises {$component->included} — the customer is billed from the first unit while they are shown an allowance."
-            );
+            ));
             $problems++;
         }
 

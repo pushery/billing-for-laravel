@@ -97,6 +97,7 @@ use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
 use Stripe\StripeObject;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
 /**
@@ -276,7 +277,7 @@ final class DoctorCommand extends Command
 
         $pinned = $this->pinnedVersion($config);
 
-        $this->components->info("The package is pinned to Stripe API version {$pinned}.");
+        $this->components->info(OutputFormatter::escape("The package is pinned to Stripe API version {$pinned}."));
 
         // The endpoints deliver to an install that bills through Stripe and to no other. A package configured for
         // another driver routinely carries a stale Stripe key, and the account behind it is not one this install can
@@ -284,7 +285,7 @@ final class DoctorCommand extends Command
         $driver = $config->get('billing.default', 'stripe');
 
         if ($driver !== 'stripe') {
-            $this->components->info('The Stripe webhook endpoints are not checked: the active driver is '.(is_string($driver) ? $driver : 'not named').'.');
+            $this->components->info(OutputFormatter::escape('The Stripe webhook endpoints are not checked: the active driver is '.(is_string($driver) ? $driver : 'not named').'.'));
 
             return $this->verdict($failing);
         }
@@ -293,7 +294,7 @@ final class DoctorCommand extends Command
             $endpoints = $stripe->webhookEndpoints->all(['limit' => 100]);
         } catch (Throwable $e) {
             // A diagnostic never fails the app because it could not reach the provider; it reports and stops.
-            $this->components->warn('Could not read the Stripe webhook endpoints: '.$e->getMessage());
+            $this->components->warn(OutputFormatter::escape('Could not read the Stripe webhook endpoints: '.$e->getMessage()));
 
             return $this->verdict($failing);
         }
@@ -311,28 +312,28 @@ final class DoctorCommand extends Command
             if ($missing !== []) {
                 // A selection without one of these loses what hangs off it, and nothing else says so: an event that
                 // never arrives produces nothing at all.
-                $this->components->error("{$url} does not receive ".count($missing).' event type(s) the package handles: '.implode(', ', $missing).'.');
+                $this->components->error(OutputFormatter::escape("{$url} does not receive ".count($missing).' event type(s) the package handles: '.implode(', ', $missing).'.'));
                 $gaps++;
             }
 
             if ($version === null) {
                 // No pinned version on the endpoint: its payloads follow the account's default version, which
                 // can move under you. Pin it to match, or a later account-wide bump silently changes the shape.
-                $this->components->warn("{$url} has no pinned version; it follows the account default. Pin it to {$pinned}.");
+                $this->components->warn(OutputFormatter::escape("{$url} has no pinned version; it follows the account default. Pin it to {$pinned}."));
                 $drift++;
 
                 continue;
             }
 
             if ($version !== $pinned) {
-                $this->components->error("{$url} renders payloads in {$version}, but the package expects {$pinned}.");
+                $this->components->error(OutputFormatter::escape("{$url} renders payloads in {$version}, but the package expects {$pinned}."));
                 $drift++;
 
                 continue;
             }
 
             if ($missing === []) {
-                $this->components->info("{$url} matches.");
+                $this->components->info(OutputFormatter::escape("{$url} matches."));
             }
         }
 
@@ -343,11 +344,11 @@ final class DoctorCommand extends Command
         }
 
         if ($gaps > 0) {
-            $this->components->error("{$gaps} of {$checked} webhook endpoint(s) miss event types the package handles.");
+            $this->components->error(OutputFormatter::escape("{$gaps} of {$checked} webhook endpoint(s) miss event types the package handles."));
         }
 
         if ($drift > 0) {
-            $this->components->error("{$drift} of {$checked} webhook endpoint(s) do not match the pinned version.");
+            $this->components->error(OutputFormatter::escape("{$drift} of {$checked} webhook endpoint(s) do not match the pinned version."));
 
             return $this->verdict(true);
         }
@@ -356,7 +357,7 @@ final class DoctorCommand extends Command
             return $this->verdict(true);
         }
 
-        $this->components->info("All {$checked} webhook endpoint(s) render payloads in the pinned version.");
+        $this->components->info(OutputFormatter::escape("All {$checked} webhook endpoint(s) render payloads in the pinned version."));
 
         return $this->verdict($failing);
     }
@@ -434,10 +435,10 @@ final class DoctorCommand extends Command
         if ($driver === 'mollie' && SandboxMollie::enabled()) {
             $outcome = $config->get('billing.mollie.sandbox_outcome', 'paid');
 
-            $this->components->warn(
+            $this->components->warn(OutputFormatter::escape(
                 'billing.mollie.sandbox is on: the sandbox answers for Mollie, no payment reaches Mollie, and every payment '
                 .'gets the outcome '.(is_string($outcome) ? $outcome : 'paid').'. Switch it off before this install takes real money.',
-            );
+            ));
 
             return;
         }
@@ -465,25 +466,25 @@ final class DoctorCommand extends Command
         $production = $config->get('app.env') === 'production';
 
         if ($production && $isTest) {
-            $this->components->warn(
+            $this->components->warn(OutputFormatter::escape(
                 "{$setting} is a TEST key and this environment is production. Checkouts will complete and no "
                 .'money will be taken. If that is deliberate -- an acceptance or demo deployment -- nothing '
                 .'is wrong here.',
-            );
+            ));
 
             return;
         }
 
         if (! $production && $isLive) {
-            $this->components->warn(
+            $this->components->warn(OutputFormatter::escape(
                 "{$setting} is a LIVE key and this environment is not production. Real cards will be charged "
                 .'from here.',
-            );
+            ));
 
             return;
         }
 
-        $this->components->info("{$setting} matches this environment.");
+        $this->components->info(OutputFormatter::escape("{$setting} matches this environment."));
     }
 
     /**
@@ -510,9 +511,9 @@ final class DoctorCommand extends Command
             ));
 
             if ($foreign !== []) {
-                $this->components->warn("Keys the package does not ship in config('{$name}'): ".implode(', ', $foreign)
+                $this->components->warn(OutputFormatter::escape("Keys the package does not ship in config('{$name}'): ".implode(', ', $foreign)
                     .". The package reads `{$name}.*` as its own settings, so an application file of that name mixes"
-                    .' with them and changes what the package does. Give the application\'s settings another name.');
+                    .' with them and changes what the package does. Give the application\'s settings another name.'));
             }
         }
     }
@@ -537,10 +538,10 @@ final class DoctorCommand extends Command
             return;
         }
 
-        $this->components->warn("Webhook effects run on the queue connection '{$connection}', whose driver is sync. "
+        $this->components->warn(OutputFormatter::escape("Webhook effects run on the queue connection '{$connection}', whose driver is sync. "
             ."Each effect then runs inside the provider's request: one that throws stops the effects after it, the "
             .'provider reads a 500, and billing.webhooks.tries does nothing. Point BILLING_WEBHOOK_QUEUE_CONNECTION, '
-            .'or the default queue connection, at an asynchronous driver.');
+            .'or the default queue connection, at an asynchronous driver.'));
     }
 
     /**
@@ -707,12 +708,12 @@ final class DoctorCommand extends Command
 
         sort($unreachable);
 
-        $this->components->error(
+        $this->components->error(OutputFormatter::escape(
             'No billing notice reaches '.implode(', ', $unreachable).': the model has no routeNotificationFor()'
             .($database ? ' or no notifications() relation' : '').', so every failed payment, suspension warning '
             .'and receipt fails in its queued job. Use Laravel\'s Notifiable on it, or bind notifiers of your '
             .'own that send these notices elsewhere.',
-        );
+        ));
 
         return true;
     }
@@ -756,7 +757,7 @@ final class DoctorCommand extends Command
         try {
             $enforced = $withdrawals->isEnforced();
         } catch (InvalidBillingConfig $refused) {
-            $this->components->error($refused->getMessage());
+            $this->components->error(OutputFormatter::escape($refused->getMessage()));
 
             return true;
         }
@@ -807,10 +808,10 @@ final class DoctorCommand extends Command
         }
 
         foreach ($uncovered as $key) {
-            $this->components->error(
+            $this->components->error(OutputFormatter::escape(
                 "Add-on '{$key}' hands over a work but carries no archetype, so the consumer-rights profile "
                 .'does not gate it: it is provided without a recorded withdrawal consent.'
-            );
+            ));
         }
 
         return true;
@@ -853,12 +854,12 @@ final class DoctorCommand extends Command
         }
 
         foreach ($refused as $key) {
-            $this->components->error(
+            $this->components->error(OutputFormatter::escape(
                 "Add-on '{$key}' hands over no work, grants no units and carries no withdrawal answer, so the hub's "
                 .'checkout refuses it while the consumer-rights profile is set. Give it an archetype whose withdrawal '
                 ."the profile fixes, 'voucher' for a money credit, or set its buyers to 'business' if only businesses "
                 .'buy it.'
-            );
+            ));
         }
 
         return $refused !== [];
@@ -897,12 +898,12 @@ final class DoctorCommand extends Command
             return false;
         }
 
-        $this->components->error(
+        $this->components->error(OutputFormatter::escape(
             VoucherInstrumentType::CONFIG_KEY.' is single_purpose, so a top-up is taxed when it is bought, and Stripe takes '
             .'its credit off an invoice after the invoice\'s tax, so the invoice it pays is taxed again. Add-ons that credit '
             .'money: '.implode(', ', $topUps).'. Use multi_purpose with Stripe, the default, under which a top-up is taxed '
             .'when it is spent.'
-        );
+        ));
 
         return true;
     }
@@ -920,7 +921,7 @@ final class DoctorCommand extends Command
 
         foreach ($priceChanges->refusals() as $problems) {
             foreach ($problems as $problem) {
-                $this->components->error($problem);
+                $this->components->error(OutputFormatter::escape($problem));
             }
 
             $failing = true;
@@ -949,7 +950,7 @@ final class DoctorCommand extends Command
         try {
             $audience = CustomerAudience::configured($config);
         } catch (InvalidBillingConfig $invalid) {
-            $this->components->error($invalid->getMessage());
+            $this->components->error(OutputFormatter::escape($invalid->getMessage()));
 
             return;
         }
@@ -988,18 +989,18 @@ final class DoctorCommand extends Command
             }
 
             if (($engine ? $plans->planFor($tierKey, BillingInterval::Month) : $plans->providerPriceFor($tierKey, BillingInterval::Month)) === null) {
-                $this->components->warn("Tier '{$tierKey}' is sold yearly and has no monthly price, so a consumer's year of it "
+                $this->components->warn(OutputFormatter::escape("Tier '{$tierKey}' is sold yearly and has no monthly price, so a consumer's year of it "
                     .'renews as a year. Sell it monthly as well under the same key, or set billing.audience to business_only '
-                    .'if the application sells only to businesses.');
+                    .'if the application sells only to businesses.'));
             }
 
             // A subscription with an item beside its tier's is not arranged, since the monthly phase would need a monthly
             // price for every item. A metered component is such an item.
             if (array_filter($meters->forTier($tierKey), static fn (MeteredComponent $component): bool => $component->isBillable()) !== []) {
-                $this->components->warn("Tier '{$tierKey}' is sold yearly and carries metered components, so a consumer's year "
+                $this->components->warn(OutputFormatter::escape("Tier '{$tierKey}' is sold yearly and carries metered components, so a consumer's year "
                     .'of it renews as a year: a subscription with an item beside its tier\'s cannot be arranged to go on '
                     .'monthly. Meter it on a monthly tier, or set billing.audience to business_only if the application sells '
-                    .'only to businesses.');
+                    .'only to businesses.'));
             }
         }
     }
@@ -1023,9 +1024,9 @@ final class DoctorCommand extends Command
             $tierKey = (string) $key;
 
             if (in_array(BillingInterval::Year, $plans->intervalsFor($tierKey), true)) {
-                $this->components->warn("Tier '{$tierKey}' is sold yearly, and the package's own billing engine renews a "
+                $this->components->warn(OutputFormatter::escape("Tier '{$tierKey}' is sold yearly, and the package's own billing engine renews a "
                     ."consumer's year of it as a year. Sell it monthly, or set billing.audience to business_only if the "
-                    .'application sells only to businesses.');
+                    .'application sells only to businesses.'));
             }
         }
     }
@@ -1059,11 +1060,11 @@ final class DoctorCommand extends Command
 
             foreach (is_array($offers) ? $offers : [] as $key => $offer) {
                 if (is_array($offer) && ($offer['buyers'] ?? null) === BuyerAudience::Business->value) {
-                    $this->components->warn(
+                    $this->components->warn(OutputFormatter::escape(
                         "{$kind} '{$key}' is sold only to businesses, and the bound NoBusinessBuyers names no owner as "
                         .'one, so the account hub shows it to nobody. The default, DeclaredBusinessBuyers, reads what '
                         .'customers declared.'
-                    );
+                    ));
                 }
             }
         }
@@ -1092,10 +1093,10 @@ final class DoctorCommand extends Command
         ));
 
         if ($missing !== []) {
-            $this->components->warn(
+            $this->components->warn(OutputFormatter::escape(
                 'An XRechnung needs billing.company.'.implode(', billing.company.', $missing).': without them the documents '
                 .'the default EInvoice writes miss the seller contact or the payment instructions the German rules require.'
-            );
+            ));
         }
     }
 
@@ -1140,18 +1141,18 @@ final class DoctorCommand extends Command
         // A warning, not an error. The package cannot know that a reading is wrong for a jurisdiction — only
         // that nobody said it was right. Failing the command here would make an honest, deliberate reuse
         // indistinguishable from an oversight, and an operator who cannot silence a check learns to ignore it.
-        $this->components->warn(
+        $this->components->warn(OutputFormatter::escape(
             "The [{$active}] jurisdiction profile is active, but ".count($inherited).' reading(s) are still the '
             .'shipped ['.self::SHIPPED_PROFILE.'] ones. A profile that answers some questions and not others '
             .'is a hybrid, and nothing on a document says which half decided it.'
-        );
+        ));
 
         // One per line rather than folded into the sentence above. The console component wraps a long line at
         // the terminal width, and a name broken across a wrap is a name an operator cannot search for — which
         // is the first thing anyone does with a list like this. Found the hard way: the assertion for the
         // headline passed while the assertion for the names failed, from the same single message.
         foreach ($inherited as $reading) {
-            $this->line("  - {$reading}");
+            $this->line(OutputFormatter::escape("  - {$reading}"));
         }
 
         $this->components->info('Bind your own for each, or confirm it is right for your jurisdiction.');
@@ -1210,10 +1211,10 @@ final class DoctorCommand extends Command
             return false;
         }
 
-        $this->components->error(
+        $this->components->error(OutputFormatter::escape(
             'The database has no '.implode(', ', $missing).'. Run `php artisan migrate` first; the checks that '
             .'read the billing tables were skipped.'
-        );
+        ));
 
         return true;
     }
@@ -1236,10 +1237,10 @@ final class DoctorCommand extends Command
             return false;
         }
 
-        $this->components->error(
+        $this->components->error(OutputFormatter::escape(
             "billing.schema.host_key_type is '{$unrecognized}', which is none of int, uuid or ulid, so the "
             .'migrations read it as int. Name the key type your models use, spelled in lowercase.'
-        );
+        ));
 
         return true;
     }
@@ -1270,12 +1271,12 @@ final class DoctorCommand extends Command
             return false;
         }
 
-        $this->components->error(
+        $this->components->error(OutputFormatter::escape(
             "billing.schema.host_key_type is '{$configured}', but billing_subscriptions.owner_id is "
             ."'{$actual}'. The setting is read when a table is created, so changing it later does not "
             .'alter tables that already exist. Every write keyed to one of your models will fail until the '
             .'columns are migrated to match — this is a data migration, not a setting change.'
-        );
+        ));
 
         return true;
     }
@@ -1316,11 +1317,11 @@ final class DoctorCommand extends Command
 
         $zone = is_string($session['zone'] ?? null) ? $session['zone'] : 'not UTC';
 
-        $this->components->error(
+        $this->components->error(OutputFormatter::escape(
             "The database session runs in the time zone '{$zone}'. The package compares its moments in UTC, and "
             ."PostgreSQL reads a moment a query binds in the session's zone, so every such comparison is off by the "
             ."difference. Set 'timezone' => 'UTC' on the connection in config/database.php."
-        );
+        ));
 
         return true;
     }
@@ -1352,11 +1353,11 @@ final class DoctorCommand extends Command
             return false;
         }
 
-        $this->components->error(
+        $this->components->error(OutputFormatter::escape(
             "{$unmoved} routed sale(s) were paid for and the merchant's share never moved. Fix the cause, then run "
             .'billing:marketplace:retry-transfers. It retries under the key the sale used, so a provider that kept '
             .'the failed answer can replay it for a while (Stripe: 24 hours) before a retry goes through.'
-        );
+        ));
 
         return true;
     }
@@ -1408,13 +1409,13 @@ final class DoctorCommand extends Command
             return $this->reportHeldOrders();
         }
 
-        $this->components->error(
+        $this->components->error(OutputFormatter::escape(
             "{$stranded} billing order(s) have been claimed for more than ".self::STRANDED_ORDER_HOURS
             .' hours without a payment. The cycle they claimed will not be retried, and no webhook will '
             .'arrive for them because no payment was ever created — those subscribers are not being '
             .'billed. Inspect them before deciding: a retry is only safe where the provider was never '
             .'called.'
-        );
+        ));
 
         $this->reportHeldOrders();
 
@@ -1449,14 +1450,14 @@ final class DoctorCommand extends Command
             return false;
         }
 
-        $this->components->error(
+        $this->components->error(OutputFormatter::escape(
             "{$held} billing order(s) have been waiting on a payment for more than ".self::HELD_ORDER_DAYS
             .' days. A charge that long in flight has almost certainly been settled or refused at the '
             .'provider without this application hearing about it — a lost delivery, a failed signature, or '
             .'an effect job that ran out of retries. Do NOT charge again: look the payment up at the '
             .'provider first, because the money may already have moved. Where the package bills the cycles itself, '
             .'`php artisan billing:cycles:reconcile` reads each such payment back and records where it stands.'
-        );
+        ));
 
         return true;
     }
@@ -1482,15 +1483,15 @@ final class DoctorCommand extends Command
         $age = (int) Carbon::parse($validFrom)->diffInDays(Carbon::now(), absolute: false);
 
         if ($age > $maxAge) {
-            $this->components->error(
+            $this->components->error(OutputFormatter::escape(
                 "The {$source} tax rate table is {$age} days old (limit {$maxAge}). Rates move; verify it "
                 .'against the current published rates and refresh its date.'
-            );
+            ));
 
             return true;
         }
 
-        $this->components->info("The {$source} tax rate table is {$age} days old (limit {$maxAge}).");
+        $this->components->info(OutputFormatter::escape("The {$source} tax rate table is {$age} days old (limit {$maxAge})."));
 
         return false;
     }
@@ -1565,7 +1566,7 @@ final class DoctorCommand extends Command
 
         $age = (int) Carbon::parse($validFrom)->diffInDays(Carbon::now(), absolute: false);
 
-        $this->components->info("The {$source} union membership was last checked {$age} days ago.");
+        $this->components->info(OutputFormatter::escape("The {$source} union membership was last checked {$age} days ago."));
     }
 
     /**
@@ -1618,11 +1619,11 @@ final class DoctorCommand extends Command
             $newest = ExchangeRateRecord::model()::query()->where('to_currency', $currency)->max('rate_date');
 
             if (! is_string($newest) && ! $newest instanceof DateTimeInterface) {
-                $this->components->error(
+                $this->components->error(OutputFormatter::escape(
                     "No exchange rates have ever been imported for {$currency}. Run "
                     .'billing:exchange-rates:import — until a series exists, every conversion into this '
                     .'currency is refused rather than answered.'
-                );
+                ));
 
                 $failing = true;
 
@@ -1632,18 +1633,18 @@ final class DoctorCommand extends Command
             $age = (int) Carbon::parse($newest)->diffInDays(Carbon::now(), absolute: false);
 
             if ($age > $limit) {
-                $this->components->error(
+                $this->components->error(OutputFormatter::escape(
                     "The {$currency} exchange-rate series is {$age} days old (limit {$limit}). The import is "
                     .'not keeping it current; past '.DatabaseExchangeRateSource::FORWARD_LIMIT_DAYS
                     .' days the lookup finds no row and a document cannot be issued.'
-                );
+                ));
 
                 $failing = true;
 
                 continue;
             }
 
-            $this->components->info("The {$currency} exchange-rate series is {$age} days old (limit {$limit}).");
+            $this->components->info(OutputFormatter::escape("The {$currency} exchange-rate series is {$age} days old (limit {$limit})."));
         }
 
         return $failing;
@@ -1674,7 +1675,7 @@ final class DoctorCommand extends Command
         $age = (int) Carbon::parse($validFrom)->diffInDays(Carbon::now(), absolute: false);
         $source = $this->profiles->profile()?->key() ?? 'none';
 
-        $this->components->info("The profile ({$source}) distance-sale threshold was last checked {$age} days ago.");
+        $this->components->info(OutputFormatter::escape("The profile ({$source}) distance-sale threshold was last checked {$age} days ago."));
     }
 
     /**
@@ -1746,7 +1747,7 @@ final class DoctorCommand extends Command
         }
 
         if ($agreeing > 0) {
-            $this->components->info("The displayed price of {$agreeing} tier(s) and add-on(s) is the price Stripe charges.");
+            $this->components->info(OutputFormatter::escape("The displayed price of {$agreeing} tier(s) and add-on(s) is the price Stripe charges."));
         }
 
         return $failing;
@@ -1763,27 +1764,27 @@ final class DoctorCommand extends Command
             $price = $stripe->prices->retrieve($priceId);
         } catch (RateLimitException $e) {
             // The SDK makes a 429 a kind of InvalidRequestException, and it says nothing about the price.
-            $this->components->warn("Could not read the Stripe price {$priceId} of {$subject}: {$e->getMessage()}");
+            $this->components->warn(OutputFormatter::escape("Could not read the Stripe price {$priceId} of {$subject}: {$e->getMessage()}"));
 
             return 'unchecked';
         } catch (InvalidRequestException $e) {
             if ($e->getStripeCode() !== 'resource_missing') {
-                $this->components->warn("Could not read the Stripe price {$priceId} of {$subject}: {$e->getMessage()}");
+                $this->components->warn(OutputFormatter::escape("Could not read the Stripe price {$priceId} of {$subject}: {$e->getMessage()}"));
 
                 return 'unchecked';
             }
 
-            $this->components->error(ucfirst($subject)." names {$priceId}, which Stripe does not know, so the checkout cannot charge it.");
+            $this->components->error(OutputFormatter::escape(ucfirst($subject)." names {$priceId}, which Stripe does not know, so the checkout cannot charge it."));
 
             return 'differs';
         } catch (Throwable $e) {
-            $this->components->warn("Could not read the Stripe price {$priceId} of {$subject}: {$e->getMessage()}");
+            $this->components->warn(OutputFormatter::escape("Could not read the Stripe price {$priceId} of {$subject}: {$e->getMessage()}"));
 
             return 'unchecked';
         }
 
         if (! is_int($price->unit_amount)) {
-            $this->components->warn("Stripe prices {$priceId} of {$subject} in tiers or in fractions of a cent, so its displayed price is not compared.");
+            $this->components->warn(OutputFormatter::escape("Stripe prices {$priceId} of {$subject} in tiers or in fractions of a cent, so its displayed price is not compared."));
 
             return 'unchecked';
         }
@@ -1791,13 +1792,13 @@ final class DoctorCommand extends Command
         $charged = Money::of($price->unit_amount, strtoupper($price->currency));
 
         if (! $shown instanceof Money) {
-            $this->components->warn(ucfirst($subject)." shows no price, and Stripe charges {$charged->format()} for {$priceId}.");
+            $this->components->warn(OutputFormatter::escape(ucfirst($subject)." shows no price, and Stripe charges {$charged->format()} for {$priceId}."));
 
             return 'unchecked';
         }
 
         if (! $shown->equals($charged)) {
-            $this->components->error(ucfirst($subject)." shows {$shown->format()}, and Stripe charges {$charged->format()} for {$priceId}.");
+            $this->components->error(OutputFormatter::escape(ucfirst($subject)." shows {$shown->format()}, and Stripe charges {$charged->format()} for {$priceId}."));
 
             return 'differs';
         }
@@ -1806,7 +1807,7 @@ final class DoctorCommand extends Command
             $recurring = $price->recurring;
 
             if (! $recurring instanceof StripeObject) {
-                $this->components->error(ucfirst($subject)." is shown as billed every {$interval->value}, and Stripe charges {$priceId} once.");
+                $this->components->error(OutputFormatter::escape(ucfirst($subject)." is shown as billed every {$interval->value}, and Stripe charges {$priceId} once."));
 
                 return 'differs';
             }
@@ -1814,14 +1815,14 @@ final class DoctorCommand extends Command
             $billed = $recurring->interval_count === 1 ? $recurring->interval : "{$recurring->interval_count} {$recurring->interval}s";
 
             if ($billed !== $interval->value) {
-                $this->components->error(ucfirst($subject)." is shown as billed every {$interval->value}, and Stripe bills {$priceId} every {$billed}.");
+                $this->components->error(OutputFormatter::escape(ucfirst($subject)." is shown as billed every {$interval->value}, and Stripe bills {$priceId} every {$billed}."));
 
                 return 'differs';
             }
         }
 
         if ($toConsumers && $price->tax_behavior === 'exclusive') {
-            $this->components->warn("Stripe adds the tax on top of {$priceId}, so a consumer pays more than the {$shown->format()} {$subject} shows.");
+            $this->components->warn(OutputFormatter::escape("Stripe adds the tax on top of {$priceId}, so a consumer pays more than the {$shown->format()} {$subject} shows."));
 
             return 'unchecked';
         }

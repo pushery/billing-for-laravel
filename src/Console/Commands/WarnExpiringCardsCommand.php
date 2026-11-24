@@ -15,6 +15,7 @@ use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\ValueObjects\PaymentMethod;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
 /**
@@ -57,15 +58,15 @@ final class WarnExpiringCardsCommand extends Command
                         $failed++;
                         Container::getInstance()->make(ExceptionHandler::class)->report($e);
                         $key = $owner->getKey();
-                        $this->components->warn('Could not warn owner '.(is_scalar($key) ? (string) $key : '?').": {$e->getMessage()}");
+                        $this->components->warn(OutputFormatter::escape('Could not warn owner '.(is_scalar($key) ? (string) $key : '?').": {$e->getMessage()}"));
                     }
                 }
             });
 
-        $this->components->info(($dryRun ? 'Would warn ' : 'Warned ')."{$warned} owner(s) about an expiring card.");
+        $this->components->info(OutputFormatter::escape(($dryRun ? 'Would warn ' : 'Warned ')."{$warned} owner(s) about an expiring card."));
 
         if ($failed > 0) {
-            $this->components->error("{$failed} owner(s) could not be checked; the next run asks again.");
+            $this->components->error(OutputFormatter::escape("{$failed} owner(s) could not be checked; the next run asks again."));
 
             return self::FAILURE;
         }

@@ -12,6 +12,7 @@ use Pushery\Billing\Exceptions\ReportingPeriodNotClosed;
 use Pushery\Billing\Tax\FreezeRecapitulativeStatementRates;
 use Pushery\Billing\ValueObjects\RecapitulativeStatementPeriod;
 use Pushery\Billing\ValueObjects\ReportingPeriod;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Give a closed period's reverse-charged sales in another currency the rate their recapitulative statement states.
@@ -44,12 +45,12 @@ final class FreezeRecapitulativeStatementRatesCommand extends Command
         try {
             $frozen = $rates->forPeriod($period->startsOn(), $period->endsOn(), CarbonImmutable::now());
         } catch (ReportingPeriodNotClosed $notClosed) {
-            $this->components->error($notClosed->getMessage());
+            $this->components->error(OutputFormatter::escape($notClosed->getMessage()));
 
             return self::FAILURE;
         }
 
-        $this->components->info(sprintf('Froze the recapitulative statement rate on %d document(s) for %s.', $frozen, $period->label()));
+        $this->components->info(OutputFormatter::escape(sprintf('Froze the recapitulative statement rate on %d document(s) for %s.', $frozen, $period->label())));
 
         return self::SUCCESS;
     }

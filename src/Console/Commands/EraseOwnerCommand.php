@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Support\BillingEraser;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\OwnerScopedTables;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Erases one owner's billing data — the operational half of a right-to-erasure request (GDPR Art. 17).
@@ -82,19 +83,19 @@ final class EraseOwnerCommand extends Command
         $report = $eraser->erase($owner);
 
         foreach ($report->purged as $table => $rows) {
-            $this->line("purged {$rows} row(s) from {$table}");
+            $this->line(OutputFormatter::escape("purged {$rows} row(s) from {$table}"));
         }
 
         foreach ($report->retained as $table => $rows) {
-            $this->line("kept {$rows} row(s) in {$table}, unlinked from the owner (retention)");
+            $this->line(OutputFormatter::escape("kept {$rows} row(s) in {$table}, unlinked from the owner (retention)"));
         }
 
         foreach ($report->unspentCredit as $currency => $minor) {
             // Money the customer was still owed, now gone. Nobody should learn this from a diff.
-            $this->components->warn("The owner still had {$minor} ({$currency}) of unspent credit; it was recorded to the audit ledger and purged.");
+            $this->components->warn(OutputFormatter::escape("The owner still had {$minor} ({$currency}) of unspent credit; it was recorded to the audit ledger and purged."));
         }
 
-        $this->components->info($report->isEmpty() ? 'That owner had no billing data.' : 'Erased.');
+        $this->components->info(OutputFormatter::escape($report->isEmpty() ? 'That owner had no billing data.' : 'Erased.'));
 
         return self::SUCCESS;
     }

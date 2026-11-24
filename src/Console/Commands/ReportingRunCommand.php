@@ -10,6 +10,7 @@ use Pushery\Billing\Exceptions\ReportingNotPlausible;
 use Pushery\Billing\Marketplace\ReportingExport;
 use Pushery\Billing\Marketplace\ReportingFilingRegister;
 use Pushery\Billing\Models\ReportingFiling;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Produce a reporting period's official record — and refuse to, while anything about it is implausible.
@@ -63,12 +64,12 @@ final class ReportingRunCommand extends Command
             // The findings are the output here, not the failure. An operator needs to know which rule is
             // open before they can clear it, and the exception already names them all — re-wording that
             // would be a second list that drifts from the first.
-            $this->components->error($refusal->getMessage());
+            $this->components->error(OutputFormatter::escape($refusal->getMessage()));
 
             return self::FAILURE;
         }
 
-        $this->components->info(sprintf(
+        $this->components->info(OutputFormatter::escape(sprintf(
             'Produced the %d record for %s: %s v%s, %d seller(s), %d bytes.',
             $year,
             $currency,
@@ -76,17 +77,17 @@ final class ReportingRunCommand extends Command
             $record->format_version,
             $record->seller_count,
             strlen($record->contents),
-        ));
+        )));
 
         $filing = $register->latestFilingFor($year, $currency);
 
         if ($filing instanceof ReportingFiling) {
             // Said out loud, because it changes what the operator does next. A period that is already filed
             // does not take a second filing — it takes a correction, which names its predecessor.
-            $this->components->warn(sprintf(
+            $this->components->warn(OutputFormatter::escape(sprintf(
                 'This period was already filed on %s. A further submission is a correction, not a filing.',
                 $filing->filed_at->toDateString(),
-            ));
+            )));
 
             return self::SUCCESS;
         }

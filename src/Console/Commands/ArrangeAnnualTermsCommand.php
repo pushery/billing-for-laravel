@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Consumer\AnnualTerms;
 use Pushery\Billing\Models\Subscription;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
 /**
@@ -63,7 +64,7 @@ final class ArrangeAnnualTermsCommand extends Command
                     $label = 'subscription '.$this->keyOf($subscription).' ('.$subscription->provider_id.')';
 
                     if ($dryRun) {
-                        $this->line('  would ask about '.$label);
+                        $this->line(OutputFormatter::escape('  would ask about '.$label));
 
                         continue;
                     }
@@ -74,25 +75,25 @@ final class ArrangeAnnualTermsCommand extends Command
                         $arrangement = $terms->arrangeAgain($owner, $subscription);
                     } catch (Throwable $refused) {
                         $failed++;
-                        $this->components->error($label.': '.$refused->getMessage());
+                        $this->components->error(OutputFormatter::escape($label.': '.$refused->getMessage()));
 
                         continue;
                     }
 
                     if ($arrangement !== $before) {
                         $arranged++;
-                        $this->line('  arranged '.$label.': '.$arrangement.', recorded before: '.($before ?? 'none'));
+                        $this->line(OutputFormatter::escape('  arranged '.$label.': '.$arrangement.', recorded before: '.($before ?? 'none')));
                     }
                 }
             });
 
         if ($dryRun) {
-            $this->components->info("Would ask the driver about {$asked} annual term(s).");
+            $this->components->info(OutputFormatter::escape("Would ask the driver about {$asked} annual term(s)."));
 
             return self::SUCCESS;
         }
 
-        $this->components->info("Arranged {$arranged} of {$asked} annual term(s) again.");
+        $this->components->info(OutputFormatter::escape("Arranged {$arranged} of {$asked} annual term(s) again."));
 
         return $failed === 0 ? self::SUCCESS : self::FAILURE;
     }

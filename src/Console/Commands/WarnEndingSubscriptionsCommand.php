@@ -17,6 +17,7 @@ use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\ValueObjects\MerchantScope;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Reminds owners whose canceled subscription is about to end.
@@ -102,7 +103,7 @@ final class WarnEndingSubscriptionsCommand extends Command
                 }
             });
 
-        $this->components->info(($dryRun ? 'Would remind ' : 'Reminded ')."{$warned} owner(s) of a subscription about to end.");
+        $this->components->info(OutputFormatter::escape(($dryRun ? 'Would remind ' : 'Reminded ')."{$warned} owner(s) of a subscription about to end."));
 
         $attempts->finish();
 

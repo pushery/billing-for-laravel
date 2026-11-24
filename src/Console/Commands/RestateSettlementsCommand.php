@@ -9,6 +9,7 @@ use Illuminate\Console\Command;
 use Pushery\Billing\Enums\SettlementRestatementBlock;
 use Pushery\Billing\Enums\SettlementRestatementState;
 use Pushery\Billing\Marketplace\SettlementRestater;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Issue again the settlements a corrected creator standing has made wrong.
@@ -53,10 +54,10 @@ final class RestateSettlementsCommand extends Command
             $unchanged++;
         }
 
-        $this->components->info("Restated {$restated} settlement(s), {$unchanged} needed no change.");
+        $this->components->info(OutputFormatter::escape("Restated {$restated} settlement(s), {$unchanged} needed no change."));
 
         foreach ($blocked as $reason => $count) {
-            $this->components->warn("{$count} settlement(s) could not be issued again: {$reason}.");
+            $this->components->warn(OutputFormatter::escape("{$count} settlement(s) could not be issued again: {$reason}."));
         }
 
         return self::SUCCESS;

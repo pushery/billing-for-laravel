@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\PriceChanges\DeclaredPriceChanges;
 use Pushery\Billing\PriceChanges\PriceChangeAnnouncer;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Announces every declared price change that is due to the running subscriptions it reaches, once each.
@@ -29,7 +30,7 @@ final class AnnouncePriceChangesCommand extends Command
 
         foreach ($refusals as $problems) {
             foreach ($problems as $problem) {
-                $this->components->error($problem);
+                $this->components->error(OutputFormatter::escape($problem));
             }
         }
 
@@ -42,7 +43,7 @@ final class AnnouncePriceChangesCommand extends Command
 
         $result = $announcer->announce(Carbon::now(), 'mollie');
 
-        $this->components->info("Announced {$result['announced']} price change(s) to subscriptions; {$result['failed']} could not be announced and are tried again on the next run.");
+        $this->components->info(OutputFormatter::escape("Announced {$result['announced']} price change(s) to subscriptions; {$result['failed']} could not be announced and are tried again on the next run."));
 
         return $refusals === [] && $result['failed'] === 0 ? self::SUCCESS : self::FAILURE;
     }

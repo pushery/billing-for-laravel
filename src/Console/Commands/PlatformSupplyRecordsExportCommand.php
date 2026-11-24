@@ -9,6 +9,8 @@ use Illuminate\Console\Command;
 use Illuminate\Filesystem\Filesystem;
 use Pushery\Billing\Support\RecordsFile;
 use Pushery\Billing\Tax\PlatformSupplyRecords;
+use Symfony\Component\Console\Formatter\OutputFormatter;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Writes the records of the supplies the platform facilitated without being their supplier, for the days asked for.
@@ -46,7 +48,7 @@ final class PlatformSupplyRecordsExportCommand extends Command
         $path = $this->option('path');
 
         if (! is_string($path) || $path === '') {
-            $this->line($contents);
+            $this->output->writeln($contents, OutputInterface::OUTPUT_RAW);
 
             return self::SUCCESS;
         }
@@ -54,7 +56,7 @@ final class PlatformSupplyRecordsExportCommand extends Command
         $files->ensureDirectoryExists(dirname($path));
         $files->put($path, $contents);
 
-        $this->components->info("{$count} record(s) written to {$path}.");
+        $this->components->info(OutputFormatter::escape("{$count} record(s) written to {$path}."));
 
         return self::SUCCESS;
     }

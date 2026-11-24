@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Enums\CheckpointStatus;
 use Pushery\Billing\Enums\GoLiveStep;
 use Pushery\Billing\Preflight\MarketplacePreflight;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Prints the marketplace go-live checklist: every point, in order, with what it found.
@@ -29,15 +30,15 @@ final class MarketplacePreflightCommand extends Command
     {
         $enabled = (bool) $config->get('billing.marketplace.enabled', false);
 
-        $this->components->info($enabled
+        $this->components->info(OutputFormatter::escape($enabled
             ? 'The marketplace switch is ON. These points are enforced at boot.'
-            : 'The marketplace switch is off. This is what has to hold before it may be switched on.');
+            : 'The marketplace switch is off. This is what has to hold before it may be switched on.'));
 
         $report = $preflight->run();
 
         foreach (GoLiveStep::ordered() as $step) {
             $this->newLine();
-            $this->line("<options=bold>{$step->order()}. {$step->label()}</>");
+            $this->line('<options=bold>'.OutputFormatter::escape("{$step->order()}. {$step->label()}").'</>');
 
             $lines = $report->linesFor($step);
 
@@ -51,7 +52,7 @@ final class MarketplacePreflightCommand extends Command
                 $suffix = $line->blocking ? '' : ' <fg=gray>(does not block)</>';
 
                 $this->line("   {$this->badge($line->status)} {$line->key}{$suffix}");
-                $this->line("      <fg=gray>{$line->reason}</>");
+                $this->line('      <fg=gray>'.OutputFormatter::escape($line->reason).'</>');
             }
         }
 

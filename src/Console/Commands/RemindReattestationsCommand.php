@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Marketplace\ReattestationReminderSweep;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Remind the creators whose tax attestation is due for renewal, before it runs out.
@@ -25,9 +26,9 @@ final class RemindReattestationsCommand extends Command
     {
         $sent = $sweep->remind(CarbonImmutable::now());
 
-        $this->components->info($sent === 0
+        $this->components->info(OutputFormatter::escape($sent === 0
             ? 'No tax attestation needed a reminder.'
-            : "Reminded {$sent} creator(s) that their tax attestation is due.");
+            : "Reminded {$sent} creator(s) that their tax attestation is due."));
 
         return self::SUCCESS;
     }

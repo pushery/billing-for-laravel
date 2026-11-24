@@ -479,7 +479,8 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
     }
 
     /**
-     * One refund in the words every provider shares, with the key {@see self::refund()} stored in its metadata.
+     * One refund in the words every provider shares, with the key {@see self::refund()} stored in its metadata and the
+     * moment Mollie names for it.
      *
      * `queued`, `pending` and `processing` all read as pending, and so does a status Mollie adds later: a refund
      * that may still pay out is not one to make a second time.
@@ -496,6 +497,7 @@ final readonly class MolliePaymentRails implements CancelsPayments, CollectsDire
                 default => RefundStatus::Pending,
             },
             amount: MollieAmount::fromResource($refund->amount),
+            madeAt: MollieValue::moment($refund->createdAt),
         );
     }
 

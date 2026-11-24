@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Dunning\SubscriptionExpirySweep;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Expire every subscription whose cure window has run out, and send the one final message.
@@ -31,9 +32,9 @@ final class ExpireDelinquentSubscriptionsCommand extends Command
         // Under the scheduler the output is discarded and "it ran" reaches the bound ScheduleHeartbeat instead:
         // this command cancels things, so a scheduler that stopped is otherwise not noticed until a customer
         // asks why they are still being charged for what they stopped paying.
-        $this->components->info($expired === 0
+        $this->components->info(OutputFormatter::escape($expired === 0
             ? 'No subscription has run out its cure window today.'
-            : "Expired {$expired} subscription(s) whose cure window ran out.");
+            : "Expired {$expired} subscription(s) whose cure window ran out."));
 
         return self::SUCCESS;
     }

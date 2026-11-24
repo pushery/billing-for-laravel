@@ -9,6 +9,8 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Filesystem\Filesystem;
 use Pushery\Billing\Support\BillingDataExport;
+use Symfony\Component\Console\Formatter\OutputFormatter;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Everything the package holds about one owner, as JSON — the answer to a subject-access or
@@ -45,12 +47,12 @@ final class ExportOwnerCommand extends Command
 
         if (is_string($path) && $path !== '') {
             $files->put($path, $json);
-            $this->components->info("Wrote the export to {$path}.");
+            $this->components->info(OutputFormatter::escape("Wrote the export to {$path}."));
 
             return self::SUCCESS;
         }
 
-        $this->line($json);
+        $this->output->writeln($json, OutputInterface::OUTPUT_RAW);
 
         return self::SUCCESS;
     }

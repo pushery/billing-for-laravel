@@ -15,6 +15,7 @@ use Pushery\Billing\Tax\DatedTaxRateTable;
 use Pushery\Billing\Tax\TaxCalculatorFactory;
 use Pushery\Billing\Tax\TaxPoint;
 use Pushery\Billing\ValueObjects\Money;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Names every invoiced period that a change of rate leaves taxed at another rate than the one of its last day.
@@ -84,11 +85,11 @@ final class TaxRateCorrectionsCommand extends Command
         });
 
         if ($unjudged > 0) {
-            $this->components->warn("{$unjudged} invoiced period(s) end on a day the dated rate history does not cover in their country, so their rate was not checked.");
+            $this->components->warn(OutputFormatter::escape("{$unjudged} invoiced period(s) end on a day the dated rate history does not cover in their country, so their rate was not checked."));
         }
 
         if ($rows === []) {
-            $this->components->info($unjudged > 0 ? 'Every other invoiced period carries the rate of its last day.' : 'Every invoiced period carries the rate of its last day.');
+            $this->components->info(OutputFormatter::escape($unjudged > 0 ? 'Every other invoiced period carries the rate of its last day.' : 'Every invoiced period carries the rate of its last day.'));
 
             return self::SUCCESS;
         }
@@ -133,7 +134,7 @@ final class TaxRateCorrectionsCommand extends Command
         $net = (int) $invoice->subtotal_minor;
 
         return [
-            (string) ($invoice->number ?? '#'.$invoice->id),
+            OutputFormatter::escape((string) ($invoice->number ?? '#'.$invoice->id)),
             ($invoice->service_period_start?->toDateString() ?? '?').' to '.$lastDay->toDateString(),
             strtoupper($country),
             Money::of($net, $invoice->currency)->toDecimal().' '.$invoice->currency,

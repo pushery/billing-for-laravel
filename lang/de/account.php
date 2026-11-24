@@ -70,10 +70,10 @@ return [
     ],
 
     'trial' => [
-        'generic' => 'Deine kostenlose Testphase endet in :days Tag — wähle einen Tarif, um deinen Zugang zu behalten.|Deine kostenlose Testphase endet in :days Tagen — wähle einen Tarif, um deinen Zugang zu behalten.',
-        'add_pm' => 'Deine Testphase endet in :days Tag — füge eine Zahlungsmethode hinzu, damit dein Tarif weiterläuft.|Deine Testphase endet in :days Tagen — füge eine Zahlungsmethode hinzu, damit dein Tarif weiterläuft.',
-        'upgrade' => 'Deine Testphase endet in :days Tag — du kannst deinen Tarif jederzeit anpassen.|Deine Testphase endet in :days Tagen — du kannst deinen Tarif jederzeit anpassen.',
-        'usage' => 'Du hast noch :days Tag in deiner Testphase; die Nutzung unten entspricht deinem Test-Tarif.|Du hast noch :days Tage in deiner Testphase; die Nutzung unten entspricht deinem Test-Tarif.',
+        'generic' => '{1} Deine kostenlose Testphase endet in :days Tag — wähle einen Tarif, um deinen Zugang zu behalten.|[2,*] Deine kostenlose Testphase endet in :days Tagen — wähle einen Tarif, um deinen Zugang zu behalten.',
+        'add_pm' => '{1} Deine Testphase endet in :days Tag — füge eine Zahlungsmethode hinzu, damit dein Tarif weiterläuft.|[2,*] Deine Testphase endet in :days Tagen — füge eine Zahlungsmethode hinzu, damit dein Tarif weiterläuft.',
+        'upgrade' => '{1} Deine Testphase endet in :days Tag — du kannst deinen Tarif jederzeit anpassen.|[2,*] Deine Testphase endet in :days Tagen — du kannst deinen Tarif jederzeit anpassen.',
+        'usage' => '{1} Du hast noch :days Tag in deiner Testphase; die Nutzung unten entspricht deinem Test-Tarif.|[2,*] Du hast noch :days Tage in deiner Testphase; die Nutzung unten entspricht deinem Test-Tarif.',
         'cta' => [
             'subscribe' => 'Jetzt abonnieren',
             'add_payment_method' => 'Zahlungsmethode hinzufügen',

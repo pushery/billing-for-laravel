@@ -25,6 +25,7 @@ use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\ValueObjects\Money;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Reminds customers of an annual term that ends soon, and consumers of the monthly contract it went on as.
@@ -110,7 +111,7 @@ final class RemindAnnualTermsCommand extends Command
 
         $this->remindOfContinuations($now);
 
-        $this->components->info(($this->dryRun ? 'Would send ' : 'Sent ')."{$this->sent} annual-term reminder(s).");
+        $this->components->info(OutputFormatter::escape(($this->dryRun ? 'Would send ' : 'Sent ')."{$this->sent} annual-term reminder(s)."));
 
         $this->attempts->finish();
 

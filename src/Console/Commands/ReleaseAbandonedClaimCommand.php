@@ -10,6 +10,7 @@ use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\LocalBillingEngine;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Hand a cycle back to the biller after its claim was abandoned.
@@ -89,12 +90,12 @@ final class ReleaseAbandonedClaimCommand extends Command
             // `fresh()`, not `refresh()`: the latter is findOrFail underneath and throws when the row is
             // gone. On the one command whose job is to explain a refusal clearly, a stack trace is the
             // worst possible answer — and a vanished row is a refusal like any other, not a crash.
-            $this->components->error($this->whyNot($order->fresh() ?? $order));
+            $this->components->error(OutputFormatter::escape($this->whyNot($order->fresh() ?? $order)));
 
             return self::FAILURE;
         }
 
-        $this->components->info("Released the claim on order {$order->id}. Nothing was charged: the next scheduled run reprices this cycle and collects it under the same order.");
+        $this->components->info(OutputFormatter::escape("Released the claim on order {$order->id}. Nothing was charged: the next scheduled run reprices this cycle and collects it under the same order."));
 
         return self::SUCCESS;
     }

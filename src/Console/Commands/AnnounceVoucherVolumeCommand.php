@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Marketplace\VoucherVolumeSweep;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Say when voucher volume has grown into something an operator has to act on.
@@ -27,9 +28,9 @@ final class AnnounceVoucherVolumeCommand extends Command
     {
         $announced = $sweep->announce(CarbonImmutable::now());
 
-        $this->components->info($announced === 0
+        $this->components->info(OutputFormatter::escape($announced === 0
             ? 'No voucher volume has reached a level worth announcing.'
-            : "Announced {$announced} voucher-volume level(s).");
+            : "Announced {$announced} voucher-volume level(s)."));
 
         return self::SUCCESS;
     }

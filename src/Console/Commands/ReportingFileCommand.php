@@ -10,6 +10,7 @@ use Pushery\Billing\Exceptions\ReportingFilingRefused;
 use Pushery\Billing\Marketplace\ReportingFilingRegister;
 use Pushery\Billing\Models\ReportingExportRecord;
 use Pushery\Billing\Models\ReportingFiling;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Write down that a produced record actually went out — the line between "may be rebuilt" and "is fixed".
@@ -58,7 +59,7 @@ final class ReportingFileCommand extends Command
             // Refused rather than produced on the spot. Filing says "these bytes went out", and bytes this
             // command generated a second ago went nowhere — recording them as submitted would be the one
             // lie the whole register exists to make impossible.
-            $this->components->error(sprintf('No record has been produced for %d in %s yet. Run billing:reporting:run first.', $year, $currency));
+            $this->components->error(OutputFormatter::escape(sprintf('No record has been produced for %d in %s yet. Run billing:reporting:run first.', $year, $currency)));
 
             return self::FAILURE;
         }
@@ -70,18 +71,18 @@ final class ReportingFileCommand extends Command
                 ? $register->fileCorrection($export, $this->latestOrFail($register, $year, $currency), $by)
                 : $register->file($export, $by);
         } catch (ReportingFilingRefused $refusal) {
-            $this->components->error($refusal->getMessage());
+            $this->components->error(OutputFormatter::escape($refusal->getMessage()));
 
             return self::FAILURE;
         }
 
-        $this->components->info(sprintf(
+        $this->components->info(OutputFormatter::escape(sprintf(
             '%s for %d in %s recorded, submitted by %s.',
             $filing->correction_sequence === 0 ? 'Filing' : 'Correction '.$filing->correction_sequence,
             $year,
             $currency,
             $by,
-        ));
+        )));
 
         return self::SUCCESS;
     }

@@ -24,6 +24,7 @@ use Pushery\Billing\Support\RetentionMatrix;
 use Pushery\Billing\Support\StoredDocumentFiles;
 use Pushery\Billing\Support\SubjectScopedRecords;
 use Pushery\Billing\ValueObjects\RetentionRule;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * The retention clock. Personal data the package no longer needs is not data it may keep (GDPR Art. 5(1)(e)
@@ -109,7 +110,7 @@ final class PruneBillingCommand extends Command
         // Payments-only mode keeps no financial record, no audit trail and no filing, so the payloads above are all
         // it ages out, and the tables the steps below read do not exist there.
         if ($manager->paymentsOnly()) {
-            $this->components->info(($dryRun ? 'Would prune' : 'Pruned')." {$payloadCount} stored webhook payload(s); payments-only mode keeps no other records.");
+            $this->components->info(OutputFormatter::escape(($dryRun ? 'Would prune' : 'Pruned')." {$payloadCount} stored webhook payload(s); payments-only mode keeps no other records."));
 
             if ($dryRun) {
                 $this->reportRules($matrix, PaymentsModeSchema::TABLES);
@@ -257,20 +258,20 @@ final class PruneBillingCommand extends Command
 
         $verb = $dryRun ? 'Would prune' : 'Pruned';
 
-        $this->components->info("{$verb} {$payloadCount} stored webhook payload(s), {$financialCount} retained financial record(s), {$auditCount} audit event(s), {$filingCount} reporting filing(s) and {$timePrunedCount} expired export document(s).");
+        $this->components->info(OutputFormatter::escape("{$verb} {$payloadCount} stored webhook payload(s), {$financialCount} retained financial record(s), {$auditCount} audit event(s), {$filingCount} reporting filing(s) and {$timePrunedCount} expired export document(s)."));
 
         if ($dryRun && $files->pending() > 0) {
-            $this->components->info("Would remove {$files->pending()} stored document file(s) with them.");
+            $this->components->info(OutputFormatter::escape("Would remove {$files->pending()} stored document file(s) with them."));
         }
 
         if (! $dryRun && $files->removed() + $files->missing() + $files->failed() > 0) {
-            $this->components->info("Removed {$files->removed()} stored document file(s) with them; {$files->missing()} had already gone.");
+            $this->components->info(OutputFormatter::escape("Removed {$files->removed()} stored document file(s) with them; {$files->missing()} had already gone."));
         }
 
         // A file its disk did not remove is a retention duty left undone, and its row, the one thing that named
         // it, is gone. Each one is logged with its disk and path, and the run fails so the scheduler says so.
         if ($files->failed() > 0) {
-            $this->components->error("{$files->failed()} stored document file(s) could not be removed; the log names each disk and path.");
+            $this->components->error(OutputFormatter::escape("{$files->failed()} stored document file(s) could not be removed; the log names each disk and path."));
         }
 
         // A dry run doubles as the evidence an audit asks for, so it states the rules rather than only the
@@ -287,7 +288,7 @@ final class PruneBillingCommand extends Command
 
         if ($survivors !== []) {
             foreach ($survivors as $object => $count) {
-                $this->components->error("{$count} row(s) still hold [{$object}], which must be discarded where it is processed.");
+                $this->components->error(OutputFormatter::escape("{$count} row(s) still hold [{$object}], which must be discarded where it is processed."));
             }
 
             return self::FAILURE;
@@ -331,7 +332,7 @@ final class PruneBillingCommand extends Command
     {
         $this->holdUnanswered = true;
 
-        $this->components->error($e->getMessage());
+        $this->components->error(OutputFormatter::escape($e->getMessage()));
     }
 
     /**

@@ -10,6 +10,7 @@ use Pushery\Billing\Enums\UsageEventState;
 use Pushery\Billing\Events\UsageBacklogStalled;
 use Pushery\Billing\Models\UsageEvent;
 use Pushery\Billing\Support\UsageReconciler;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Answers "is any usage going to be mis-billed right now?" — the point-in-time check a scheduler runs and
@@ -56,14 +57,14 @@ final class ReconcileUsageCommand extends Command
         $drifts = $reconciler->reconcile();
 
         foreach ($drifts as $drift) {
-            $this->components->warn(sprintf(
+            $this->components->warn(OutputFormatter::escape(sprintf(
                 "Usage drift on meter '%s' (%s): we reported %d, the provider recorded %d (delta %+d).",
                 $drift->meterKey,
                 $drift->period,
                 $drift->reported,
                 $drift->recorded,
                 $drift->delta(),
-            ));
+            )));
         }
 
         return $drifts !== [];
@@ -105,7 +106,7 @@ final class ReconcileUsageCommand extends Command
 
         $quantity = (int) (clone $failed)->sum('quantity');
 
-        $this->components->warn("{$count} usage rollup(s) totalling {$quantity} unit(s) failed to report — usage that will not be billed unless re-driven.");
+        $this->components->warn(OutputFormatter::escape("{$count} usage rollup(s) totalling {$quantity} unit(s) failed to report — usage that will not be billed unless re-driven."));
 
         if ($this->option('redrive') !== true) {
             $this->line('Fix the cause first (see billing:meters:check), then re-run with --redrive to retry them.');
@@ -120,7 +121,7 @@ final class ReconcileUsageCommand extends Command
             'last_error' => null,
         ]);
 
-        $this->components->info("Re-drove {$reset} failed rollup(s) back to pending; the next flush will retry them.");
+        $this->components->info(OutputFormatter::escape("Re-drove {$reset} failed rollup(s) back to pending; the next flush will retry them."));
 
         return false;
     }

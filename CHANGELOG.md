@@ -4,6 +4,27 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.66.0] - 2026-11-23
+
+### ✨ Added
+
+- **A refund read back through `refundsOf()` names the moment the provider made it, in UTC.** `RefundState::$madeAt` carries Mollie's `createdAt` and Stripe's `created`, for a refund made at the provider's dashboard as well, so an application can book a refund on the day it was made rather than the day it noticed it, and the two can lie in different months. It is null where the provider names none, and a `RefundState` that other rails build without it keeps working.
+
+### 🔧 Changed
+
+- **`symfony/console` is a declared dependency.** The commands escape what they print with its output formatter, and an export printed to the console goes through its output unformatted. Every Laravel version the package supports installs the component already, so no installation resolves differently.
+
+### 🐛 Fixed
+
+- **The commands print values as they stand.** Symfony's console formatter read a part of a value that looks like a style tag as styling and dropped it, in an exception message, an answer of a payment provider or a reference read from the database. The colored markers of the commands keep their colors.
+- **An export printed to the console comes out as the file would.** Without `--path`, the DATEV, tax return, import scheme return, recapitulative statement and supply record exports, the owner export and the rate reports in JSON hand their content to the console unformatted, so a value in it that looks like a style tag stays in it.
+
+- **The days a trial has left read in the plural under a regional locale.** Each form of the four trial notices names its count, `{1} … day …|[2,*] … days …`, in all seven catalogs. Laravel picks a form without a count by the name of the locale, from a table that knows `de_AT` but no locale written with a hyphen, so an application on `de-AT` showed the singular for five days left.
+
+### 📚 Documentation
+
+- **The documentation says that the `octane` store of Laravel Octane is out of the pruner's reach.** The store keeps an expired entry in a table of a fixed number of rows, `octane.cache.rows`, until its key is written again or the server restarts, and the scheduler, where the pruner runs, sees an empty store. Once the table is full, writing a new key fails, so the documentation advises against making `octane` the default cache store of an application that runs this package.
+
 ## [0.65.0] - 2026-11-22
 
 ### ✨ Added
@@ -8683,7 +8704,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.65.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.66.0...HEAD
+[0.66.0]: https://github.com/pushery/billing-for-laravel/compare/v0.65.0...v0.66.0
 [0.65.0]: https://github.com/pushery/billing-for-laravel/compare/v0.64.0...v0.65.0
 [0.64.0]: https://github.com/pushery/billing-for-laravel/compare/v0.63.0...v0.64.0
 [0.63.0]: https://github.com/pushery/billing-for-laravel/compare/v0.62.0...v0.63.0

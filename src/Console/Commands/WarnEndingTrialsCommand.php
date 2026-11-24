@@ -20,6 +20,7 @@ use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\Support\TableLookup;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
 /**
@@ -71,7 +72,7 @@ final class WarnEndingTrialsCommand extends Command
         $warned = $this->warnGenericTrials($config, $notifier, $log, $attempts, $now, $days, $dryRun);
         $warned += $this->warnSubscriptionTrials($notifier, $log, $attempts, $now, $days, $dryRun);
 
-        $this->components->info(($dryRun ? 'Would warn ' : 'Warned ')."{$warned} owner(s) about an ending trial.");
+        $this->components->info(OutputFormatter::escape(($dryRun ? 'Would warn ' : 'Warned ')."{$warned} owner(s) about an ending trial."));
 
         $attempts->finish();
 
@@ -100,7 +101,7 @@ final class WarnEndingTrialsCommand extends Command
             TableLookup::qualified($customer->getTable(), $customer->getConnectionName()),
             'trial_ends_at',
         )) {
-            $this->components->warn("The table {$customer->getTable()} has no trial_ends_at column; no generic trial was scanned.");
+            $this->components->warn(OutputFormatter::escape("The table {$customer->getTable()} has no trial_ends_at column; no generic trial was scanned."));
 
             return 0;
         }

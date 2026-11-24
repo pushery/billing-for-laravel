@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\MerchantRelationshipEnded;
 use Pushery\Billing\Support\BillingManager;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Start a merchant's onboarding: create their connected account and print the link they open.
@@ -53,7 +54,7 @@ final class MerchantOnboardCommand extends Command
             // The message this exception already carries says which of the two it is — the marketplace is
             // switched off, or the configured driver cannot route money. Re-wording it here would be a
             // second sentence for the same state, drifting from the first the moment either changes.
-            $this->components->error($exception->getMessage());
+            $this->components->error(OutputFormatter::escape($exception->getMessage()));
 
             return self::FAILURE;
         }
@@ -67,7 +68,7 @@ final class MerchantOnboardCommand extends Command
             // Said out loud and failed. A link printed for a merchant whose relationship has ended would
             // point at an account the provider no longer releases funds through, and an exit 0 would hand
             // the operator a success they could not act on.
-            $this->components->error($exception->getMessage());
+            $this->components->error(OutputFormatter::escape($exception->getMessage()));
 
             return self::FAILURE;
         }
@@ -79,14 +80,14 @@ final class MerchantOnboardCommand extends Command
         $url = $this->text($intent->payload, 'url', '(the provider returned no link)');
         $expires = $this->text($intent->payload, 'expires_at', 'an unstated time');
 
-        $this->components->info('Connected account: '.$account);
+        $this->components->info(OutputFormatter::escape('Connected account: '.$account));
         $this->newLine();
-        $this->line($url);
+        $this->line(OutputFormatter::escape($url));
         $this->newLine();
 
         // Printed because it is the difference between "the link did not work" and "the link expired",
         // and only one of those is a reason to run this command again.
-        $this->components->warn('Single-use, and it expires at '.$expires.'. Re-run this command for a fresh one.');
+        $this->components->warn(OutputFormatter::escape('Single-use, and it expires at '.$expires.'. Re-run this command for a fresh one.'));
 
         // Said out loud, every time, because it is the question this command exists to answer. `charges_enabled`
         // is not a switch anywhere: the provider raises it itself once its own review passes, and no API
@@ -115,7 +116,7 @@ final class MerchantOnboardCommand extends Command
         $class = Relation::getMorphedModel($type) ?? $type;
 
         if (! is_a($class, Model::class, true)) {
-            $this->components->error($type.' is neither a morph alias nor an Eloquent model class.');
+            $this->components->error(OutputFormatter::escape($type.' is neither a morph alias nor an Eloquent model class.'));
 
             return null;
         }
@@ -124,7 +125,7 @@ final class MerchantOnboardCommand extends Command
         $merchant = $model->newQuery()->find($id);
 
         if (! $merchant instanceof Model) {
-            $this->components->error('No '.$class.' with key '.$id.'.');
+            $this->components->error(OutputFormatter::escape('No '.$class.' with key '.$id.'.'));
 
             return null;
         }

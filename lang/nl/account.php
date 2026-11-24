@@ -70,10 +70,10 @@ return [
     ],
 
     'trial' => [
-        'generic' => 'Je gratis proefperiode eindigt over :days dag — kies een plan om je toegang te behouden.|Je gratis proefperiode eindigt over :days dagen — kies een plan om je toegang te behouden.',
-        'add_pm' => 'Je proefperiode eindigt over :days dag — voeg een betaalmethode toe zodat je plan doorloopt.|Je proefperiode eindigt over :days dagen — voeg een betaalmethode toe zodat je plan doorloopt.',
-        'upgrade' => 'Je proefperiode eindigt over :days dag — je kunt je plan altijd aanpassen.|Je proefperiode eindigt over :days dagen — je kunt je plan altijd aanpassen.',
-        'usage' => 'Je hebt nog :days dag proefperiode; het verbruik hieronder is dat van je proefplan.|Je hebt nog :days dagen proefperiode; het verbruik hieronder is dat van je proefplan.',
+        'generic' => '{1} Je gratis proefperiode eindigt over :days dag — kies een plan om je toegang te behouden.|[2,*] Je gratis proefperiode eindigt over :days dagen — kies een plan om je toegang te behouden.',
+        'add_pm' => '{1} Je proefperiode eindigt over :days dag — voeg een betaalmethode toe zodat je plan doorloopt.|[2,*] Je proefperiode eindigt over :days dagen — voeg een betaalmethode toe zodat je plan doorloopt.',
+        'upgrade' => '{1} Je proefperiode eindigt over :days dag — je kunt je plan altijd aanpassen.|[2,*] Je proefperiode eindigt over :days dagen — je kunt je plan altijd aanpassen.',
+        'usage' => '{1} Je hebt nog :days dag proefperiode; het verbruik hieronder is dat van je proefplan.|[2,*] Je hebt nog :days dagen proefperiode; het verbruik hieronder is dat van je proefplan.',
         'cta' => [
             'subscribe' => 'Nu abonneren',
             'add_payment_method' => 'Betaalmethode toevoegen',

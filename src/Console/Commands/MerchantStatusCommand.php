@@ -10,6 +10,7 @@ use Pushery\Billing\Contracts\ReportsOnboardingRequirements;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Models\MerchantAccount;
 use Pushery\Billing\Support\BillingManager;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
 /**
@@ -48,7 +49,7 @@ final class MerchantStatusCommand extends Command
         try {
             $manager->marketplaceRails();
         } catch (MarketplaceUnsupported $exception) {
-            $this->components->error($exception->getMessage());
+            $this->components->error(OutputFormatter::escape($exception->getMessage()));
 
             return self::FAILURE;
         }
@@ -75,8 +76,8 @@ final class MerchantStatusCommand extends Command
             }
 
             $rows[] = [
-                $account->merchant_type.' #'.$account->merchant_id,
-                $account->account_reference,
+                OutputFormatter::escape($account->merchant_type.' #'.$account->merchant_id),
+                OutputFormatter::escape($account->account_reference),
                 $this->mark($reference->chargesEnabled),
                 $this->mark($reference->payoutsEnabled),
                 $this->mark($reference->detailsSubmitted),
@@ -106,7 +107,7 @@ final class MerchantStatusCommand extends Command
         // form is the normal state of an onboarding funnel, not a fault in this installation. A non-zero
         // exit here would make the command unusable in the deploy check where somebody would first reach
         // for it, and would train people to ignore it.
-        $this->components->warn($blocked.' of '.count($rows).' account(s) cannot receive money yet. The provider raises those flags itself once its review passes; nothing here sets them.');
+        $this->components->warn(OutputFormatter::escape($blocked.' of '.count($rows).' account(s) cannot receive money yet. The provider raises those flags itself once its review passes; nothing here sets them.'));
 
         return self::SUCCESS;
     }
@@ -170,7 +171,7 @@ final class MerchantStatusCommand extends Command
         try {
             $outstanding = $onboarding->outstandingFor($merchant);
         } catch (Throwable $exception) {
-            return '<fg=yellow>unreadable: '.$exception->getMessage().'</>';
+            return '<fg=yellow>unreadable: '.OutputFormatter::escape($exception->getMessage()).'</>';
         }
 
         if ($outstanding === null) {
@@ -180,17 +181,17 @@ final class MerchantStatusCommand extends Command
         if ($outstanding['disabled_reason'] !== null) {
             // Printed first when present, because it is the one answer that no amount of paperwork changes.
             // A list of documents beside it would read as "do these and you are done", which it is not.
-            return '<fg=red>'.$outstanding['disabled_reason'].'</>';
+            return '<fg=red>'.OutputFormatter::escape($outstanding['disabled_reason']).'</>';
         }
 
         if ($outstanding['currently_due'] !== []) {
-            return implode(', ', $outstanding['currently_due']);
+            return OutputFormatter::escape(implode(', ', $outstanding['currently_due']));
         }
 
         if ($outstanding['eventually_due'] !== []) {
             // Not blocking today, and saying so matters: this is what turns into a hold after a threshold
             // is crossed, and it is the only warning anybody gets before that happens.
-            return '<fg=yellow>later: '.implode(', ', $outstanding['eventually_due']).'</>';
+            return '<fg=yellow>later: '.OutputFormatter::escape(implode(', ', $outstanding['eventually_due'])).'</>';
         }
 
         return '<fg=green>nothing</>';

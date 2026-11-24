@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Exceptions\ReportingPeriodNotClosed;
 use Pushery\Billing\Tax\FreezeReportingRates;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Give a closed period's documents the rate their return will be filed on.
@@ -50,7 +51,7 @@ final class FreezeReportingRatesCommand extends Command
         }
 
         if ($quarter < 1 || $quarter > 4) {
-            $this->components->error("There is no quarter {$quarter}. Pass --quarter=1 through 4.");
+            $this->components->error(OutputFormatter::escape("There is no quarter {$quarter}. Pass --quarter=1 through 4."));
 
             return self::FAILURE;
         }
@@ -63,18 +64,18 @@ final class FreezeReportingRatesCommand extends Command
         try {
             $frozen = $rates->forPeriod($start, $end, $now);
         } catch (ReportingPeriodNotClosed $notClosed) {
-            $this->components->error($notClosed->getMessage());
+            $this->components->error(OutputFormatter::escape($notClosed->getMessage()));
 
             return self::FAILURE;
         }
 
-        $this->components->info(sprintf(
+        $this->components->info(OutputFormatter::escape(sprintf(
             'Froze the reporting rate on %d document(s) for %d-Q%d, converted at %s.',
             $frozen,
             $year,
             $quarter,
             $end->toDateString(),
-        ));
+        )));
 
         return self::SUCCESS;
     }

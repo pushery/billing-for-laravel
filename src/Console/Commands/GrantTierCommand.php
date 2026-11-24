@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Support\BillingAdmin;
 use Pushery\Billing\Support\UntouchableTiers;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Comp an owner onto a tier out of band — the terminal form of {@see BillingAdmin::comp()}, for the
@@ -46,7 +47,7 @@ final class GrantTierCommand extends Command
         $tiers = $config->get('billing.tiers');
 
         if (! is_array($tiers) || ! array_key_exists($tier, $tiers)) {
-            $this->components->error("No tier '{$tier}' is configured in billing.tiers.");
+            $this->components->error(OutputFormatter::escape("No tier '{$tier}' is configured in billing.tiers."));
 
             return self::FAILURE;
         }
@@ -55,7 +56,7 @@ final class GrantTierCommand extends Command
         $owner = $model::query()->find($ownerKey);
 
         if (! $owner instanceof Model) {
-            $this->components->error("No owner with key '{$ownerKey}'.");
+            $this->components->error(OutputFormatter::escape("No owner with key '{$ownerKey}'."));
 
             return self::FAILURE;
         }
@@ -65,10 +66,10 @@ final class GrantTierCommand extends Command
 
         $admin->comp($owner, $tier, $reason);
 
-        $this->components->info("Granted tier '{$tier}' to owner '{$ownerKey}'.");
+        $this->components->info(OutputFormatter::escape("Granted tier '{$tier}' to owner '{$ownerKey}'."));
 
         if (! UntouchableTiers::has($config, $tier)) {
-            $this->components->warn("'{$tier}' is not in billing.untouchable_tiers — the next provider webhook may overwrite this grant.");
+            $this->components->warn(OutputFormatter::escape("'{$tier}' is not in billing.untouchable_tiers — the next provider webhook may overwrite this grant."));
         }
 
         return self::SUCCESS;

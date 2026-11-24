@@ -70,10 +70,10 @@ return [
     ],
 
     'trial' => [
-        'generic' => 'Your free trial ends in :days day — subscribe to keep your access.|Your free trial ends in :days days — subscribe to keep your access.',
-        'add_pm' => 'Your trial ends in :days day — add a payment method so your plan continues.|Your trial ends in :days days — add a payment method so your plan continues.',
-        'upgrade' => 'Your trial ends in :days day — review your plan whenever you like.|Your trial ends in :days days — review your plan whenever you like.',
-        'usage' => 'You have :days day left on your trial; the usage below is your trial plan.|You have :days days left on your trial; the usage below is your trial plan.',
+        'generic' => '{1} Your free trial ends in :days day — subscribe to keep your access.|[2,*] Your free trial ends in :days days — subscribe to keep your access.',
+        'add_pm' => '{1} Your trial ends in :days day — add a payment method so your plan continues.|[2,*] Your trial ends in :days days — add a payment method so your plan continues.',
+        'upgrade' => '{1} Your trial ends in :days day — review your plan whenever you like.|[2,*] Your trial ends in :days days — review your plan whenever you like.',
+        'usage' => '{1} You have :days day left on your trial; the usage below is your trial plan.|[2,*] You have :days days left on your trial; the usage below is your trial plan.',
         'cta' => [
             'subscribe' => 'Subscribe now',
             'add_payment_method' => 'Add payment method',

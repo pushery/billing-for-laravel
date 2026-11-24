@@ -10,6 +10,8 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Invoicing\DatevPeriodBatch;
 use Pushery\Billing\ValueObjects\AccountReconciliation;
 use Pushery\Billing\ValueObjects\Money;
+use Symfony\Component\Console\Formatter\OutputFormatter;
+use Symfony\Component\Console\Output\OutputInterface;
 use Throwable;
 
 /**
@@ -68,14 +70,14 @@ final class DatevExportCommand extends Command
 
         if (is_string($path) && $path !== '') {
             $files->put($path, $content);
-            $this->components->info("Wrote {$counted} to {$path}.");
+            $this->components->info(OutputFormatter::escape("Wrote {$counted} to {$path}."));
             $this->reportUnbookedCredit($batch['unbookedCreditMinor'], $batch['currency']);
 
             return $this->reportTie($batch['reconciliation']);
         }
 
-        $this->output->write($content);
-        $this->components->info("Exported {$counted}.");
+        $this->output->write($content, false, OutputInterface::OUTPUT_RAW);
+        $this->components->info(OutputFormatter::escape("Exported {$counted}."));
         $this->reportUnbookedCredit($batch['unbookedCreditMinor'], $batch['currency']);
 
         return $this->reportTie($batch['reconciliation']);
@@ -103,7 +105,7 @@ final class DatevExportCommand extends Command
     {
         if ($reconciliation->isBalanced()) {
             if (! $reconciliation->subLedgerTotal->isZero()) {
-                $this->components->info('Merchant payables tie out at '.$this->amount($reconciliation->subLedgerTotal).'.');
+                $this->components->info(OutputFormatter::escape('Merchant payables tie out at '.$this->amount($reconciliation->subLedgerTotal).'.'));
             }
 
             return self::SUCCESS;
@@ -118,9 +120,9 @@ final class DatevExportCommand extends Command
         // Written with line(), not through a console component: a component wraps a long message at the
         // terminal width, and a figure an operator is meant to read — or a test is meant to assert — must not
         // depend on where that wrap happens to fall.
-        $this->line('  Sub-ledger holds '.$this->amount($reconciliation->subLedgerTotal).' in merchant payables.');
-        $this->line('  Exported batch books '.$this->amount($reconciliation->collectiveAccountBalance).' to the payables accounts.');
-        $this->line('  Difference: '.$this->amount($reconciliation->difference()).'.');
+        $this->line(OutputFormatter::escape('  Sub-ledger holds '.$this->amount($reconciliation->subLedgerTotal).' in merchant payables.'));
+        $this->line(OutputFormatter::escape('  Exported batch books '.$this->amount($reconciliation->collectiveAccountBalance).' to the payables accounts.'));
+        $this->line(OutputFormatter::escape('  Difference: '.$this->amount($reconciliation->difference()).'.'));
         $this->line('  The file was written so the difference can be traced. Do not file it until it reconciles.');
 
         return self::FAILURE;
@@ -189,7 +191,7 @@ final class DatevExportCommand extends Command
         // wraps at the terminal width, so a phrase near column 80 is split across lines — and anything
         // reading the output for it, a test or a person grepping a CI log, then does not find it. Measured:
         // the single-sentence version broke between "no account" and "pair".
-        $this->components->warn("Unbooked credit movement: {$amount}.");
+        $this->components->warn(OutputFormatter::escape("Unbooked credit movement: {$amount}."));
         $this->components->warn('It has no account pair. The file is complete about everything else.');
     }
 }

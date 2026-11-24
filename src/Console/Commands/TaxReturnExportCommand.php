@@ -20,6 +20,8 @@ use Pushery\Billing\Tax\PeriodicTaxReturn;
 use Pushery\Billing\Tax\ReportingConversion;
 use Pushery\Billing\Tax\TaxReturnExportArchive;
 use Pushery\Billing\ValueObjects\ReportingPeriod;
+use Symfony\Component\Console\Formatter\OutputFormatter;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Writes one period's return lines to a file.
@@ -83,7 +85,7 @@ final class TaxReturnExportCommand extends Command
         } catch (CorrectionOutsideWindow|ReportingRateMissing $e) {
             // Refused, not dropped: a correction that vanishes looks exactly like one that was never owed, and a
             // sale left out for want of a rate looks exactly like one that was never made.
-            $this->components->error($e->getMessage());
+            $this->components->error(OutputFormatter::escape($e->getMessage()));
 
             return self::FAILURE;
         }
@@ -93,7 +95,7 @@ final class TaxReturnExportCommand extends Command
         $path = $this->option('path');
 
         if (! is_string($path) || $path === '') {
-            $this->line($contents);
+            $this->output->writeln($contents, OutputInterface::OUTPUT_RAW);
 
             return self::SUCCESS;
         }
@@ -101,7 +103,7 @@ final class TaxReturnExportCommand extends Command
         $files->ensureDirectoryExists(dirname($path));
         $files->put($path, $contents);
 
-        $this->components->info(count($lines)." line(s) written to {$path}.");
+        $this->components->info(OutputFormatter::escape(count($lines)." line(s) written to {$path}."));
 
         return self::SUCCESS;
     }
