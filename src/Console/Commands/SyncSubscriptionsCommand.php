@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Support\SubscriptionReconciler;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
 /**
@@ -63,12 +64,12 @@ final class SyncSubscriptionsCommand extends Command
                         // One owner's provider hiccup must not abort the whole sweep.
                         Container::getInstance()->make(ExceptionHandler::class)->report($e);
                         $key = $owner->getKey();
-                        $this->components->warn('Could not sync owner '.(is_scalar($key) ? (string) $key : '?').": {$e->getMessage()}");
+                        $this->components->warn(OutputFormatter::escape('Could not sync owner '.(is_scalar($key) ? (string) $key : '?').": {$e->getMessage()}"));
                     }
                 }
             });
 
-        $this->components->info(($dryRun ? 'Would sync ' : 'Synced ')."{$synced} owner(s) from the provider.");
+        $this->components->info(OutputFormatter::escape(($dryRun ? 'Would sync ' : 'Synced ')."{$synced} owner(s) from the provider."));
 
         return self::SUCCESS;
     }

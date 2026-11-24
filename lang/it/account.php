@@ -70,10 +70,10 @@ return [
     ],
 
     'trial' => [
-        'generic' => 'La tua prova gratuita termina tra :days giorno: scegli un piano per mantenere il tuo accesso.|La tua prova gratuita termina tra :days giorni: scegli un piano per mantenere il tuo accesso.',
-        'add_pm' => 'La tua prova termina tra :days giorno: aggiungi un metodo di pagamento affinché il tuo piano continui.|La tua prova termina tra :days giorni: aggiungi un metodo di pagamento affinché il tuo piano continui.',
-        'upgrade' => 'La tua prova termina tra :days giorno: puoi rivedere il tuo piano quando vuoi.|La tua prova termina tra :days giorni: puoi rivedere il tuo piano quando vuoi.',
-        'usage' => 'Ti resta :days giorno di prova; l’utilizzo qui sotto è quello del tuo piano di prova.|Ti restano :days giorni di prova; l’utilizzo qui sotto è quello del tuo piano di prova.',
+        'generic' => '{1} La tua prova gratuita termina tra :days giorno: scegli un piano per mantenere il tuo accesso.|[2,*] La tua prova gratuita termina tra :days giorni: scegli un piano per mantenere il tuo accesso.',
+        'add_pm' => '{1} La tua prova termina tra :days giorno: aggiungi un metodo di pagamento affinché il tuo piano continui.|[2,*] La tua prova termina tra :days giorni: aggiungi un metodo di pagamento affinché il tuo piano continui.',
+        'upgrade' => '{1} La tua prova termina tra :days giorno: puoi rivedere il tuo piano quando vuoi.|[2,*] La tua prova termina tra :days giorni: puoi rivedere il tuo piano quando vuoi.',
+        'usage' => '{1} Ti resta :days giorno di prova; l’utilizzo qui sotto è quello del tuo piano di prova.|[2,*] Ti restano :days giorni di prova; l’utilizzo qui sotto è quello del tuo piano di prova.',
         'cta' => [
             'subscribe' => 'Abbonati ora',
             'add_payment_method' => 'Aggiungi un metodo di pagamento',

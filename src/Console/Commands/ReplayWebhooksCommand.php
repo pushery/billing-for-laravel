@@ -19,6 +19,7 @@ use Pushery\Billing\ValueObjects\PaymentAccount;
 use Pushery\Billing\Webhooks\RepeatableEffect;
 use Pushery\Billing\Webhooks\StoredDeliveryRequest;
 use Pushery\Billing\Webhooks\WebhookEffectRegistry;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Re-drives stored webhook deliveries through the effect bus.
@@ -62,7 +63,7 @@ final class ReplayWebhooksCommand extends Command
         // cannot be honored changes nothing at all.
         foreach ($rerun as $effect) {
             if (! is_a($effect, RepeatableEffect::class, true)) {
-                $this->error("Refusing to run {$effect} again: only an effect that implements ".RepeatableEffect::class.' can run over a delivery it already handled without doing its work twice.');
+                $this->error(OutputFormatter::escape("Refusing to run {$effect} again: only an effect that implements ".RepeatableEffect::class.' can run over a delivery it already handled without doing its work twice.'));
 
                 return self::INVALID;
             }
@@ -110,13 +111,13 @@ final class ReplayWebhooksCommand extends Command
 
             $queued += $effects;
 
-            $this->line(sprintf(
+            $this->line(OutputFormatter::escape(sprintf(
                 '%s %s (%s) → %d effect(s)',
                 $dryRun ? 'would replay' : 'replayed',
                 $delivery->event_id,
                 $delivery->type,
                 $effects,
-            ));
+            )));
 
             // A delivery that produced nothing is reported, because "replayed … → 0 effect(s)" reads as
             // success and is exactly how a merchant delivery would disappear from a bulk replay. Not a
@@ -125,26 +126,26 @@ final class ReplayWebhooksCommand extends Command
             if ($effects === 0) {
                 $silent++;
 
-                $this->components->warn(sprintf(
+                $this->components->warn(OutputFormatter::escape(sprintf(
                     '%s (%s) from %s mapped to nothing — no effect was queued for it.',
                     $delivery->event_id,
                     $delivery->type,
                     $delivery->account_reference === '' ? 'the platform account' : $delivery->account_reference,
-                ));
+                )));
             }
         }
 
-        $this->info(sprintf(
+        $this->info(OutputFormatter::escape(sprintf(
             '%s %d effect(s) across %d deliver%s, %d mapped to nothing.',
             $dryRun ? 'Would queue' : 'Queued',
             $queued,
             count($deliveries),
             count($deliveries) === 1 ? 'y' : 'ies',
             $silent,
-        ));
+        )));
 
         if ($rerun !== [] && ! $dryRun) {
-            $this->info("Released {$released} handled run(s) of the named effect(s) to run again.");
+            $this->info(OutputFormatter::escape("Released {$released} handled run(s) of the named effect(s) to run again."));
         }
 
         return self::SUCCESS;
@@ -222,12 +223,12 @@ final class ReplayWebhooksCommand extends Command
         }
 
         if (! $this->laravel->bound(MarketplaceWebhookEventMapper::class)) {
-            $this->components->warn(sprintf(
+            $this->components->warn(OutputFormatter::escape(sprintf(
                 'No merchant mapper is bound, so %s from %s is read by the platform mapper, which does not '
                 .'know merchant events.',
                 $delivery->event_id,
                 $delivery->account_reference,
-            ));
+            )));
 
             return $platform;
         }

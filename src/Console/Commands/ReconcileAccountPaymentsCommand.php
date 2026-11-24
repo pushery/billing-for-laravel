@@ -14,6 +14,7 @@ use Pushery\Billing\Drivers\Mollie\MollieMoneyBackOutcomes;
 use Pushery\Billing\Events\RefundFailed;
 use Pushery\Billing\Support\AccountPaymentReconciler;
 use Pushery\Billing\Support\SweepAttempts;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Picks up the payments of the Mollie payment accounts that changed where Mollie calls no webhook.
@@ -83,15 +84,15 @@ final class ReconcileAccountPaymentsCommand extends Command
                 foreach (array_keys($payments) as $payment) {
                     foreach ($reconciler->reconcile($account, (string) $payment) as $change) {
                         $recorded++;
-                        $this->components->twoColumnDetail($account->key.': '.$change->paymentReference, $change->status->value);
+                        $this->components->twoColumnDetail(OutputFormatter::escape($account->key.': '.$change->paymentReference), OutputFormatter::escape($change->status->value));
                     }
                 }
             });
         }
 
-        $this->components->info($recorded === 0
+        $this->components->info(OutputFormatter::escape($recorded === 0
             ? "Nothing new across {$read} Mollie account(s), {$refundDays} days of refunds and {$chargebackDays} days of chargebacks."
-            : "{$recorded} change(s) recorded and dispatched across {$read} Mollie account(s).");
+            : "{$recorded} change(s) recorded and dispatched across {$read} Mollie account(s)."));
 
         $attempts->finish();
 

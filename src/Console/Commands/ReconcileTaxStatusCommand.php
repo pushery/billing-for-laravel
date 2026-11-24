@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Marketplace\SmallBusinessFlipSweep;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Flip the creators who have outgrown their size relief.
@@ -49,21 +50,21 @@ final class ReconcileTaxStatusCommand extends Command
     {
         $report = $sweep->reconcile(CarbonImmutable::now());
 
-        $this->components->info($report->examined === 0
+        $this->components->info(OutputFormatter::escape($report->examined === 0
             ? 'No creator currently rests on a size relief.'
-            : "Reconciled {$report->examined} creator(s) against their turnover here.");
+            : "Reconciled {$report->examined} creator(s) against their turnover here."));
 
         if (! $report->complete()) {
             $missing = count($report->withoutFoundingYear);
 
             // Warned rather than failed. A non-zero exit would make a scheduler treat this as a broken job
             // and, in most setups, alert on it nightly forever — which is how a real warning gets muted.
-            $this->components->warn(
+            $this->components->warn(OutputFormatter::escape(
                 "{$missing} creator(s) have no founding year recorded, so the ordinary limit was applied to "
                 .'them rather than the lower founding-year one. A creator in their first year may therefore '
                 .'be over a limit this run did not test them against. Collect the year with their next '
                 .'declaration: '.implode(', ', $report->withoutFoundingYear)
-            );
+            ));
         }
 
         // Reported after the missing-year warning and separately from it, because they are different
@@ -72,11 +73,11 @@ final class ReconcileTaxStatusCommand extends Command
         // creator who becomes standard rated has to register, and registration takes weeks. The first
         // day they owe tax is otherwise the first day they cannot charge it correctly.
         foreach ($report->approaching as $creator => $level) {
-            $this->components->info(sprintf(
+            $this->components->info(OutputFormatter::escape(sprintf(
                 '%s has reached %d%% of their small-business limit and is still relieved by size.',
                 $creator,
                 (int) round($level * 100),
-            ));
+            )));
         }
 
         return self::SUCCESS;

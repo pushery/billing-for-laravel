@@ -19,6 +19,7 @@ use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\ValueObjects\DunningLevel;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
 /**
@@ -79,15 +80,15 @@ final class AdvanceDunningCommand extends Command
                     } catch (Throwable $e) {
                         $failed++;
                         Container::getInstance()->make(ExceptionHandler::class)->report($e);
-                        $this->components->warn("Could not advance subscription {$subscription->id}: {$e->getMessage()}");
+                        $this->components->warn(OutputFormatter::escape("Could not advance subscription {$subscription->id}: {$e->getMessage()}"));
                     }
                 }
             });
 
-        $this->components->info(($dryRun ? 'Would advance ' : 'Advanced ')."{$advanced} delinquent owner(s) up the dunning ladder.");
+        $this->components->info(OutputFormatter::escape(($dryRun ? 'Would advance ' : 'Advanced ')."{$advanced} delinquent owner(s) up the dunning ladder."));
 
         if ($failed > 0) {
-            $this->components->error("{$failed} subscription(s) could not be advanced; the next run tries them again.");
+            $this->components->error(OutputFormatter::escape("{$failed} subscription(s) could not be advanced; the next run tries them again."));
 
             return self::FAILURE;
         }

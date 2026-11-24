@@ -11,6 +11,7 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\TableLookup;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Prepares a host app to use the package: publishes the config and generates the owner-columns
@@ -45,14 +46,14 @@ final class InstallCommand extends Command
         $unusable = $this->unusableName($table, $tierColumn, $customerColumn);
 
         if ($unusable !== null) {
-            $this->components->error($unusable);
+            $this->components->error(OutputFormatter::escape($unusable));
 
             return self::FAILURE;
         }
 
         $path = $this->writeMigration($files, $table, $tierColumn, $customerColumn, $this->droppableColumns($table, $tierColumn, $customerColumn));
 
-        $this->components->info("Wrote the owner-columns migration for '{$table}' to {$path}.");
+        $this->components->info(OutputFormatter::escape("Wrote the owner-columns migration for '{$table}' to {$path}."));
 
         $this->components->bulletList([
             'Point billing.customer.model at your billable model (a webhook cannot find its owner without it).',

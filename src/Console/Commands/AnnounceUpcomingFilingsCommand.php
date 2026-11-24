@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Tax\UpcomingFilingSweep;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Warn about each filing obligation before its day arrives.
@@ -27,9 +28,9 @@ final class AnnounceUpcomingFilingsCommand extends Command
     {
         $announced = $sweep->announce(CarbonImmutable::now());
 
-        $this->components->info($announced === 0
+        $this->components->info(OutputFormatter::escape($announced === 0
             ? 'No filing obligation falls due inside the notice window.'
-            : "Announced {$announced} upcoming filing obligation(s).");
+            : "Announced {$announced} upcoming filing obligation(s)."));
 
         return self::SUCCESS;
     }

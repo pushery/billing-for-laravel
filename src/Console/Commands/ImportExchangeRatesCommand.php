@@ -12,6 +12,7 @@ use Pushery\Billing\Contracts\PublishesExchangeRates;
 use Pushery\Billing\Exceptions\ExchangeRateFeedUnreadable;
 use Pushery\Billing\Tax\EcbRateParser;
 use Pushery\Billing\Tax\ExchangeRateImport;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Fetch the central bank's published rates into the local store.
@@ -98,10 +99,10 @@ final class ImportExchangeRatesCommand extends Command
                 // Reported and skipped rather than thrown, and only here. One currency's outage must not
                 // discard the others already fetched — but it is never silent, because a currency that
                 // quietly stopped importing is a series that grows a hole and answers it with a later day.
-                $this->components->error(
+                $this->components->error(OutputFormatter::escape(
                     $publisher->describe()." answered {$response->status()} for {$currency}; its rates for "
                     .'this window were not imported.'
-                );
+                ));
                 $failed[] = $currency;
 
                 continue;
@@ -110,7 +111,7 @@ final class ImportExchangeRatesCommand extends Command
             try {
                 $rates = $parser->parse($response->body());
             } catch (ExchangeRateFeedUnreadable $unreadable) {
-                $this->components->error("{$currency}: {$unreadable->getMessage()}");
+                $this->components->error(OutputFormatter::escape("{$currency}: {$unreadable->getMessage()}"));
                 $failed[] = $currency;
 
                 continue;
@@ -121,14 +122,14 @@ final class ImportExchangeRatesCommand extends Command
         }
 
         if ($imported !== []) {
-            $this->components->info(sprintf(
+            $this->components->info(OutputFormatter::escape(sprintf(
                 'Imported %d exchange-rate row(s) for %s between %s and %s. Source: %s.',
                 $stored,
                 implode(', ', $imported),
                 $from->toDateString(),
                 $to->toDateString(),
                 $publisher->describe(),
-            ));
+            )));
         }
 
         if ($failed === []) {
@@ -137,7 +138,7 @@ final class ImportExchangeRatesCommand extends Command
 
         // The schedule watches the exit status and nothing else, so a currency that did not import fails the
         // run, after every other one was stored.
-        $this->components->error('Not imported: '.implode(', ', $failed).'.');
+        $this->components->error(OutputFormatter::escape('Not imported: '.implode(', ', $failed).'.'));
 
         return self::FAILURE;
     }

@@ -70,10 +70,10 @@ return [
     ],
 
     'trial' => [
-        'generic' => 'Ton essai gratuit se termine dans :days jour — choisis un forfait pour conserver ton accès.|Ton essai gratuit se termine dans :days jours — choisis un forfait pour conserver ton accès.',
-        'add_pm' => 'Ton essai se termine dans :days jour — ajoute un moyen de paiement pour que ton forfait continue.|Ton essai se termine dans :days jours — ajoute un moyen de paiement pour que ton forfait continue.',
-        'upgrade' => 'Ton essai se termine dans :days jour — tu peux revoir ton forfait quand tu veux.|Ton essai se termine dans :days jours — tu peux revoir ton forfait quand tu veux.',
-        'usage' => 'Il te reste :days jour d’essai ; la consommation ci-dessous correspond à ton forfait d’essai.|Il te reste :days jours d’essai ; la consommation ci-dessous correspond à ton forfait d’essai.',
+        'generic' => '{1} Ton essai gratuit se termine dans :days jour — choisis un forfait pour conserver ton accès.|[2,*] Ton essai gratuit se termine dans :days jours — choisis un forfait pour conserver ton accès.',
+        'add_pm' => '{1} Ton essai se termine dans :days jour — ajoute un moyen de paiement pour que ton forfait continue.|[2,*] Ton essai se termine dans :days jours — ajoute un moyen de paiement pour que ton forfait continue.',
+        'upgrade' => '{1} Ton essai se termine dans :days jour — tu peux revoir ton forfait quand tu veux.|[2,*] Ton essai se termine dans :days jours — tu peux revoir ton forfait quand tu veux.',
+        'usage' => '{1} Il te reste :days jour d’essai ; la consommation ci-dessous correspond à ton forfait d’essai.|[2,*] Il te reste :days jours d’essai ; la consommation ci-dessous correspond à ton forfait d’essai.',
         'cta' => [
             'subscribe' => 'S’abonner maintenant',
             'add_payment_method' => 'Ajouter un moyen de paiement',

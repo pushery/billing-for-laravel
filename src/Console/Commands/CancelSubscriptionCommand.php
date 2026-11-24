@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Support\BillingAdmin;
 use Pushery\Billing\ValueObjects\MerchantScope;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * End an owner's subscription immediately — the terminal form of {@see BillingAdmin::cancel()}.
@@ -48,7 +49,7 @@ final class CancelSubscriptionCommand extends Command
         $owner = $model::query()->find($ownerKey);
 
         if (! $owner instanceof Model) {
-            $this->components->error("No owner with key '{$ownerKey}'.");
+            $this->components->error(OutputFormatter::escape("No owner with key '{$ownerKey}'."));
 
             return self::FAILURE;
         }
@@ -60,7 +61,7 @@ final class CancelSubscriptionCommand extends Command
         $merchant = is_string($merchantUid) && $merchantUid !== '' ? MerchantScope::fromUid($merchantUid) : null;
 
         if ($merchant instanceof MerchantScope && $merchant->isPlatform()) {
-            $this->components->error("'{$merchantUid}' is not a merchant uid; it reads m:<type>#<id>.");
+            $this->components->error(OutputFormatter::escape("'{$merchantUid}' is not a merchant uid; it reads m:<type>#<id>."));
 
             return self::FAILURE;
         }
@@ -68,12 +69,12 @@ final class CancelSubscriptionCommand extends Command
         $type = $this->option('type');
 
         if (! $admin->cancel($owner, $reason, null, $merchant, is_string($type) && $type !== '' ? $type : null)) {
-            $this->components->error("Owner '{$ownerKey}' has no running subscription in that scope; nothing was canceled.");
+            $this->components->error(OutputFormatter::escape("Owner '{$ownerKey}' has no running subscription in that scope; nothing was canceled."));
 
             return self::FAILURE;
         }
 
-        $this->components->info("Canceled the subscription of owner '{$ownerKey}'.");
+        $this->components->info(OutputFormatter::escape("Canceled the subscription of owner '{$ownerKey}'."));
 
         return self::SUCCESS;
     }

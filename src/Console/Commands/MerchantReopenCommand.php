@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Pushery\Billing\Marketplace\MerchantLifecycle;
 use Pushery\Billing\Models\MerchantAccount;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Begin again with a merchant whose relationship with the platform had ended.
@@ -93,7 +94,7 @@ final class MerchantReopenCommand extends Command
         $class = Relation::getMorphedModel($type) ?? $type;
 
         if (! class_exists($class) || ! is_subclass_of($class, Model::class)) {
-            $this->components->error("No model is registered for '{$type}'. Pass the morph alias or the class name.");
+            $this->components->error(OutputFormatter::escape("No model is registered for '{$type}'. Pass the morph alias or the class name."));
 
             return null;
         }
@@ -108,7 +109,7 @@ final class MerchantReopenCommand extends Command
      */
     private function missing(string $type, mixed $id): null
     {
-        $this->components->error("No {$type} exists with key ".(is_scalar($id) ? (string) $id : '(unreadable)').'.');
+        $this->components->error(OutputFormatter::escape("No {$type} exists with key ".(is_scalar($id) ? (string) $id : '(unreadable)').'.'));
 
         return null;
     }

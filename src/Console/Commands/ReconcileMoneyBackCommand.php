@@ -14,6 +14,7 @@ use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\MoneyBackReconciler;
 use Pushery\Billing\Support\WebhookEventLedger;
 use Pushery\Billing\Webhooks\WebhookEffectRegistry;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Pick up the refunds that failed and the chargebacks a bank reversed where the provider's webhook does not say.
@@ -53,7 +54,7 @@ final class ReconcileMoneyBackCommand extends Command
             : null;
 
         if (! $outcomes instanceof ReportsMoneyBackOutcomes) {
-            $this->components->info("The {$driver} driver reads no refunds or chargebacks back, so there is nothing to reconcile.");
+            $this->components->info(OutputFormatter::escape("The {$driver} driver reads no refunds or chargebacks back, so there is nothing to reconcile."));
 
             return self::SUCCESS;
         }
@@ -64,16 +65,16 @@ final class ReconcileMoneyBackCommand extends Command
 
         foreach ($dispatched as $outcome) {
             $this->components->twoColumnDetail(
-                $outcome instanceof RefundFailed
+                OutputFormatter::escape($outcome instanceof RefundFailed
                     ? 'refund '.$outcome->refundReference.' ('.$outcome->failure->value.')'
-                    : 'chargeback '.$outcome->disputeReference.' (reversed)',
-                $outcome->amount->toDecimal().' '.$outcome->amount->currency,
+                    : 'chargeback '.$outcome->disputeReference.' (reversed)'),
+                OutputFormatter::escape($outcome->amount->toDecimal().' '.$outcome->amount->currency),
             );
         }
 
-        $this->components->info($dispatched === []
+        $this->components->info(OutputFormatter::escape($dispatched === []
             ? "Nothing new across {$refundDays} days of refunds and {$chargebackDays} days of chargebacks."
-            : count($dispatched).' outcome(s) recorded and dispatched.');
+            : count($dispatched).' outcome(s) recorded and dispatched.'));
 
         return self::SUCCESS;
     }

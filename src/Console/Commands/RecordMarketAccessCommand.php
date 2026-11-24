@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Illuminate\Console\Command;
 use Pushery\Billing\Enums\MarketAccess;
 use Pushery\Billing\Marketplace\MarketAccessJournal;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Writes down which markets were opened or closed, and by whom.
@@ -37,8 +38,8 @@ final class RecordMarketAccessCommand extends Command
 
         foreach ($changes as $change) {
             $this->components->twoColumnDetail(
-                $change['country'],
-                ($change['from'] instanceof MarketAccess ? $change['from']->value : 'unrecorded').' → '.$change['to']->value,
+                OutputFormatter::escape($change['country']),
+                OutputFormatter::escape(($change['from'] instanceof MarketAccess ? $change['from']->value : 'unrecorded').' → '.$change['to']->value),
             );
         }
 

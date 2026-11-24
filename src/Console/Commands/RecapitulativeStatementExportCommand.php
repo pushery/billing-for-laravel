@@ -26,6 +26,8 @@ use Pushery\Billing\Tax\RecapitulativeStatementArchive;
 use Pushery\Billing\Tax\ReportingConversion;
 use Pushery\Billing\ValueObjects\RecapitulativeStatementPeriod;
 use Pushery\Billing\ValueObjects\ReportingPeriod;
+use Symfony\Component\Console\Formatter\OutputFormatter;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Writes one period's recapitulative statement to a file, for an operator who does not report it from DATEV.
@@ -88,12 +90,12 @@ final class RecapitulativeStatementExportCommand extends Command
             $elsewhere = $this->reverseChargedElsewhere($period->startsOn(), $period->endsOn(), $currency);
 
             if ($elsewhere > 0) {
-                $this->components->error(sprintf(
+                $this->components->error(OutputFormatter::escape(sprintf(
                     '%d reverse-charged sale(s) of %s are in another currency, and the active jurisdiction profile names no rate to state them in %s at. Leaving them out would file a statement short by those sales.',
                     $elsewhere,
                     $period->label(),
                     $currency,
-                ));
+                )));
 
                 return self::FAILURE;
             }
@@ -104,7 +106,7 @@ final class RecapitulativeStatementExportCommand extends Command
                 $refusal = $this->monthlyInstead($statement, $period->inQuarter(), $currency, $profile->recapitulativeStatementMonthlyThresholdMinor(), $conversion);
 
                 if ($refusal !== null) {
-                    $this->components->error($refusal);
+                    $this->components->error(OutputFormatter::escape($refusal));
 
                     return self::FAILURE;
                 }
@@ -114,7 +116,7 @@ final class RecapitulativeStatementExportCommand extends Command
         } catch (RecapitulativeStatementIncomplete|ReportingRateMissing $e) {
             // Refused, not dropped: a sale left off the statement looks exactly like one that never happened, and
             // a sale stated without its rate would state an amount nobody converted.
-            $this->components->error($e->getMessage());
+            $this->components->error(OutputFormatter::escape($e->getMessage()));
 
             return self::FAILURE;
         }
@@ -125,15 +127,15 @@ final class RecapitulativeStatementExportCommand extends Command
         $path = $this->option('path');
 
         if (! is_string($path) || $path === '') {
-            $this->line($contents);
-            $this->components->info($deadline);
+            $this->output->writeln($contents, OutputInterface::OUTPUT_RAW);
+            $this->components->info(OutputFormatter::escape($deadline));
 
             return self::SUCCESS;
         }
 
         $files->ensureDirectoryExists(dirname($path));
         $files->put($path, $contents);
-        $this->components->info(count($lines)." line(s) written to {$path}. {$deadline}");
+        $this->components->info(OutputFormatter::escape(count($lines)." line(s) written to {$path}. {$deadline}"));
 
         return self::SUCCESS;
     }

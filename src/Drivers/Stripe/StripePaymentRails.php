@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Pushery\Billing\Drivers\Stripe;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Contracts\CancelsPayments;
 use Pushery\Billing\Contracts\PaymentRails;
@@ -366,7 +367,8 @@ final readonly class StripePaymentRails implements CancelsPayments, PaymentRails
     }
 
     /**
-     * Every refund Stripe holds for the payment, read through all its pages.
+     * Every refund Stripe holds for the payment, read through all its pages, each with the moment Stripe names for it,
+     * its `created`.
      *
      * `succeeded` reads as refunded, `failed` and `canceled` as they are, and `pending` and `requires_action` as
      * pending, as does a status Stripe adds later: a refund that may still pay out is not one to make a second time.
@@ -379,6 +381,7 @@ final readonly class StripePaymentRails implements CancelsPayments, PaymentRails
 
         foreach ($this->stripe->refunds->all(['payment_intent' => $this->paymentIntentFor($chargeReference), 'limit' => 100])->autoPagingIterator() as $refund) {
             $key = $refund->metadata['billing_reference'] ?? null;
+            $created = $refund['created'] ?? null;
 
             $states[] = new RefundState(
                 reference: $refund->id,
@@ -390,6 +393,7 @@ final readonly class StripePaymentRails implements CancelsPayments, PaymentRails
                     default => RefundStatus::Pending,
                 },
                 amount: new Money((int) $refund->amount, strtoupper((string) $refund->currency)),
+                madeAt: is_int($created) ? CarbonImmutable::createFromTimestamp($created, 'UTC') : null,
             );
         }
 

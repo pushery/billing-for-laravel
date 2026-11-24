@@ -12,6 +12,7 @@ use Pushery\Billing\Models\Order;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\CyclePaymentReconciler;
 use Pushery\Billing\Support\SweepAttempts;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Reads back the payment of every cycle in collection whose webhook has not arrived.
@@ -63,7 +64,7 @@ final class ReconcileCyclePaymentsCommand extends Command
                 }
             });
 
-        $this->components->info("{$read} cycle(s) in collection read back, {$dispatched} event(s) recorded and dispatched.");
+        $this->components->info(OutputFormatter::escape("{$read} cycle(s) in collection read back, {$dispatched} event(s) recorded and dispatched."));
 
         $attempts->finish();
 

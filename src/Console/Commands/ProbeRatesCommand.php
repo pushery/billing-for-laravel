@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\Config;
 use Pushery\Billing\Tax\RateConformityProbe;
 use Pushery\Billing\Tax\RateConformityReport;
 use Pushery\Billing\Tax\TedbRateSource;
+use Symfony\Component\Console\Formatter\OutputFormatter;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Ask the source whether the rates we ship are still what it publishes.
@@ -61,7 +63,7 @@ final class ProbeRatesCommand extends Command
         $answer = TedbRateSource::on($on);
 
         if ($answer->failure !== null) {
-            $this->components->warn($answer->failure);
+            $this->components->warn(OutputFormatter::escape($answer->failure));
 
             $report = $probe->unreachable();
         } else {
@@ -76,7 +78,7 @@ final class ProbeRatesCommand extends Command
     private function report(RateConformityReport $report): void
     {
         if ($this->option('format') === 'json') {
-            $this->line(json_encode($report->toArray(), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+            $this->output->writeln(json_encode($report->toArray(), JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
 
             return;
         }
@@ -97,23 +99,23 @@ final class ProbeRatesCommand extends Command
         }
 
         foreach ($report->drift as $country => $pair) {
-            $this->components->error(
+            $this->components->error(OutputFormatter::escape(
                 "{$country}: we ship {$pair['shipped']} basis points, the source says {$pair['source']}."
-            );
+            ));
         }
 
         foreach ($report->refused as $country => $values) {
-            $this->components->warn(
+            $this->components->warn(OutputFormatter::escape(
                 "{$country}: the source gave more than one standard rate (".implode(', ', $values).'), '
                 .'so there is nothing to compare against.'
-            );
+            ));
         }
 
         if ($report->missingFromSource !== []) {
-            $this->components->info(
+            $this->components->info(OutputFormatter::escape(
                 'Not covered by the source: '.implode(', ', $report->missingFromSource)
                 .' — silence there is not agreement.'
-            );
+            ));
         }
 
         if ($report->agrees()) {

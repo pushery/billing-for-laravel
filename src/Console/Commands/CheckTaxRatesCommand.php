@@ -14,6 +14,8 @@ use Pushery\Billing\Tax\RateChangeTriage;
 use Pushery\Billing\Tax\RateImporter;
 use Pushery\Billing\Tax\RateProposal;
 use Pushery\Billing\Tax\TedbRateSource;
+use Symfony\Component\Console\Formatter\OutputFormatter;
+use Symfony\Component\Console\Output\OutputInterface;
 
 /**
  * Ask the source what the rates should be, and write down a proposal — never a change.
@@ -68,7 +70,7 @@ final class CheckTaxRatesCommand extends Command
         $answer = TedbRateSource::on($on);
 
         if ($answer->failure !== null) {
-            $this->components->warn($answer->failure);
+            $this->components->warn(OutputFormatter::escape($answer->failure));
 
             return $importer->unreachable()->exitCode();
         }
@@ -116,23 +118,23 @@ final class CheckTaxRatesCommand extends Command
         // of this command made exactly that mistake. The written path travels IN the document instead, which
         // is also the only place a machine could use it.
         if ($this->option('format') === 'json') {
-            $this->line(json_encode(
+            $this->output->writeln(json_encode(
                 [...$proposal->toArray(), 'written_to' => $written],
                 JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR,
-            ));
+            ), OutputInterface::OUTPUT_RAW);
 
             return;
         }
 
         if ($written !== null) {
-            $this->components->info('Proposal written to '.$written);
+            $this->components->info(OutputFormatter::escape('Proposal written to '.$written));
         }
 
         if (! $proposal->usable()) {
             $this->components->warn('The answer is not usable, so no proposal was written.');
 
             foreach ($proposal->assessment['implausible'] as $note) {
-                $this->components->twoColumnDetail('implausible', $note);
+                $this->components->twoColumnDetail('implausible', OutputFormatter::escape($note));
             }
 
             return;
@@ -152,7 +154,7 @@ final class CheckTaxRatesCommand extends Command
             $class = $classified[$country] ?? RateChangeClass::RecordedOnly;
 
             $this->components->twoColumnDetail(
-                $country.'  '.$class->value,
+                OutputFormatter::escape($country.'  '.$class->value),
                 sprintf('%d → %d bps', $change['from'], $change['to']),
             );
         }

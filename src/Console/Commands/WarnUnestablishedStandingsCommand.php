@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Marketplace\UnestablishedStandingSweep;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Tell the merchants who never declared that the deadline is coming.
@@ -27,9 +28,9 @@ final class WarnUnestablishedStandingsCommand extends Command
     {
         $warned = $sweep->warn(CarbonImmutable::now());
 
-        $this->components->info($warned === 0
+        $this->components->info(OutputFormatter::escape($warned === 0
             ? 'Nobody needed warning about the tax-standing deadline.'
-            : "Warned {$warned} merchant(s) that the tax-standing deadline is approaching.");
+            : "Warned {$warned} merchant(s) that the tax-standing deadline is approaching."));
 
         return self::SUCCESS;
     }

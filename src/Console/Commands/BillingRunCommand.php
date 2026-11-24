@@ -10,6 +10,7 @@ use Pushery\Billing\Contracts\InternalBalance;
 use Pushery\Billing\Marketplace\BalanceSubscriptions;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\ScheduledSwapRunner;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Advances the recurring billing cycle for the active driver. Stripe drives its own cycle, so the engine
@@ -46,14 +47,14 @@ final class BillingRunCommand extends Command
             $renewed = $container->make(BalanceSubscriptions::class)->renewDue();
 
             if ($renewed > 0) {
-                $this->components->info("Renewed {$renewed} subscription(s) paid from a balance.");
+                $this->components->info(OutputFormatter::escape("Renewed {$renewed} subscription(s) paid from a balance."));
             }
         }
 
         $applied = $swaps->runDue();
 
         if ($applied > 0) {
-            $this->components->info("Applied {$applied} scheduled plan change(s).");
+            $this->components->info(OutputFormatter::escape("Applied {$applied} scheduled plan change(s)."));
         }
 
         return self::SUCCESS;

@@ -11,6 +11,7 @@ use Pushery\Billing\Exceptions\ExchangeRateFeedUnreadable;
 use Pushery\Billing\Tax\ExchangeRateImport;
 use Pushery\Billing\Tax\MonthlyRateFile;
 use Pushery\Billing\Tax\PublishedRate;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Import announced monthly average rates from a file into the local store.
@@ -66,7 +67,7 @@ final class ImportExchangeRateFileCommand extends Command
         $contents = is_readable($path) ? file_get_contents($path) : false;
 
         if ($contents === false) {
-            $this->components->error("The file [{$path}] could not be read.");
+            $this->components->error(OutputFormatter::escape("The file [{$path}] could not be read."));
 
             return self::FAILURE;
         }
@@ -74,7 +75,7 @@ final class ImportExchangeRateFileCommand extends Command
         try {
             $rates = $file->parse($contents);
         } catch (ExchangeRateFeedUnreadable $unreadable) {
-            $this->components->error($unreadable->getMessage());
+            $this->components->error(OutputFormatter::escape($unreadable->getMessage()));
 
             return self::FAILURE;
         }
@@ -98,14 +99,14 @@ final class ImportExchangeRateFileCommand extends Command
             $rates,
         )));
 
-        $this->components->info(sprintf(
+        $this->components->info(OutputFormatter::escape(sprintf(
             'Imported %d announced monthly rate(s) for %s, %s to %s. Source: %s.',
             $written,
             implode(', ', $pairs),
             $months[0],
             $months[count($months) - 1],
             $source,
-        ));
+        )));
 
         return self::SUCCESS;
     }

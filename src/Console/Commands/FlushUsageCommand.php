@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Support\UsageFlusher;
 use Pushery\Billing\Support\UsageGrants;
 use Pushery\Billing\Support\UsageMeter;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Hands recorded usage to the provider that bills it.
@@ -35,7 +36,7 @@ final class FlushUsageCommand extends Command
         $reclaimed = $counters->expire();
 
         if ($reclaimed > 0) {
-            $this->components->info("Reclaimed {$reclaimed} expired usage reservation(s).");
+            $this->components->info(OutputFormatter::escape("Reclaimed {$reclaimed} expired usage reservation(s)."));
         }
 
         // An expired grant is written off here, with the loss recorded, for the same reason and on the same cadence:
@@ -43,7 +44,7 @@ final class FlushUsageCommand extends Command
         $expired = $grants->expire();
 
         if ($expired > 0) {
-            $this->components->info("Wrote off {$expired} expired usage grant(s).");
+            $this->components->info(OutputFormatter::escape("Wrote off {$expired} expired usage grant(s)."));
         }
 
         if (! (bool) $config->get('billing.enabled', true)) {
@@ -54,7 +55,7 @@ final class FlushUsageCommand extends Command
 
         $reported = $flusher->flush();
 
-        $this->components->info("Reported {$reported} usage rollup(s).");
+        $this->components->info(OutputFormatter::escape("Reported {$reported} usage rollup(s)."));
 
         return self::SUCCESS;
     }

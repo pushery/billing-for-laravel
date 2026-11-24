@@ -70,10 +70,10 @@ return [
     ],
 
     'trial' => [
-        'generic' => 'O teu período de teste gratuito termina em :days dia — escolhe um plano para manteres o teu acesso.|O teu período de teste gratuito termina em :days dias — escolhe um plano para manteres o teu acesso.',
-        'add_pm' => 'O teu período de teste termina em :days dia — adiciona um método de pagamento para que o teu plano continue.|O teu período de teste termina em :days dias — adiciona um método de pagamento para que o teu plano continue.',
-        'upgrade' => 'O teu período de teste termina em :days dia — podes rever o teu plano quando quiseres.|O teu período de teste termina em :days dias — podes rever o teu plano quando quiseres.',
-        'usage' => 'Resta-te :days dia de teste; a utilização abaixo é a do teu plano de teste.|Restam-te :days dias de teste; a utilização abaixo é a do teu plano de teste.',
+        'generic' => '{1} O teu período de teste gratuito termina em :days dia — escolhe um plano para manteres o teu acesso.|[2,*] O teu período de teste gratuito termina em :days dias — escolhe um plano para manteres o teu acesso.',
+        'add_pm' => '{1} O teu período de teste termina em :days dia — adiciona um método de pagamento para que o teu plano continue.|[2,*] O teu período de teste termina em :days dias — adiciona um método de pagamento para que o teu plano continue.',
+        'upgrade' => '{1} O teu período de teste termina em :days dia — podes rever o teu plano quando quiseres.|[2,*] O teu período de teste termina em :days dias — podes rever o teu plano quando quiseres.',
+        'usage' => '{1} Resta-te :days dia de teste; a utilização abaixo é a do teu plano de teste.|[2,*] Restam-te :days dias de teste; a utilização abaixo é a do teu plano de teste.',
         'cta' => [
             'subscribe' => 'Subscrever agora',
             'add_payment_method' => 'Adicionar método de pagamento',

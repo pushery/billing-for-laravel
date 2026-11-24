@@ -6,6 +6,7 @@ namespace Pushery\Billing\Console\Commands;
 
 use Illuminate\Console\Command;
 use Pushery\Billing\Marketplace\UnmovedMerchantShares;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Moves the merchant shares that failed to move after their sale was paid.
@@ -26,14 +27,14 @@ final class RetryMerchantTransfersCommand extends Command
     public function handle(UnmovedMerchantShares $shares): int
     {
         if ($this->option('dry-run') === true) {
-            $this->components->info($shares->count().' share(s) would be tried.');
+            $this->components->info(OutputFormatter::escape($shares->count().' share(s) would be tried.'));
 
             return self::SUCCESS;
         }
 
         $outcome = $shares->retry();
 
-        $this->components->info("{$outcome['moved']} share(s) moved, {$outcome['failed']} failed again, {$outcome['skipped']} skipped.");
+        $this->components->info(OutputFormatter::escape("{$outcome['moved']} share(s) moved, {$outcome['failed']} failed again, {$outcome['skipped']} skipped."));
 
         return $outcome['failed'] === 0 && $outcome['skipped'] === 0 ? self::SUCCESS : self::FAILURE;
     }

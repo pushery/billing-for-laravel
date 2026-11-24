@@ -12,6 +12,7 @@ use Pushery\Billing\Contracts\ReportsMerchantCapabilities;
 use Pushery\Billing\Marketplace\MerchantCapabilities;
 use Pushery\Billing\Models\MerchantAccount;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Ask the provider what a merchant's capabilities are, for when the webhook that would have said never came.
@@ -55,10 +56,10 @@ final class RefreshMerchantCapabilitiesCommand extends Command
             // Named, not fatal. A driver may legitimately be unable to answer — the null driver cannot, and
             // a consumer's own may not — and a command that died here would read as a broken installation
             // rather than as a capability this driver does not have.
-            $this->components->warn(
+            $this->components->warn(OutputFormatter::escape(
                 'The configured onboarding driver ('.$onboarding::class.') cannot report capabilities, so '
                 .'nothing was asked. Only a driver implementing ReportsMerchantCapabilities can.'
-            );
+            ));
 
             return self::SUCCESS;
         }
@@ -80,10 +81,10 @@ final class RefreshMerchantCapabilitiesCommand extends Command
                 // The morph target is the consumer's model and it can be gone — deleted, renamed, never
                 // migrated. Saying which one beats skipping in silence: an account nobody can resolve is a
                 // merchant nobody can pay, and that is worth a line.
-                $this->components->warn(
+                $this->components->warn(OutputFormatter::escape(
                     $account->account_reference.' points at '.$account->merchant_type.' #'
                     .$account->merchant_id.', which does not resolve; skipped.'
-                );
+                ));
 
                 continue;
             }
@@ -91,7 +92,7 @@ final class RefreshMerchantCapabilitiesCommand extends Command
             $reported = $onboarding->capabilitiesFor($merchant);
 
             if (! $reported instanceof MerchantAccountReference) {
-                $this->components->warn($account->account_reference.' has no account at the provider; skipped.');
+                $this->components->warn(OutputFormatter::escape($account->account_reference.' has no account at the provider; skipped.'));
 
                 continue;
             }
@@ -99,16 +100,16 @@ final class RefreshMerchantCapabilitiesCommand extends Command
             $capabilities->apply($reported);
             $refreshed++;
 
-            $this->line(sprintf(
+            $this->line(OutputFormatter::escape(sprintf(
                 '%s → charges %s · payouts %s · details %s',
                 $account->account_reference,
                 $reported->chargesEnabled ? 'yes' : 'no',
                 $reported->payoutsEnabled ? 'yes' : 'no',
                 $reported->detailsSubmitted ? 'yes' : 'no',
-            ));
+            )));
         }
 
-        $this->components->info("Refreshed {$refreshed} merchant account(s) from the provider.");
+        $this->components->info(OutputFormatter::escape("Refreshed {$refreshed} merchant account(s) from the provider."));
 
         return self::SUCCESS;
     }

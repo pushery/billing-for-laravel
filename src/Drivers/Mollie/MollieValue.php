@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Pushery\Billing\Drivers\Mollie;
 
 use BackedEnum;
+use Carbon\CarbonImmutable;
 use Mollie\Api\Types\MandateMethod;
 use ReflectionClass;
+use Throwable;
 
 /**
  * Mollie's vocabulary as the strings both major versions of its SDK put on the wire.
@@ -68,6 +70,27 @@ final readonly class MollieValue
     public static function id(mixed $id): string
     {
         return is_scalar($id) ? (string) $id : '';
+    }
+
+    /**
+     * A moment Mollie sent, in UTC, or null where it sent none or one that does not parse.
+     *
+     * Mollie writes a moment as ISO 8601 with an offset. Version 4 types such a field as a string, version 3
+     * leaves it as the JSON decoder made it.
+     *
+     * @param  mixed  $value  a date and time Mollie sent: a string on version 4 of the SDK, decoded JSON on version 3
+     */
+    public static function moment(mixed $value): ?CarbonImmutable
+    {
+        if (! is_string($value) || $value === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse($value)->utc();
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /**

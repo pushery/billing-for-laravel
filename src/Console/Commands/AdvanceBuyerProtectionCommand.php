@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Marketplace\BuyerProtectionClock;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Moves every waiting payout whose time has come.
@@ -33,7 +34,7 @@ final class AdvanceBuyerProtectionCommand extends Command
             // Counted from the clock's own selections, so the preview cannot name a hold the run would leave.
             $due = count($clock->due($now));
 
-            $this->components->info("{$due} hold(s) would move.");
+            $this->components->info(OutputFormatter::escape("{$due} hold(s) would move."));
 
             return self::SUCCESS;
         }
@@ -41,7 +42,7 @@ final class AdvanceBuyerProtectionCommand extends Command
         $moved = $clock->advance($now);
 
         foreach ($moved as $hold) {
-            $this->components->info("{$hold->charge_reference} is now {$hold->state->value}.");
+            $this->components->info(OutputFormatter::escape("{$hold->charge_reference} is now {$hold->state->value}."));
         }
 
         $this->components->info(count($moved).' hold(s) moved.');

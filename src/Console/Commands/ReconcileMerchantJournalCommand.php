@@ -10,6 +10,7 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Pushery\Billing\Contracts\ReportsMovedShares;
 use Pushery\Billing\Marketplace\ProviderJournalReconciler;
 use Pushery\Billing\Support\BillingManager;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * The operator surface for the provider reconciliation.
@@ -38,11 +39,11 @@ final class ReconcileMerchantJournalCommand extends Command
         //
         // Refused rather than silently swept, because the alternative is a report an operator would act on.
         if ($driver !== $active) {
-            $this->components->error(
+            $this->components->error(OutputFormatter::escape(
                 "This install runs the {$active} driver, so it can only read {$active} transfers back. "
                 ."Sweeping {$driver} rows through it would ask {$active} about references it never issued "
                 .'and report every one as missing at the provider. Run this where '.$driver.' is active.'
-            );
+            ));
 
             return self::FAILURE;
         }
@@ -56,7 +57,7 @@ final class ReconcileMerchantJournalCommand extends Command
         if (! $reader instanceof ReportsMovedShares) {
             // Not a failure. A provider that routes the share as part of the payment makes no transfer and
             // has nothing to read back — saying so plainly beats a green run that audited nothing.
-            $this->components->warn("The {$driver} driver cannot read transfers back, so there is nothing to reconcile.");
+            $this->components->warn(OutputFormatter::escape("The {$driver} driver cannot read transfers back, so there is nothing to reconcile."));
 
             return self::SUCCESS;
         }
@@ -74,13 +75,13 @@ final class ReconcileMerchantJournalCommand extends Command
         $oldest = $reconciler->oldestRead($driver, $limit, $before);
 
         if ($read < $total && $oldest !== null) {
-            $this->components->warn(
+            $this->components->warn(OutputFormatter::escape(
                 "Read the newest {$read} of {$total} {$driver} journal rows. The older ones: --before={$oldest}."
-            );
+            ));
         }
 
         if ($findings === []) {
-            $this->components->info("No drift across the newest {$read} of {$total} {$driver} journal rows.");
+            $this->components->info(OutputFormatter::escape("No drift across the newest {$read} of {$total} {$driver} journal rows."));
 
             return self::SUCCESS;
         }
@@ -89,10 +90,10 @@ final class ReconcileMerchantJournalCommand extends Command
             $delta = $finding->deltaMinor();
 
             $this->components->twoColumnDetail(
-                $finding->transferReference.' ('.$finding->reason.')',
-                $delta === null
+                OutputFormatter::escape($finding->transferReference.' ('.$finding->reason.')'),
+                OutputFormatter::escape($delta === null
                     ? 'ours '.$finding->ours->toDecimal().' '.$finding->ours->currency
-                    : 'delta '.($delta > 0 ? '+' : '').$delta
+                    : 'delta '.($delta > 0 ? '+' : '').$delta)
             );
         }
 

@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Dunning\PaymentReminderSweep;
+use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
  * Send the daily reminder to every subscription still inside its cure window.
@@ -32,9 +33,9 @@ final class RemindDelinquentSubscriptionsCommand extends Command
         // The line tells whoever runs this by hand that it ran and found nothing. Under the scheduler the output
         // is discarded and "it ran" reaches the bound ScheduleHeartbeat instead, because an absent scheduler is
         // exactly the failure this command exists to prevent.
-        $this->components->info($sent === 0
+        $this->components->info(OutputFormatter::escape($sent === 0
             ? 'No subscription is inside its cure window today.'
-            : "Reminded {$sent} subscription(s) in arrears.");
+            : "Reminded {$sent} subscription(s) in arrears."));
 
         return self::SUCCESS;
     }
