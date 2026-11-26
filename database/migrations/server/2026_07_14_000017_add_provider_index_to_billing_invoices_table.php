@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * A unique index on (provider, provider_id) so persisting an invoice is idempotent.
@@ -20,14 +21,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
-            $table->unique(['provider', 'provider_id'], 'billing_invoices_provider_unique');
+            $table->unique(['provider', 'provider_id'], BillingSchema::indexName('billing_invoices_provider_unique'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
-            $table->dropUnique('billing_invoices_provider_unique');
+            $table->dropUnique(BillingSchema::standingIndexName('billing_invoices', 'billing_invoices_provider_unique'));
         });
     }
 };

@@ -39,7 +39,7 @@ return new class extends Migration
             $table->timestamp('merchant_erased_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['merchant_type', 'merchant_id', 'currency'], 'billing_merchant_balances_unique');
+            $table->unique(['merchant_type', 'merchant_id', 'currency'], BillingSchema::indexName('billing_merchant_balances_unique'));
         });
     }
 

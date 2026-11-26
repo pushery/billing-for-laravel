@@ -41,7 +41,8 @@
                         <th class="px-4 py-3 font-medium">{{ __('billing::account.invoices.number') }}</th>
                         <th class="px-4 py-3 text-right font-medium">{{ __('billing::account.invoices.amount') }}</th>
                         <th class="px-4 py-3 font-medium">{{ __('billing::account.invoices.status') }}</th>
-                        <th class="px-4 py-3"></th>
+                        {{-- The column of download links shows no heading, and a screen reader still hears its name. --}}
+                        <th class="px-4 py-3"><span class="sr-only">{{ __('billing::account.invoices.download') }}</span></th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-800">

@@ -12,14 +12,12 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Carbon;
-use Pushery\Billing\Contracts\TrialNotifier;
 use Pushery\Billing\Enums\SubscriptionState;
-use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Models\Subscription;
-use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\Support\TableLookup;
+use Pushery\Billing\Support\TrialReminders;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
@@ -41,7 +39,14 @@ use Throwable;
  *
  * The mark is written to the audit log against the owner and the date. Keyed on the owner alone, an extended
  * trial would be silenced for good; keyed on nothing, the customer is mailed every night the scheduler runs.
- * A trial moved to a new date is a new reminder, which is the same rule the webhook path applies.
+ * A trial moved to a new date is a new reminder, which is the same rule the webhook path applies. The mark is
+ * kept by `TrialReminders`, through which an application reminds a trial of its own as well.
+ *
+ * ## The window, in the owner's days
+ *
+ * A trial is due when it ends inside the window of days counted from now, and where `OwnerTimezone` answers a zone
+ * for the owner, the window counts whole days there (`TrialReminders::due()`). The query reads one day further, so
+ * the last day of the window is read whole in every zone.
  *
  * The mark is recorded only when something was actually sent. A dry run that recorded it would silence the
  * real run behind it — the two have to be skipped together or not at all.
@@ -57,7 +62,7 @@ final class WarnEndingTrialsCommand extends Command
 
     protected $description = 'Notify owners whose generic trial is about to end.';
 
-    public function handle(Repository $config, TrialNotifier $notifier, BillingEventLog $log): int
+    public function handle(Repository $config, TrialReminders $reminders): int
     {
         $days = $this->windowDays($config);
         $dryRun = $this->option('dry-run') === true;
@@ -69,8 +74,8 @@ final class WarnEndingTrialsCommand extends Command
         // Each half on its own: a customer model the generic scan cannot read never keeps the subscription
         // trials, which live on the package's own table, from their reminder.
         $attempts = new SweepAttempts;
-        $warned = $this->warnGenericTrials($config, $notifier, $log, $attempts, $now, $days, $dryRun);
-        $warned += $this->warnSubscriptionTrials($notifier, $log, $attempts, $now, $days, $dryRun);
+        $warned = $this->warnGenericTrials($config, $reminders, $attempts, $now, $days, $dryRun);
+        $warned += $this->warnSubscriptionTrials($reminders, $attempts, $now, $days, $dryRun);
 
         $this->components->info(OutputFormatter::escape(($dryRun ? 'Would warn ' : 'Warned ')."{$warned} owner(s) about an ending trial."));
 
@@ -85,7 +90,7 @@ final class WarnEndingTrialsCommand extends Command
      * of failing before the subscription trials are reached. The column is looked up in the table a query on the
      * customer's connection finds, which on PostgreSQL may sit in another schema of the `search_path` than the first.
      */
-    private function warnGenericTrials(Repository $config, TrialNotifier $notifier, BillingEventLog $log, SweepAttempts $attempts, Carbon $now, int $days, bool $dryRun): int
+    private function warnGenericTrials(Repository $config, TrialReminders $reminders, SweepAttempts $attempts, Carbon $now, int $days, bool $dryRun): int
     {
         $model = $config->get('billing.customer.model');
 
@@ -110,10 +115,10 @@ final class WarnEndingTrialsCommand extends Command
 
         $model::query()
             ->whereNotNull('trial_ends_at')
-            ->whereBetween('trial_ends_at', [$now, $now->copy()->addDays($days)])
+            ->whereBetween('trial_ends_at', [$now, $now->copy()->addDays($days + 1)])
             ->chunkById(100,
                 /** @param Collection<int, Model> $owners */
-                function (Collection $owners) use ($notifier, $log, $attempts, $dryRun, &$warned): void {
+                function (Collection $owners) use ($reminders, $attempts, $now, $days, $dryRun, &$warned): void {
                     foreach ($owners as $owner) {
                         // Normalized rather than type-checked, and the difference matters. The consumer owns
                         // this model: a `trial_ends_at` cast is Cashier's convention, not something this
@@ -139,11 +144,11 @@ final class WarnEndingTrialsCommand extends Command
                             continue;
                         }
 
-                        if ($this->hasSubscription($owner)) {
+                        if (! $reminders->due($owner, $endsAt, $now, $days) || $this->hasSubscription($owner)) {
                             continue;
                         }
 
-                        if ($this->alreadyWarned($owner, $endsAt)) {
+                        if ($reminders->sentFor($owner, $endsAt)) {
                             continue;
                         }
 
@@ -153,13 +158,8 @@ final class WarnEndingTrialsCommand extends Command
                             continue;
                         }
 
-                        $sent = $attempts->attempt(static function () use ($notifier, $log, $owner, $endsAt): void {
-                            $notifier->trialEnding($owner, $endsAt);
-
-                            $log->record('trial.ending_notice_sent', $owner, [
-                                'trial' => 'generic',
-                                'trial_ends_at' => $endsAt->format('Y-m-d'),
-                            ]);
+                        $sent = $attempts->attempt(static function () use ($reminders, $owner, $endsAt): void {
+                            $reminders->send($owner, $endsAt, 'generic');
                         });
 
                         if ($sent) {
@@ -184,8 +184,7 @@ final class WarnEndingTrialsCommand extends Command
      * first notice of the end of their free period is the debit.
      */
     private function warnSubscriptionTrials(
-        TrialNotifier $notifier,
-        BillingEventLog $log,
+        TrialReminders $reminders,
         SweepAttempts $attempts,
         Carbon $now,
         int $days,
@@ -196,8 +195,8 @@ final class WarnEndingTrialsCommand extends Command
         Subscription::model()::query()
             ->where('status', SubscriptionState::Trialing->value)
             ->whereNotNull('trial_ends_at')
-            ->whereBetween('trial_ends_at', [$now, $now->copy()->addDays($days)])
-            ->chunkById(100, function (Collection $subscriptions) use ($notifier, $log, $attempts, $dryRun, &$warned): void {
+            ->whereBetween('trial_ends_at', [$now, $now->copy()->addDays($days + 1)])
+            ->chunkById(100, function (Collection $subscriptions) use ($reminders, $attempts, $now, $days, $dryRun, &$warned): void {
                 /** @var Collection<int, Subscription> $subscriptions */
                 foreach ($subscriptions as $subscription) {
                     if ($this->providerAnnouncesTrialEnd($subscription->provider)) {
@@ -213,7 +212,7 @@ final class WarnEndingTrialsCommand extends Command
 
                     $endsAt = Carbon::instance($endsAt);
 
-                    if ($this->alreadyWarned($owner, $endsAt)) {
+                    if (! $reminders->due($owner, $endsAt, $now, $days) || $reminders->sentFor($owner, $endsAt)) {
                         continue;
                     }
 
@@ -223,17 +222,11 @@ final class WarnEndingTrialsCommand extends Command
                         continue;
                     }
 
-                    $sent = $attempts->attempt(static function () use ($notifier, $log, $owner, $endsAt): void {
-                        $notifier->trialEnding($owner, $endsAt);
-
-                        // The same event type and the same date format the generic path records, so the two
-                        // dedupe against each other and the provider's own notice does too — it writes this
-                        // record as well. A second type would make three paths that each believe they are the
-                        // only one.
-                        $log->record('trial.ending_notice_sent', $owner, [
-                            'trial' => 'subscription',
-                            'trial_ends_at' => $endsAt->format('Y-m-d'),
-                        ]);
+                    // The same mark the generic path records, so the two dedupe against each other and the
+                    // provider's own notice does too: it writes this record as well. A second type would make
+                    // three paths that each believe they are the only one.
+                    $sent = $attempts->attempt(static function () use ($reminders, $owner, $endsAt): void {
+                        $reminders->send($owner, $endsAt, 'subscription');
                     });
 
                     if ($sent) {
@@ -311,23 +304,6 @@ final class WarnEndingTrialsCommand extends Command
                 // Or a provider will tell them, and two reminders for one trial end is how a reminder
                 // stops being read.
                 || $this->providerAnnouncesTrialEnd($subscription->provider));
-    }
-
-    /** Whether this owner has already been told about this trial end. */
-    private function alreadyWarned(Model $owner, Carbon $endsAt): bool
-    {
-        // Compared in PHP rather than through a JSON path in SQL, deliberately. The three engines this
-        // package is proven on spell a JSON path differently and disagree about what is comparable, and a
-        // dedupe that silently matched nothing on one of them would mail a customer every night — the
-        // failure would appear only in production, on whichever engine the operator happens to run.
-        $date = $endsAt->format('Y-m-d');
-
-        return BillingEvent::model()::query()
-            ->where('type', 'trial.ending_notice_sent')
-            ->where('subject_type', $owner->getMorphClass())
-            ->where('subject_id', $owner->getKey())
-            ->get()
-            ->contains(static fn (BillingEvent $event): bool => ($event->payload['trial_ends_at'] ?? null) === $date);
     }
 
     private function windowDays(Repository $config): int

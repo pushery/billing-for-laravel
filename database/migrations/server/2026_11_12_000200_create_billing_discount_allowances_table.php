@@ -32,7 +32,7 @@ return new class extends Migration
             $table->dateTimeTz('created_at')->nullable();
             $table->dateTimeTz('updated_at')->nullable();
 
-            $table->unique(['owner_type', 'owner_id', 'cause'], 'billing_discount_allowances_cause_unique');
+            $table->unique(['owner_type', 'owner_id', 'cause'], BillingSchema::indexName('billing_discount_allowances_cause_unique'));
         });
     }
 

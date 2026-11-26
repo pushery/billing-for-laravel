@@ -47,11 +47,11 @@ return new class extends Migration
 
             // One account per merchant per provider. A second account for the same merchant is not a
             // harmless duplicate: it splits their money across two identities the provider pays separately.
-            $table->unique(['provider', 'merchant_type', 'merchant_id'], 'billing_merchant_accounts_merchant_unique');
+            $table->unique(['provider', 'merchant_type', 'merchant_id'], BillingSchema::indexName('billing_merchant_accounts_merchant_unique'));
 
             // A webhook arrives with the account reference and no local identity, so the lookup back to the
             // merchant runs on this column on every inbound Connect-style event.
-            $table->unique(['provider', 'account_reference'], 'billing_merchant_accounts_reference_unique');
+            $table->unique(['provider', 'account_reference'], BillingSchema::indexName('billing_merchant_accounts_reference_unique'));
         });
     }
 

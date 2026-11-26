@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * One row per attempt to reverse money, written before the provider is called.
@@ -55,7 +56,7 @@ return new class extends Migration
             $table->timestamps();
 
             // Every attempt against one charge, which is how a caller sees what has already been tried.
-            $table->index(['provider', 'charge_reference'], 'billing_refund_attempts_charge_index');
+            $table->index(['provider', 'charge_reference'], BillingSchema::indexName('billing_refund_attempts_charge_index'));
         });
     }
 

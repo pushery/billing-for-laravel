@@ -34,7 +34,7 @@ return new class extends Migration
             $table->timestamp('owner_erased_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['document_number', 'syntax'], 'billing_document_artifacts_document_syntax_unique');
+            $table->unique(['document_number', 'syntax'], BillingSchema::indexName('billing_document_artifacts_document_syntax_unique'));
         });
     }
 

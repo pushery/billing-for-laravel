@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Which subdivision of the destination country a sale was made into.
@@ -42,14 +43,14 @@ return new class extends Migration
 
             // The pair, in the order a counter reads it: every question about a subdivision is a question
             // about a subdivision of a country, and `NY` alone is not one.
-            $table->index(['destination_country', 'destination_subdivision'], 'billing_invoices_destination_idx');
+            $table->index(['destination_country', 'destination_subdivision'], BillingSchema::indexName('billing_invoices_destination_idx'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
-            $table->dropIndex('billing_invoices_destination_idx');
+            $table->dropIndex(BillingSchema::standingIndexName('billing_invoices', 'billing_invoices_destination_idx'));
             $table->dropColumn('destination_subdivision');
         });
     }

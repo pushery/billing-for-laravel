@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Which document settled this charge, for the run where nothing else can say.
@@ -47,14 +48,14 @@ return new class extends Migration
     {
         Schema::table('billing_merchant_charges', function (Blueprint $table): void {
             $table->unsignedBigInteger('settlement_invoice_id')->nullable()->after('settled_at');
-            $table->index('settlement_invoice_id', 'billing_merchant_charges_settlement_invoice_index');
+            $table->index('settlement_invoice_id', BillingSchema::indexName('billing_merchant_charges_settlement_invoice_index'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_merchant_charges', function (Blueprint $table): void {
-            $table->dropIndex('billing_merchant_charges_settlement_invoice_index');
+            $table->dropIndex(BillingSchema::standingIndexName('billing_merchant_charges', 'billing_merchant_charges_settlement_invoice_index'));
             $table->dropColumn('settlement_invoice_id');
         });
     }

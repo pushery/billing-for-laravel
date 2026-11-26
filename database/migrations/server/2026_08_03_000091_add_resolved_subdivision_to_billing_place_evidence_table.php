@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The subdivision the place evidence settled on, where the resolved country has subdivisions in scope.
@@ -30,7 +31,7 @@ return new class extends Migration
             // subdivision together, over time. The country index alone cannot answer it without a scan.
             $table->index(
                 ['resolved_country', 'resolved_subdivision', 'resolved_at'],
-                'billing_place_evidence_subdivision_index',
+                BillingSchema::indexName('billing_place_evidence_subdivision_index'),
             );
         });
     }
@@ -38,7 +39,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('billing_place_evidence', function (Blueprint $table): void {
-            $table->dropIndex('billing_place_evidence_subdivision_index');
+            $table->dropIndex(BillingSchema::standingIndexName('billing_place_evidence', 'billing_place_evidence_subdivision_index'));
             $table->dropColumn('resolved_subdivision');
         });
     }

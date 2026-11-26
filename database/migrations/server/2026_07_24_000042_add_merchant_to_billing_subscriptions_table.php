@@ -42,17 +42,19 @@ return new class extends Migration
             // enforced — one row per (owner, type) — is preserved exactly, now as one row per
             // (owner, type, 'platform'). The losing insert of a concurrent first delivery still hits this
             // violation and reruns, because both racers carry the same sentinel.
-            $table->dropUnique('billing_subscriptions_owner_type_owner_id_type_unique');
+            // By its columns, as it was built: Laravel derives the same name again, with the table prefix
+            // wherever the connection gives its index names one.
+            $table->dropUnique(['owner_type', 'owner_id', 'type']);
             // Named explicitly: the conventional name for four columns overruns MySQL's 64-character
             // identifier limit, so an unnamed index migrates on SQLite and fails on MySQL.
-            $table->unique(['owner_type', 'owner_id', 'type', 'merchant_uid'], 'billing_subscriptions_owner_merchant_unique');
+            $table->unique(['owner_type', 'owner_id', 'type', 'merchant_uid'], BillingSchema::indexName('billing_subscriptions_owner_merchant_unique'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_subscriptions', function (Blueprint $table): void {
-            $table->dropUnique('billing_subscriptions_owner_merchant_unique');
+            $table->dropUnique(BillingSchema::standingIndexName('billing_subscriptions', 'billing_subscriptions_owner_merchant_unique'));
             $table->unique(['owner_type', 'owner_id', 'type']);
 
             $table->dropIndex(['merchant_type', 'merchant_id', 'status']);

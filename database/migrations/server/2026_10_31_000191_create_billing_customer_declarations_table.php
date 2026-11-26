@@ -48,7 +48,7 @@ return new class extends Migration
             $table->dateTime('owner_erased_at')->nullable();
             $table->timestamps();
 
-            $table->index('reference', 'billing_customer_declarations_reference_index');
+            $table->index('reference', BillingSchema::indexName('billing_customer_declarations_reference_index'));
         });
     }
 

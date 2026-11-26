@@ -29,7 +29,7 @@ return new class extends Migration
             $table->string('reached_period')->nullable();
             $table->timestamps();
 
-            $table->unique(['owner_type', 'owner_id'], 'billing_spend_caps_owner_unique');
+            $table->unique(['owner_type', 'owner_id'], BillingSchema::indexName('billing_spend_caps_owner_unique'));
         });
     }
 

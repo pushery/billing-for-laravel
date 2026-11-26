@@ -63,11 +63,11 @@ return new class extends Migration
 
             $table->timestamps();
 
-            $table->unique(['provider', 'charge_reference'], 'billing_merchant_charges_reference_unique');
+            $table->unique(['provider', 'charge_reference'], BillingSchema::indexName('billing_merchant_charges_reference_unique'));
 
             // The read path of the earnings journal and of every clawback: everything a merchant was
             // routed, newest first.
-            $table->index(['merchant_type', 'merchant_id', 'settlement_state'], 'billing_merchant_charges_merchant_index');
+            $table->index(['merchant_type', 'merchant_id', 'settlement_state'], BillingSchema::indexName('billing_merchant_charges_merchant_index'));
         });
     }
 

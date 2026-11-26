@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Which merchant account a delivery is about, and the dedup key that has to include it.
@@ -32,14 +33,14 @@ return new class extends Migration
 
         Schema::table('billing_webhook_events', function (Blueprint $table): void {
             $table->dropUnique(['provider', 'event_id']);
-            $table->unique(['provider', 'account_reference', 'event_id'], 'billing_webhook_events_account_event_unique');
+            $table->unique(['provider', 'account_reference', 'event_id'], BillingSchema::indexName('billing_webhook_events_account_event_unique'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_webhook_events', function (Blueprint $table): void {
-            $table->dropUnique('billing_webhook_events_account_event_unique');
+            $table->dropUnique(BillingSchema::standingIndexName('billing_webhook_events', 'billing_webhook_events_account_event_unique'));
             $table->unique(['provider', 'event_id']);
         });
 

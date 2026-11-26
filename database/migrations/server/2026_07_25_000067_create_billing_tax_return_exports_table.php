@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * A produced return file, kept as the document it is.
@@ -38,7 +39,7 @@ return new class extends Migration
             $table->string('written_to')->nullable();
             $table->timestamps();
 
-            $table->index(['year', 'quarter', 'currency'], 'billing_tax_return_exports_period_index');
+            $table->index(['year', 'quarter', 'currency'], BillingSchema::indexName('billing_tax_return_exports_period_index'));
         });
     }
 

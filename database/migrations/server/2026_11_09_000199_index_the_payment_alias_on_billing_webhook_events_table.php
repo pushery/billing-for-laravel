@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 use Pushery\Billing\Support\MigrationLocks;
 
 /**
@@ -34,13 +35,14 @@ return new class extends Migration
 
         if ($connection->getDriverName() === 'pgsql') {
             $grammar = $connection->getQueryGrammar();
+            $name = BillingSchema::indexName(self::INDEX);
 
             // On a first run nothing stands under the name, and the drop changes nothing.
-            $connection->statement('drop index concurrently if exists '.$grammar->wrap(self::INDEX));
+            $connection->statement('drop index concurrently if exists '.$grammar->wrap($name));
 
             $connection->statement(sprintf(
                 'create index concurrently if not exists %s on %s (%s)',
-                $grammar->wrap(self::INDEX),
+                $grammar->wrap($name),
                 $grammar->wrapTable('billing_webhook_events'),
                 $grammar->columnize(self::COLUMNS),
             ));
@@ -51,7 +53,7 @@ return new class extends Migration
         MigrationLocks::bound();
 
         Schema::table('billing_webhook_events', function (Blueprint $table): void {
-            $table->index(self::COLUMNS, self::INDEX);
+            $table->index(self::COLUMNS, BillingSchema::indexName(self::INDEX));
         });
     }
 
@@ -60,7 +62,7 @@ return new class extends Migration
         $connection = Schema::getConnection();
 
         if ($connection->getDriverName() === 'pgsql') {
-            $connection->statement('drop index concurrently if exists '.$connection->getQueryGrammar()->wrap(self::INDEX));
+            $connection->statement('drop index concurrently if exists '.$connection->getQueryGrammar()->wrap(BillingSchema::standingIndexName('billing_webhook_events', self::INDEX)));
 
             return;
         }
@@ -68,7 +70,7 @@ return new class extends Migration
         MigrationLocks::bound();
 
         Schema::table('billing_webhook_events', function (Blueprint $table): void {
-            $table->dropIndex(self::INDEX);
+            $table->dropIndex(BillingSchema::standingIndexName('billing_webhook_events', self::INDEX));
         });
     }
 };

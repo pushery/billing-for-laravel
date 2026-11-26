@@ -38,8 +38,8 @@ return new class extends Migration
             $table->timestamp('owner_erased_at')->nullable();
             $table->timestamps();
 
-            $table->unique('reference', 'billing_place_evidence_reference_unique');
-            $table->index(['resolved_country', 'resolved_at'], 'billing_place_evidence_country_index');
+            $table->unique('reference', BillingSchema::indexName('billing_place_evidence_reference_unique'));
+            $table->index(['resolved_country', 'resolved_at'], BillingSchema::indexName('billing_place_evidence_country_index'));
         });
     }
 

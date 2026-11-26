@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * What was reported about sellers for a period, kept as the exact bytes that were produced.
@@ -59,7 +60,7 @@ return new class extends Migration
             // corrections land — and the interesting fact is that it happened and whether the two agree. A
             // unique key would force the second run to overwrite the first, destroying the only evidence
             // that anything changed.
-            $table->index(['period_year', 'currency', 'format'], 'billing_reporting_exports_period_index');
+            $table->index(['period_year', 'currency', 'format'], BillingSchema::indexName('billing_reporting_exports_period_index'));
         });
     }
 

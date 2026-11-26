@@ -50,7 +50,7 @@ return new class extends Migration
             $table->timestamp('warned_at');
             $table->timestamps();
 
-            $table->unique(['merchant_type', 'merchant_id', 'deadline'], 'billing_tax_hold_warning_unique');
+            $table->unique(['merchant_type', 'merchant_id', 'deadline'], BillingSchema::indexName('billing_tax_hold_warning_unique'));
         });
     }
 

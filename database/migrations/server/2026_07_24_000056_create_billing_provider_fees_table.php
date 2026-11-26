@@ -39,7 +39,7 @@ return new class extends Migration
             $table->timestamp('merchant_erased_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['provider', 'reference'], 'billing_provider_fees_unique');
+            $table->unique(['provider', 'reference'], BillingSchema::indexName('billing_provider_fees_unique'));
         });
     }
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 use Pushery\Billing\Support\TableLookup;
 
 /**
@@ -19,7 +20,8 @@ use Pushery\Billing\Support\TableLookup;
  *
  * An index is dropped only where it exists and the index that covers it exists too, so an installation that never
  * had it, removed it, or changed the longer one migrates all the same and keeps what it still needs. Rolling back
- * recreates each under its old name, on its old columns.
+ * recreates each on its old columns, under its old name, which carries the table prefix where
+ * BillingSchema::indexName() gives one.
  *
  * Server-only, reversible.
  */
@@ -101,13 +103,17 @@ return new class extends Migration
 
             $drop = array_keys(array_filter(
                 $indexes,
-                static fn (array $index, string $name): bool => Schema::hasIndex(TableLookup::qualified($table), $name) && Schema::hasIndex(TableLookup::qualified($table), $index['coveredBy']),
+                static fn (array $index, string $name): bool => Schema::hasIndex(TableLookup::qualified($table), BillingSchema::standingIndexName($table, $name))
+                    && Schema::hasIndex(TableLookup::qualified($table), BillingSchema::standingIndexName($table, $index['coveredBy'])),
                 ARRAY_FILTER_USE_BOTH,
             ));
 
             if ($drop === []) {
                 continue;
             }
+
+            // Each under the name it stands under: with the table prefix, or without it on an installation from before.
+            $drop = array_map(static fn (string $name): string => BillingSchema::standingIndexName($table, $name), $drop);
 
             Schema::table($table, static function (Blueprint $blueprint) use ($drop): void {
                 foreach ($drop as $name) {
@@ -124,7 +130,7 @@ return new class extends Migration
                 continue;
             }
 
-            $restore = array_filter($indexes, static fn (array $index, string $name): bool => ! Schema::hasIndex(TableLookup::qualified($table), $name), ARRAY_FILTER_USE_BOTH);
+            $restore = array_filter($indexes, static fn (array $index, string $name): bool => ! Schema::hasIndex(TableLookup::qualified($table), BillingSchema::standingIndexName($table, $name)), ARRAY_FILTER_USE_BOTH);
 
             if ($restore === []) {
                 continue;
@@ -132,7 +138,7 @@ return new class extends Migration
 
             Schema::table($table, static function (Blueprint $blueprint) use ($restore): void {
                 foreach ($restore as $name => $index) {
-                    $blueprint->index($index['columns'], $name);
+                    $blueprint->index($index['columns'], BillingSchema::indexName($name));
                 }
             });
         }

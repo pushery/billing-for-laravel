@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Which event a correcting document corrects, where that event has no row of its own.
@@ -42,7 +43,7 @@ return new class extends Migration
 
             $table->unique(
                 ['correction_key', 'credited_invoice_id'],
-                'billing_invoices_correction_key_unique',
+                BillingSchema::indexName('billing_invoices_correction_key_unique'),
             );
         });
     }
@@ -50,7 +51,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
-            $table->dropUnique('billing_invoices_correction_key_unique');
+            $table->dropUnique(BillingSchema::standingIndexName('billing_invoices', 'billing_invoices_correction_key_unique'));
             $table->dropColumn('correction_key');
         });
     }

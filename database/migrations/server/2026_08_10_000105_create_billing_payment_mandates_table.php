@@ -47,10 +47,10 @@ return new class extends Migration
             // Per provider, not globally: two providers' id spaces are unrelated, so the same string under
             // both is a coincidence rather than a duplicate. Refusing it would leave an install running two
             // drivers unable to store a valid mandate.
-            $table->unique(['provider', 'mandate_reference'], 'billing_payment_mandates_reference_unique');
+            $table->unique(['provider', 'mandate_reference'], BillingSchema::indexName('billing_payment_mandates_reference_unique'));
 
             // The lookup the engine does before every off-session charge.
-            $table->index(['owner_type', 'owner_id', 'provider', 'is_default'], 'billing_payment_mandates_default_index');
+            $table->index(['owner_type', 'owner_id', 'provider', 'is_default'], BillingSchema::indexName('billing_payment_mandates_default_index'));
         });
     }
 

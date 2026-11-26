@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Enums\BillingInterval;
 use Pushery\Billing\Exceptions\SubscriptionNotPermitted;
 use Pushery\Billing\ValueObjects\SubscriptionStart;
+use Pushery\Billing\ValueObjects\TrialChoice;
 
 /**
  * Begin a subscription on the mandate an owner has already given, without sending them to the provider.
@@ -32,13 +33,17 @@ interface StartsOverAMandate
      * code is honored as `start()` honors it. A generic trial stands on the owner rather than on a subscription, so this
      * call grants none.
      *
+     * A trial the application decides for this start replaces the one of the policy: a moment it ends at, or none. The
+     * policy is then not asked, and a code that gives trial days changes that trial in neither direction.
+     *
      * @param  ?string  $declarationReference  the key the buyer's withdrawal declarations were recorded under, carried
      *                                         onto the subscription so the ledger finds them again
      * @param  ?BillingInterval  $interval  the interval to sell the tier at; null sells it at its default interval, and a
      *                                      driver that bills a tier at its default interval alone refuses another
+     * @param  ?TrialChoice  $trial  the trial of this start as the application decides it; null leaves it to the policy
      *
      * @throws SubscriptionNotPermitted when the tier is not one this install sells, the billable already has a live
      *                                  subscription, or the billable holds no mandate the engine can charge
      */
-    public function startOverTheMandate(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?BillingInterval $interval = null): SubscriptionStart;
+    public function startOverTheMandate(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?BillingInterval $interval = null, ?TrialChoice $trial = null): SubscriptionStart;
 }

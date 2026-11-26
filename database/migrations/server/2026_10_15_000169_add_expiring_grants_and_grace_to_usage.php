@@ -39,9 +39,9 @@ return new class extends Migration
             $table->unsignedBigInteger('expired_units')->nullable();
             $table->timestamps();
 
-            $table->index(['owner_type', 'owner_id', 'meter_key', 'expires_at'], 'billing_usage_grants_draw_index');
-            $table->unique(['owner_type', 'owner_id', 'meter_key', 'reference'], 'billing_usage_grants_reference_unique');
-            $table->index(['expired_at', 'expires_at'], 'billing_usage_grants_expiry_index');
+            $table->index(['owner_type', 'owner_id', 'meter_key', 'expires_at'], BillingSchema::indexName('billing_usage_grants_draw_index'));
+            $table->unique(['owner_type', 'owner_id', 'meter_key', 'reference'], BillingSchema::indexName('billing_usage_grants_reference_unique'));
+            $table->index(['expired_at', 'expires_at'], BillingSchema::indexName('billing_usage_grants_expiry_index'));
         });
 
         Schema::table('billing_prepaid_units', function (Blueprint $table): void {

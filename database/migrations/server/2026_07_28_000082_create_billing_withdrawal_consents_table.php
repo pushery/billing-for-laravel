@@ -58,7 +58,7 @@ return new class extends Migration
             $table->timestamp('owner_erased_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['owner_type', 'owner_id', 'reference'], 'billing_withdrawal_consents_unique');
+            $table->unique(['owner_type', 'owner_id', 'reference'], BillingSchema::indexName('billing_withdrawal_consents_unique'));
         });
     }
 

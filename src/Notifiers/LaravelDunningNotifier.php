@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Notification;
 use Pushery\Billing\Catalogs\MeterCatalog;
 use Pushery\Billing\Consumer\WithdrawalConsentLedger;
+use Pushery\Billing\Contracts\AddressesTrialReminders;
 use Pushery\Billing\Contracts\DunningNotifier;
 use Pushery\Billing\Contracts\MandateNotifier;
 use Pushery\Billing\Contracts\PaymentActionAmountNotifier;
@@ -37,6 +38,7 @@ use Pushery\Billing\Notifications\TrialEndingNotification;
 use Pushery\Billing\PriceChanges\PriceChange;
 use Pushery\Billing\Support\FirstChargePreview;
 use Pushery\Billing\Support\OwnersZone;
+use Pushery\Billing\Support\TrialCallouts;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\PaymentMethod;
@@ -111,16 +113,38 @@ final class LaravelDunningNotifier implements DunningNotifier, MandateNotifier, 
 
     /**
      * The reminder names the charge that follows the trial where the driver can preview it, and the day it is collected
-     * in the owner's zone, as it names the end of the trial.
+     * in the owner's zone, as it names the end of the trial. Where the application binds `AddressesTrialReminders`, it
+     * goes to the recipients that names, in the language it names, and its button still follows the owner's payment
+     * method, since the recipients act for the owner.
      */
     public function trialEnding(Model $owner, DateTimeInterface $endsAt): void
     {
-        $charge = Container::getInstance()->make(FirstChargePreview::class)->for($owner);
+        $container = Container::getInstance();
+        $charge = $container->make(FirstChargePreview::class)->for($owner);
+        $trialEndsAt = OwnersZone::of($owner, $endsAt);
+        $firstCharge = $charge instanceof UpcomingInvoicePreview ? new UpcomingInvoicePreview(OwnersZone::of($owner, $charge->date), $charge->amount) : null;
 
-        Notification::send($owner, new TrialEndingNotification(
-            OwnersZone::of($owner, $endsAt),
-            $charge instanceof UpcomingInvoicePreview ? new UpcomingInvoicePreview(OwnersZone::of($owner, $charge->date), $charge->amount) : null,
-        ));
+        if (! $container->bound(AddressesTrialReminders::class)) {
+            Notification::send($owner, new TrialEndingNotification($trialEndsAt, $firstCharge));
+
+            return;
+        }
+
+        $audience = $container->make(AddressesTrialReminders::class);
+        $notification = new TrialEndingNotification($trialEndsAt, $firstCharge, TrialCallouts::hasPaymentMethod($owner));
+        $locale = $audience->locale($owner);
+
+        if ($locale !== null) {
+            $notification->locale($locale);
+        }
+
+        $recipients = [];
+
+        foreach ($audience->recipients($owner) as $recipient) {
+            $recipients[] = $recipient;
+        }
+
+        Notification::send($recipients, $notification);
     }
 
     public function priceChangeAnnounced(Model $owner, PriceChange $change, DateTimeInterface $effectiveOn): void

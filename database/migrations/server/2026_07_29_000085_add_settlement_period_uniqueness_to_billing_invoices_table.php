@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * One document per owner, series and period — enforced by the database rather than by a lookup.
@@ -45,7 +46,7 @@ return new class extends Migration
         Schema::table('billing_invoices', function (Blueprint $table): void {
             $table->unique(
                 ['owner_type', 'owner_id', 'document_series', 'settlement_period'],
-                'billing_invoices_owner_series_period_unique',
+                BillingSchema::indexName('billing_invoices_owner_series_period_unique'),
             );
         });
     }
@@ -53,7 +54,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
-            $table->dropUnique('billing_invoices_owner_series_period_unique');
+            $table->dropUnique(BillingSchema::standingIndexName('billing_invoices', 'billing_invoices_owner_series_period_unique'));
         });
     }
 };

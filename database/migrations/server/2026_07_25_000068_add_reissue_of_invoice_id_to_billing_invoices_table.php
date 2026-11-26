@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Marks a document that states an existing sale again, rather than stating a new one.
@@ -24,14 +25,14 @@ return new class extends Migration
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
             $table->unsignedBigInteger('reissue_of_invoice_id')->nullable()->after('credited_invoice_number');
-            $table->index('reissue_of_invoice_id', 'billing_invoices_reissue_index');
+            $table->index('reissue_of_invoice_id', BillingSchema::indexName('billing_invoices_reissue_index'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
-            $table->dropIndex('billing_invoices_reissue_index');
+            $table->dropIndex(BillingSchema::standingIndexName('billing_invoices', 'billing_invoices_reissue_index'));
             $table->dropColumn('reissue_of_invoice_id');
         });
     }

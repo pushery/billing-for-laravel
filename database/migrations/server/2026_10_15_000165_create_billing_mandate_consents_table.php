@@ -47,7 +47,7 @@ return new class extends Migration
             $table->dateTime('owner_erased_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['provider', 'mandate_reference'], 'billing_mandate_consents_mandate_unique');
+            $table->unique(['provider', 'mandate_reference'], BillingSchema::indexName('billing_mandate_consents_mandate_unique'));
         });
     }
 

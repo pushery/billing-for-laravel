@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * A stored document file the disk did not remove when `billing:prune` pruned the record that named it. The record is
@@ -23,7 +24,7 @@ return new class extends Migration
             // With its zone on PostgreSQL and as a DATETIME on MySQL, like every moment of the package's tables.
             $table->dateTimeTz('failed_at');
 
-            $table->unique('fingerprint', 'billing_stranded_files_fingerprint_unique');
+            $table->unique('fingerprint', BillingSchema::indexName('billing_stranded_files_fingerprint_unique'));
         });
     }
 

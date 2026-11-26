@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Which filing obligation has been announced, and for which due date.
@@ -35,7 +36,7 @@ return new class extends Migration
             $table->timestamp('announced_at');
             $table->timestamps();
 
-            $table->unique(['obligation', 'due_on'], 'billing_filing_reminder_unique');
+            $table->unique(['obligation', 'due_on'], BillingSchema::indexName('billing_filing_reminder_unique'));
         });
     }
 

@@ -24,6 +24,10 @@ use Pushery\Billing\ValueObjects\UpcomingInvoicePreview;
  * the day it is collected, and where the customer cancels before then. Without it the mail
  * names neither, rather than a figure from the catalog that the charge may not have.
  *
+ * The button leads to the plan screen where the owner has a payment method and to the screen that takes one where
+ * not. A notifier that sends the reminder to people acting for the owner passes the owner's answer as
+ * `$ownerHasPaymentMethod`, since the payment method belongs to the owner and not to the recipient.
+ *
  * Queued after the commit, like every notification the package sends: the run that sends it claims, mails and
  * marks itself handled in one transaction, so a run that rolled back can never have mailed the customer.
  */
@@ -32,6 +36,7 @@ final class TrialEndingNotification extends BillingNotification
     public function __construct(
         private readonly DateTimeInterface $trialEndsAt,
         private readonly ?UpcomingInvoicePreview $firstCharge = null,
+        private readonly ?bool $ownerHasPaymentMethod = null,
     ) {}
 
     public function toMail(object $notifiable): MailMessage
@@ -53,7 +58,9 @@ final class TrialEndingNotification extends BillingNotification
         // plan screen — they are choosing whether to continue. Somebody without one needs the screen that
         // takes a card, which is the action this mail's own text asks for. Sending both to the same place
         // makes one of the two do a second hop for no reason.
-        $hasCard = $notifiable instanceof Model && TrialCallouts::hasPaymentMethod($notifiable);
+        // A notifier that sends the reminder to people acting for the owner says what the owner has; without that, the
+        // notifiable is the owner.
+        $hasCard = $this->ownerHasPaymentMethod ?? ($notifiable instanceof Model && TrialCallouts::hasPaymentMethod($notifiable));
 
         return $this->withAction(
             $mail,

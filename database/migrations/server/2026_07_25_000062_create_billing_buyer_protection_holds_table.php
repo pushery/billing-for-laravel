@@ -46,8 +46,8 @@ return new class extends Migration
 
             // The scheduler asks one question — which holds are still open and past a date — so the index is
             // on the pair it filters by, not on either column alone.
-            $table->index(['state', 'confirm_by'], 'billing_protection_holds_state_confirm_index');
-            $table->index(['state', 'decide_by'], 'billing_protection_holds_state_decide_index');
+            $table->index(['state', 'confirm_by'], BillingSchema::indexName('billing_protection_holds_state_confirm_index'));
+            $table->index(['state', 'decide_by'], BillingSchema::indexName('billing_protection_holds_state_decide_index'));
         });
     }
 

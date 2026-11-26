@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * A register's verdict on a tax ID can come back after a different one, and then it is an answer of its own.
@@ -26,16 +27,16 @@ return new class extends Migration
         });
 
         Schema::table('billing_tax_id_verifications', function (Blueprint $table): void {
-            $table->dropUnique('billing_tax_id_verifications_answer_unique');
-            $table->unique(['provider', 'tax_id_reference', 'status', 'follows'], 'billing_tax_id_verifications_answer_unique');
+            $table->dropUnique(BillingSchema::standingIndexName('billing_tax_id_verifications', 'billing_tax_id_verifications_answer_unique'));
+            $table->unique(['provider', 'tax_id_reference', 'status', 'follows'], BillingSchema::indexName('billing_tax_id_verifications_answer_unique'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_tax_id_verifications', function (Blueprint $table): void {
-            $table->dropUnique('billing_tax_id_verifications_answer_unique');
-            $table->unique(['provider', 'tax_id_reference', 'status'], 'billing_tax_id_verifications_answer_unique');
+            $table->dropUnique(BillingSchema::standingIndexName('billing_tax_id_verifications', 'billing_tax_id_verifications_answer_unique'));
+            $table->unique(['provider', 'tax_id_reference', 'status'], BillingSchema::indexName('billing_tax_id_verifications_answer_unique'));
         });
 
         Schema::table('billing_tax_id_verifications', function (Blueprint $table): void {

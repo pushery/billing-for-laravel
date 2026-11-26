@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * One settlement that has to be issued again because the creator's standing was corrected.
@@ -35,8 +36,8 @@ return new class extends Migration
             $table->timestamp('processed_at')->nullable();
             $table->timestamps();
 
-            $table->unique('original_invoice_id', 'billing_settlement_restatements_original_unique');
-            $table->index('state', 'billing_settlement_restatements_state_index');
+            $table->unique('original_invoice_id', BillingSchema::indexName('billing_settlement_restatements_original_unique'));
+            $table->index('state', BillingSchema::indexName('billing_settlement_restatements_state_index'));
         });
     }
 

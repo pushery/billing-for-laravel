@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Marks an invoice that charges again what a credit note credited, and names the invoice it charges again.
@@ -20,14 +21,14 @@ return new class extends Migration
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
             $table->unsignedBigInteger('reinstates_invoice_id')->nullable()->after('restates_invoice_id');
-            $table->index('reinstates_invoice_id', 'billing_invoices_reinstates_index');
+            $table->index('reinstates_invoice_id', BillingSchema::indexName('billing_invoices_reinstates_index'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
-            $table->dropIndex('billing_invoices_reinstates_index');
+            $table->dropIndex(BillingSchema::standingIndexName('billing_invoices', 'billing_invoices_reinstates_index'));
             $table->dropColumn('reinstates_invoice_id');
         });
     }

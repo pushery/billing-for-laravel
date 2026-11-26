@@ -14,7 +14,8 @@ use Illuminate\Database\Eloquent\Model;
  * midnight: a subscription that ends at 22:00 UTC ends on the next day in Tokyo. Bind an implementation that answers
  * with the owner's zone, and the notices the package's own notifier sends name the day in it.
  *
- * It is asked once per notice, with the owner the notice goes to.
+ * It is asked once per notice, with the owner the notice goes to, and the reminder before the end of a trial asks it
+ * once more to count its window in whole days of that zone.
  */
 interface OwnerTimezone
 {

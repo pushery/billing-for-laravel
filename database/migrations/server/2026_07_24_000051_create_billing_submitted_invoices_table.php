@@ -58,7 +58,7 @@ return new class extends Migration
 
             // Dedup: the same issuer cannot submit the same invoice number twice. The index name is given
             // explicitly — the auto-generated one exceeds MySQL's 64-character identifier limit.
-            $table->unique(['owner_type', 'owner_id', 'issuer_invoice_number'], 'billing_submitted_invoices_dedup');
+            $table->unique(['owner_type', 'owner_id', 'issuer_invoice_number'], BillingSchema::indexName('billing_submitted_invoices_dedup'));
         });
     }
 

@@ -50,7 +50,7 @@ return new class extends Migration
             $table->timestamp('merchant_erased_at')->nullable();
             $table->timestamps();
 
-            $table->index(['merchant_type', 'merchant_id', 'resolved_at'], 'billing_seller_data_escalations_open_index');
+            $table->index(['merchant_type', 'merchant_id', 'resolved_at'], BillingSchema::indexName('billing_seller_data_escalations_open_index'));
         });
     }
 

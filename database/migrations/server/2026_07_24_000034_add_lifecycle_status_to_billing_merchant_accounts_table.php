@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The platform's own position on a merchant, beside the provider's live capability flags.
@@ -30,14 +31,14 @@ return new class extends Migration
             $table->timestamp('status_changed_at')->nullable()->after('status_reason');
 
             // The routing decision reads status beside the capabilities on every routed payment.
-            $table->index(['provider', 'status'], 'billing_merchant_accounts_status_index');
+            $table->index(['provider', 'status'], BillingSchema::indexName('billing_merchant_accounts_status_index'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_merchant_accounts', function (Blueprint $table): void {
-            $table->dropIndex('billing_merchant_accounts_status_index');
+            $table->dropIndex(BillingSchema::standingIndexName('billing_merchant_accounts', 'billing_merchant_accounts_status_index'));
             $table->dropColumn(['status', 'status_reason', 'status_changed_at']);
         });
     }

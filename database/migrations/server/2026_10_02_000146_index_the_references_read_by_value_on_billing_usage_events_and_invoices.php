@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The two references the package reads by value get an index.
@@ -19,22 +20,22 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('billing_usage_events', function (Blueprint $table): void {
-            $table->index('rolled_up_into', 'billing_usage_events_rolled_up_into_index');
+            $table->index('rolled_up_into', BillingSchema::indexName('billing_usage_events_rolled_up_into_index'));
         });
 
         Schema::table('billing_invoices', function (Blueprint $table): void {
-            $table->index('credited_invoice_id', 'billing_invoices_credited_invoice_id_index');
+            $table->index('credited_invoice_id', BillingSchema::indexName('billing_invoices_credited_invoice_id_index'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
-            $table->dropIndex('billing_invoices_credited_invoice_id_index');
+            $table->dropIndex(BillingSchema::standingIndexName('billing_invoices', 'billing_invoices_credited_invoice_id_index'));
         });
 
         Schema::table('billing_usage_events', function (Blueprint $table): void {
-            $table->dropIndex('billing_usage_events_rolled_up_into_index');
+            $table->dropIndex(BillingSchema::standingIndexName('billing_usage_events', 'billing_usage_events_rolled_up_into_index'));
         });
     }
 };

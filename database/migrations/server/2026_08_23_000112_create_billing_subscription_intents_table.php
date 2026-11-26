@@ -66,7 +66,7 @@ return new class extends Migration
             // MySQL refuses the whole ALTER with error 1059. So the generated name is a migration that
             // works on one of the two engines this package is proven on and cannot run on the other,
             // and the engine it fails on is the one a consumer is more likely to be using.
-            $table->index(['owner_type', 'owner_id', 'claimed_at'], 'billing_intents_owner_open_index');
+            $table->index(['owner_type', 'owner_id', 'claimed_at'], BillingSchema::indexName('billing_intents_owner_open_index'));
         });
     }
 
