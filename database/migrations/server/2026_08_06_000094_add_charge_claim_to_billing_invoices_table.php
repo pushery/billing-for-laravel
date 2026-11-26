@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * One first document per owner, series and settled charge — the period index's twin for one-off sales.
@@ -58,7 +59,7 @@ return new class extends Migration
 
             $table->unique(
                 ['owner_type', 'owner_id', 'document_series', 'charge_claim_key'],
-                'billing_invoices_owner_series_charge_unique',
+                BillingSchema::indexName('billing_invoices_owner_series_charge_unique'),
             );
         });
     }
@@ -66,7 +67,7 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
-            $table->dropUnique('billing_invoices_owner_series_charge_unique');
+            $table->dropUnique(BillingSchema::standingIndexName('billing_invoices', 'billing_invoices_owner_series_charge_unique'));
             $table->dropColumn('charge_claim_key');
         });
     }

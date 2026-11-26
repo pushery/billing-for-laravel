@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * When a local-engine driver should next act on a subscription.
@@ -33,14 +34,14 @@ return new class extends Migration
 
             // The due query is `WHERE scheduled_processing_at <= now AND status IN (...)`, and it runs on a
             // schedule against the whole table. Indexed in that order so the range narrows first.
-            $table->index(['scheduled_processing_at', 'status'], 'billing_subscriptions_due_index');
+            $table->index(['scheduled_processing_at', 'status'], BillingSchema::indexName('billing_subscriptions_due_index'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_subscriptions', function (Blueprint $table): void {
-            $table->dropIndex('billing_subscriptions_due_index');
+            $table->dropIndex(BillingSchema::standingIndexName('billing_subscriptions', 'billing_subscriptions_due_index'));
             $table->dropColumn('scheduled_processing_at');
         });
     }

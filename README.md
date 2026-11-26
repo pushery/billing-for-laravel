@@ -36,10 +36,10 @@ Everything crosses a small set of contracts, so your app talks to _billing_ — 
 
 ## Requirements
 
-- PHP 8.4+
+- PHP 8.4+ (tested on 8.4.27, 8.5.x and 8.6.x)
 - Laravel 13+
 
-Tested on PostgreSQL and MySQL 8.4, the databases Laravel Cloud runs (serverless Postgres and MySQL 8.4 LTS). The fast suite runs on SQLite.
+Tested on PostgreSQL 18.7 and MySQL 8.4.13, the databases Laravel Cloud runs (serverless Postgres and MySQL 8.4 LTS). The fast suite runs on SQLite.
 
 ## Installation
 

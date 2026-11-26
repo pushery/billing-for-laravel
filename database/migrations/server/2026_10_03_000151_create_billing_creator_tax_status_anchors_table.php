@@ -27,7 +27,7 @@ return new class extends Migration
             BillingSchema::hostType($table, 'merchant_type');
             BillingSchema::hostKey($table, 'merchant_id');
 
-            $table->unique(['merchant_type', 'merchant_id'], 'billing_creator_tax_status_anchors_unique');
+            $table->unique(['merchant_type', 'merchant_id'], BillingSchema::indexName('billing_creator_tax_status_anchors_unique'));
         });
     }
 

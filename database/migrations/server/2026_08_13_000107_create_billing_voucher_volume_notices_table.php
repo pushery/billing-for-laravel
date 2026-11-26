@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * A record that one voucher-volume level, for one currency, in one year, has been announced.
@@ -51,7 +52,7 @@ return new class extends Migration
             $table->timestamp('announced_at');
             $table->timestamps();
 
-            $table->unique(['currency', 'level', 'announced_for_year'], 'billing_voucher_volume_notice_unique');
+            $table->unique(['currency', 'level', 'announced_for_year'], BillingSchema::indexName('billing_voucher_volume_notice_unique'));
         });
     }
 

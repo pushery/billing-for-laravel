@@ -137,20 +137,20 @@ return new class extends Migration
             // identifier limit, so an unnamed index migrates on SQLite and fails on MySQL.
             $table->unique(
                 ['owner_type', 'owner_id', 'content_type', 'content_ref', 'merchant_uid'],
-                'billing_access_grants_owner_content_unique',
+                BillingSchema::indexName('billing_access_grants_owner_content_unique'),
             );
 
             // The index `morphs()` would have created, now that the columns are declared by hand.
-            $table->index(['owner_type', 'owner_id'], 'billing_access_grants_owner_index');
+            $table->index(['owner_type', 'owner_id'], BillingSchema::indexName('billing_access_grants_owner_index'));
 
             // "What does this person still own" — the read a library screen makes on every page.
-            $table->index(['owner_type', 'owner_id', 'status'], 'billing_access_grants_owner_status_index');
+            $table->index(['owner_type', 'owner_id', 'status'], BillingSchema::indexName('billing_access_grants_owner_status_index'));
 
             // "Who owns this work" — the read a takedown or a creator deletion makes.
-            $table->index(['content_type', 'content_ref', 'status'], 'billing_access_grants_content_index');
+            $table->index(['content_type', 'content_ref', 'status'], BillingSchema::indexName('billing_access_grants_content_index'));
 
             // The merchant-scoped counterpart, mirroring the subscriptions table.
-            $table->index(['merchant_type', 'merchant_id', 'status'], 'billing_access_grants_merchant_index');
+            $table->index(['merchant_type', 'merchant_id', 'status'], BillingSchema::indexName('billing_access_grants_merchant_index'));
         });
     }
 

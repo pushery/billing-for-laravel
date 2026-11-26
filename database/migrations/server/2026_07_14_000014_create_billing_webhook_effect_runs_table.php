@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * One row per (effect, reference): did this effect already run for this thing? It is both the dedup
@@ -42,9 +43,9 @@ return new class extends Migration
 
             // The dedup identity: one run per effect per reference. This unique is what makes the claim
             // race-safe — two concurrent workers cannot both insert a fresh claim.
-            $table->unique(['provider', 'reference', 'effect'], 'billing_effect_runs_unique');
-            $table->index(['status'], 'billing_effect_runs_status_idx');
-            $table->index(['delivery_id'], 'billing_effect_runs_delivery_idx');
+            $table->unique(['provider', 'reference', 'effect'], BillingSchema::indexName('billing_effect_runs_unique'));
+            $table->index(['status'], BillingSchema::indexName('billing_effect_runs_status_idx'));
+            $table->index(['delivery_id'], BillingSchema::indexName('billing_effect_runs_delivery_idx'));
         });
     }
 

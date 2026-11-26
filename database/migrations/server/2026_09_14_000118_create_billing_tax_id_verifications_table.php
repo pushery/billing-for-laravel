@@ -51,7 +51,7 @@ return new class extends Migration
             $table->timestamp('owner_erased_at')->nullable();
             $table->timestamps();
 
-            $table->unique(['provider', 'tax_id_reference', 'status'], 'billing_tax_id_verifications_answer_unique');
+            $table->unique(['provider', 'tax_id_reference', 'status'], BillingSchema::indexName('billing_tax_id_verifications_answer_unique'));
         });
     }
 

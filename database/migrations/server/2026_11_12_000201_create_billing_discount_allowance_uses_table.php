@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * What one order took off a discount allowance.
@@ -29,10 +30,10 @@ return new class extends Migration
                 $table->dateTimeTz('created_at')->nullable();
                 $table->dateTimeTz('updated_at')->nullable();
 
-                $table->unique(['discount_allowance_id', 'order_id'], 'billing_discount_allowance_uses_order_unique');
+                $table->unique(['discount_allowance_id', 'order_id'], BillingSchema::indexName('billing_discount_allowance_uses_order_unique'));
                 // The foreign key's own index, which PostgreSQL does not create by itself: a retry replaces the uses of
                 // its order, and deleting an order reaches its uses through this column.
-                $table->index('order_id', 'billing_discount_allowance_uses_order_index');
+                $table->index('order_id', BillingSchema::indexName('billing_discount_allowance_uses_order_index'));
             });
         } finally {
             $this->releaseTheBound();

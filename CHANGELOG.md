@@ -4,6 +4,45 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.68.0] - 2026-11-26
+
+### ⚠️ Breaking
+
+- **`StartsOverAMandate::startOverTheMandate()` takes a sixth parameter, `?TrialChoice $trial = null`.** An application class that implements the contract adds it to its signature. A call stays as it is.
+
+### ✨ Added
+
+- **A start over the mandate takes the trial the application decides.** `startOverTheMandate($owner, 'pro', trial: TrialChoice::endingAt($endsAt))` starts the subscription in a trial that ends at that moment, with the first run there, and `TrialChoice::none()` starts it active, its first period due at once where it is collected in advance and at the period's end where it is collected in arrears. The trial policy was the only source before, so an application that runs a trial of its own length, or none, wrote the subscription itself. For such a start the policy is not asked, whatever trial the owner had, and a code that gives trial days changes the trial in neither direction. Without a choice the policy decides, as before.
+
+- **The reminder before the end of a trial goes to the recipients the application names, in the language it names.** Where an application binds `AddressesTrialReminders`, the package's notifier sends the reminder to the notifiables `recipients()` answers for the owner, in the locale `locale()` answers, instead of to the owner itself. An application whose owner is an account with several people behind it, or whose language belongs to an order, sent the reminder itself before. The button still follows the owner's payment method.
+- **An application reminds a trial the package does not keep through the same mark.** `app(TrialReminders::class)->remind($owner, $endsAt)` sends the reminder through the bound `TrialNotifier` and records the mark `billing:trials:warn` reads, so one end of a trial is reminded once, whichever path comes first. It returns false for an end that was reminded before.
+
+- **`BillingSchema::indexName()` and `BillingSchema::standingIndexName()`.** The first gives the name an index of the package is built under on the connection a migration runs on, the second the name it stands under on its table, for a migration that drops it. A migration the application publishes calls both.
+
+### 🔧 Changed
+
+- **The WireKit variant of the declarations list takes WireKit from 2.74.1 on.** A host on an older WireKit gets the plain list until it updates WireKit.
+
+- **`billing:trials:warn` counts its window in whole days of the owner's zone, where `OwnerTimezone` answers one.** A trial is due once its last day lies no more than `billing.trial.ending_within_days` days after today in that zone, for the whole of that day, so a trial that ends in the evening of the last day of the window is reminded on that day. Without a zone the window counts from the moment of the run.
+
+- **`BillingSchema::morphs()` and `nullableMorphs()` build an index name given to them as `indexName()` gives it**, with the table prefix on PostgreSQL and SQLite where the connection sets `prefix_indexes`.
+
+- **A switch set to a spelling that says neither on nor off stops the boot.** This holds for every switch of `config/billing.php` that reads its variable through `EnvSwitch::read()`, from `BILLING_ENABLED` to the two locks `BILLING_RETENTION_ALLOW_BELOW_STATUTORY_MINIMUM` and `BILLING_ALLOW_CONFORMITY_WAIVER`. A value such as `ture` kept the value the package ships. The boot and `config:cache` now stop with an `InvalidArgumentException` that names the variable, the value as written and every spelling for on and off. A missing or empty line and `empty`, `(empty)`, `null` and `(null)` keep the shipped value, as before.
+
+  **Upgrade:** a host whose `.env` gives one of these variables another spelling corrects it, or deletes the line to keep the default.
+
+### 🐛 Fixed
+
+- **The column of download links in the invoice history has a name for a screen reader.** Its heading was empty, so a screen reader announced the column without a name, and an accessibility scan that counts minor findings reported it. The heading now carries the word of the download link, visible to a screen reader only.
+
+- **The package installs on a connection with a table prefix and `prefix_indexes`, a second installation in the same schema included.** Two migrations dropped a unique index Laravel had named after its table by that name without the prefix, so a prefixed installation stopped there, and they now name the index by its columns. On PostgreSQL and SQLite every index name the migrations write themselves carries the prefix where the connection sets `prefix_indexes`, as a name Laravel derives does, so a second installation under another prefix builds its own indexes instead of stopping at `relation already exists`, and the concurrent builds of the two payment indexes of the webhook events no longer drop another installation's index first. The retyping of the credit ledger's source names its table with the prefix. MySQL and MariaDB keep the names as written. An installation that already ran the migrations keeps its indexes as they are, and a later migration finds an index under either name.
+
+### 📚 Documentation
+
+- **The requirements name the versions the package is tested on.** PHP 8.4.27, 8.5.x and 8.6.x, PostgreSQL 18.7 and MySQL 8.4.13, in the README and on the start page of the documentation.
+
+- **The configuration reference says how the package installs under a table prefix**, and which index names carry it on which engine.
+
 ## [0.67.0] - 2026-11-24
 
 ### ✨ Added
@@ -8724,7 +8763,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.67.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.68.0...HEAD
+[0.68.0]: https://github.com/pushery/billing-for-laravel/compare/v0.67.0...v0.68.0
 [0.67.0]: https://github.com/pushery/billing-for-laravel/compare/v0.66.0...v0.67.0
 [0.66.0]: https://github.com/pushery/billing-for-laravel/compare/v0.65.0...v0.66.0
 [0.65.0]: https://github.com/pushery/billing-for-laravel/compare/v0.64.0...v0.65.0

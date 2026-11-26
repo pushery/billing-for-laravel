@@ -44,9 +44,9 @@ return new class extends Migration
             $table->dateTime('owner_erased_at')->nullable();
             $table->timestamps();
 
-            $table->index(['status', 'declared_at'], 'billing_withdrawal_declarations_status_index');
+            $table->index(['status', 'declared_at'], BillingSchema::indexName('billing_withdrawal_declarations_status_index'));
             // PostgreSQL creates no index for a foreign key, and a subscription's declarations are read by it.
-            $table->index('subscription_id', 'billing_withdrawal_declarations_subscription_index');
+            $table->index('subscription_id', BillingSchema::indexName('billing_withdrawal_declarations_subscription_index'));
         });
     }
 

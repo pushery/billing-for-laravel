@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * That a subscription was told of a declared price change, and from which day the new price holds for it.
@@ -34,10 +35,10 @@ return new class extends Migration
                 $table->dateTimeTz('created_at')->nullable();
                 $table->dateTimeTz('updated_at')->nullable();
 
-                $table->unique(['price_change', 'billing_subscription_id'], 'billing_price_change_announcements_unique');
+                $table->unique(['price_change', 'billing_subscription_id'], BillingSchema::indexName('billing_price_change_announcements_unique'));
                 // The foreign key's own index, which PostgreSQL does not create by itself: the cycle reads the
                 // announcements of its subscription through this column.
-                $table->index('billing_subscription_id', 'billing_price_change_announcements_subscription_index');
+                $table->index('billing_subscription_id', BillingSchema::indexName('billing_price_change_announcements_subscription_index'));
             });
         } finally {
             $this->releaseTheBound();

@@ -56,7 +56,7 @@ return new class extends Migration
 
             // The read path: every settlement asks for one merchant's agreements. Ordered by accepted_at so
             // the applicable version is found without a scan.
-            $table->index(['merchant_type', 'merchant_id', 'accepted_at'], 'billing_self_billing_agreements_merchant_index');
+            $table->index(['merchant_type', 'merchant_id', 'accepted_at'], BillingSchema::indexName('billing_self_billing_agreements_merchant_index'));
         });
     }
 

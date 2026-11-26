@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Lets a merchant issue a coupon, instead of the discount namespace belonging to the platform alone.
@@ -42,19 +43,21 @@ return new class extends Migration
         Schema::table('billing_coupons', function (Blueprint $table): void {
             $table->string('merchant_uid')->default('platform')->after('code');
 
-            $table->dropUnique('billing_coupons_code_unique');
+            // By its column, as it was built: Laravel derives the same name again, with the table prefix
+            // wherever the connection gives its index names one.
+            $table->dropUnique(['code']);
 
             // Named explicitly: the conventional name is derived from the table and every column, and this
             // package has already been bitten by an unnamed multi-column index that migrates on SQLite and
             // overruns MySQL's 64-character identifier limit.
-            $table->unique(['merchant_uid', 'code'], 'billing_coupons_merchant_code_unique');
+            $table->unique(['merchant_uid', 'code'], BillingSchema::indexName('billing_coupons_merchant_code_unique'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_coupons', function (Blueprint $table): void {
-            $table->dropUnique('billing_coupons_merchant_code_unique');
+            $table->dropUnique(BillingSchema::standingIndexName('billing_coupons', 'billing_coupons_merchant_code_unique'));
             $table->unique('code');
             $table->dropColumn('merchant_uid');
         });

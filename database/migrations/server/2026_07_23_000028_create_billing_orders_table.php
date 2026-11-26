@@ -41,7 +41,7 @@ return new class extends Migration
             // Exactly one order per subscription cycle. This is the idempotency guarantee: a second attempt
             // to assemble the same cycle hits the unique violation instead of billing the customer twice.
             // A one-off order (subscription_id NULL) is exempt — NULLs are distinct, so many are allowed.
-            $table->unique(['subscription_id', 'period_start'], 'billing_orders_subscription_period_unique');
+            $table->unique(['subscription_id', 'period_start'], BillingSchema::indexName('billing_orders_subscription_period_unique'));
         });
     }
 

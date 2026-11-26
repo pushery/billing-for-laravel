@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Who answered which finding, for which period, and why.
@@ -37,7 +38,7 @@ return new class extends Migration
 
             $table->unique(
                 ['period_year', 'currency', 'finding_key'],
-                'billing_reporting_acknowledgements_period_finding_unique',
+                BillingSchema::indexName('billing_reporting_acknowledgements_period_finding_unique'),
             );
         });
     }

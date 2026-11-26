@@ -36,8 +36,8 @@ return new class extends Migration
 
             // Named, because the generated names run past the identifier length some engines enforce — and
             // an index that cannot be created is a constraint that silently is not there on that engine.
-            $table->unique(['merchant_type', 'merchant_id'], 'billing_creditor_accounts_merchant_unique');
-            $table->unique('number', 'billing_creditor_accounts_number_unique');
+            $table->unique(['merchant_type', 'merchant_id'], BillingSchema::indexName('billing_creditor_accounts_merchant_unique'));
+            $table->unique('number', BillingSchema::indexName('billing_creditor_accounts_number_unique'));
         });
     }
 

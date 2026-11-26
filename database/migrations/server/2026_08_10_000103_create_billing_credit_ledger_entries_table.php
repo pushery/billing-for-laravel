@@ -53,7 +53,7 @@ return new class extends Migration
             $table->timestamp('created_at')->nullable();
 
             // The balance query sums over exactly this triple, so it is one index rather than three.
-            $table->index(['owner_type', 'owner_id', 'currency'], 'billing_credit_entries_owner_currency_index');
+            $table->index(['owner_type', 'owner_id', 'currency'], BillingSchema::indexName('billing_credit_entries_owner_currency_index'));
         });
     }
 

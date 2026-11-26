@@ -41,8 +41,8 @@ return new class extends Migration
             $table->timestamp('opened_at');
             $table->timestamp('merchant_erased_at')->nullable();
             $table->timestamps();
-            $table->unique(['provider', 'dispute_reference'], 'billing_disputes_unique');
-            $table->index('opened_at', 'billing_disputes_opened_at');
+            $table->unique(['provider', 'dispute_reference'], BillingSchema::indexName('billing_disputes_unique'));
+            $table->index('opened_at', BillingSchema::indexName('billing_disputes_opened_at'));
         });
     }
 

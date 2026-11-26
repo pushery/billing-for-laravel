@@ -41,7 +41,7 @@ return new class extends Migration
             $table->timestamp('merchant_erased_at')->nullable();
             $table->timestamps();
 
-            $table->index(['merchant_type', 'merchant_id', 'signed_on'], 'billing_us_tax_forms_seller_index');
+            $table->index(['merchant_type', 'merchant_id', 'signed_on'], BillingSchema::indexName('billing_us_tax_forms_seller_index'));
         });
     }
 

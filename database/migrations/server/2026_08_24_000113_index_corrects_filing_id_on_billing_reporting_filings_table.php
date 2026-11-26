@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 use Pushery\Billing\Support\TableLookup;
 
 /**
@@ -39,18 +40,18 @@ return new class extends Migration
         }
 
         Schema::table(self::TABLE, function (Blueprint $table): void {
-            $table->index('corrects_filing_id', self::INDEX);
+            $table->index('corrects_filing_id', BillingSchema::indexName(self::INDEX));
         });
     }
 
     public function down(): void
     {
-        if (! TableLookup::exists(self::TABLE) || ! Schema::hasIndex(TableLookup::qualified(self::TABLE), self::INDEX)) {
+        if (! TableLookup::exists(self::TABLE) || ! Schema::hasIndex(TableLookup::qualified(self::TABLE), BillingSchema::standingIndexName(self::TABLE, self::INDEX))) {
             return;
         }
 
         Schema::table(self::TABLE, function (Blueprint $table): void {
-            $table->dropIndex(self::INDEX);
+            $table->dropIndex(BillingSchema::standingIndexName(self::TABLE, self::INDEX));
         });
     }
 
@@ -61,7 +62,7 @@ return new class extends Migration
      */
     private function alreadyIndexed(): bool
     {
-        if (Schema::hasIndex(TableLookup::qualified(self::TABLE), self::INDEX)) {
+        if (Schema::hasIndex(TableLookup::qualified(self::TABLE), BillingSchema::standingIndexName(self::TABLE, self::INDEX))) {
             return true;
         }
 

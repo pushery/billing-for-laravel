@@ -41,8 +41,8 @@ return new class extends Migration
 
             // The volume counter asks for everything issued since a date; the expiry sweep asks for what is
             // past its date and still has value.
-            $table->index('issued_at', 'billing_vouchers_issued_index');
-            $table->index(['expires_at', 'expired_at'], 'billing_vouchers_expiry_index');
+            $table->index('issued_at', BillingSchema::indexName('billing_vouchers_issued_index'));
+            $table->index(['expires_at', 'expired_at'], BillingSchema::indexName('billing_vouchers_expiry_index'));
         });
     }
 

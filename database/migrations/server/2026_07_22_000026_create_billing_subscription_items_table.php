@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The provider-neutral lines of a local subscription: what is billed each cycle, and for how much.
@@ -51,7 +52,7 @@ return new class extends Migration
             // (`billing_subscription_items_billing_subscription_id_plan_key_unique`) is 65 characters and
             // MySQL rejects any identifier over 64 — an error Postgres never raises, since it silently
             // truncates instead. Left to the default, this table could not be created on MySQL.
-            $table->unique(['billing_subscription_id', 'plan_key'], 'billing_sub_items_subscription_plan_unique');
+            $table->unique(['billing_subscription_id', 'plan_key'], BillingSchema::indexName('billing_sub_items_subscription_plan_unique'));
         });
     }
 

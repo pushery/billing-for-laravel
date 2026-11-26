@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The order a locally issued invoice states.
@@ -29,14 +30,14 @@ return new class extends Migration
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
             $table->unsignedBigInteger('order_id')->nullable()->after('provider_id');
-            $table->unique('order_id', 'billing_invoices_order_unique');
+            $table->unique('order_id', BillingSchema::indexName('billing_invoices_order_unique'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
-            $table->dropUnique('billing_invoices_order_unique');
+            $table->dropUnique(BillingSchema::standingIndexName('billing_invoices', 'billing_invoices_order_unique'));
             $table->dropColumn('order_id');
         });
     }

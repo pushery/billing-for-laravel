@@ -8,6 +8,7 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\Builder;
 use Illuminate\Database\Schema\ColumnDefinition;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * How this package types its references to the host's models.
@@ -111,10 +112,12 @@ final class BillingSchema
      *
      * `$indexed: false` leaves out the index on the pair, for a table whose own composite index leads with it.
      * That index answers every lookup by the pair, and a second one on the pair alone costs a write on every
-     * insert and update and serves no query.
+     * insert and update and serves no query. A name given as `$indexName` is built as {@see indexName()} gives it.
      */
     public static function morphs(Blueprint $table, string $name, ?string $indexName = null, bool $indexed = true): void
     {
+        $indexName = $indexName === null ? null : self::indexName($indexName);
+
         if (self::hostKeyType() === 'int' && $indexed) {
             $table->numericMorphs($name, $indexName);
 
@@ -132,6 +135,8 @@ final class BillingSchema
     /** An optional reference to one of the host's models, with the same choice about its index. */
     public static function nullableMorphs(Blueprint $table, string $name, ?string $indexName = null, bool $indexed = true): void
     {
+        $indexName = $indexName === null ? null : self::indexName($indexName);
+
         if (self::hostKeyType() === 'int' && $indexed) {
             $table->nullableNumericMorphs($name, $indexName);
 
@@ -185,5 +190,52 @@ final class BillingSchema
             'ulid' => $table->char($column, 26),
             default => $table->unsignedBigInteger($column),
         };
+    }
+
+    /**
+     * The name an index this package names itself is built under, on the connection a migration runs on.
+     *
+     * PostgreSQL and SQLite give an index name once per schema, not once per table. Laravel puts the table prefix
+     * in front of every index name it derives when the connection sets `prefix_indexes`, so two installations under
+     * two prefixes in one schema keep their derived indexes apart. A name a migration writes itself stays the same
+     * under every prefix, and the second installation stops at `relation already exists`. Under that setting the
+     * name here carries the prefix as well. MySQL and MariaDB give an index name once per table, where nothing
+     * collides, and a prefix could push a name kept under their 64 characters past the limit, so there it stays
+     * as written.
+     */
+    public static function indexName(string $name): string
+    {
+        $connection = Schema::getConnection();
+
+        return in_array($connection->getDriverName(), ['pgsql', 'sqlite'], true) && (bool) $connection->getConfig('prefix_indexes')
+            ? $connection->getTablePrefix().$name
+            : $name;
+    }
+
+    /**
+     * The name one of this package's indexes stands under on the table, for a migration that drops it.
+     *
+     * An installation migrated before index names carried the table prefix keeps its indexes under the names
+     * without it, and one migrated since has them under the names {@see indexName()} gives. A derived name carries
+     * the prefix on every engine that sets `prefix_indexes`. So the index stands under the name with the prefix or
+     * under the one without it, and that is the name a drop has to give. When it stands under neither, the answer
+     * is the name {@see indexName()} gives, and a drop of a missing index fails as it did before.
+     */
+    public static function standingIndexName(string $table, string $name): string
+    {
+        $standing = [];
+
+        foreach (Schema::getIndexes(TableLookup::qualified($table)) as $index) {
+            /** @var array{name: string} $index */
+            $standing[] = strtolower($index['name']);
+        }
+
+        foreach (array_unique([Schema::getConnection()->getTablePrefix().$name, $name]) as $candidate) {
+            if (in_array(strtolower($candidate), $standing, true)) {
+                return $candidate;
+            }
+        }
+
+        return self::indexName($name);
     }
 }

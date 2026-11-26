@@ -60,7 +60,7 @@ return new class extends Migration
             // It is also the read path — every document asks for one creator's status at one moment, which
             // is exactly this prefix. A separate lookup index over the same three columns would be a second
             // copy of this one: paid for on every write, never chosen by the planner over the unique.
-            $table->unique(['merchant_type', 'merchant_id', 'effective_from'], 'billing_creator_tax_statuses_interval_unique');
+            $table->unique(['merchant_type', 'merchant_id', 'effective_from'], BillingSchema::indexName('billing_creator_tax_statuses_interval_unique'));
         });
     }
 

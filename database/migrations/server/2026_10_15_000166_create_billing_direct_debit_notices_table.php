@@ -37,10 +37,10 @@ return new class extends Migration
             $table->boolean('recurring');
             $table->dateTime('announced_at');
 
-            $table->index(['provider', 'mandate_reference'], 'billing_direct_debit_notices_mandate_index');
+            $table->index(['provider', 'mandate_reference'], BillingSchema::indexName('billing_direct_debit_notices_mandate_index'));
             // PostgreSQL creates no index for a foreign key, and a notice is looked up by what it announces.
-            $table->index('subscription_id', 'billing_direct_debit_notices_subscription_index');
-            $table->index('order_id', 'billing_direct_debit_notices_order_index');
+            $table->index('subscription_id', BillingSchema::indexName('billing_direct_debit_notices_subscription_index'));
+            $table->index('order_id', BillingSchema::indexName('billing_direct_debit_notices_order_index'));
         });
     }
 

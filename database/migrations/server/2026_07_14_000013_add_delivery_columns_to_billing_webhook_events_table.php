@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Turns the webhook-event row from a bare idempotency marker into a replayable delivery record: the raw
@@ -25,14 +26,14 @@ return new class extends Migration
             $table->text('last_error')->nullable();
             $table->timestamp('handled_at')->nullable();
 
-            $table->index(['status', 'created_at'], 'billing_webhook_events_status_idx');
+            $table->index(['status', 'created_at'], BillingSchema::indexName('billing_webhook_events_status_idx'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_webhook_events', function (Blueprint $table): void {
-            $table->dropIndex('billing_webhook_events_status_idx');
+            $table->dropIndex(BillingSchema::standingIndexName('billing_webhook_events', 'billing_webhook_events_status_idx'));
             $table->dropColumn(['payload', 'status', 'last_error', 'handled_at']);
         });
     }

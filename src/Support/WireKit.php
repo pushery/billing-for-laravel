@@ -25,7 +25,7 @@ final class WireKit
      * constraint, which the lane with the lowest dependencies installs. It moves with that constraint, and a test holds
      * the two together.
      */
-    public const string MINIMUM = '2.73.0';
+    public const string MINIMUM = '2.74.1'; // renovate: datasource=packagist depName=pushery/wirekit
 
     public static function active(): bool
     {
@@ -35,8 +35,8 @@ final class WireKit
     /**
      * Whether a version string clears the floor. A named branch, reported as `dev-…`, and no answer at all count as
      * satisfied: somebody developing against a branch has chosen it. A branch named like a version, reported as
-     * `2.x-dev` or `2.72.x-dev`, sits above every release of its line, so its `x` compares as the highest number there
-     * is: `2.x-dev` clears the floor and `2.72.x-dev` does not.
+     * `2.x-dev` or `2.73.x-dev`, sits above every release of its line, so its `x` compares as the highest number there
+     * is: `2.x-dev` clears the floor and `2.73.x-dev` does not.
      */
     public static function satisfies(?string $version): bool
     {

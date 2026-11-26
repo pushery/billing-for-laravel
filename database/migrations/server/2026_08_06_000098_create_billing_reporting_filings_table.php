@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The act of filing a produced reporting record — separate from the record, because they are separate facts.
@@ -78,9 +79,9 @@ return new class extends Migration
 
             $table->unique(
                 ['period_year', 'currency', 'correction_sequence'],
-                'billing_reporting_filings_period_sequence_unique',
+                BillingSchema::indexName('billing_reporting_filings_period_sequence_unique'),
             );
-            $table->unique('export_id', 'billing_reporting_filings_export_unique');
+            $table->unique('export_id', BillingSchema::indexName('billing_reporting_filings_export_unique'));
         });
     }
 

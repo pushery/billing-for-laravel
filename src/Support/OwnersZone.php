@@ -24,11 +24,22 @@ final readonly class OwnersZone
 {
     public static function of(Model $owner, DateTimeInterface $moment): DateTimeInterface
     {
+        $zone = self::zoneOf($owner);
+
+        return $zone === null ? $moment : CarbonImmutable::instance($moment)->setTimezone($zone);
+    }
+
+    /**
+     * The zone OwnerTimezone answers for an owner, or null where it answers none or no time zone identifier. The second
+     * case is reported, so a run that counts by the zone goes on with the stored moment instead of failing.
+     */
+    public static function zoneOf(Model $owner): ?string
+    {
         $container = Container::getInstance();
         $zone = $container->make(OwnerTimezone::class)->for($owner);
 
         if ($zone === null) {
-            return $moment;
+            return null;
         }
 
         if (! in_array($zone, DateTimeZone::listIdentifiers(), true)) {
@@ -38,9 +49,9 @@ final readonly class OwnersZone
                 $owner->getMorphClass(),
             )));
 
-            return $moment;
+            return null;
         }
 
-        return CarbonImmutable::instance($moment)->setTimezone($zone);
+        return $zone;
     }
 }

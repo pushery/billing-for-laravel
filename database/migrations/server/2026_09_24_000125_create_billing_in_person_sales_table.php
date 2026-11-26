@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Every sale put on a card reader, with the tax decided for it at the counter.
@@ -42,8 +43,8 @@ return new class extends Migration
             $table->timestamp('paid_at')->nullable();
             $table->unsignedBigInteger('invoice_id')->nullable();
             $table->timestamps();
-            $table->unique(['provider', 'payment_reference'], 'billing_in_person_sales_payment');
-            $table->index('status', 'billing_in_person_sales_status');
+            $table->unique(['provider', 'payment_reference'], BillingSchema::indexName('billing_in_person_sales_payment'));
+            $table->index('status', BillingSchema::indexName('billing_in_person_sales_status'));
         });
     }
 

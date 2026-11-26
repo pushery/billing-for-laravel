@@ -36,7 +36,14 @@ return new class extends Migration
                 throw new RuntimeException('billing_credit_ledger_entries.source_id holds values a uuid column could only hold if something other than this package wrote them. Inspect them before the column is retyped.');
             }
 
-            DB::statement('ALTER TABLE billing_credit_ledger_entries ALTER COLUMN source_id TYPE bigint USING NULL');
+            // The table through the grammar, which puts the connection's table prefix in front of it.
+            $grammar = Schema::getConnection()->getQueryGrammar();
+
+            DB::statement(sprintf(
+                'alter table %s alter column %s type bigint using null',
+                $grammar->wrapTable('billing_credit_ledger_entries'),
+                $grammar->wrap('source_id'),
+            ));
 
             return;
         }

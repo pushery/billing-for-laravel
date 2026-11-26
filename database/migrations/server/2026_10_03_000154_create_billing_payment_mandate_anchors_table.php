@@ -28,7 +28,7 @@ return new class extends Migration
             BillingSchema::hostKey($table, 'owner_id');
             $table->string('provider');
 
-            $table->unique(['owner_type', 'owner_id', 'provider'], 'billing_payment_mandate_anchors_unique');
+            $table->unique(['owner_type', 'owner_id', 'provider'], BillingSchema::indexName('billing_payment_mandate_anchors_unique'));
         });
     }
 

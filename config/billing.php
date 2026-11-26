@@ -25,7 +25,7 @@ return [
     |
     */
 
-    'enabled' => EnvSwitch::read(env('BILLING_ENABLED'), true),
+    'enabled' => EnvSwitch::read(env('BILLING_ENABLED'), true, 'BILLING_ENABLED'),
 
     /*
     |--------------------------------------------------------------------------
@@ -208,7 +208,7 @@ return [
         // names the cache store the sandbox keeps its objects in, null for the default store, and it keeps them
         // without expiry, because a mandate has to last until the cycle that charges it. Payment accounts keep
         // reaching Mollie. The driver refuses to boot with the sandbox on in production.
-        'sandbox' => EnvSwitch::read(env('BILLING_MOLLIE_SANDBOX'), false),
+        'sandbox' => EnvSwitch::read(env('BILLING_MOLLIE_SANDBOX'), false, 'BILLING_MOLLIE_SANDBOX'),
         'sandbox_outcome' => env('BILLING_MOLLIE_SANDBOX_OUTCOME', 'paid'),
         'sandbox_store' => env('BILLING_MOLLIE_SANDBOX_STORE'),
     ],
@@ -238,7 +238,7 @@ return [
 
         // Whether subscriptions and purchases are opened as test charges, which a development store approves
         // without paying. Off unless set: a live store charged in test mode pays nothing.
-        'test' => EnvSwitch::read(env('BILLING_SHOPIFY_TEST'), false),
+        'test' => EnvSwitch::read(env('BILLING_SHOPIFY_TEST'), false, 'BILLING_SHOPIFY_TEST'),
     ],
 
     /*
@@ -364,7 +364,7 @@ return [
         // that an adopter could not discover by reading the published config was the one they were most
         // likely to need. Absent it still falls back to the payment-methods route, exactly as before.
         'payment_methods_return_url' => env('BILLING_PAYMENT_METHODS_RETURN_URL'),
-        'promotion_codes' => EnvSwitch::read(env('BILLING_CHECKOUT_PROMOTION_CODES'), true),
+        'promotion_codes' => EnvSwitch::read(env('BILLING_CHECKOUT_PROMOTION_CODES'), true, 'BILLING_CHECKOUT_PROMOTION_CODES'),
         // Whether a checkout asks the buyer for a tax ID. Unset, a checkout asks where the provider computes tax and
         // nowhere else. `true` asks on every checkout, with the provider computing tax or not, so a business gets its
         // ID onto the invoice either way. `false` never asks: Stripe reverse-charges on an ID's format before it
@@ -819,7 +819,7 @@ return [
     'usage' => [
         'hold_seconds' => is_numeric($usageHoldSeconds = env('BILLING_USAGE_HOLD_SECONDS')) && (int) $usageHoldSeconds >= 1 ? (int) $usageHoldSeconds : 900,
         'spend_cap' => [
-            'enabled' => EnvSwitch::read(env('BILLING_USAGE_SPEND_CAP'), false),
+            'enabled' => EnvSwitch::read(env('BILLING_USAGE_SPEND_CAP'), false, 'BILLING_USAGE_SPEND_CAP'),
             'default' => is_numeric($usageSpendCapDefault = env('BILLING_USAGE_SPEND_CAP_DEFAULT')) && (int) $usageSpendCapDefault >= 0 ? (int) $usageSpendCapDefault : 0,
         ],
     ],
@@ -877,7 +877,7 @@ return [
     */
 
     'erasure' => [
-        'forget_customer' => EnvSwitch::read(env('BILLING_ERASURE_FORGET_CUSTOMER'), false),
+        'forget_customer' => EnvSwitch::read(env('BILLING_ERASURE_FORGET_CUSTOMER'), false, 'BILLING_ERASURE_FORGET_CUSTOMER'),
         'merchant_subscriptions' => env('BILLING_ERASURE_MERCHANT_SUBSCRIPTIONS', 'now'),
     ],
 
@@ -912,7 +912,7 @@ return [
         // floor above. Left false, a shorter erased_financial_days refuses to boot rather than prune tax
         // records early. It is declared here rather than left as an undocumented read, because a fail-closed
         // guard whose opt-out appears in no published file is one a consumer can only discover by hitting it.
-        'allow_below_statutory_minimum' => EnvSwitch::read(env('BILLING_RETENTION_ALLOW_BELOW_STATUTORY_MINIMUM'), false),
+        'allow_below_statutory_minimum' => EnvSwitch::read(env('BILLING_RETENTION_ALLOW_BELOW_STATUTORY_MINIMUM'), false, 'BILLING_RETENTION_ALLOW_BELOW_STATUTORY_MINIMUM'),
     ],
 
     /*
@@ -1156,7 +1156,7 @@ return [
     */
 
     'realtime' => [
-        'enabled' => EnvSwitch::read(env('BILLING_REALTIME'), false),
+        'enabled' => EnvSwitch::read(env('BILLING_REALTIME'), false, 'BILLING_REALTIME'),
 
         /*
          * Whether this package renders somewhere for those toasts to land.
@@ -1174,7 +1174,7 @@ return [
          * The third option is neither: leave this off and write your own one-line listener on
          * `wirekit-toast`, reading `detail.message` and `detail.variant`.
          */
-        'render_toast_region' => EnvSwitch::read(env('BILLING_REALTIME_TOAST_REGION'), false),
+        'render_toast_region' => EnvSwitch::read(env('BILLING_REALTIME_TOAST_REGION'), false, 'BILLING_REALTIME_TOAST_REGION'),
     ],
 
     /*
@@ -1296,7 +1296,7 @@ return [
     'admin' => [
         // Whether the console is mounted at all. An application with a back office of its own turns it off, and the
         // console's route and Livewire component are then not registered.
-        'enabled' => EnvSwitch::read(env('BILLING_ADMIN_ENABLED'), true),
+        'enabled' => EnvSwitch::read(env('BILLING_ADMIN_ENABLED'), true, 'BILLING_ADMIN_ENABLED'),
         'ability' => env('BILLING_ADMIN_ABILITY', 'billing-admin'),
         'prefix' => env('BILLING_ADMIN_PREFIX', 'admin/billing'),
         'middleware' => ['web', 'auth'],
@@ -1475,7 +1475,7 @@ return [
     */
 
     'tax_oss' => [
-        'threshold_waived' => EnvSwitch::read(env('BILLING_TAX_OSS_THRESHOLD_WAIVED'), true),
+        'threshold_waived' => EnvSwitch::read(env('BILLING_TAX_OSS_THRESHOLD_WAIVED'), true, 'BILLING_TAX_OSS_THRESHOLD_WAIVED'),
         'waived_since' => env('BILLING_TAX_OSS_WAIVED_SINCE'),
 
         // How many years a declaration that gave up the threshold binds for. The operator's tax authority
@@ -1558,7 +1558,7 @@ return [
         // standard rating. There is deliberately no switch for the opposite direction: a platform count under
         // the limit proves nothing (external turnover exists), so an automatic flip back is never offered.
         // The asymmetry is an invariant, not a default.
-        'auto_flip_enabled' => EnvSwitch::read(env('BILLING_TAX_SB_AUTO_FLIP'), true),
+        'auto_flip_enabled' => EnvSwitch::read(env('BILLING_TAX_SB_AUTO_FLIP'), true, 'BILLING_TAX_SB_AUTO_FLIP'),
 
         'warning_levels' => [0.80, 0.95],
         // How long a confirmed small-business registration stands before it is asked again. A registration
@@ -1611,7 +1611,7 @@ return [
         // (the charge lands automatically when the trial ends); false lets the owner trial without one
         // (Stripe collects the card only if the trial converts). Per-tier override:
         // tiers.<key>.trial.requires_payment_method.
-        'requires_payment_method' => EnvSwitch::read(env('BILLING_TRIAL_REQUIRES_PM'), true),
+        'requires_payment_method' => EnvSwitch::read(env('BILLING_TRIAL_REQUIRES_PM'), true, 'BILLING_TRIAL_REQUIRES_PM'),
 
         // How many days before a trial ends the app-shell banner starts nudging the owner to pick a plan.
         'ending_within_days' => 3,
@@ -1846,7 +1846,7 @@ return [
     ],
 
     'tax_us' => [
-        'enabled' => EnvSwitch::read(env('BILLING_TAX_US_ENABLED'), false),
+        'enabled' => EnvSwitch::read(env('BILLING_TAX_US_ENABLED'), false, 'BILLING_TAX_US_ENABLED'),
 
         // How close to a region's limit counts as "approaching it", in basis points of that limit.
         // Waiting for a limit to be crossed is waiting too long: registration takes weeks, the obligation
@@ -1925,7 +1925,7 @@ return [
         // its first useful figure after the first year that could have breached a threshold — which is the
         // year it exists for.
         'us_state_gmv' => [
-            'enabled' => EnvSwitch::read(env('BILLING_TAX_COUNTER_US_STATE_GMV'), false),
+            'enabled' => EnvSwitch::read(env('BILLING_TAX_COUNTER_US_STATE_GMV'), false, 'BILLING_TAX_COUNTER_US_STATE_GMV'),
         ],
 
         // The reporting counter, and whether this installation is in a regime that has one at all.
@@ -1944,7 +1944,7 @@ return [
         // different basis — whether a creator is still a small business — and it keeps running, which a
         // test asserts by switching this off and reading that one.
         'dac7' => [
-            'enabled' => EnvSwitch::read(env('BILLING_TAX_COUNTER_DAC7_ENABLED'), true),
+            'enabled' => EnvSwitch::read(env('BILLING_TAX_COUNTER_DAC7_ENABLED'), true, 'BILLING_TAX_COUNTER_DAC7_ENABLED'),
         ],
     ],
 
@@ -1991,7 +1991,7 @@ return [
     // And it is not a setting to try out. It moves which period a transaction is taxed in, and a
     // document number's year is frozen the moment it is drawn. Changing it after documents exist does not
     // adjust them.
-    'tax_point_on_receipt' => EnvSwitch::read(env('BILLING_TAX_POINT_ON_RECEIPT'), false),
+    'tax_point_on_receipt' => EnvSwitch::read(env('BILLING_TAX_POINT_ON_RECEIPT'), false, 'BILLING_TAX_POINT_ON_RECEIPT'),
 
     // The countries that tax a supply at the rate in force when it is carried out rather than on its tax point. A
     // period is carried out on its last day, so there a period that spans a change of rate carries the rate of its last
@@ -2007,7 +2007,7 @@ return [
     // silent. Turn it on where the probe is actually wanted — a nightly job, never the push gate, because a
     // network-dependent check in the push gate goes red on the first DNS hiccup and gets disabled.
     'tax_rate_probe' => [
-        'enabled' => EnvSwitch::read(env('BILLING_RATE_PROBE'), false),
+        'enabled' => EnvSwitch::read(env('BILLING_RATE_PROBE'), false, 'BILLING_RATE_PROBE'),
 
         // Where `billing:tax-rates:check` writes its proposal. Null means beside the shipped snapshot, so the
         // two share a dating convention and can be diffed side by side.
@@ -2031,7 +2031,7 @@ return [
     // and the rules contradict each other across jurisdictions, so a package-level default would be wrong
     // for somebody by law rather than by oversight. See the ExchangeRateBasis enum for the three rules.
     'tax_exchange_rates' => [
-        'enabled' => EnvSwitch::read(env('BILLING_EXCHANGE_RATES'), false),
+        'enabled' => EnvSwitch::read(env('BILLING_EXCHANGE_RATES'), false, 'BILLING_EXCHANGE_RATES'),
 
         // Which currencies `billing:exchange-rates:import` fetches from the central bank, as the bank names
         // them. Empty by default, so the switch above alone still contacts nobody: turning the store on and
@@ -2279,7 +2279,7 @@ return [
         //
         // Off, because whether security fixes can be waived at all is genuinely disputed. Turning it on is
         // your decision, taken on your own advice.
-        'allow_conformity_waiver' => EnvSwitch::read(env('BILLING_ALLOW_CONFORMITY_WAIVER'), false),
+        'allow_conformity_waiver' => EnvSwitch::read(env('BILLING_ALLOW_CONFORMITY_WAIVER'), false, 'BILLING_ALLOW_CONFORMITY_WAIVER'),
 
         // The time zone a declaration through the cancellation button or the withdrawal function states the moment
         // it arrived in, on the confirmation and on every saved copy. The moment decides whether the declaration was in
@@ -2355,7 +2355,7 @@ return [
         //
         // Turn it off where your reading of data minimization differs. The rest of the evidence is
         // untouched, and a state counter then runs honestly on `unknown` rather than quietly on a guess.
-        'collect_subdivision' => EnvSwitch::read(env('BILLING_TAX_EVIDENCE_SUBDIVISION'), true),
+        'collect_subdivision' => EnvSwitch::read(env('BILLING_TAX_EVIDENCE_SUBDIVISION'), true, 'BILLING_TAX_EVIDENCE_SUBDIVISION'),
 
         // Which countries' subdivisions are worth recording at all.
         //
@@ -2390,7 +2390,7 @@ return [
     // that re-imported the word would guarantee that somebody eventually reads a tier check as proof of
     // ownership, which is the one confusion the whole separation exists to prevent.
     'content_ownership' => [
-        'enabled' => EnvSwitch::read(env('BILLING_CONTENT_OWNERSHIP_ENABLED'), false),
+        'enabled' => EnvSwitch::read(env('BILLING_CONTENT_OWNERSHIP_ENABLED'), false, 'BILLING_CONTENT_OWNERSHIP_ENABLED'),
 
         // What a sale promises about later versions when neither the work nor the merchant says otherwise.
         // One of: latest, latest_with_revisions, windowed, frozen.
@@ -2410,7 +2410,7 @@ return [
         // materialized at purchase, so off costs nothing to enforce -- a work added next month has no
         // row for an earlier buyer, and there is nothing to remember to switch off. On, a repeat call for the
         // same buyer tops up what has since been added.
-        'bundle_additive_default' => EnvSwitch::read(env('BILLING_BUNDLE_ADDITIVE_DEFAULT'), false),
+        'bundle_additive_default' => EnvSwitch::read(env('BILLING_BUNDLE_ADDITIVE_DEFAULT'), false, 'BILLING_BUNDLE_ADDITIVE_DEFAULT'),
 
         // Whether a refund also ends access to the work.
         //
@@ -2418,17 +2418,17 @@ return [
         // in place after a goodwill refund is common and often the point -- the work has already been read, so
         // taking it back costs nothing to skip and turns a recovered customer into an angry one. Ending it is
         // right where the refund was a return rather than a gesture.
-        'revoke_on_refund' => EnvSwitch::read(env('BILLING_REVOKE_ON_REFUND'), true),
+        'revoke_on_refund' => EnvSwitch::read(env('BILLING_REVOKE_ON_REFUND'), true, 'BILLING_REVOKE_ON_REFUND'),
 
         // The same question for a lost dispute, and a different situation: a chargeback is involuntary,
         // decided by somebody else, and the money is already gone. There is no version of it where the
         // platform chose to give the work away, which is why the shipped answer is to end access.
-        'revoke_on_chargeback' => EnvSwitch::read(env('BILLING_REVOKE_ON_CHARGEBACK'), true),
+        'revoke_on_chargeback' => EnvSwitch::read(env('BILLING_REVOKE_ON_CHARGEBACK'), true, 'BILLING_REVOKE_ON_CHARGEBACK'),
 
         // Whether access a chargeback ended comes back when the bank takes the chargeback back. On, because the
         // customer has paid after all. Only a grant the chargeback revoked returns; one that ended for another
         // reason stays revoked. Off where somebody should look before access returns.
-        'restore_on_chargeback_reversal' => EnvSwitch::read(env('BILLING_RESTORE_ON_CHARGEBACK_REVERSAL'), true),
+        'restore_on_chargeback_reversal' => EnvSwitch::read(env('BILLING_RESTORE_ON_CHARGEBACK_REVERSAL'), true, 'BILLING_RESTORE_ON_CHARGEBACK_REVERSAL'),
     ],
 
     // Multi-merchant: a buyer pays this platform, and the money is destined for somebody else.
@@ -2471,7 +2471,7 @@ return [
     // Full prose: https://docs.pushery.com/billing-for-laravel/marketplace/overview
     // Driver authors: https://docs.pushery.com/billing-for-laravel/guides/upgrading
     'marketplace' => [
-        'enabled' => EnvSwitch::read(env('BILLING_MARKETPLACE_ENABLED'), false),
+        'enabled' => EnvSwitch::read(env('BILLING_MARKETPLACE_ENABLED'), false, 'BILLING_MARKETPLACE_ENABLED'),
 
         /*
         | Buyer protection: the payout waits until the buyer says they got what
@@ -2526,7 +2526,7 @@ return [
             | itself. On a destination charge the provider moves the money as the payment settles, and there
             | is no moment in between for anything here to hold.
             */
-            'enabled' => EnvSwitch::read(env('BILLING_BUYER_PROTECTION'), false),
+            'enabled' => EnvSwitch::read(env('BILLING_BUYER_PROTECTION'), false, 'BILLING_BUYER_PROTECTION'),
             'account_type' => env('BILLING_BUYER_PROTECTION_ACCOUNT_TYPE', 'express'),
             'confirm_after_days' => is_numeric($confirmAfterDays = env('BILLING_BUYER_PROTECTION_CONFIRM_AFTER_DAYS')) && (int) $confirmAfterDays >= 1 ? (int) $confirmAfterDays : 14,
             'decide_after_days' => is_numeric($decideAfterDays = env('BILLING_BUYER_PROTECTION_DECIDE_AFTER_DAYS')) && (int) $decideAfterDays >= 1 ? (int) $decideAfterDays : 60,
@@ -2563,7 +2563,7 @@ return [
         | baked into code it would silently apply somebody else's.
         */
         'negative_balance' => [
-            'offset_against_payouts' => EnvSwitch::read(env('BILLING_MARKETPLACE_OFFSET_DEBT'), true),
+            'offset_against_payouts' => EnvSwitch::read(env('BILLING_MARKETPLACE_OFFSET_DEBT'), true, 'BILLING_MARKETPLACE_OFFSET_DEBT'),
             'claim_after_days' => is_numeric($claimAfterDays = env('BILLING_MARKETPLACE_CLAIM_AFTER_DAYS')) && (int) $claimAfterDays >= 1 ? (int) $claimAfterDays : 90,
         ],
 
@@ -2596,12 +2596,12 @@ return [
 
             // Default classification of what is sold. true = electronically-supplied service (Art. 9a
             // applies); false = physical goods. Override per product class through the resolver.
-            'supplies_are_electronic' => EnvSwitch::read(env('BILLING_MARKETPLACE_SUPPLIES_ELECTRONIC'), true),
+            'supplies_are_electronic' => EnvSwitch::read(env('BILLING_MARKETPLACE_SUPPLIES_ELECTRONIC'), true, 'BILLING_MARKETPLACE_SUPPLIES_ELECTRONIC'),
 
             // The Art. 9a rebuttal: `seller_of_record` for an electronic supply is refused unless all four are
             // true. A platform that sets its own terms, authorizes billing or approves the supply cannot
             // truthfully assert these — leave them false and stay the deemed supplier.
-            'art9a_rebuttal_asserted' => EnvSwitch::read(env('BILLING_MARKETPLACE_ART9A_REBUTTAL'), false),
+            'art9a_rebuttal_asserted' => EnvSwitch::read(env('BILLING_MARKETPLACE_ART9A_REBUTTAL'), false, 'BILLING_MARKETPLACE_ART9A_REBUTTAL'),
             'no_agb_control' => false,
             'no_billing_authorization' => false,
             'no_supply_authorization' => false,
@@ -2620,7 +2620,7 @@ return [
         // issues for such a supply is enough only there, so those sales are refused until it is true.
         'deemed_supply_of_goods' => [
             'ioss_number' => env('BILLING_MARKETPLACE_IOSS_NUMBER'),
-            'union_scheme' => EnvSwitch::read(env('BILLING_MARKETPLACE_DEEMED_SUPPLY_UNION_SCHEME'), false),
+            'union_scheme' => EnvSwitch::read(env('BILLING_MARKETPLACE_DEEMED_SUPPLY_UNION_SCHEME'), false, 'BILLING_MARKETPLACE_DEEMED_SUPPLY_UNION_SCHEME'),
         ],
 
         // What a platform asks a seller for at onboarding.
@@ -2662,7 +2662,7 @@ return [
         'seller_record_route' => env('BILLING_MARKETPLACE_SELLER_RECORD_ROUTE'),
 
         'seller_record' => [
-            'collect_precautionary' => EnvSwitch::read(env('BILLING_MARKETPLACE_COLLECT_PRECAUTIONARY'), true),
+            'collect_precautionary' => EnvSwitch::read(env('BILLING_MARKETPLACE_COLLECT_PRECAUTIONARY'), true, 'BILLING_MARKETPLACE_COLLECT_PRECAUTIONARY'),
         ],
 
         // When a seller is active enough to be asked to declare their standing.
@@ -2714,7 +2714,7 @@ return [
             // the gentler one: stopping somebody selling ends their income, holding their money leaves them
             // selling and unpaid.
             'measure' => env('BILLING_MARKETPLACE_DATA_MEASURE', 'withhold_payout'),
-            'measure_precautionary_gaps' => EnvSwitch::read(env('BILLING_MARKETPLACE_MEASURE_PRECAUTIONARY'), false),
+            'measure_precautionary_gaps' => EnvSwitch::read(env('BILLING_MARKETPLACE_MEASURE_PRECAUTIONARY'), false, 'BILLING_MARKETPLACE_MEASURE_PRECAUTIONARY'),
             'withhold_up_to_days' => is_numeric($withholdUpToDays = env('BILLING_MARKETPLACE_WITHHOLD_UP_TO_DAYS')) && (int) $withholdUpToDays >= 1 ? (int) $withholdUpToDays : 90,
             // The rail's own limit. Read here, defined by the payout schedule — this never sets it.
             'payout_deadline_days' => is_numeric($payoutDeadlineDays = env('BILLING_MARKETPLACE_PAYOUT_DEADLINE_DAYS')) && (int) $payoutDeadlineDays >= 1 ? (int) $payoutDeadlineDays : 90,
@@ -2751,8 +2751,8 @@ return [
         // A jurisdiction profile that requires the hold overrides all three of these: there the hold is a
         // legal condition rather than a rollout, and a date cannot postpone it.
         'tax_status_hold' => [
-            'blocks_payouts' => EnvSwitch::read(env('BILLING_MARKETPLACE_HOLD_BLOCKS_PAYOUTS'), true),
-            'blocks_sales' => EnvSwitch::read(env('BILLING_MARKETPLACE_HOLD_BLOCKS_SALES'), true),
+            'blocks_payouts' => EnvSwitch::read(env('BILLING_MARKETPLACE_HOLD_BLOCKS_PAYOUTS'), true, 'BILLING_MARKETPLACE_HOLD_BLOCKS_PAYOUTS'),
+            'blocks_sales' => EnvSwitch::read(env('BILLING_MARKETPLACE_HOLD_BLOCKS_SALES'), true, 'BILLING_MARKETPLACE_HOLD_BLOCKS_SALES'),
             'enforce_from' => env('BILLING_MARKETPLACE_HOLD_ENFORCE_FROM'),
 
             // How many days before that date the merchants who have not declared are told it is coming.
@@ -2819,9 +2819,9 @@ return [
             // invoice — and never calls the engine. It is a backstop, not the routing decision: the caller
             // checks this before settling, and the engine refuses loudly if it is reached while off, rather
             // than issue a document a disabled platform never meant to.
-            'enabled' => EnvSwitch::read(env('BILLING_MARKETPLACE_SELF_BILLING_ENABLED'), true),
+            'enabled' => EnvSwitch::read(env('BILLING_MARKETPLACE_SELF_BILLING_ENABLED'), true, 'BILLING_MARKETPLACE_SELF_BILLING_ENABLED'),
 
-            'require_agreement' => EnvSwitch::read(env('BILLING_MARKETPLACE_SELF_BILLING_AGREEMENT'), true),
+            'require_agreement' => EnvSwitch::read(env('BILLING_MARKETPLACE_SELF_BILLING_AGREEMENT'), true, 'BILLING_MARKETPLACE_SELF_BILLING_AGREEMENT'),
         ],
 
         // What the buyer's receipt collects, and when.
@@ -2882,7 +2882,7 @@ return [
         // a PWYW price is floored on the server, because a buyer-chosen price is the one place the
         // anti-injection stance would otherwise lapse.
         'tips' => [
-            'enabled' => EnvSwitch::read(env('BILLING_MARKETPLACE_TIPS'), false),
+            'enabled' => EnvSwitch::read(env('BILLING_MARKETPLACE_TIPS'), false, 'BILLING_MARKETPLACE_TIPS'),
             // One line on purpose -- do not wrap this ternary.
             // A `: null` sitting alone on its own line is unreachable coverage, not a missing test.
             // PHP emits no opcode for a constant-null false branch, so pcov never reports that line,
@@ -2920,7 +2920,7 @@ return [
         // make a taxable supply of the platform's own disappear — the account number is config, the
         // separateness is structure.
         'buyer_fee' => [
-            'enabled' => EnvSwitch::read(env('BILLING_MARKETPLACE_BUYER_FEE'), false),
+            'enabled' => EnvSwitch::read(env('BILLING_MARKETPLACE_BUYER_FEE'), false, 'BILLING_MARKETPLACE_BUYER_FEE'),
             'model' => env('BILLING_MARKETPLACE_BUYER_FEE_MODEL', 'percent'),
             'bps' => is_numeric($marketplaceBuyerFeeBps = env('BILLING_MARKETPLACE_BUYER_FEE_BPS')) && (int) $marketplaceBuyerFeeBps >= 0 ? (int) $marketplaceBuyerFeeBps : 0,
             'fixed_minor' => is_numeric($marketplaceBuyerFeeFixedMinor = env('BILLING_MARKETPLACE_BUYER_FEE_FIXED_MINOR')) && (int) $marketplaceBuyerFeeFixedMinor >= 0 ? (int) $marketplaceBuyerFeeFixedMinor : 0,
@@ -2948,7 +2948,7 @@ return [
         // the commission chain is the named red line, and refusing before a number is drawn keeps a gapless
         // series from spending one on a document that must not exist.
         'seller_fee' => [
-            'enabled' => EnvSwitch::read(env('BILLING_MARKETPLACE_SELLER_FEE'), false),
+            'enabled' => EnvSwitch::read(env('BILLING_MARKETPLACE_SELLER_FEE'), false, 'BILLING_MARKETPLACE_SELLER_FEE'),
             'model' => env('BILLING_MARKETPLACE_SELLER_FEE_MODEL', 'percent'),
             'bps' => is_numeric($marketplaceSellerFeeBps = env('BILLING_MARKETPLACE_SELLER_FEE_BPS')) && (int) $marketplaceSellerFeeBps >= 0 ? (int) $marketplaceSellerFeeBps : 0,
             'fixed_minor' => is_numeric($marketplaceSellerFeeFixedMinor = env('BILLING_MARKETPLACE_SELLER_FEE_FIXED_MINOR')) && (int) $marketplaceSellerFeeFixedMinor >= 0 ? (int) $marketplaceSellerFeeFixedMinor : 0,
@@ -3052,7 +3052,7 @@ return [
         | anything is a decision a person makes.
         */
         'vouchers' => [
-            'enabled' => EnvSwitch::read(env('BILLING_VOUCHERS_ENABLED'), false),
+            'enabled' => EnvSwitch::read(env('BILLING_VOUCHERS_ENABLED'), false, 'BILLING_VOUCHERS_ENABLED'),
             'instrument_type' => env('BILLING_VOUCHER_INSTRUMENT_TYPE', 'multi_purpose'),
             'expire_after_days' => is_numeric($voucherExpireAfterDays = env('BILLING_VOUCHER_EXPIRE_AFTER_DAYS')) && (int) $voucherExpireAfterDays >= 1 ? (int) $voucherExpireAfterDays : 1095,
             'volume_window_months' => is_numeric($voucherVolumeWindowMonths = env('BILLING_VOUCHER_VOLUME_WINDOW_MONTHS')) && (int) $voucherVolumeWindowMonths >= 1 ? (int) $voucherVolumeWindowMonths : 12,
@@ -3061,7 +3061,7 @@ return [
         ],
 
         'custody' => [
-            'platform_held' => EnvSwitch::read(env('BILLING_MARKETPLACE_PLATFORM_HELD'), false),
+            'platform_held' => EnvSwitch::read(env('BILLING_MARKETPLACE_PLATFORM_HELD'), false, 'BILLING_MARKETPLACE_PLATFORM_HELD'),
         ],
 
         // Provider events about a merchant arrive on their own endpoint, signed with their own key. The

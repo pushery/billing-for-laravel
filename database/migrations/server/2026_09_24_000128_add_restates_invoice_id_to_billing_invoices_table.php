@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Marks a settlement issued in place of one that was canceled, and names it.
@@ -22,14 +23,14 @@ return new class extends Migration
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
             $table->unsignedBigInteger('restates_invoice_id')->nullable()->after('reissue_of_invoice_id');
-            $table->index('restates_invoice_id', 'billing_invoices_restates_index');
+            $table->index('restates_invoice_id', BillingSchema::indexName('billing_invoices_restates_index'));
         });
     }
 
     public function down(): void
     {
         Schema::table('billing_invoices', function (Blueprint $table): void {
-            $table->dropIndex('billing_invoices_restates_index');
+            $table->dropIndex(BillingSchema::standingIndexName('billing_invoices', 'billing_invoices_restates_index'));
             $table->dropColumn('restates_invoice_id');
         });
     }

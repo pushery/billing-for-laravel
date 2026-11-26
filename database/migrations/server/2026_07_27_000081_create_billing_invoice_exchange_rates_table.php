@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * The rates a document was actually converted at, frozen onto it.
@@ -59,7 +60,7 @@ return new class extends Migration
 
             // One rate per layer per document. A second row for the same layer would mean a document with
             // two answers to the same question, and nothing downstream could choose between them.
-            $table->unique(['invoice_id', 'layer'], 'billing_invoice_exchange_rates_invoice_layer_unique');
+            $table->unique(['invoice_id', 'layer'], BillingSchema::indexName('billing_invoice_exchange_rates_invoice_layer_unique'));
         });
     }
 

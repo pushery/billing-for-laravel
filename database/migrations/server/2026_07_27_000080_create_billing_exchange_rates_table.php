@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * Published exchange rates, held locally so a conversion never waits on somebody else's uptime.
@@ -70,12 +71,12 @@ return new class extends Migration
             // One rate per pair, per day, per rule. The rule belongs in the key for the reason in the
             // docblock: without it the ministry average and the central bank's daily rate for the same day
             // are the same row, and the second import silently overwrites the first.
-            $table->unique(['from_currency', 'to_currency', 'rate_date', 'basis'], 'billing_exchange_rates_pair_date_basis_unique');
+            $table->unique(['from_currency', 'to_currency', 'rate_date', 'basis'], BillingSchema::indexName('billing_exchange_rates_pair_date_basis_unique'));
 
             // The lookup the reader actually performs: a pair and a rule, then the nearest date at or after
             // the one asked for. Leading with the three equality columns lets the range scan on rate_date
             // run inside them rather than after them.
-            $table->index(['from_currency', 'to_currency', 'basis', 'rate_date'], 'billing_exchange_rates_lookup_index');
+            $table->index(['from_currency', 'to_currency', 'basis', 'rate_date'], BillingSchema::indexName('billing_exchange_rates_lookup_index'));
         });
     }
 

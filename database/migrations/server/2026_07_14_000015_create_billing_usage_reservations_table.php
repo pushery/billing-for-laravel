@@ -37,7 +37,7 @@ return new class extends Migration
             // The sweep's index, and the only one the package queries this table by (a hold is found by its
             // token, which the unique index above already covers). Named explicitly: the generated name
             // would exceed MySQL's 64-character identifier limit.
-            $table->index(['state', 'expires_at'], 'billing_usage_reservations_expiry_idx');
+            $table->index(['state', 'expires_at'], BillingSchema::indexName('billing_usage_reservations_expiry_idx'));
         });
     }
 

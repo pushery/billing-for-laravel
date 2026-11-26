@@ -59,7 +59,7 @@ return new class extends Migration
             $table->index(['state', 'next_attempt_at']);
             // Reconciliation and the gauge: an owner's usage on one meter in one cycle. Named
             // explicitly — the generated name would exceed MySQL's 64-character identifier limit.
-            $table->index(['owner_type', 'owner_id', 'meter_key', 'period'], 'billing_usage_events_owner_meter_period_index');
+            $table->index(['owner_type', 'owner_id', 'meter_key', 'period'], BillingSchema::indexName('billing_usage_events_owner_meter_period_index'));
         });
     }
 

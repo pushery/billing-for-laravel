@@ -38,6 +38,7 @@ use Pushery\Billing\Trials\Trials;
 use Pushery\Billing\ValueObjects\MerchantScope;
 use Pushery\Billing\ValueObjects\Money;
 use Pushery\Billing\ValueObjects\SubscriptionStart;
+use Pushery\Billing\ValueObjects\TrialChoice;
 use RuntimeException;
 
 /**
@@ -217,10 +218,11 @@ final readonly class LocalSubscriptionStarter implements StartsOverAMandate, Sta
      *
      * The mandate is asked for before anything is written, and its absence is a refusal rather than a redirect: the
      * application called this because the customer chose the mandate they gave, and sending them to the provider would
-     * ask for one they believe they gave already. A trial is the subscription trial the policy gives, once per owner; a
-     * generic trial stands on the owner rather than on a subscription, and only `start()` grants it.
+     * ask for one they believe they gave already. A trial is the subscription trial the policy gives, once per owner, or
+     * the one the application chose for this start; a generic trial stands on the owner rather than on a subscription,
+     * and only `start()` grants it.
      */
-    public function startOverTheMandate(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?BillingInterval $interval = null): SubscriptionStart
+    public function startOverTheMandate(Model $billable, string $tierKey, ?string $couponCode = null, ?string $declarationReference = null, ?BillingInterval $interval = null, ?TrialChoice $trial = null): SubscriptionStart
     {
         $ownerKey = $this->admit($billable, $tierKey, $interval);
 
@@ -230,11 +232,15 @@ final readonly class LocalSubscriptionStarter implements StartsOverAMandate, Sta
 
         $couponCode = $this->normalizeCode($couponCode);
         $now = CarbonImmutable::now();
-        $trialEndsAt = $this->subscriptionTrialEnd($billable, $tierKey, $now);
+        $trialEndsAt = $trial instanceof TrialChoice ? null : $this->subscriptionTrialEnd($billable, $tierKey, $now);
         $couponModel = Coupon::model();
 
-        return new $couponModel()->getConnection()->transaction(function () use ($billable, $ownerKey, $tierKey, $couponCode, $trialEndsAt, $now, $declarationReference): SubscriptionStart {
-            [$endsAt, $granted] = $this->trialWithTheCode($billable, $couponCode, $tierKey, $trialEndsAt, $now);
+        return new $couponModel()->getConnection()->transaction(function () use ($billable, $ownerKey, $tierKey, $couponCode, $trialEndsAt, $now, $declarationReference, $trial): SubscriptionStart {
+            // The trial the application chose is final: a code that gives trial days lengthens it as little as it adds
+            // one to a start without, and a code that names a discount is spent by startHere() either way.
+            [$endsAt, $granted] = $trial instanceof TrialChoice
+                ? [$trial->endsAt, null]
+                : $this->trialWithTheCode($billable, $couponCode, $tierKey, $trialEndsAt, $now);
 
             return $this->startHere($billable, $ownerKey, $tierKey, $couponCode, $endsAt, $granted, $now, $declarationReference);
         });

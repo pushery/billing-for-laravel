@@ -30,7 +30,7 @@ return new class extends Migration
             $table->unsignedBigInteger('spent_micros')->default(0);
             $table->timestamps();
 
-            $table->unique(['account', 'day', 'currency'], 'billing_ai_spend_account_unique');
+            $table->unique(['account', 'day', 'currency'], BillingSchema::indexName('billing_ai_spend_account_unique'));
         });
     }
 

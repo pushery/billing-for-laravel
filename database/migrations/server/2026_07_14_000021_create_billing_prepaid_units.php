@@ -44,7 +44,7 @@ return new class extends Migration
             $table->timestamps();
 
             // Named explicitly: the generated name would exceed MySQL's 64-character identifier limit.
-            $table->unique(['owner_type', 'owner_id', 'meter_key'], 'billing_prepaid_units_owner_meter_unique');
+            $table->unique(['owner_type', 'owner_id', 'meter_key'], BillingSchema::indexName('billing_prepaid_units_owner_meter_unique'));
         });
 
         Schema::table('billing_usage_counters', function (Blueprint $table): void {

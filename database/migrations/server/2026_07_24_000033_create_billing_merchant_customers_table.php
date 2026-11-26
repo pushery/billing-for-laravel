@@ -37,7 +37,7 @@ return new class extends Migration
             // global key that cannot tell two merchants' customers apart.
             $table->unique(
                 ['provider', 'account_reference', 'customer_reference'],
-                'billing_merchant_customers_scoped_unique',
+                BillingSchema::indexName('billing_merchant_customers_scoped_unique'),
             );
         });
     }

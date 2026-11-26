@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Pushery\Billing\Support\BillingSchema;
 
 /**
  * When each market was opened or closed, and by whom.
@@ -28,7 +29,7 @@ return new class extends Migration
             $table->timestamp('recorded_at');
             $table->timestamps();
 
-            $table->index(['country', 'recorded_at'], 'billing_market_access_log_country_index');
+            $table->index(['country', 'recorded_at'], BillingSchema::indexName('billing_market_access_log_country_index'));
         });
     }
 
