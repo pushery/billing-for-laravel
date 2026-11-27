@@ -9,6 +9,7 @@ use Illuminate\Console\Command;
 use Pushery\Billing\Enums\SettlementRestatementBlock;
 use Pushery\Billing\Enums\SettlementRestatementState;
 use Pushery\Billing\Marketplace\SettlementRestater;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -21,6 +22,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  *
  * Safe to run at any time and as often as wanted. A settlement is canceled at most once.
  */
+#[AsCommand(name: 'billing:settlements:restate')]
 final class RestateSettlementsCommand extends Command
 {
     protected $signature = 'billing:settlements:restate';

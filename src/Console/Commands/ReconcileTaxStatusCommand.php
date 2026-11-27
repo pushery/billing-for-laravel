@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Marketplace\SmallBusinessFlipSweep;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -40,6 +41,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * So they are named in the output. The run succeeds because the reconciliation it could do is correct and
  * worth keeping; what it could not test is on the screen instead of behind a silent zero.
  */
+#[AsCommand(name: 'billing:tax-status:reconcile')]
 final class ReconcileTaxStatusCommand extends Command
 {
     protected $signature = 'billing:tax-status:reconcile';

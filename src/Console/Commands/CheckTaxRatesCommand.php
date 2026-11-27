@@ -14,6 +14,7 @@ use Pushery\Billing\Tax\RateChangeTriage;
 use Pushery\Billing\Tax\RateImporter;
 use Pushery\Billing\Tax\RateProposal;
 use Pushery\Billing\Tax\TedbRateSource;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -48,6 +49,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  * Same switch as the probe. Reaching a public service is not something a package should do because it
  * happened to be installed.
  */
+#[AsCommand(name: 'billing:tax-rates:check')]
 final class CheckTaxRatesCommand extends Command
 {
     protected $signature = 'billing:tax-rates:check {--on= : the date to ask about, default today}

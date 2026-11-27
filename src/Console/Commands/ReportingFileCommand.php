@@ -10,6 +10,7 @@ use Pushery\Billing\Exceptions\ReportingFilingRefused;
 use Pushery\Billing\Marketplace\ReportingFilingRegister;
 use Pushery\Billing\Models\ReportingExportRecord;
 use Pushery\Billing\Models\ReportingFiling;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -28,6 +29,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * a character in a shell line — and the act is irreversible for a reason: once a period is filed, later
  * changes are a correction that names its predecessor, never a rewrite of what went out.
  */
+#[AsCommand(name: 'billing:reporting:file')]
 final class ReportingFileCommand extends Command
 {
     protected $signature = 'billing:reporting:file

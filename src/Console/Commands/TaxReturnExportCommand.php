@@ -20,6 +20,7 @@ use Pushery\Billing\Tax\PeriodicTaxReturn;
 use Pushery\Billing\Tax\ReportingConversion;
 use Pushery\Billing\Tax\TaxReturnExportArchive;
 use Pushery\Billing\ValueObjects\ReportingPeriod;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -38,6 +39,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  * anybody filed it — and a preview piped into a file and filed from there is exactly the case that would
  * otherwise leave no trace at all. Rows are cheap; a quarter whose figures nobody can reconstruct is not.
  */
+#[AsCommand(name: 'billing:tax-return:export')]
 final class TaxReturnExportCommand extends Command
 {
     /** How many documents one read of the period holds. */

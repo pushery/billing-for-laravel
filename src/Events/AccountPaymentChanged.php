@@ -42,6 +42,9 @@ final readonly class AccountPaymentChanged implements BillingDomainEvent
      *                                  at Mollie or `customer_balance` at Stripe, where the provider names it
      * @param  ?PaymentInstructions  $paymentInstructions  where an open bank transfer goes and the reference it
      *                                                     carries, while the transfer is still awaited
+     * @param  ?string  $cardCountry  the country that issued the card the payment ran with, as two capitals of
+     *                                ISO 3166-1 such as `NL`, where the provider names it: Stripe on the charge, Mollie
+     *                                in the payment's details. Null for a payment without a card
      */
     public function __construct(
         public string $provider,
@@ -59,5 +62,6 @@ final readonly class AccountPaymentChanged implements BillingDomainEvent
         public CarbonImmutable $observedAt = new CarbonImmutable,
         public ?string $paymentMethod = null,
         public ?PaymentInstructions $paymentInstructions = null,
+        public ?string $cardCountry = null,
     ) {}
 }

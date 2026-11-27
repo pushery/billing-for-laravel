@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Support\BillingEraser;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\OwnerScopedTables;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -23,6 +24,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * It does not delete the invoices. The law requires them to be kept, and to carry the buyer's name and
  * address while they are — see BillingEraser.
  */
+#[AsCommand(name: 'billing:erase')]
 final class EraseOwnerCommand extends Command
 {
     use ConfirmableTrait;

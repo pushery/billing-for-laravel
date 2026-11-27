@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Dunning\SubscriptionExpirySweep;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -18,6 +19,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  *
  * Safe to run more than once: an expired subscription carries a termination marker and is not selected again.
  */
+#[AsCommand(name: 'billing:dunning:expire')]
 final class ExpireDelinquentSubscriptionsCommand extends Command
 {
     protected $signature = 'billing:dunning:expire';

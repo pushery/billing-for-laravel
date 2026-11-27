@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Pushery\Billing\Marketplace\MerchantLifecycle;
 use Pushery\Billing\Models\MerchantAccount;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -33,6 +34,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * only means something if the way back is somewhere a webhook cannot reach. Reopening decides that a
  * relationship somebody ended should begin again — a person's decision, with a person's name on the run.
  */
+#[AsCommand(name: 'billing:merchant:reopen')]
 final class MerchantReopenCommand extends Command
 {
     protected $signature = 'billing:merchant:reopen

@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Support\BillingAdmin;
 use Pushery\Billing\ValueObjects\MerchantScope;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -25,6 +26,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * `--type` names another contract. A `--merchant` value that is not such a uid fails too, because the scope
  * would otherwise read it as the platform and cancel the platform's contract instead.
  */
+#[AsCommand(name: 'billing:subscription:cancel')]
 final class CancelSubscriptionCommand extends Command
 {
     protected $signature = 'billing:subscription:cancel

@@ -24,6 +24,7 @@ use Pushery\Billing\Support\RetentionMatrix;
 use Pushery\Billing\Support\StoredDocumentFiles;
 use Pushery\Billing\Support\SubjectScopedRecords;
 use Pushery\Billing\ValueObjects\RetentionRule;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -54,6 +55,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * Payments-only mode keeps the webhook deliveries and nothing else ({@see PaymentsModeSchema}), so there the
  * payloads are all that ages out.
  */
+#[AsCommand(name: 'billing:prune')]
 final class PruneBillingCommand extends Command
 {
     /** The filings of the seller-reporting records, which leave a reporting period at a time. */

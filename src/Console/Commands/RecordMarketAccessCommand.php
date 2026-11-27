@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Illuminate\Console\Command;
 use Pushery\Billing\Enums\MarketAccess;
 use Pushery\Billing\Marketplace\MarketAccessJournal;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -19,6 +20,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * Repeating it costs nothing — only actual changes are written, so running it on every deploy is a
  * reasonable habit rather than a way to fill the log with noise.
  */
+#[AsCommand(name: 'billing:markets:record')]
 final class RecordMarketAccessCommand extends Command
 {
     protected $signature = 'billing:markets:record {--actor= : Who made the change}';

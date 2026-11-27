@@ -9,6 +9,7 @@ use Illuminate\Console\Command;
 use Pushery\Billing\Tax\TaxRateCorrection;
 use Pushery\Billing\Tax\TaxRateCorrections;
 use Pushery\Billing\ValueObjects\Money;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -18,6 +19,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * its net, the tax it charged, the rate of the period's last day and the tax at that rate. It writes nothing: the
  * correction belongs in the return of the day the period was carried out, and the invoice stays as it was issued.
  */
+#[AsCommand(name: 'billing:tax-rates:corrections')]
 final class TaxRateCorrectionsCommand extends Command
 {
     protected $signature = 'billing:tax-rates:corrections

@@ -10,6 +10,7 @@ use Pushery\Billing\Enums\UsageEventState;
 use Pushery\Billing\Events\UsageBacklogStalled;
 use Pushery\Billing\Models\UsageEvent;
 use Pushery\Billing\Support\UsageReconciler;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -28,6 +29,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * Drift and stall also dispatch domain events, so monitoring escalates in real time; the exit code is the
  * signal for whoever ran the command — non-zero when anything here needs a human.
  */
+#[AsCommand(name: 'billing:usage:reconcile')]
 final class ReconcileUsageCommand extends Command
 {
     protected $signature = 'billing:usage:reconcile {--redrive : Reset failed usage rollups to pending so the next flush retries them}';

@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Marketplace\SellerDataEscalationSweep;
 use Pushery\Billing\Marketplace\WithheldMerchantShares;
+use Symfony\Component\Console\Attribute\AsCommand;
 
 /**
  * Move each seller whose record is incomplete one step along the escalation, then pay out what may move.
@@ -19,6 +20,7 @@ use Pushery\Billing\Marketplace\WithheldMerchantShares;
  * It says so when it cannot run at all: without a record source nothing about any record is known, and a
  * run that printed "nothing to do" there would read like a clean bill.
  */
+#[AsCommand(name: 'billing:seller-data:escalate')]
 final class EscalateSellerDataCommand extends Command
 {
     protected $signature = 'billing:seller-data:escalate';

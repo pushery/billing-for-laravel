@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\PriceChanges\DeclaredPriceChanges;
 use Pushery\Billing\PriceChanges\PriceChangeAnnouncer;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -18,6 +19,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * provider prices its own invoices announces nothing, and `billing:doctor` reports a change declared there. A change that
  * breaks a rule is announced to nobody, and every rule it breaks is printed, which fails the run.
  */
+#[AsCommand(name: 'billing:price-changes:announce')]
 final class AnnouncePriceChangesCommand extends Command
 {
     protected $signature = 'billing:price-changes:announce';

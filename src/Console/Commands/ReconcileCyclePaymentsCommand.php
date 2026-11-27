@@ -12,6 +12,7 @@ use Pushery\Billing\Models\Order;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\CyclePaymentReconciler;
 use Pushery\Billing\Support\SweepAttempts;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -23,6 +24,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * settles the cycle, a failed one fails it and starts the dunning, and one still open stays open. Nothing is charged:
  * the payment exists already, and only its standing is asked for.
  */
+#[AsCommand(name: 'billing:cycles:reconcile')]
 final class ReconcileCyclePaymentsCommand extends Command
 {
     protected $signature = 'billing:cycles:reconcile

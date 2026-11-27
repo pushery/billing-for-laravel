@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Tax\UpcomingFilingSweep;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -18,6 +19,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * Two obligations share the end-of-January date, and each gets its own warning. A single "something is due"
  * would let whoever handles the one they thought of consider the day dealt with.
  */
+#[AsCommand(name: 'billing:filings:announce')]
 final class AnnounceUpcomingFilingsCommand extends Command
 {
     protected $signature = 'billing:filings:announce';

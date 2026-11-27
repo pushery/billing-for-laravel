@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Exceptions\ReportingPeriodNotClosed;
 use Pushery\Billing\Tax\FreezeReportingRates;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -26,6 +27,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * and makes a half-open range impossible to express. Two free dates would let somebody file a period that
  * does not exist, and the resulting figures would look entirely normal.
  */
+#[AsCommand(name: 'billing:exchange-rates:freeze-reporting')]
 final class FreezeReportingRatesCommand extends Command
 {
     protected $signature = 'billing:exchange-rates:freeze-reporting {--year= : calendar year} {--quarter= : 1-4}';

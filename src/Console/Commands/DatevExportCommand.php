@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 use Pushery\Billing\Invoicing\DatevPeriodBatch;
 use Pushery\Billing\ValueObjects\AccountReconciliation;
 use Pushery\Billing\ValueObjects\Money;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Output\OutputInterface;
 use Throwable;
@@ -25,6 +26,7 @@ use Throwable;
  * `billing.datev` and must be confirmed with the advisor; left unset the file is structurally valid
  * with blank account fields to fill in — this command does not post anything itself.
  */
+#[AsCommand(name: 'billing:datev:export')]
 final class DatevExportCommand extends Command
 {
     protected $signature = 'billing:datev:export

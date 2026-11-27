@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Support\UsageFlusher;
 use Pushery\Billing\Support\UsageGrants;
 use Pushery\Billing\Support\UsageMeter;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -20,6 +21,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * escalate an outage it cannot fix. Usage that genuinely cannot be reported is escalated by the flusher
  * itself, loudly, because that is revenue that will not be collected.
  */
+#[AsCommand(name: 'billing:usage:flush')]
 final class FlushUsageCommand extends Command
 {
     protected $signature = 'billing:usage:flush';

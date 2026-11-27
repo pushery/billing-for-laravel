@@ -161,7 +161,20 @@ final class MollieAccountWebhookEventMapper implements DerivesDeliveryKey, Names
             observedAt: CarbonImmutable::now(),
             paymentMethod: MollieValue::of($payment->method),
             paymentInstructions: MolliePaymentInstructions::of($payment),
+            cardCountry: $this->cardCountryOf($payment),
         );
+    }
+
+    /**
+     * The country that issued the card a payment ran with, as Mollie names it in the payment's details, or null for a
+     * payment without a card and for details that name no country of two letters.
+     */
+    private function cardCountryOf(Payment $payment): ?string
+    {
+        $details = $payment->details;
+        $country = is_object($details) ? MollieValue::of($details->cardCountryCode ?? null) : null;
+
+        return $country !== null && preg_match('/^[A-Za-z]{2}\z/', $country) === 1 ? strtoupper($country) : null;
     }
 
     /**

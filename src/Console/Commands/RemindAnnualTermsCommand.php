@@ -25,6 +25,7 @@ use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\ValueObjects\Money;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -50,6 +51,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  *
  * Meant to run daily.
  */
+#[AsCommand(name: 'billing:annual-terms:remind')]
 final class RemindAnnualTermsCommand extends Command
 {
     /** Days before an annual term ends, inside the 35 to 40 days a consumer is reminded in. */

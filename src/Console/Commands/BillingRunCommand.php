@@ -10,6 +10,7 @@ use Pushery\Billing\Contracts\InternalBalance;
 use Pushery\Billing\Marketplace\BalanceSubscriptions;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\ScheduledSwapRunner;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -25,6 +26,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * And it renews the subscriptions paid from an internal balance, where the marketplace is on and the host binds a
  * balance: no provider renews those, whatever the driver.
  */
+#[AsCommand(name: 'billing:run')]
 final class BillingRunCommand extends Command
 {
     protected $signature = 'billing:run';

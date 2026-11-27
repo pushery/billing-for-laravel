@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Marketplace\LapsedAttestationSweep;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -16,6 +17,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * write can be watched; an attestation expiring writes nothing at all — the hold begins because a date
  * passed. Without a scheduled sweep the merchant finds out by trying to sell.
  */
+#[AsCommand(name: 'billing:tax-holds:announce')]
 final class AnnounceLapsedAttestationsCommand extends Command
 {
     protected $signature = 'billing:tax-holds:announce';

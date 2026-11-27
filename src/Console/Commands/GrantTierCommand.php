@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Support\BillingAdmin;
 use Pushery\Billing\Support\UntouchableTiers;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -21,6 +22,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * that is not untouchable (`billing.untouchable_tiers`, or the tier's own `untouchable` flag) warns — because
  * the next provider webhook is free to overwrite such a grant, which is rarely what a support comp intends.
  */
+#[AsCommand(name: 'billing:tier:grant')]
 final class GrantTierCommand extends Command
 {
     protected $signature = 'billing:tier:grant

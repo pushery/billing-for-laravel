@@ -17,6 +17,7 @@ use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\ValueObjects\MerchantScope;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -42,6 +43,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  *
  * Meant to run daily.
  */
+#[AsCommand(name: 'billing:subscriptions:warn')]
 final class WarnEndingSubscriptionsCommand extends Command
 {
     protected $signature = 'billing:subscriptions:warn {--days= : Remind about canceled subscriptions ending within this many days} {--dry-run}';

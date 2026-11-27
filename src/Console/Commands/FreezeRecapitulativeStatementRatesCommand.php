@@ -12,6 +12,7 @@ use Pushery\Billing\Exceptions\ReportingPeriodNotClosed;
 use Pushery\Billing\Tax\FreezeRecapitulativeStatementRates;
 use Pushery\Billing\ValueObjects\RecapitulativeStatementPeriod;
 use Pushery\Billing\ValueObjects\ReportingPeriod;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -23,6 +24,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * names a period the way `billing:recapitulative-statement:export` does, a quarter or a month, and never two
  * free dates.
  */
+#[AsCommand(name: 'billing:exchange-rates:freeze-statement')]
 final class FreezeRecapitulativeStatementRatesCommand extends Command
 {
     protected $signature = 'billing:exchange-rates:freeze-statement
