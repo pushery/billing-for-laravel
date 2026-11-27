@@ -11,6 +11,7 @@ use Pushery\Billing\Exceptions\ExchangeRateFeedUnreadable;
 use Pushery\Billing\Tax\ExchangeRateImport;
 use Pushery\Billing\Tax\MonthlyRateFile;
 use Pushery\Billing\Tax\PublishedRate;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -31,6 +32,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * A default here would put a publisher's name on figures they never published, which is the one mistake this
  * whole seam is built to prevent.
  */
+#[AsCommand(name: 'billing:exchange-rates:import-file')]
 final class ImportExchangeRateFileCommand extends Command
 {
     protected $signature = 'billing:exchange-rates:import-file

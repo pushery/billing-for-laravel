@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Pushery\Billing\Marketplace\BuyerProtectionClock;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -20,6 +21,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * Meant to run daily. A missed day is harmless: the deadlines are dates, so a late run moves everything that
  * has come due rather than only what came due today.
  */
+#[AsCommand(name: 'billing:protection:advance')]
 final class AdvanceBuyerProtectionCommand extends Command
 {
     protected $signature = 'billing:protection:advance {--dry-run}';

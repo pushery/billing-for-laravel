@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Filesystem\Filesystem;
 use Pushery\Billing\Support\BillingDataExport;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -16,6 +17,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  * Everything the package holds about one owner, as JSON — the answer to a subject-access or
  * data-portability request (GDPR Art. 15, Art. 20).
  */
+#[AsCommand(name: 'billing:export')]
 final class ExportOwnerCommand extends Command
 {
     protected $signature = 'billing:export

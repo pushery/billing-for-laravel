@@ -12,6 +12,7 @@ use Pushery\Billing\Contracts\PublishesExchangeRates;
 use Pushery\Billing\Exceptions\ExchangeRateFeedUnreadable;
 use Pushery\Billing\Tax\EcbRateParser;
 use Pushery\Billing\Tax\ExchangeRateImport;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -43,6 +44,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * The bank publishes a rate, not a rule. Its daily reference rate is the correct one both at a tax point
  * and at a period end, so each observation is stored under both — see {@see ExchangeRateImport}.
  */
+#[AsCommand(name: 'billing:exchange-rates:import')]
 final class ImportExchangeRatesCommand extends Command
 {
     protected $signature = 'billing:exchange-rates:import {--from= : first day to fetch (YYYY-MM-DD)} {--to= : last day to fetch}';

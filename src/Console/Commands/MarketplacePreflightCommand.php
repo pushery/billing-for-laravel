@@ -9,6 +9,7 @@ use Illuminate\Contracts\Config\Repository;
 use Pushery\Billing\Enums\CheckpointStatus;
 use Pushery\Billing\Enums\GoLiveStep;
 use Pushery\Billing\Preflight\MarketplacePreflight;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -20,6 +21,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * start the application that would have run it. Registering an artisan command changes no behavior and
  * costs a single-seller install nothing: no config is read until somebody types the command.
  */
+#[AsCommand(name: 'billing:marketplace:preflight')]
 final class MarketplacePreflightCommand extends Command
 {
     protected $signature = 'billing:marketplace:preflight';

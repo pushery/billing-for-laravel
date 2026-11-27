@@ -17,6 +17,7 @@ use Pushery\Billing\Models\InvoiceRecord;
 use Pushery\Billing\Tax\PeriodicTaxReturn;
 use Pushery\Billing\Tax\TaxReturnExportArchive;
 use Pushery\Billing\ValueObjects\ImportSchemePeriod;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -35,6 +36,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  * Every run is recorded under the import scheme, including one that only prints, as the one-stop-shop export
  * records its own.
  */
+#[AsCommand(name: 'billing:import-scheme-return:export')]
 final class ImportSchemeReturnExportCommand extends Command
 {
     /** How many documents one read of the month holds. */

@@ -10,6 +10,7 @@ use Pushery\Billing\Exceptions\ReportingNotPlausible;
 use Pushery\Billing\Marketplace\ReportingExport;
 use Pushery\Billing\Marketplace\ReportingFilingRegister;
 use Pushery\Billing\Models\ReportingFiling;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -39,6 +40,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * operator's act — this package holds no portal credentials and transmits nothing — so it gets its own
  * verb rather than a flag on this one. A flag would make the irreversible step a character.
  */
+#[AsCommand(name: 'billing:reporting:run')]
 final class ReportingRunCommand extends Command
 {
     protected $signature = 'billing:reporting:run

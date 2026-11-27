@@ -10,6 +10,7 @@ use Pushery\Billing\Contracts\ReportsOnboardingRequirements;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Models\MerchantAccount;
 use Pushery\Billing\Support\BillingManager;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
@@ -35,6 +36,7 @@ use Throwable;
  * answer it still gets the whole flag table rather than an error, because "which of my merchants can take
  * money" is the more important of the two questions and it does not depend on the provider being reachable.
  */
+#[AsCommand(name: 'billing:merchant:status')]
 final class MerchantStatusCommand extends Command
 {
     protected $signature = 'billing:merchant:status

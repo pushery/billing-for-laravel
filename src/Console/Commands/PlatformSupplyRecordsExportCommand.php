@@ -9,6 +9,7 @@ use Illuminate\Console\Command;
 use Illuminate\Filesystem\Filesystem;
 use Pushery\Billing\Support\RecordsFile;
 use Pushery\Billing\Tax\PlatformSupplyRecords;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -23,6 +24,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  *
  * The file is semicolon-separated, and a field holding a semicolon, a quote or a line break is quoted.
  */
+#[AsCommand(name: 'billing:platform-records:export')]
 final class PlatformSupplyRecordsExportCommand extends Command
 {
     protected $signature = 'billing:platform-records:export

@@ -4,6 +4,22 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.0] - 2026-11-27
+
+### ✨ Added
+
+- **`AccountPaymentChanged` names the country of the card a payment ran with, as `cardCountry`.** Two capitals of ISO 3166-1, such as `NL`, where the provider names them: Stripe on the latest charge under `payment_method_details.card.country`, Mollie in the details of a card payment under `cardCountryCode`. A payment without a card, such as a bank transfer or a direct debit, and one whose provider names no country carry `null`. The country is the signal `CountrySignals` calls `payment`, so a sale that records it keeps one more piece of evidence of where the customer is.
+
+### ⚡ Performance
+
+- **A start of the console builds none of the package's commands.** Each command class carries `#[AsCommand]` with the name of its signature, so Laravel keeps each in the map of its loader and builds it only when it runs. Before, every start of a host's console built every command of the package through the container, for each run of the schedule, each queue worker and each `artisan` call, whatever ran.
+
+### 🐛 Fixed
+
+- **The migrations that find the owner of `billing_webhook_events` no longer take an interrupted one for complete.** On MySQL a `migrate` that stopped between adding `owner_type` and `owner_id` and indexing them left the columns without their index, and the next run found the columns and recorded the migration as done. An erasure then found a customer's deliveries without the index. Where the columns already stand, both migrations that add them now check for an index that leads with both and stop with a message that names the table and the way to repair it. Columns that carry such an index, under any name, pass as before.
+
+  **Upgrade:** an installation whose migrations ran through has nothing to do. One whose `migrate` stops at the message adds the index it names and runs `migrate` again.
+
 ## [0.68.0] - 2026-11-26
 
 ### ⚠️ Breaking
@@ -8763,7 +8779,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.68.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.69.0...HEAD
+[0.69.0]: https://github.com/pushery/billing-for-laravel/compare/v0.68.0...v0.69.0
 [0.68.0]: https://github.com/pushery/billing-for-laravel/compare/v0.67.0...v0.68.0
 [0.67.0]: https://github.com/pushery/billing-for-laravel/compare/v0.66.0...v0.67.0
 [0.66.0]: https://github.com/pushery/billing-for-laravel/compare/v0.65.0...v0.66.0

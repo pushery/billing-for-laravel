@@ -6,6 +6,7 @@ namespace Pushery\Billing\Console\Commands;
 
 use Illuminate\Console\Command;
 use Pushery\Billing\Marketplace\UnmovedMerchantShares;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -18,6 +19,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * Each share is tried once per run under the idempotency key its sale used, so a transfer that did go through
  * with its answer lost is found rather than paid twice. It exits non-zero while any share is still unmoved.
  */
+#[AsCommand(name: 'billing:marketplace:retry-transfers')]
 final class RetryMerchantTransfersCommand extends Command
 {
     protected $signature = 'billing:marketplace:retry-transfers {--dry-run}';

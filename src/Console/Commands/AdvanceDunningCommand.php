@@ -19,6 +19,7 @@ use Pushery\Billing\Enums\AuditSource;
 use Pushery\Billing\Models\Subscription;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\ValueObjects\DunningLevel;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
@@ -32,6 +33,7 @@ use Throwable;
  * warnings, and dunning_level (reset to 0 on recovery by the plan-sync effect) makes every rung fire
  * exactly once.
  */
+#[AsCommand(name: 'billing:dunning:advance')]
 final class AdvanceDunningCommand extends Command
 {
     protected $signature = 'billing:dunning:advance {--dry-run}';

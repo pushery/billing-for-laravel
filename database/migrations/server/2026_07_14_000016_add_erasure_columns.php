@@ -37,6 +37,11 @@ return new class extends Migration
             Schema::table('billing_webhook_events', function (Blueprint $table): void {
                 BillingSchema::nullableMorphs($table, 'owner');
             });
+        } elseif (! $this->ownerIsIndexed()) {
+            // Columns found here say that ADD COLUMN ran, not that the index after it did. MySQL runs no DDL
+            // inside a transaction, so a `migrate` cut off between the two leaves the owner without the index an
+            // erasure finds a customer's deliveries through, and skipping it would record that as done.
+            throw new RuntimeException('billing_webhook_events carries owner_type and owner_id without the index over both that this migration creates with them, so a previous migrate stopped between the columns and their index. Add the index (an index on billing_webhook_events (owner_type, owner_id)) and run migrate again.');
         }
 
         foreach (['billing_invoices', 'billing_addon_purchases'] as $retained) {
@@ -85,5 +90,21 @@ return new class extends Migration
                 $table->dropColumn('owner_erased_at');
             });
         }
+    }
+
+    /**
+     * Whether an index of billing_webhook_events leads with owner_type and owner_id, under any name: the one this
+     * migration creates with the columns, or a longer one that serves the same lookups.
+     */
+    private function ownerIsIndexed(): bool
+    {
+        foreach (Schema::getIndexes(TableLookup::qualified('billing_webhook_events')) as $index) {
+            /** @var array{columns: list<string>} $index */
+            if (array_slice($index['columns'], 0, 2) === ['owner_type', 'owner_id']) {
+                return true;
+            }
+        }
+
+        return false;
     }
 };

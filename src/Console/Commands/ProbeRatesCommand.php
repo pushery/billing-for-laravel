@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Config;
 use Pushery\Billing\Tax\RateConformityProbe;
 use Pushery\Billing\Tax\RateConformityReport;
 use Pushery\Billing\Tax\TedbRateSource;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -34,6 +35,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  * TEDB speaks SOAP, but a hand-built envelope over an ordinary HTTP POST is enough and keeps the package
  * free of an extension a consumer would otherwise have to install for a job they may never run.
  */
+#[AsCommand(name: 'billing:rates:probe')]
 final class ProbeRatesCommand extends Command
 {
     protected $signature = 'billing:rates:probe {--format=text : text or json} {--on= : the date to ask about, default today}';

@@ -19,6 +19,7 @@ use Pushery\Billing\ValueObjects\PaymentAccount;
 use Pushery\Billing\Webhooks\RepeatableEffect;
 use Pushery\Billing\Webhooks\StoredDeliveryRequest;
 use Pushery\Billing\Webhooks\WebhookEffectRegistry;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -36,6 +37,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * Only failed (and never-completed) runs actually re-run. Signature verification is not repeated — these
  * payloads were verified when they arrived; nothing unverified is ever stored.
  */
+#[AsCommand(name: 'billing:webhooks:replay')]
 final class ReplayWebhooksCommand extends Command
 {
     protected $signature = 'billing:webhooks:replay

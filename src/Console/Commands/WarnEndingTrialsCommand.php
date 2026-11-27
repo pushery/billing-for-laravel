@@ -18,6 +18,7 @@ use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\SweepAttempts;
 use Pushery\Billing\Support\TableLookup;
 use Pushery\Billing\Support\TrialReminders;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
@@ -56,6 +57,7 @@ use Throwable;
  * Not an optimization. Both paths firing means the same customer gets the same reminder twice, which is how
  * a reminder stops being read.
  */
+#[AsCommand(name: 'billing:trials:warn')]
 final class WarnEndingTrialsCommand extends Command
 {
     protected $signature = 'billing:trials:warn {--days= : Warn about trials ending within this many days} {--dry-run}';

@@ -9,6 +9,7 @@ use Illuminate\Console\Command;
 use Illuminate\Filesystem\Filesystem;
 use Pushery\Billing\Support\RecordsFile;
 use Pushery\Billing\Tax\DeemedSupplyRecords;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -23,6 +24,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  * The file is semicolon-separated, like the returns this package writes, and a field that holds a semicolon, a quote
  * or a line break is quoted, since the description of the goods is free text.
  */
+#[AsCommand(name: 'billing:deemed-supply-records:export')]
 final class DeemedSupplyRecordsExportCommand extends Command
 {
     protected $signature = 'billing:deemed-supply-records:export

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Consumer\AnnualTerms;
 use Pushery\Billing\Models\Subscription;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
@@ -33,6 +34,7 @@ use Throwable;
  * `--dry-run` names the subscriptions a run would ask the driver about and asks nothing, since only the driver can tell
  * an arrangement in place from one to make again.
  */
+#[AsCommand(name: 'billing:annual-terms:arrange')]
 final class ArrangeAnnualTermsCommand extends Command
 {
     protected $signature = 'billing:annual-terms:arrange {--dry-run : Name the subscriptions a run would ask the driver about, and change nothing}';

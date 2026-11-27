@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Pushery\Billing\Exceptions\MarketplaceUnsupported;
 use Pushery\Billing\Exceptions\MerchantRelationshipEnded;
 use Pushery\Billing\Support\BillingManager;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -30,6 +31,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * does produce is a fresh link, and that is not a workaround — Stripe's account links are single-use and
  * short-lived by design, so re-running this is the normal way to give somebody a link that still works.
  */
+#[AsCommand(name: 'billing:merchant:onboard')]
 final class MerchantOnboardCommand extends Command
 {
     protected $signature = 'billing:merchant:onboard

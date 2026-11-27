@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Dunning\PaymentReminderSweep;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -20,6 +21,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * Safe to run more than once a day — the sweep marks the day it sent, so a second run in the same day sends
  * nothing. That is what makes it safe to schedule and safe to re-run by hand after a partial failure.
  */
+#[AsCommand(name: 'billing:dunning:remind')]
 final class RemindDelinquentSubscriptionsCommand extends Command
 {
     protected $signature = 'billing:dunning:remind';

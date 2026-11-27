@@ -10,6 +10,7 @@ use Pushery\Billing\Catalogs\MeterCatalog;
 use Pushery\Billing\Contracts\MeterInspector;
 use Pushery\Billing\ValueObjects\MeteredComponent;
 use Pushery\Billing\ValueObjects\MeterPriceFacts;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -28,6 +29,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  *
  * Fails (non-zero exit) on any mismatch, so a deploy check catches the drift instead of a customer.
  */
+#[AsCommand(name: 'billing:meters:check')]
 final class CheckMetersCommand extends Command
 {
     protected $signature = 'billing:meters:check';

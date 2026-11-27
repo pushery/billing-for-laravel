@@ -26,6 +26,7 @@ use Pushery\Billing\Tax\RecapitulativeStatementArchive;
 use Pushery\Billing\Tax\ReportingConversion;
 use Pushery\Billing\ValueObjects\RecapitulativeStatementPeriod;
 use Pushery\Billing\ValueObjects\ReportingPeriod;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Symfony\Component\Console\Output\OutputInterface;
 
@@ -45,6 +46,7 @@ use Symfony\Component\Console\Output\OutputInterface;
  * The deadline is printed where the jurisdiction profile states one, so the date sits beside the file it
  * belongs to.
  */
+#[AsCommand(name: 'billing:recapitulative-statement:export')]
 final class RecapitulativeStatementExportCommand extends Command
 {
     /** How many documents one read of a window holds. */

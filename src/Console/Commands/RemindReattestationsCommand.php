@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Marketplace\ReattestationReminderSweep;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -16,6 +17,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * follows is announced by `billing:tax-holds:announce`. This is the notice before it: once when the year
  * turns and the renewal falls due, once more shortly before the attestation runs out.
  */
+#[AsCommand(name: 'billing:tax-holds:remind')]
 final class RemindReattestationsCommand extends Command
 {
     protected $signature = 'billing:tax-holds:remind';

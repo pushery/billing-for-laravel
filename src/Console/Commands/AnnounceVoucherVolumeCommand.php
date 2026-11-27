@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Marketplace\VoucherVolumeSweep;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -18,6 +19,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * Two levels, announced separately. "You are close" has a lead time attached and "you are past it" has a
  * deadline; a single message would let the first stand for the second.
  */
+#[AsCommand(name: 'billing:vouchers:volume')]
 final class AnnounceVoucherVolumeCommand extends Command
 {
     protected $signature = 'billing:vouchers:volume';

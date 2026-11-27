@@ -209,6 +209,7 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
             testmode: ($intent['livemode'] ?? null) === false,
             method: StripeBankTransfer::methodOf($intent),
             instructions: StripeBankTransfer::instructions($intent),
+            cardCountry: $this->cardCountryOf($intent),
         );
     }
 
@@ -369,7 +370,30 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
             ($intent['livemode'] ?? null) === false,
             $chargebacks,
             StripeBankTransfer::methodOf($intent),
+            cardCountry: $this->cardCountryOf($intent),
         );
+    }
+
+    /**
+     * The country that issued the card the intent's latest charge ran with, as Stripe names it under
+     * `payment_method_details.card`, or null for a charge with another method, one that is not expanded and one that
+     * names no country of two letters.
+     *
+     * @param  array<array-key, mixed>  $intent
+     */
+    private function cardCountryOf(array $intent): ?string
+    {
+        $charge = $intent['latest_charge'] ?? null;
+        $details = is_array($charge) ? ($charge['payment_method_details'] ?? null) : null;
+
+        if (! is_array($details) || ($details['type'] ?? null) !== 'card') {
+            return null;
+        }
+
+        $card = $details['card'] ?? null;
+        $country = is_array($card) ? ($card['country'] ?? null) : null;
+
+        return is_string($country) && preg_match('/^[A-Za-z]{2}\z/', $country) === 1 ? strtoupper($country) : null;
     }
 
     /**
@@ -489,7 +513,7 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
      * @param  list<PaymentChargeback>  $chargebacks
      * @param  mixed  $metadata  the payment's metadata, untyped in the SDK's StripeObject
      */
-    private function change(string $paymentReference, AccountPaymentStatus $status, Money $amount, Money $refunded, Money $chargedBack, mixed $metadata, ?string $refund = null, bool $testmode = false, array $chargebacks = [], ?string $method = null, ?PaymentInstructions $instructions = null): AccountPaymentChanged
+    private function change(string $paymentReference, AccountPaymentStatus $status, Money $amount, Money $refunded, Money $chargedBack, mixed $metadata, ?string $refund = null, bool $testmode = false, array $chargebacks = [], ?string $method = null, ?PaymentInstructions $instructions = null, ?string $cardCountry = null): AccountPaymentChanged
     {
         $values = is_array($metadata) ? $metadata : [];
         $kept = [];
@@ -518,6 +542,7 @@ final readonly class StripeAccountWebhookEventMapper implements NamesAnotherIdOf
             CarbonImmutable::now(),
             $method,
             $instructions,
+            $cardCountry,
         );
     }
 

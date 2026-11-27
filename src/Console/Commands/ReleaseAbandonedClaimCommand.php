@@ -10,6 +10,7 @@ use Pushery\Billing\Enums\OrderStatus;
 use Pushery\Billing\Models\Order;
 use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\LocalBillingEngine;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -40,6 +41,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * leaves it in. The next scheduled run reopens it, reprices it and collects it — through the same order, so
  * the charge carries the idempotency key the abandoned attempt used rather than a fresh one.
  */
+#[AsCommand(name: 'billing:release-claim')]
 final class ReleaseAbandonedClaimCommand extends Command
 {
     use ConfirmableTrait;

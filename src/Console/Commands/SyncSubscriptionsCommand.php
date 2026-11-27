@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Pushery\Billing\Enums\SubscriptionState;
 use Pushery\Billing\Support\SubscriptionReconciler;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
@@ -27,6 +28,7 @@ use Throwable;
  * with --owner, or let it chunk the whole customer model (only rows that already have a provider
  * reference).
  */
+#[AsCommand(name: 'billing:sync')]
 final class SyncSubscriptionsCommand extends Command
 {
     protected $signature = 'billing:sync {--owner= : Sync a single owner by primary key} {--chunk=100} {--dry-run}';

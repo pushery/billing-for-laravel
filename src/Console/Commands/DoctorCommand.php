@@ -97,6 +97,7 @@ use Stripe\Exception\InvalidRequestException;
 use Stripe\Exception\RateLimitException;
 use Stripe\StripeClient;
 use Stripe\StripeObject;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
@@ -111,6 +112,7 @@ use Throwable;
  * written for. The mapper reads fields defensively, so the failure is silent: a real billing event just
  * stops firing. This surfaces that drift as an operator- and CI-visible signal (a non-zero exit on mismatch).
  */
+#[AsCommand(name: 'billing:doctor')]
 final class DoctorCommand extends Command
 {
     protected $signature = 'billing:doctor';

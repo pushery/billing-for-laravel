@@ -7,6 +7,7 @@ namespace Pushery\Billing\Console\Commands;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Pushery\Billing\Marketplace\UnestablishedStandingSweep;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -18,6 +19,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * Without it, the first a merchant hears of the deadline is a refused sale: at the till, having done
  * nothing and been asked for nothing, at the one moment where a declaration cannot be produced in time.
  */
+#[AsCommand(name: 'billing:tax-holds:warn')]
 final class WarnUnestablishedStandingsCommand extends Command
 {
     protected $signature = 'billing:tax-holds:warn';

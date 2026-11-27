@@ -14,6 +14,7 @@ use Pushery\Billing\Support\BillingManager;
 use Pushery\Billing\Support\MoneyBackReconciler;
 use Pushery\Billing\Support\WebhookEventLedger;
 use Pushery\Billing\Webhooks\WebhookEffectRegistry;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -26,6 +27,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * The windows count from when the refund or the chargeback was created. Thirty days covers the time a refund takes to
  * be paid out or to fail. A bank decides on a chargeback within months, so that window is six of them.
  */
+#[AsCommand(name: 'billing:money-back:reconcile')]
 final class ReconcileMoneyBackCommand extends Command
 {
     protected $signature = 'billing:money-back:reconcile

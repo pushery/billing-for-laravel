@@ -10,6 +10,7 @@ use Illuminate\Contracts\Events\Dispatcher;
 use Pushery\Billing\Contracts\ReportsMovedShares;
 use Pushery\Billing\Marketplace\ProviderJournalReconciler;
 use Pushery\Billing\Support\BillingManager;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -19,6 +20,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * on which of several stories the difference tells and a sweep cannot tell them apart. A command that
  * "fixed" a drift would be writing over the only evidence that something went wrong.
  */
+#[AsCommand(name: 'billing:merchants:reconcile')]
 final class ReconcileMerchantJournalCommand extends Command
 {
     protected $signature = 'billing:merchants:reconcile {--driver= : the driver whose rows to audit, defaulting to the active one} {--limit=500 : how many journal rows one sweep reads, newest first} {--before= : read the rows older than this id, where a sweep left off}';

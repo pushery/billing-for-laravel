@@ -12,6 +12,7 @@ use Pushery\Billing\Contracts\ReportsMerchantCapabilities;
 use Pushery\Billing\Marketplace\MerchantCapabilities;
 use Pushery\Billing\Models\MerchantAccount;
 use Pushery\Billing\ValueObjects\MerchantAccountReference;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -42,6 +43,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * only a provider report lifts a flag stays one rule in one place. A second write path here would be a
  * second place that rule can be broken, and it would look identical from outside.
  */
+#[AsCommand(name: 'billing:merchant:refresh')]
 final class RefreshMerchantCapabilitiesCommand extends Command
 {
     protected $signature = 'billing:merchant:refresh

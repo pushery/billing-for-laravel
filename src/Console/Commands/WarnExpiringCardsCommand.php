@@ -15,6 +15,7 @@ use Pushery\Billing\Contracts\PaymentMethods;
 use Pushery\Billing\Models\BillingEvent;
 use Pushery\Billing\Support\BillingEventLog;
 use Pushery\Billing\ValueObjects\PaymentMethod;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 use Throwable;
 
@@ -24,6 +25,7 @@ use Throwable;
  * reads each owner's default method, and notifies once per card and expiry for a card expiring inside the window.
  * It makes one provider call per owner, so it is meant to run on a daily schedule, not per request.
  */
+#[AsCommand(name: 'billing:cards:warn')]
 final class WarnExpiringCardsCommand extends Command
 {
     protected $signature = 'billing:cards:warn {--days= : Warn about cards expiring within this many days} {--dry-run}';

@@ -14,6 +14,7 @@ use Pushery\Billing\Drivers\Mollie\MollieMoneyBackOutcomes;
 use Pushery\Billing\Events\RefundFailed;
 use Pushery\Billing\Support\AccountPaymentReconciler;
 use Pushery\Billing\Support\SweepAttempts;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -29,6 +30,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * It needs the accounts: the application's PaymentAccounts implements ListsPaymentAccounts. Without that it says so and
  * reads nothing.
  */
+#[AsCommand(name: 'billing:accounts:reconcile')]
 final class ReconcileAccountPaymentsCommand extends Command
 {
     protected $signature = 'billing:accounts:reconcile

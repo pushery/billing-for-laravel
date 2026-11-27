@@ -11,6 +11,7 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 use Pushery\Billing\Support\TableLookup;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Formatter\OutputFormatter;
 
 /**
@@ -21,6 +22,7 @@ use Symfony\Component\Console\Formatter\OutputFormatter;
  * migration can create without knowing which table. This command is where a fresh install stops
  * rendering "Free" while every plan-sync webhook dies at "column not found".
  */
+#[AsCommand(name: 'billing:install')]
 final class InstallCommand extends Command
 {
     protected $signature = 'billing:install
