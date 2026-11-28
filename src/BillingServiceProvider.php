@@ -211,6 +211,7 @@ use Pushery\Billing\Contracts\UsageNotifier;
 use Pushery\Billing\Contracts\UsageProvider;
 use Pushery\Billing\Contracts\UsageReporter;
 use Pushery\Billing\Contracts\VatIdValidator;
+use Pushery\Billing\Contracts\WebhookEffectMiddleware;
 use Pushery\Billing\Discounts\LayeredDiscountResolver;
 use Pushery\Billing\Drivers\Mollie\MollieServiceProvider;
 use Pushery\Billing\Drivers\NullCreditSync;
@@ -337,6 +338,7 @@ use Pushery\Billing\Support\MeteringSupportGuard;
 use Pushery\Billing\Support\NoConfirmationDocuments;
 use Pushery\Billing\Support\NoPaymentAccounts;
 use Pushery\Billing\Support\NoRetentionHolds;
+use Pushery\Billing\Support\NoWebhookEffectMiddleware;
 use Pushery\Billing\Support\NullScheduleHeartbeat;
 use Pushery\Billing\Support\PasswordOrEmailReconfirmation;
 use Pushery\Billing\Support\PaymentsModeSchema;
@@ -432,6 +434,7 @@ final class BillingServiceProvider extends ServiceProvider
 
         $this->app->singleton(WebhookEffectRegistry::class);
         $this->app->bind(ScheduleHeartbeat::class, NullScheduleHeartbeat::class);
+        $this->app->bind(WebhookEffectMiddleware::class, NoWebhookEffectMiddleware::class);
 
         // The seller's own coupon rows first, the platform's config map second -- LayeredDiscountResolver says why.
         $this->app->bind(DiscountResolver::class, LayeredDiscountResolver::class);

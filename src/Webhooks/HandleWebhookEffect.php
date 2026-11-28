@@ -11,6 +11,7 @@ use Illuminate\Contracts\Queue\ShouldQueueAfterCommit;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Config;
 use Pushery\Billing\Contracts\DedupesOnReference;
+use Pushery\Billing\Contracts\WebhookEffectMiddleware;
 use Pushery\Billing\Events\BillingDomainEvent;
 use Pushery\Billing\Support\BillingConnection;
 use Pushery\Billing\Support\Concerns\BacksOffBetweenAttempts;
@@ -84,6 +85,19 @@ final class HandleWebhookEffect implements ShouldBeEncrypted, ShouldQueueAfterCo
         $this->accountReference = $accountReference;
 
         return $this;
+    }
+
+    /**
+     * The middleware this job runs through, as the application's `WebhookEffectMiddleware` names it.
+     *
+     * Asked on the worker, each time the job is about to run, so the answer can depend on the account in
+     * `provider` and `accountReference`. The shipped default names none.
+     *
+     * @return list<object>
+     */
+    public function middleware(): array
+    {
+        return Container::getInstance()->make(WebhookEffectMiddleware::class)->for($this);
     }
 
     public function handle(WebhookEffectLedger $runs): void
