@@ -4,6 +4,12 @@ All notable changes to `pushery/billing-for-laravel` are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and
 the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.70.0] - 2026-11-28
+
+### ✨ Added
+
+- **An application can hold the webhook effects of one payment account to a share of the queue.** `HandleWebhookEffect` runs through the job middleware a bound `WebhookEffectMiddleware` names, asked on the worker before each effect, and the job carries `provider` and `accountReference`, the account its delivery came from, for a limiter to key on. With `RateLimited`, an effect over its account's share goes back to the queue while the effects of the other accounts run. The default, `NoWebhookEffectMiddleware`, names none, so nothing changes until an application binds its own.
+
 ## [0.69.0] - 2026-11-27
 
 ### ✨ Added
@@ -8779,7 +8785,8 @@ named — the range contained their changes without being exclusive to them, and
 - One subscription-state row per owner is enforced, and same-second out-of-order
   webhooks can no longer restore access to a canceled subscription.
 
-[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.69.0...HEAD
+[Unreleased]: https://github.com/pushery/billing-for-laravel/compare/v0.70.0...HEAD
+[0.70.0]: https://github.com/pushery/billing-for-laravel/compare/v0.69.0...v0.70.0
 [0.69.0]: https://github.com/pushery/billing-for-laravel/compare/v0.68.0...v0.69.0
 [0.68.0]: https://github.com/pushery/billing-for-laravel/compare/v0.67.0...v0.68.0
 [0.67.0]: https://github.com/pushery/billing-for-laravel/compare/v0.66.0...v0.67.0
